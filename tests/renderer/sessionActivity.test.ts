@@ -83,6 +83,42 @@ describe('session activity helpers', () => {
     });
   });
 
+  test('warns when an agent-activity event is missing identifiers', () => {
+    const originalWarn = console.warn;
+    const warnings: unknown[][] = [];
+    console.warn = (...args: unknown[]) => {
+      warnings.push(args);
+    };
+
+    try {
+      const current: SessionActivityMap = {
+        'session-1': {
+          architect: {
+            agentId: 'architect',
+            agentName: 'Architect',
+            activityType: 'thinking',
+          },
+        },
+      };
+
+      expect(
+        applySessionEventActivity(current, {
+          sessionId: 'session-1',
+          kind: 'agent-activity',
+          occurredAt: '2026-03-23T00:00:00.000Z',
+          activityType: 'thinking',
+          agentId: '   ',
+          agentName: '   ',
+        }),
+      ).toBe(current);
+
+      expect(warnings).toHaveLength(1);
+      expect(String(warnings[0][0])).toContain('Dropping agent-activity event');
+    } finally {
+      console.warn = originalWarn;
+    }
+  });
+
   test('clears stale activity when a session restarts', () => {
     const current: SessionActivityMap = {
       'session-1': {

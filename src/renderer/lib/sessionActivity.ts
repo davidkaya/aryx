@@ -24,6 +24,7 @@ export function applySessionEventActivity(
   if (event.kind === 'agent-activity') {
     const agentKey = resolveAgentKey(event);
     if (!agentKey) {
+      console.warn('[kopaya activity] Dropping agent-activity event without agentId/agentName.', event);
       return current;
     }
 

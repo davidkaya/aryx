@@ -12,6 +12,11 @@ import type {
 } from '@shared/contracts/sidecar';
 import type { ChatMessageRecord } from '@shared/domain/session';
 import { createSidecarEnvironment } from '@main/sidecar/sidecarEnvironment';
+import {
+  markRunTurnPendingErrored,
+  shouldHandleRunTurnEvent,
+  type RunTurnPendingCommand,
+} from '@main/sidecar/runTurnPending';
 import { resolveSidecarProcess } from '@main/sidecar/sidecarRuntime';
 
 type PendingCommand =
@@ -25,13 +30,7 @@ type PendingCommand =
       resolve: (issues: ValidatePatternCommand['pattern'] extends never ? never : unknown) => void;
       reject: (error: Error) => void;
     }
-  | {
-      kind: 'run-turn';
-      resolve: (messages: ChatMessageRecord[]) => void;
-      reject: (error: Error) => void;
-      onDelta: (event: TurnDeltaEvent) => void | Promise<void>;
-      onActivity: (event: AgentActivityEvent) => void | Promise<void>;
-    };
+  | RunTurnPendingCommand;
 
 export class SidecarClient {
   private process?: ChildProcessWithoutNullStreams;
@@ -129,6 +128,7 @@ export class SidecarClient {
           reject,
           onDelta: onDelta ?? (() => undefined),
           onActivity: onActivity ?? (() => undefined),
+          errored: false,
         });
       } else if (command.type === 'validate-pattern') {
         this.pending.set(command.requestId, {
@@ -183,27 +183,33 @@ export class SidecarClient {
         }
         return;
       case 'turn-delta':
-        if (pending.kind === 'run-turn') {
+        if (pending.kind === 'run-turn' && shouldHandleRunTurnEvent(pending)) {
           this.invokeRunTurnHandler(event.requestId, pending, () => pending.onDelta(event));
         }
         return;
       case 'agent-activity':
-        if (pending.kind === 'run-turn') {
+        if (pending.kind === 'run-turn' && shouldHandleRunTurnEvent(pending)) {
           this.invokeRunTurnHandler(event.requestId, pending, () => pending.onActivity(event));
         }
         return;
       case 'turn-complete':
         if (pending.kind === 'run-turn') {
-          pending.resolve(event.messages);
+          if (shouldHandleRunTurnEvent(pending)) {
+            pending.resolve(event.messages);
+          }
           this.pending.delete(event.requestId);
         }
         return;
       case 'command-error':
-        pending.reject(new Error(event.message));
+        if (pending.kind === 'run-turn') {
+          markRunTurnPendingErrored(pending, new Error(event.message));
+        } else {
+          pending.reject(new Error(event.message));
+        }
         this.pending.delete(event.requestId);
         return;
       case 'command-complete':
-        if (pending.kind !== 'run-turn') {
+        if (pending.kind !== 'run-turn' || pending.errored) {
           this.pending.delete(event.requestId);
         }
         return;
@@ -212,12 +218,14 @@ export class SidecarClient {
 
   private invokeRunTurnHandler(
     requestId: string,
-    pending: Extract<PendingCommand, { kind: 'run-turn' }>,
+    pending: RunTurnPendingCommand,
     callback: () => void | Promise<void>,
   ): void {
     void Promise.resolve(callback()).catch((error: unknown) => {
-      this.pending.delete(requestId);
-      pending.reject(error instanceof Error ? error : new Error(String(error)));
+      markRunTurnPendingErrored(pending, error);
+      if (this.pending.get(requestId) !== pending) {
+        return;
+      }
     });
   }
 }

@@ -17,12 +17,13 @@ The target UX is a left-side tree navigator for projects/sessions/patterns and a
 
 ## Current repository state
 
-- The repository is currently only a minimal Bun + TypeScript scaffold.
-- `src/index.ts` is effectively empty.
-- There is no Electron app structure yet.
-- There is no renderer framework, no desktop state model, and no project/session UI.
-- There is no .NET solution, no MAF integration, and no Copilot SDK integration yet.
-- Current validation is minimal: `bun run test` maps to `bun run typecheck`, but the local TypeScript toolchain is not installed yet in this checkout, so the baseline command currently fails because `tsc` is unavailable.
+- The repository now contains a working Electron desktop shell with a React + Tailwind renderer, shared TypeScript domain/contracts, persistence, IPC wiring, and a bundled .NET sidecar.
+- The chat-first workspace UX is implemented with projects, sessions, pattern management, session launch, and streaming transcript updates.
+- The .NET sidecar implements single-agent chat plus sequential, concurrent, handoff, and group-chat orchestration modes.
+- Magentic remains intentionally unavailable because Microsoft still documents it as unsupported in C#/.NET today.
+- Copilot integration now uses the system-installed `copilot` command instead of the SDK's bundled native CLI path.
+- On Windows, the app sanitizes Bun/Copilot/Electron/Node/npm runtime variables and shell-launches `copilot` through `cmd.exe /d /s /c copilot` to avoid the `--no-warnings` startup failure under Bun/Electron.
+- Validation workflows are established and verified in this repository: `bun run test`, .NET sidecar tests/builds, and packaging for the Windows desktop app.
 
 ## Product scope captured so far
 
@@ -37,7 +38,7 @@ The target UX is a left-side tree navigator for projects/sessions/patterns and a
   - concurrent
   - handoff
   - group chat
--  - magentic (represented as unavailable in the current .NET implementation because Microsoft documents it as unsupported in C# today)
+  - magentic (represented as unavailable in the current .NET implementation because Microsoft documents it as unsupported in C# today)
 - Additional first-class single-agent chat mode for direct human-agent conversation
 - Multiple projects/folders open in the app at the same time
 - Reusable user-defined orchestration patterns stored in a global app-wide pattern library
@@ -118,6 +119,14 @@ The target UX is a left-side tree navigator for projects/sessions/patterns and a
 - .NET tests for pattern validation and orchestration execution
 - Contract/integration tests for Electron-to-.NET messaging
 - End-to-end smoke coverage for launching a project, starting a session, and streaming chat output
+
+## Current implementation status
+
+- Phases 1 through 6 are substantially complete for the currently supported scope.
+- Desktop shell, persistence, pattern management, session launch, streaming chat UX, sidecar protocol, packaging, and validation coverage are implemented.
+- The Copilot runtime path is now productionized around the system-installed CLI, including protocol compatibility upgrades and Windows/Bun launch hardening.
+- The only explicitly blocked roadmap item is Magentic orchestration support, which depends on upstream C#/.NET support in Microsoft Agent Framework.
+- Future planning should treat the current work as a functioning baseline that mainly needs iterative polish and any new product features, not initial scaffolding.
 
 ## Proposed implementation phases
 
@@ -205,6 +214,7 @@ The target UX is a left-side tree navigator for projects/sessions/patterns and a
 - User-defined patterns are editable, reusable, and managed as a global library shared across projects.
 - Sessions must resume after app restart and recover orchestration/chat state.
 - Only Copilot SDK-backed agents are in scope for v1, using the user's Copilot account.
+- The app always uses the system-installed `copilot` CLI; on Windows it launches that CLI through the shell and sanitizes runtime environment variables for Bun/Electron compatibility.
 - Secrets and provider credentials are stored through the OS keychain.
 - The current .NET implementation supports sequential, concurrent, handoff, and group chat; Magentic is surfaced as unavailable until C# support exists upstream.
 

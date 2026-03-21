@@ -37,8 +37,8 @@ export function ChatPane({ activity, project, pattern, session, onSend }: ChatPa
 
   const isBusy = session.status === 'running';
   const activityRows = useMemo(
-    () => buildAgentActivityRows(activity, pattern.agents, isBusy),
-    [activity, isBusy, pattern.agents],
+    () => buildAgentActivityRows(activity, pattern.agents),
+    [activity, pattern.agents],
   );
 
   useEffect(() => {

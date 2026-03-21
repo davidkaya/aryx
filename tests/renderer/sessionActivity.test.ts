@@ -125,15 +125,10 @@ describe('session activity helpers', () => {
   });
 
   test('builds rows for all agents with sensible defaults', () => {
-    expect(buildAgentActivityRows(undefined, agents, true)).toEqual([
+    expect(buildAgentActivityRows(undefined, agents)).toEqual([
       {
         key: 'architect',
         agentName: 'Architect',
-        activity: {
-          agentId: 'architect',
-          agentName: 'Architect',
-          activityType: 'thinking',
-        },
       },
       {
         key: 'reviewer',
@@ -157,7 +152,6 @@ describe('session activity helpers', () => {
           },
         },
         agents,
-        true,
       ),
     ).toEqual([
       {
@@ -183,7 +177,7 @@ describe('session activity helpers', () => {
   });
 
   test('formats contextual activity labels and state flags', () => {
-    expect(formatAgentActivityLabel(undefined)).toBe('Waiting…');
+    expect(formatAgentActivityLabel(undefined)).toBe('No status yet');
     expect(
       formatAgentActivityLabel({
         agentId: 'reviewer',

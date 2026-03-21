@@ -77,11 +77,8 @@ export function pruneSessionActivities(
 export function buildAgentActivityRows(
   current: SessionActivityState | undefined,
   agents: PatternDefinition['agents'],
-  isBusy: boolean,
 ): AgentActivityRow[] {
-  const hasReportedActivity = !!current && Object.keys(current).length > 0;
-
-  return agents.map((agent, index) => {
+  return agents.map((agent) => {
     const activity = current?.[agent.id] ?? current?.[agent.name];
 
     if (activity) {
@@ -89,18 +86,6 @@ export function buildAgentActivityRows(
         key: agent.id,
         agentName: agent.name,
         activity,
-      };
-    }
-
-    if (!hasReportedActivity && isBusy && index === 0) {
-      return {
-        key: agent.id,
-        agentName: agent.name,
-        activity: {
-          agentId: agent.id,
-          agentName: agent.name,
-          activityType: 'thinking',
-        },
       };
     }
 
@@ -113,7 +98,7 @@ export function buildAgentActivityRows(
 
 export function formatAgentActivityLabel(activity: AgentActivityState | undefined): string {
   if (!activity) {
-    return 'Waiting…';
+    return 'No status yet';
   }
 
   switch (activity?.activityType) {
@@ -126,7 +111,7 @@ export function formatAgentActivityLabel(activity: AgentActivityState | undefine
     case 'thinking':
       return 'Thinking…';
     default:
-      return 'Waiting…';
+      return 'No status yet';
   }
 }
 

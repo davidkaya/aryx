@@ -42,6 +42,7 @@ export interface SessionEventRecord {
 
   // New fields for 'agent-activity' events
   activityType?: 'thinking' | 'tool-calling' | 'handoff' | 'completed';
+  agentId?: string;
   agentName?: string;
   toolName?: string;
 }
@@ -70,6 +71,7 @@ In the sidecar's turn-execution pipeline, emit a new JSON event type alongside t
   "requestId": "…",
   "sessionId": "…",
   "activityType": "tool-calling",
+  "agentId": "agent-reviewer",
   "agentName": "Code Reviewer",
   "toolName": "read_file"
 }
@@ -79,25 +81,25 @@ The Electron main process maps this to a `SessionEventRecord` with `kind: 'agent
 
 ### Renderer consumption
 
-`App.tsx` now subscribes to `onSessionEvent` and tracks the latest activity event for the selected session. `ChatPane.tsx` uses that state to show contextual messages like:
+`App.tsx` now subscribes to `onSessionEvent` and tracks live activity per agent for the selected session. `ChatPane.tsx` uses that state to show a status row for each agent while the run is active.
 
 - "Code Reviewer is thinking…"
 - "Code Reviewer is using read_file…"
 - "Handing off to Summarizer…"
 
-The `ThinkingDots` component and activity indicator section in `ChatPane.tsx` are now wired to this data, with completed activity rendering as text-only status instead of an animated waiting state.
+The activity panel in `ChatPane.tsx` is now wired to this data, showing every agent in the pattern with a current status such as waiting, thinking, tool usage, handoff, or completed.
 
 ## Files involved
 
 | Layer | File | Change |
 |---|---|---|
-| Shared | `src/shared/domain/event.ts` | Add `'agent-activity'` to `SessionEventKind`, add optional `activityType` / `agentName` / `toolName` fields |
-| Shared | `src/shared/contracts/sidecar.ts` | Add `AgentActivityEvent` to the sidecar event union |
+| Shared | `src/shared/domain/event.ts` | Add `'agent-activity'` to `SessionEventKind`, add optional `activityType` / `agentId` / `agentName` / `toolName` fields |
+| Shared | `src/shared/contracts/sidecar.ts` | Add `AgentActivityEvent` to the sidecar event union, including a stable optional `agentId` |
 | Main | `src/main/sidecar/sidecarProcess.ts` | Parse `agent-activity` events from sidecar JSON output |
 | Main | `src/main/KopayaAppService.ts` | Map parsed activity events to `SessionEventRecord` and emit via `session-event` |
-| Renderer | `src/renderer/App.tsx` | Subscribe to `onSessionEvent` and track live activity state per session |
-| Renderer | `src/renderer/components/ChatPane.tsx` | Render contextual activity text in the existing activity indicator |
-| Renderer | `src/renderer/lib/sessionActivity.ts` | Provide pure helpers for activity-state updates and display text |
-| Sidecar | `sidecar/src/Kopaya.AgentHost/Contracts/ProtocolModels.cs` | Define `AgentActivityEventDto` |
+| Renderer | `src/renderer/App.tsx` | Subscribe to `onSessionEvent` and track live per-agent activity state per session |
+| Renderer | `src/renderer/components/ChatPane.tsx` | Render an activity row for each agent while a session is running |
+| Renderer | `src/renderer/lib/sessionActivity.ts` | Provide pure helpers for per-agent activity-state updates and display text |
+| Sidecar | `sidecar/src/Kopaya.AgentHost/Contracts/ProtocolModels.cs` | Define `AgentActivityEventDto`, including `agentId` |
 | Sidecar | `sidecar/src/Kopaya.AgentHost/Services/CopilotWorkflowRunner.cs` | Emit `agent-activity` events during MAF turn execution when observable |
 | Sidecar | `sidecar/src/Kopaya.AgentHost/Services/SidecarProtocolHost.cs` | Forward activity events over the stdio protocol |

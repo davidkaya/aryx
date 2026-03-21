@@ -1,9 +1,11 @@
-import { type KeyboardEvent, useEffect, useRef, useState } from 'react';
+import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, ArrowUp, Bot, Loader2, User } from 'lucide-react';
 
 import {
-  formatSessionActivityLabel,
-  shouldAnimateSessionActivity,
+  buildAgentActivityRows,
+  formatAgentActivityLabel,
+  isAgentActivityActive,
+  isAgentActivityCompleted,
   type SessionActivityState,
 } from '@renderer/lib/sessionActivity';
 import type { PatternDefinition } from '@shared/domain/pattern';
@@ -34,10 +36,10 @@ export function ChatPane({ activity, project, pattern, session, onSend }: ChatPa
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const isBusy = session.status === 'running';
-  const hasPendingMessage = session.messages.some((m) => m.pending);
-  const isThinking = isBusy && !hasPendingMessage;
-  const activityLabel = formatSessionActivityLabel(activity, pattern.agents[0]?.name ?? 'Agent');
-  const showActivityAnimation = shouldAnimateSessionActivity(activity);
+  const activityRows = useMemo(
+    () => buildAgentActivityRows(activity, pattern.agents, isBusy),
+    [activity, isBusy, pattern.agents],
+  );
 
   useEffect(() => {
     transcriptRef.current?.scrollTo({
@@ -136,17 +138,31 @@ export function ChatPane({ activity, project, pattern, session, onSend }: ChatPa
               })}
             </div>
 
-            {/* Activity indicator — shown while the agent is thinking (before streaming starts) */}
-            {isThinking && (
-              <div className="py-3">
-                <div className="flex gap-3">
-                  <div className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-zinc-800 text-zinc-400">
-                    <Bot className="size-3.5" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="mb-1.5 text-[12px] font-medium text-zinc-500">{activityLabel}</div>
-                    {showActivityAnimation && <ThinkingDots />}
-                  </div>
+            {isBusy && activityRows.length > 0 && (
+              <div className="mb-4 rounded-xl border border-zinc-800 bg-zinc-900/60 px-4 py-3">
+                <div className="mb-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-600">
+                  Agent activity
+                </div>
+                <div className="space-y-2.5">
+                  {activityRows.map((row) => (
+                    <div className="flex items-start gap-3" key={row.key}>
+                      <span
+                        className={`mt-1.5 size-2 shrink-0 rounded-full ${
+                          isAgentActivityActive(row.activity)
+                            ? 'animate-pulse bg-blue-400'
+                            : isAgentActivityCompleted(row.activity)
+                              ? 'bg-emerald-400'
+                              : 'bg-zinc-700'
+                        }`}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[12px] font-medium text-zinc-300">{row.agentName}</div>
+                        <div className="text-[12px] text-zinc-500">
+                          {formatAgentActivityLabel(row.activity)}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}

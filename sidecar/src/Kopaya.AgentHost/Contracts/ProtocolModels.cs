@@ -109,6 +109,7 @@ public sealed class AgentActivityEventDto : SidecarEventDto
 {
     public string SessionId { get; init; } = string.Empty;
     public string ActivityType { get; init; } = string.Empty;
+    public string? AgentId { get; init; }
     public string? AgentName { get; init; }
     public string? ToolName { get; init; }
 }

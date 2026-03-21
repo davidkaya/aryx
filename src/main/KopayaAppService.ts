@@ -310,6 +310,7 @@ export class KopayaAppService extends EventEmitter<AppServiceEvents> {
       kind: 'agent-activity',
       occurredAt: nowIso(),
       activityType: event.activityType,
+      agentId: event.agentId,
       agentName: event.agentName,
       toolName: event.toolName,
     });

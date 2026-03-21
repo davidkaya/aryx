@@ -1,26 +1,42 @@
+import type { PatternDefinition } from '@shared/domain/pattern';
 import type { SessionEventRecord } from '@shared/domain/event';
 
-export interface SessionActivityState {
-  sessionId: string;
+export interface AgentActivityState {
+  agentId: string;
+  agentName: string;
   activityType?: SessionEventRecord['activityType'];
-  agentName?: string;
   toolName?: string;
 }
 
+export type SessionActivityState = Record<string, AgentActivityState>;
 export type SessionActivityMap = Record<string, SessionActivityState | undefined>;
+
+export interface AgentActivityRow {
+  key: string;
+  agentName: string;
+  activity?: AgentActivityState;
+}
 
 export function applySessionEventActivity(
   current: SessionActivityMap,
   event: SessionEventRecord,
 ): SessionActivityMap {
   if (event.kind === 'agent-activity') {
+    const agentKey = resolveAgentKey(event);
+    if (!agentKey) {
+      return current;
+    }
+
     return {
       ...current,
       [event.sessionId]: {
-        sessionId: event.sessionId,
-        activityType: event.activityType,
-        agentName: event.agentName,
-        toolName: event.toolName,
+        ...(current[event.sessionId] ?? {}),
+        [agentKey]: {
+          agentId: event.agentId ?? agentKey,
+          agentName: event.agentName?.trim() || event.agentId?.trim() || agentKey,
+          activityType: event.activityType,
+          toolName: event.toolName,
+        },
       },
     };
   }
@@ -58,27 +74,72 @@ export function pruneSessionActivities(
   return changed || Object.keys(next).length !== Object.keys(current).length ? next : current;
 }
 
-export function formatSessionActivityLabel(
-  activity: SessionActivityState | undefined,
-  fallbackAgentName = 'Agent',
-): string {
-  const agentName = activity?.agentName?.trim() || fallbackAgentName;
+export function buildAgentActivityRows(
+  current: SessionActivityState | undefined,
+  agents: PatternDefinition['agents'],
+  isBusy: boolean,
+): AgentActivityRow[] {
+  const hasReportedActivity = !!current && Object.keys(current).length > 0;
+
+  return agents.map((agent, index) => {
+    const activity = current?.[agent.id] ?? current?.[agent.name];
+
+    if (activity) {
+      return {
+        key: agent.id,
+        agentName: agent.name,
+        activity,
+      };
+    }
+
+    if (!hasReportedActivity && isBusy && index === 0) {
+      return {
+        key: agent.id,
+        agentName: agent.name,
+        activity: {
+          agentId: agent.id,
+          agentName: agent.name,
+          activityType: 'thinking',
+        },
+      };
+    }
+
+    return {
+      key: agent.id,
+      agentName: agent.name,
+    };
+  });
+}
+
+export function formatAgentActivityLabel(activity: AgentActivityState | undefined): string {
+  if (!activity) {
+    return 'Waiting…';
+  }
 
   switch (activity?.activityType) {
     case 'tool-calling':
-      return `${agentName} is using ${activity.toolName?.trim() || 'a tool'}…`;
+      return `Using ${activity.toolName?.trim() || 'a tool'}…`;
     case 'handoff':
-      return `Handing off to ${agentName}…`;
+      return 'Handling handoff…';
     case 'completed':
-      return `${agentName} completed their turn.`;
+      return 'Completed';
     case 'thinking':
+      return 'Thinking…';
     default:
-      return `${agentName} is thinking…`;
+      return 'Waiting…';
   }
 }
 
-export function shouldAnimateSessionActivity(activity: SessionActivityState | undefined): boolean {
-  return activity?.activityType !== 'completed';
+export function isAgentActivityActive(activity: AgentActivityState | undefined): boolean {
+  return (
+    activity?.activityType === 'thinking'
+    || activity?.activityType === 'tool-calling'
+    || activity?.activityType === 'handoff'
+  );
+}
+
+export function isAgentActivityCompleted(activity: AgentActivityState | undefined): boolean {
+  return activity?.activityType === 'completed';
 }
 
 function removeSessionActivity(
@@ -92,4 +153,8 @@ function removeSessionActivity(
   const next = { ...current };
   delete next[sessionId];
   return next;
+}
+
+function resolveAgentKey(event: SessionEventRecord): string | undefined {
+  return event.agentId?.trim() || event.agentName?.trim();
 }

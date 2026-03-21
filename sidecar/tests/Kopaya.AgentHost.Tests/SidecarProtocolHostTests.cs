@@ -103,6 +103,7 @@ public sealed class SidecarProtocolHostTests
                     RequestId = command.RequestId,
                     SessionId = command.SessionId,
                     ActivityType = "thinking",
+                    AgentId = "agent-1",
                     AgentName = "Primary",
                 });
 
@@ -122,6 +123,7 @@ public sealed class SidecarProtocolHostTests
                     RequestId = command.RequestId,
                     SessionId = command.SessionId,
                     ActivityType = "tool-calling",
+                    AgentId = "agent-1",
                     AgentName = "Primary",
                     ToolName = "read_file",
                 });
@@ -179,6 +181,7 @@ public sealed class SidecarProtocolHostTests
                 Assert.Equal("turn-1", thinkingEvent.GetProperty("requestId").GetString());
                 Assert.Equal("session-1", thinkingEvent.GetProperty("sessionId").GetString());
                 Assert.Equal("thinking", thinkingEvent.GetProperty("activityType").GetString());
+                Assert.Equal("agent-1", thinkingEvent.GetProperty("agentId").GetString());
                 Assert.Equal("Primary", thinkingEvent.GetProperty("agentName").GetString());
             },
             deltaEvent =>
@@ -190,6 +193,7 @@ public sealed class SidecarProtocolHostTests
             {
                 Assert.Equal("agent-activity", toolEvent.GetProperty("type").GetString());
                 Assert.Equal("tool-calling", toolEvent.GetProperty("activityType").GetString());
+                Assert.Equal("agent-1", toolEvent.GetProperty("agentId").GetString());
                 Assert.Equal("read_file", toolEvent.GetProperty("toolName").GetString());
             },
             completionEvent =>

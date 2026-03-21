@@ -16,6 +16,7 @@ export interface SessionEventRecord {
   authorName?: string;
   contentDelta?: string;
   activityType?: SessionActivityType;
+  agentId?: string;
   agentName?: string;
   toolName?: string;
   error?: string;

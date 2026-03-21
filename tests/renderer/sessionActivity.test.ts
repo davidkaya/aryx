@@ -2,30 +2,83 @@ import { describe, expect, test } from 'bun:test';
 
 import {
   applySessionEventActivity,
-  formatSessionActivityLabel,
+  buildAgentActivityRows,
+  formatAgentActivityLabel,
+  isAgentActivityActive,
+  isAgentActivityCompleted,
   pruneSessionActivities,
-  shouldAnimateSessionActivity,
   type SessionActivityMap,
 } from '@renderer/lib/sessionActivity';
+import type { PatternDefinition } from '@shared/domain/pattern';
 import type { SessionEventRecord } from '@shared/domain/event';
 
 describe('session activity helpers', () => {
-  test('stores the latest agent activity by session', () => {
-    const event: SessionEventRecord = {
+  const agents: PatternDefinition['agents'] = [
+    {
+      id: 'architect',
+      name: 'Architect',
+      description: 'Designs the system.',
+      instructions: 'Think about architecture.',
+      model: 'gpt-5.4',
+      reasoningEffort: 'high',
+    },
+    {
+      id: 'reviewer',
+      name: 'Reviewer',
+      description: 'Reviews the solution.',
+      instructions: 'Review the work.',
+      model: 'gpt-5.4',
+      reasoningEffort: 'medium',
+    },
+  ];
+
+  test('stores activity per session and per agent', () => {
+    const architectEvent: SessionEventRecord = {
       sessionId: 'session-1',
       kind: 'agent-activity',
       occurredAt: '2026-03-23T00:00:00.000Z',
+      activityType: 'thinking',
+      agentId: 'architect',
+      agentName: 'Architect',
+    };
+    const reviewerEvent: SessionEventRecord = {
+      sessionId: 'session-1',
+      kind: 'agent-activity',
+      occurredAt: '2026-03-23T00:00:01.000Z',
       activityType: 'tool-calling',
-      agentName: 'Code Reviewer',
+      agentId: 'reviewer',
+      agentName: 'Reviewer',
       toolName: 'read_file',
     };
 
-    expect(applySessionEventActivity({}, event)).toEqual({
+    expect(applySessionEventActivity({}, architectEvent)).toEqual({
       'session-1': {
-        sessionId: 'session-1',
-        activityType: 'tool-calling',
-        agentName: 'Code Reviewer',
-        toolName: 'read_file',
+        architect: {
+          agentId: 'architect',
+          agentName: 'Architect',
+          activityType: 'thinking',
+        },
+      },
+    });
+
+    expect(
+      applySessionEventActivity(
+        applySessionEventActivity({}, architectEvent),
+        reviewerEvent,
+      ),
+    ).toEqual({
+      'session-1': {
+        architect: {
+          agentId: 'architect',
+          agentName: 'Architect',
+          activityType: 'thinking',
+        },
+        reviewer: {
+          agentId: 'reviewer',
+          agentName: 'Reviewer',
+          activityType: 'tool-calling',
+          toolName: 'read_file',
+        },
       },
     });
   });
@@ -33,14 +86,18 @@ describe('session activity helpers', () => {
   test('clears stale activity when a session restarts or finishes', () => {
     const current: SessionActivityMap = {
       'session-1': {
-        sessionId: 'session-1',
-        activityType: 'thinking',
-        agentName: 'Primary',
+        architect: {
+          agentId: 'architect',
+          agentName: 'Architect',
+          activityType: 'thinking',
+        },
       },
       'session-2': {
-        sessionId: 'session-2',
-        activityType: 'handoff',
-        agentName: 'Reviewer',
+        reviewer: {
+          agentId: 'reviewer',
+          agentName: 'Reviewer',
+          activityType: 'handoff',
+        },
       },
     };
 
@@ -67,63 +124,121 @@ describe('session activity helpers', () => {
     });
   });
 
-  test('formats contextual activity labels and animation state', () => {
-    expect(formatSessionActivityLabel(undefined, 'Primary')).toBe('Primary is thinking…');
+  test('builds rows for all agents with sensible defaults', () => {
+    expect(buildAgentActivityRows(undefined, agents, true)).toEqual([
+      {
+        key: 'architect',
+        agentName: 'Architect',
+        activity: {
+          agentId: 'architect',
+          agentName: 'Architect',
+          activityType: 'thinking',
+        },
+      },
+      {
+        key: 'reviewer',
+        agentName: 'Reviewer',
+      },
+    ]);
+
     expect(
-      formatSessionActivityLabel(
+      buildAgentActivityRows(
         {
-          sessionId: 'session-1',
-          activityType: 'tool-calling',
+          architect: {
+            agentId: 'architect',
+            agentName: 'Architect',
+            activityType: 'completed',
+          },
+          reviewer: {
+            agentId: 'reviewer',
+            agentName: 'Reviewer',
+            activityType: 'tool-calling',
+            toolName: 'read_file',
+          },
+        },
+        agents,
+        true,
+      ),
+    ).toEqual([
+      {
+        key: 'architect',
+        agentName: 'Architect',
+        activity: {
+          agentId: 'architect',
+          agentName: 'Architect',
+          activityType: 'completed',
+        },
+      },
+      {
+        key: 'reviewer',
+        agentName: 'Reviewer',
+        activity: {
+          agentId: 'reviewer',
           agentName: 'Reviewer',
+          activityType: 'tool-calling',
           toolName: 'read_file',
         },
-        'Primary',
-      ),
-    ).toBe('Reviewer is using read_file…');
+      },
+    ]);
+  });
+
+  test('formats contextual activity labels and state flags', () => {
+    expect(formatAgentActivityLabel(undefined)).toBe('Waiting…');
     expect(
-      formatSessionActivityLabel(
-        {
-          sessionId: 'session-1',
-          activityType: 'handoff',
-          agentName: 'Summarizer',
-        },
-        'Primary',
-      ),
-    ).toBe('Handing off to Summarizer…');
+      formatAgentActivityLabel({
+        agentId: 'reviewer',
+        agentName: 'Reviewer',
+        activityType: 'tool-calling',
+        toolName: 'read_file',
+      }),
+    ).toBe('Using read_file…');
     expect(
-      formatSessionActivityLabel(
-        {
-          sessionId: 'session-1',
-          activityType: 'completed',
-          agentName: 'Reviewer',
-        },
-        'Primary',
-      ),
-    ).toBe('Reviewer completed their turn.');
+      formatAgentActivityLabel({
+        agentId: 'reviewer',
+        agentName: 'Reviewer',
+        activityType: 'handoff',
+      }),
+    ).toBe('Handling handoff…');
     expect(
-      shouldAnimateSessionActivity({
-        sessionId: 'session-1',
+      formatAgentActivityLabel({
+        agentId: 'reviewer',
+        agentName: 'Reviewer',
+        activityType: 'completed',
+      }),
+    ).toBe('Completed');
+    expect(
+      isAgentActivityActive({
+        agentId: 'architect',
+        agentName: 'Architect',
         activityType: 'thinking',
       }),
     ).toBe(true);
     expect(
-      shouldAnimateSessionActivity({
-        sessionId: 'session-1',
+      isAgentActivityCompleted({
+        agentId: 'architect',
+        agentName: 'Architect',
         activityType: 'completed',
       }),
-    ).toBe(false);
+    ).toBe(true);
+    expect(isAgentActivityCompleted(undefined)).toBe(false);
   });
 
   test('prunes activity state for sessions that no longer exist', () => {
     const current: SessionActivityMap = {
       'session-1': {
-        sessionId: 'session-1',
-        activityType: 'thinking',
+        architect: {
+          agentId: 'architect',
+          agentName: 'Architect',
+          activityType: 'thinking',
+        },
       },
       'session-2': {
-        sessionId: 'session-2',
-        activityType: 'tool-calling',
-        toolName: 'read_file',
+        reviewer: {
+          agentId: 'reviewer',
+          agentName: 'Reviewer',
+          activityType: 'tool-calling',
+          toolName: 'read_file',
+        },
       },
     };
 

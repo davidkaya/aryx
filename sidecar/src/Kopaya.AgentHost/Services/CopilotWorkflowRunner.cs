@@ -23,6 +23,8 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
         "Microsoft.Extensions.AI.ImageGenerationToolCallContent, Microsoft.Extensions.AI.Abstractions");
     private readonly PatternValidator _patternValidator;
 
+    private readonly record struct AgentIdentity(string AgentId, string AgentName);
+
     public CopilotWorkflowRunner(PatternValidator patternValidator)
     {
         _patternValidator = patternValidator;
@@ -47,8 +49,7 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
         List<StreamingSegment> segments = [];
         int fallbackMessageIndex = 0;
         List<ChatMessageDto> completedMessages = [];
-        string? activeAgentId = null;
-        string? activeAgentName = null;
+        AgentIdentity? activeAgent = null;
 
         await using StreamingRun run = await InProcessExecution.RunStreamingAsync(workflow, inputMessages).ConfigureAwait(false);
         await run.TrySendMessageAsync(new TurnToken(emitEvents: true)).ConfigureAwait(false);
@@ -56,23 +57,23 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
         await foreach (WorkflowEvent evt in run.WatchStreamAsync(cancellationToken).ConfigureAwait(false))
         {
             if (evt is ExecutorInvokedEvent invoked
-                && TryResolveKnownAgentName(command.Pattern, invoked.ExecutorId, out string invokedAgentName)
-                && !string.Equals(activeAgentId, invoked.ExecutorId, StringComparison.Ordinal))
+                && TryResolveKnownAgentIdentity(command.Pattern, invoked.ExecutorId, out AgentIdentity invokedAgent)
+                && (!activeAgent.HasValue
+                    || !string.Equals(activeAgent.Value.AgentId, invokedAgent.AgentId, StringComparison.Ordinal)))
             {
-                activeAgentId = invoked.ExecutorId;
-                activeAgentName = invokedAgentName;
+                activeAgent = invokedAgent;
 
                 await onActivity(CreateActivityEvent(
                     command,
                     activityType: "thinking",
-                    agentName: invokedAgentName)).ConfigureAwait(false);
+                    agent: invokedAgent)).ConfigureAwait(false);
             }
             else if (evt is RequestInfoEvent requestInfo)
             {
                 AgentActivityEventDto? activity = TryCreateActivityFromRequest(
                     command,
                     requestInfo,
-                    activeAgentName);
+                    activeAgent);
 
                 if (activity is not null)
                 {
@@ -85,10 +86,9 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
                 StreamingSegment segment = GetOrCreateSegment(segments, messageId, update.ExecutorId);
                 segment.Content.Append(update.Update.Text);
 
-                if (TryResolveKnownAgentName(command.Pattern, update.ExecutorId, out string updateAgentName))
+                if (TryResolveKnownAgentIdentity(command.Pattern, update.ExecutorId, out AgentIdentity updateAgent))
                 {
-                    activeAgentId = update.ExecutorId;
-                    activeAgentName = updateAgentName;
+                    activeAgent = updateAgent;
                 }
 
                 await onDelta(new TurnDeltaEventDto
@@ -102,16 +102,16 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
                 }).ConfigureAwait(false);
             }
             else if (evt is ExecutorCompletedEvent completed
-                && TryResolveKnownAgentName(command.Pattern, completed.ExecutorId, out string completedAgentName)
-                && string.Equals(activeAgentId, completed.ExecutorId, StringComparison.Ordinal))
+                && TryResolveKnownAgentIdentity(command.Pattern, completed.ExecutorId, out AgentIdentity completedAgent)
+                && activeAgent.HasValue
+                && string.Equals(activeAgent.Value.AgentId, completedAgent.AgentId, StringComparison.Ordinal))
             {
                 await onActivity(CreateActivityEvent(
                     command,
                     activityType: "completed",
-                    agentName: completedAgentName)).ConfigureAwait(false);
+                    agent: completedAgent)).ConfigureAwait(false);
 
-                activeAgentId = null;
-                activeAgentName = null;
+                activeAgent = null;
             }
             else if (evt is WorkflowOutputEvent outputEvent)
             {
@@ -127,7 +127,7 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
     private static AgentActivityEventDto CreateActivityEvent(
         RunTurnCommandDto command,
         string activityType,
-        string agentName,
+        AgentIdentity agent,
         string? toolName = null)
     {
         return new AgentActivityEventDto
@@ -136,7 +136,8 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
             RequestId = command.RequestId,
             SessionId = command.SessionId,
             ActivityType = activityType,
-            AgentName = agentName,
+            AgentId = agent.AgentId,
+            AgentName = agent.AgentName,
             ToolName = toolName,
         };
     }
@@ -144,17 +145,17 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
     private static AgentActivityEventDto? TryCreateActivityFromRequest(
         RunTurnCommandDto command,
         RequestInfoEvent requestInfo,
-        string? activeAgentName)
+        AgentIdentity? activeAgent)
     {
-        if (TryGetHandoffTargetName(command.Pattern, requestInfo, out string handoffAgentName))
+        if (TryGetHandoffTarget(command.Pattern, requestInfo, out AgentIdentity handoffAgent))
         {
             return CreateActivityEvent(
                 command,
                 activityType: "handoff",
-                agentName: handoffAgentName);
+                agent: handoffAgent);
         }
 
-        if (string.IsNullOrWhiteSpace(activeAgentName) || !TryGetToolName(requestInfo, out string toolName))
+        if (!activeAgent.HasValue || !TryGetToolName(requestInfo, out string toolName))
         {
             return null;
         }
@@ -162,27 +163,27 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
         return CreateActivityEvent(
             command,
             activityType: "tool-calling",
-            agentName: activeAgentName,
+            agent: activeAgent.Value,
             toolName: toolName);
     }
 
-    private static bool TryGetHandoffTargetName(
+    private static bool TryGetHandoffTarget(
         PatternDefinitionDto pattern,
         RequestInfoEvent requestInfo,
-        out string agentName)
+        out AgentIdentity agent)
     {
-        agentName = string.Empty;
+        agent = default;
         if (!TryReadPortableValue(requestInfo.Request.Data, HandoffTargetType, out object? handoffTarget))
         {
             return false;
         }
 
         object? target = handoffTarget?.GetType().GetProperty("Target")?.GetValue(handoffTarget);
-        agentName = ResolveAgentName(
+        agent = ResolveAgentIdentity(
             pattern,
             GetStringProperty(target, "Id"),
             GetStringProperty(target, "Name"));
-        return !string.IsNullOrWhiteSpace(agentName);
+        return !string.IsNullOrWhiteSpace(agent.AgentName);
     }
 
     private static bool TryGetToolName(RequestInfoEvent requestInfo, out string toolName)
@@ -217,12 +218,12 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
         return false;
     }
 
-    private static bool TryResolveKnownAgentName(
+    private static bool TryResolveKnownAgentIdentity(
         PatternDefinitionDto pattern,
         string? agentIdentifier,
-        out string agentName)
+        out AgentIdentity agent)
     {
-        agentName = string.Empty;
+        agent = default;
         if (string.IsNullOrWhiteSpace(agentIdentifier))
         {
             return false;
@@ -236,11 +237,13 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
             return false;
         }
 
-        agentName = string.IsNullOrWhiteSpace(match.Name) ? match.Id : match.Name;
+        agent = new AgentIdentity(
+            match.Id,
+            string.IsNullOrWhiteSpace(match.Name) ? match.Id : match.Name);
         return true;
     }
 
-    private static string ResolveAgentName(
+    private static AgentIdentity ResolveAgentIdentity(
         PatternDefinitionDto pattern,
         string? agentId,
         string? agentName)
@@ -250,15 +253,21 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
 
         if (match is not null)
         {
-            return string.IsNullOrWhiteSpace(match.Name) ? match.Id : match.Name;
+            return new AgentIdentity(
+                match.Id,
+                string.IsNullOrWhiteSpace(match.Name) ? match.Id : match.Name);
         }
+
+        string resolvedAgentId = !string.IsNullOrWhiteSpace(agentId)
+            ? agentId
+            : agentName ?? "agent";
 
         if (!string.IsNullOrWhiteSpace(agentName))
         {
-            return agentName;
+            return new AgentIdentity(resolvedAgentId, agentName);
         }
 
-        return agentId ?? string.Empty;
+        return new AgentIdentity(resolvedAgentId, resolvedAgentId);
     }
 
     private static bool MatchesAgent(PatternAgentDefinitionDto agent, string? candidate)

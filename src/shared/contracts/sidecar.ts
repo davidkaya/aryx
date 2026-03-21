@@ -68,6 +68,7 @@ export interface AgentActivityEvent {
   requestId: string;
   sessionId: string;
   activityType: AgentActivityType;
+  agentId?: string;
   agentName?: string;
   toolName?: string;
 }

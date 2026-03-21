@@ -5,7 +5,7 @@ namespace Kopaya.AgentHost.Tests;
 public sealed class CopilotCliPathResolverTests
 {
     [Fact]
-    public void Resolve_UsesCopilotFromPathDuringDevelopment()
+    public void Resolve_UsesCopilotFromPath()
     {
         string copilotDirectory = @"C:\tools\copilot";
         HashSet<string> existingFiles = new(StringComparer.OrdinalIgnoreCase)
@@ -13,42 +13,42 @@ public sealed class CopilotCliPathResolverTests
             Path.Combine(copilotDirectory, "copilot.exe"),
         };
 
-        CopilotCliResolution resolution = CopilotCliPathResolver.Resolve(
-            processPath: @"C:\Program Files\dotnet\dotnet.exe",
+        string? cliPath = CopilotCliPathResolver.Resolve(
             pathValue: $"C:\\other;\"{copilotDirectory}\"",
             pathExtValue: ".COM;.EXE;.BAT;.CMD",
             isWindows: true,
             fileExists: existingFiles.Contains);
 
-        Assert.True(resolution.ShouldOverrideCliPath);
-        Assert.Equal(Path.Combine(copilotDirectory, "copilot.exe"), resolution.CliPath, ignoreCase: true);
+        Assert.Equal(Path.Combine(copilotDirectory, "copilot.exe"), cliPath, ignoreCase: true);
     }
 
     [Fact]
-    public void Resolve_LeavesPackagedRuntimeOnBundledCli()
+    public void Resolve_UsesDefaultWindowsExtensionsWhenPathExtMissing()
     {
-        CopilotCliResolution resolution = CopilotCliPathResolver.Resolve(
-            processPath: @"C:\Program Files\Kopaya\Kopaya.AgentHost.exe",
-            pathValue: @"C:\tools",
-            pathExtValue: ".COM;.EXE;.BAT;.CMD",
+        string copilotDirectory = @"C:\tools\copilot";
+        HashSet<string> existingFiles = new(StringComparer.OrdinalIgnoreCase)
+        {
+            Path.Combine(copilotDirectory, "copilot.cmd"),
+        };
+
+        string? cliPath = CopilotCliPathResolver.Resolve(
+            pathValue: $"C:\\other;\"{copilotDirectory}\"",
+            pathExtValue: null,
             isWindows: true,
-            fileExists: _ => true);
+            fileExists: existingFiles.Contains);
 
-        Assert.False(resolution.ShouldOverrideCliPath);
-        Assert.Null(resolution.CliPath);
+        Assert.Equal(Path.Combine(copilotDirectory, "copilot.cmd"), cliPath, ignoreCase: true);
     }
 
     [Fact]
-    public void Resolve_ReportsMissingCopilotWhenDevelopmentPathDoesNotContainIt()
+    public void Resolve_ReturnsNullWhenPathDoesNotContainCopilot()
     {
-        CopilotCliResolution resolution = CopilotCliPathResolver.Resolve(
-            processPath: @"C:\Program Files\dotnet\dotnet.exe",
+        string? cliPath = CopilotCliPathResolver.Resolve(
             pathValue: @"C:\tools;C:\other",
             pathExtValue: ".COM;.EXE;.BAT;.CMD",
             isWindows: true,
             fileExists: _ => false);
 
-        Assert.True(resolution.ShouldOverrideCliPath);
-        Assert.Null(resolution.CliPath);
+        Assert.Null(cliPath);
     }
 }

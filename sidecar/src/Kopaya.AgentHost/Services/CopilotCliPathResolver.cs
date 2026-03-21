@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using GitHub.Copilot.SDK;
 
 namespace Kopaya.AgentHost.Services;
@@ -8,62 +7,34 @@ internal static class CopilotCliPathResolver
     private const string CopilotCommandName = "copilot";
     private const string DefaultWindowsPathExtensions = ".COM;.EXE;.BAT;.CMD";
 
-    public static CopilotClientOptions? CreateClientOptions()
+    public static CopilotClientOptions CreateClientOptions()
     {
-        CopilotCliResolution resolution = Resolve(
-            Environment.ProcessPath,
+        string? cliPath = Resolve(
             Environment.GetEnvironmentVariable("PATH"),
             Environment.GetEnvironmentVariable("PATHEXT"),
-            RuntimeInformation.IsOSPlatform(OSPlatform.Windows),
+            OperatingSystem.IsWindows(),
             File.Exists);
 
-        if (!resolution.ShouldOverrideCliPath)
-        {
-            return null;
-        }
-
-        if (string.IsNullOrWhiteSpace(resolution.CliPath))
+        if (string.IsNullOrWhiteSpace(cliPath))
         {
             throw new InvalidOperationException(
-                "Development sidecar could not find the system-installed 'copilot' command on PATH. Install the GitHub Copilot CLI or provide an explicit CliPath.");
+                "Kopaya requires the system-installed 'copilot' command on PATH. Install the GitHub Copilot CLI and ensure it is available in the current environment.");
         }
 
         return new CopilotClientOptions
         {
-            CliPath = resolution.CliPath,
+            CliPath = cliPath,
         };
     }
 
-    internal static CopilotCliResolution Resolve(
-        string? processPath,
+    internal static string? Resolve(
         string? pathValue,
         string? pathExtValue,
         bool isWindows,
         Func<string, bool> fileExists)
     {
         ArgumentNullException.ThrowIfNull(fileExists);
-
-        if (!IsDevelopmentHost(processPath))
-        {
-            return default;
-        }
-
-        return new CopilotCliResolution(
-            ShouldOverrideCliPath: true,
-            CliPath: ResolveCliPath(pathValue, pathExtValue, isWindows, fileExists));
-    }
-
-    private static bool IsDevelopmentHost(string? processPath)
-    {
-        if (string.IsNullOrWhiteSpace(processPath))
-        {
-            return false;
-        }
-
-        return string.Equals(
-            Path.GetFileNameWithoutExtension(processPath),
-            "dotnet",
-            StringComparison.OrdinalIgnoreCase);
+        return ResolveCliPath(pathValue, pathExtValue, isWindows, fileExists);
     }
 
     private static string? ResolveCliPath(
@@ -128,5 +99,3 @@ internal static class CopilotCliPathResolver
         }
     }
 }
-
-internal readonly record struct CopilotCliResolution(bool ShouldOverrideCliPath, string? CliPath);

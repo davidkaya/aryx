@@ -170,11 +170,11 @@ public sealed class CopilotWorkflowRunner
         {
             List<IAsyncDisposable> disposables = [];
             List<AIAgent> agents = [];
-            CopilotClientOptions? clientOptions = CopilotCliPathResolver.CreateClientOptions();
+            CopilotClientOptions clientOptions = CopilotCliPathResolver.CreateClientOptions();
 
             foreach (PatternAgentDefinitionDto definition in pattern.Agents)
             {
-                CopilotClient client = clientOptions is null ? new() : new(clientOptions);
+                CopilotClient client = new(clientOptions);
                 await client.StartAsync(cancellationToken).ConfigureAwait(false);
 
                 SessionConfig sessionConfig = new()
@@ -263,7 +263,7 @@ public sealed class CopilotWorkflowRunner
         {
             return Task.FromResult(new PermissionRequestResult
             {
-                Kind = "approved",
+                Kind = PermissionRequestResultKind.Approved,
             });
         }
     }

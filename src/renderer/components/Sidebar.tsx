@@ -98,8 +98,8 @@ export function Sidebar({
 }: SidebarProps) {
   return (
     <div className="flex h-full flex-col">
-      {/* Header */}
-      <div className="flex items-center justify-between border-b border-[var(--color-border)] px-4 py-3">
+      {/* Header — extra top padding clears the title bar overlay zone */}
+      <div className="flex items-center justify-between border-b border-[var(--color-border)] px-4 pb-3 pt-12">
         <div className="flex items-center gap-2">
           <div className="flex size-7 items-center justify-center rounded-lg bg-indigo-600 text-[11px] font-bold text-white">
             K

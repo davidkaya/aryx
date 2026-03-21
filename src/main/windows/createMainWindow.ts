@@ -1,14 +1,22 @@
-import { BrowserWindow, shell } from 'electron';
+import { BrowserWindow, Menu, shell } from 'electron';
 import { join } from 'node:path';
 
 export function createMainWindow(): BrowserWindow {
+  Menu.setApplicationMenu(null);
+
   const window = new BrowserWindow({
     width: 1440,
     height: 960,
     minWidth: 1120,
     minHeight: 720,
     title: 'kopaya',
-    backgroundColor: '#0f172a',
+    backgroundColor: '#09090b',
+    titleBarStyle: 'hidden',
+    titleBarOverlay: {
+      color: '#09090b',
+      symbolColor: '#a1a1aa',
+      height: 40,
+    },
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,

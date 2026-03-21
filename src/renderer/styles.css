@@ -61,6 +61,41 @@ textarea {
   background: #52525b;
 }
 
+/* Window drag regions for custom title bar */
+.drag-region {
+  -webkit-app-region: drag;
+}
+
+.no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* Thinking dots animation */
+@keyframes thinking-dot {
+  0%,
+  60%,
+  100% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+  30% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.thinking-dot {
+  animation: thinking-dot 1.4s ease-in-out infinite;
+}
+
+.thinking-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.thinking-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
 /* Auto-resize textarea helper */
 .auto-resize-textarea {
   field-sizing: content;

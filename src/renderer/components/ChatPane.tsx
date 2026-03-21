@@ -5,6 +5,16 @@ import type { PatternDefinition } from '@shared/domain/pattern';
 import type { ProjectRecord } from '@shared/domain/project';
 import type { SessionRecord } from '@shared/domain/session';
 
+function ThinkingDots() {
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className="thinking-dot size-2 rounded-full bg-zinc-500" />
+      <span className="thinking-dot size-2 rounded-full bg-zinc-500" />
+      <span className="thinking-dot size-2 rounded-full bg-zinc-500" />
+    </div>
+  );
+}
+
 interface ChatPaneProps {
   project: ProjectRecord;
   pattern: PatternDefinition;
@@ -17,14 +27,16 @@ export function ChatPane({ project, pattern, session, onSend }: ChatPaneProps) {
   const transcriptRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  const isBusy = session.status === 'running';
+  const hasPendingMessage = session.messages.some((m) => m.pending);
+  const isThinking = isBusy && !hasPendingMessage;
+
   useEffect(() => {
     transcriptRef.current?.scrollTo({
       top: transcriptRef.current.scrollHeight,
       behavior: 'smooth',
     });
-  }, [session.messages.length]);
-
-  const isBusy = session.status === 'running';
+  }, [session.messages.length, isBusy]);
 
   async function handleSubmit() {
     const text = input.trim();
@@ -42,8 +54,8 @@ export function ChatPane({ project, pattern, session, onSend }: ChatPaneProps) {
 
   return (
     <div className="flex h-full flex-col">
-      {/* Header */}
-      <header className="flex items-center justify-between border-b border-[var(--color-border)] px-6 py-3">
+      {/* Header — extra top padding clears the title bar overlay zone */}
+      <header className="flex items-center justify-between border-b border-[var(--color-border)] px-6 pb-3 pt-12">
         <div className="min-w-0">
           <h2 className="truncate text-sm font-semibold text-zinc-100">{session.title}</h2>
           <p className="mt-0.5 truncate text-[12px] text-zinc-500">
@@ -52,10 +64,7 @@ export function ChatPane({ project, pattern, session, onSend }: ChatPaneProps) {
         </div>
         <div className="flex items-center gap-2">
           {session.status === 'running' && (
-            <div className="flex items-center gap-1.5 text-[12px] text-blue-400">
-              <Loader2 className="size-3.5 animate-spin" />
-              Running
-            </div>
+            <span className="size-2 animate-pulse rounded-full bg-blue-400" />
           )}
           {session.status === 'error' && (
             <div className="flex items-center gap-1.5 text-[12px] text-red-400">
@@ -107,19 +116,34 @@ export function ChatPane({ project, pattern, session, onSend }: ChatPaneProps) {
                         </div>
                         <div className="whitespace-pre-wrap text-[14px] leading-relaxed text-zinc-200">
                           {message.content}
+                          {message.pending && message.content && (
+                            <span className="ml-0.5 inline-block h-[18px] w-[2px] animate-pulse rounded-sm bg-zinc-400 align-text-bottom" />
+                          )}
                         </div>
-                        {message.pending && (
-                          <div className="mt-2 flex items-center gap-1.5 text-[12px] text-zinc-500">
-                            <Loader2 className="size-3 animate-spin" />
-                            Generating...
-                          </div>
-                        )}
+                        {message.pending && !message.content && <ThinkingDots />}
                       </div>
                     </div>
                   </div>
                 );
               })}
             </div>
+
+            {/* Activity indicator — shown while the agent is thinking (before streaming starts) */}
+            {isThinking && (
+              <div className="py-3">
+                <div className="flex gap-3">
+                  <div className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-zinc-800 text-zinc-400">
+                    <Bot className="size-3.5" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="mb-1.5 text-[12px] font-medium text-zinc-500">
+                      {pattern.agents[0]?.name ?? 'Agent'}
+                    </div>
+                    <ThinkingDots />
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

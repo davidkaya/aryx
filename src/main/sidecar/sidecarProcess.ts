@@ -10,6 +10,7 @@ import type {
   RunTurnCommand,
 } from '@shared/contracts/sidecar';
 import type { ChatMessageRecord } from '@shared/domain/session';
+import { createSidecarEnvironment } from '@main/sidecar/sidecarEnvironment';
 import { resolveSidecarProcess } from '@main/sidecar/sidecarRuntime';
 
 type PendingCommand =
@@ -78,6 +79,7 @@ export class SidecarClient {
     });
     this.process = spawn(sidecar.command, sidecar.args, {
       cwd: sidecar.cwd,
+      env: createSidecarEnvironment(process.env),
       stdio: 'pipe',
       windowsHide: true,
     });

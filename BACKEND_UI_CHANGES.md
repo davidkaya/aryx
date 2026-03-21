@@ -87,7 +87,7 @@ The Electron main process maps this to a `SessionEventRecord` with `kind: 'agent
 - "Code Reviewer is using read_file…"
 - "Handing off to Summarizer…"
 
-The activity panel in `ChatPane.tsx` is now wired to this data, showing every agent in the pattern with observed activity such as thinking, tool usage, handoff, or completed. If no event has been observed for an agent yet, the UI now states that no status has been reported instead of inventing a synthetic state.
+The activity panel in `ChatPane.tsx` is now wired to this data, showing every agent in the pattern with observed activity such as thinking, tool usage, handoff, or completed. If no event has been observed for an agent yet, the UI states that no status has been reported instead of inventing a synthetic state. The panel also keeps the last observed statuses visible after a run completes, and resets them when the next run begins.
 
 ## Files involved
 

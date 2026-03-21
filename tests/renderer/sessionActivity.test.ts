@@ -83,7 +83,7 @@ describe('session activity helpers', () => {
     });
   });
 
-  test('clears stale activity when a session restarts or finishes', () => {
+  test('clears stale activity when a session restarts', () => {
     const current: SessionActivityMap = {
       'session-1': {
         architect: {
@@ -111,17 +111,36 @@ describe('session activity helpers', () => {
     ).toEqual({
       'session-2': current['session-2'],
     });
+  });
+
+  test('keeps the last observed status after completion or error', () => {
+    const current: SessionActivityMap = {
+      'session-1': {
+        architect: {
+          agentId: 'architect',
+          agentName: 'Architect',
+          activityType: 'completed',
+        },
+      },
+    };
 
     expect(
       applySessionEventActivity(current, {
-        sessionId: 'session-2',
-        kind: 'error',
+        sessionId: 'session-1',
+        kind: 'status',
         occurredAt: '2026-03-23T00:00:00.000Z',
+        status: 'idle',
+      }),
+    ).toEqual(current);
+
+    expect(
+      applySessionEventActivity(current, {
+        sessionId: 'session-1',
+        kind: 'error',
+        occurredAt: '2026-03-23T00:00:01.000Z',
         error: 'Boom',
       }),
-    ).toEqual({
-      'session-1': current['session-1'],
-    });
+    ).toEqual(current);
   });
 
   test('builds rows for all agents with sensible defaults', () => {

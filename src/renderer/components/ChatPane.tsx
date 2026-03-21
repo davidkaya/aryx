@@ -40,6 +40,8 @@ export function ChatPane({ activity, project, pattern, session, onSend }: ChatPa
     () => buildAgentActivityRows(activity, pattern.agents),
     [activity, pattern.agents],
   );
+  const hasObservedActivity = activityRows.some((row) => !!row.activity);
+  const showActivityPanel = (isBusy || hasObservedActivity) && activityRows.length > 0;
 
   useEffect(() => {
     transcriptRef.current?.scrollTo({
@@ -138,7 +140,7 @@ export function ChatPane({ activity, project, pattern, session, onSend }: ChatPa
               })}
             </div>
 
-            {isBusy && activityRows.length > 0 && (
+            {showActivityPanel && (
               <div className="mb-4 rounded-xl border border-zinc-800 bg-zinc-900/60 px-4 py-3">
                 <div className="mb-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-600">
                   Agent activity

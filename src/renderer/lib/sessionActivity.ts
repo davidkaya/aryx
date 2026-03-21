@@ -42,13 +42,9 @@ export function applySessionEventActivity(
   }
 
   if (event.kind === 'status') {
-    if (event.status === 'running' || event.status === 'idle' || event.status === 'error') {
+    if (event.status === 'running') {
       return removeSessionActivity(current, event.sessionId);
     }
-  }
-
-  if (event.kind === 'error') {
-    return removeSessionActivity(current, event.sessionId);
   }
 
   return current;

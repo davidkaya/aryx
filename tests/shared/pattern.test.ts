@@ -81,4 +81,13 @@ describe('pattern validation', () => {
       }).find((issue) => issue.field === 'agents')?.message,
     ).toBe('Group chat requires at least two agents.');
   });
+
+  test('handoff builtin instructions clearly separate triage and specialist ownership', () => {
+    const handoff = createBuiltinPatterns(BUILTIN_TIMESTAMP).find((pattern) => pattern.mode === 'handoff');
+
+    expect(handoff).toBeDefined();
+    expect(handoff?.agents[0].instructions).toContain('Do not do the specialist work yourself');
+    expect(handoff?.agents[1].instructions).toContain('own the substantive answer');
+    expect(handoff?.agents[2].instructions).toContain('own the substantive answer');
+  });
 });

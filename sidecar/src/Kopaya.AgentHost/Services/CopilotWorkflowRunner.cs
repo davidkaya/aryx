@@ -438,7 +438,7 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
             List<AIAgent> agents = [];
             CopilotClientOptions clientOptions = CopilotCliPathResolver.CreateClientOptions();
 
-            foreach (PatternAgentDefinitionDto definition in pattern.Agents)
+            foreach ((PatternAgentDefinitionDto definition, int agentIndex) in pattern.Agents.Select((definition, index) => (definition, index)))
             {
                 CopilotClient client = new(clientOptions);
                 await client.StartAsync(cancellationToken).ConfigureAwait(false);
@@ -449,7 +449,7 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
                     ReasoningEffort = definition.ReasoningEffort,
                     SystemMessage = new SystemMessageConfig
                     {
-                        Content = definition.Instructions,
+                        Content = AgentInstructionComposer.Compose(pattern, definition, agentIndex),
                     },
                     WorkingDirectory = projectPath,
                     OnPermissionRequest = ApprovePermissionAsync,

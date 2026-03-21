@@ -151,7 +151,8 @@ export function createBuiltinPatterns(timestamp: string): PatternDefinition[] {
           id: 'agent-handoff-triage',
           name: 'Triage',
           description: 'Routes the request to the right specialist.',
-          instructions: 'You triage requests and must hand them off to the most appropriate specialist.',
+          instructions:
+            'You triage requests and must hand them off to the most appropriate specialist. Do not do the specialist work yourself once the right owner is clear.',
           model: defaultModels.gpt54,
           reasoningEffort: 'medium',
         },
@@ -159,7 +160,8 @@ export function createBuiltinPatterns(timestamp: string): PatternDefinition[] {
           id: 'agent-handoff-ux',
           name: 'UX Specialist',
           description: 'Handles user experience questions.',
-          instructions: 'You focus on navigation, UX, and interaction details.',
+          instructions:
+            'You focus on navigation, UX, and interaction details. Once triage hands work to you, you own the substantive answer.',
           model: defaultModels.claude,
           reasoningEffort: 'medium',
         },
@@ -167,7 +169,8 @@ export function createBuiltinPatterns(timestamp: string): PatternDefinition[] {
           id: 'agent-handoff-runtime',
           name: 'Runtime Specialist',
           description: 'Handles backend and execution details.',
-          instructions: 'You focus on runtime, orchestration, and backend integration details.',
+          instructions:
+            'You focus on runtime, orchestration, and backend integration details. Once triage hands work to you, you own the substantive answer.',
           model: defaultModels.gpt53,
           reasoningEffort: 'medium',
         },

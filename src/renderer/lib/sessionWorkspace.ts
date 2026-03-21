@@ -1,6 +1,7 @@
 import type { SessionEventRecord } from '@shared/domain/event';
 import type { ChatMessageRecord, SessionRecord } from '@shared/domain/session';
 import type { WorkspaceState } from '@shared/domain/workspace';
+import { mergeStreamingText } from '@shared/utils/streamingText';
 
 export function applySessionEventWorkspace(
   current: WorkspaceState | undefined,
@@ -86,7 +87,7 @@ function applyMessageDeltaEvent(session: SessionRecord, event: SessionEventRecor
     const nextMessage: ChatMessageRecord = {
       ...existing,
       authorName: event.authorName ?? existing.authorName,
-      content: `${existing.content}${event.contentDelta}`,
+      content: mergeStreamingText(existing.content, event.contentDelta),
       pending: true,
     };
 

@@ -10,6 +10,7 @@ import type { SessionEventRecord } from '@shared/domain/event';
 import type { ChatMessageRecord, SessionRecord } from '@shared/domain/session';
 import type { WorkspaceState } from '@shared/domain/workspace';
 import { createId, nowIso } from '@shared/utils/ids';
+import { mergeStreamingText } from '@shared/utils/streamingText';
 
 import { WorkspaceRepository } from '@main/persistence/workspaceRepository';
 import { SecretStore } from '@main/secrets/secretStore';
@@ -278,7 +279,7 @@ export class KopayaAppService extends EventEmitter<AppServiceEvents> {
     const existing = session.messages.find((message) => message.id === event.messageId);
 
     if (existing) {
-      existing.content += event.contentDelta;
+      existing.content = mergeStreamingText(existing.content, event.contentDelta);
       existing.pending = true;
     } else {
       session.messages.push({

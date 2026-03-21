@@ -118,7 +118,7 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
 
                 string messageId = update.Update.MessageId ?? $"{command.RequestId}-delta-{fallbackMessageIndex++}";
                 StreamingSegment segment = GetOrCreateSegment(segments, messageId, authorName);
-                segment.Content.Append(update.Update.Text);
+                segment.SetContent(StreamingTextMerger.Merge(segment.Content.ToString(), update.Update.Text));
 
                 await onDelta(new TurnDeltaEventDto
                 {
@@ -416,6 +416,12 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
         public string AuthorName { get; }
 
         public StringBuilder Content { get; } = new();
+
+        public void SetContent(string value)
+        {
+            Content.Clear();
+            Content.Append(value);
+        }
     }
 
     private sealed class AgentBundle : IAsyncDisposable

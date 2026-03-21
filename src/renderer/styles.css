@@ -1,5 +1,17 @@
 @import "tailwindcss";
 
+@theme {
+  --color-surface-0: #09090b;
+  --color-surface-1: #18181b;
+  --color-surface-2: #27272a;
+  --color-surface-3: #3f3f46;
+  --color-border: #27272a;
+  --color-border-subtle: #1e1e22;
+  --color-accent: #6366f1;
+  --color-accent-hover: #818cf8;
+  --color-accent-muted: rgba(99, 102, 241, 0.15);
+}
+
 :root {
   color-scheme: dark;
   font-family:
@@ -10,11 +22,14 @@
     BlinkMacSystemFont,
     "Segoe UI",
     sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 body {
   margin: 0;
   min-height: 100vh;
+  background: var(--color-surface-0);
 }
 
 #root {
@@ -26,4 +41,29 @@ input,
 select,
 textarea {
   font: inherit;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #3f3f46;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #52525b;
+}
+
+/* Auto-resize textarea helper */
+.auto-resize-textarea {
+  field-sizing: content;
+  min-height: 44px;
+  max-height: 200px;
 }

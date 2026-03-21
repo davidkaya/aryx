@@ -1,4 +1,13 @@
-import type { PatternDefinition } from '@shared/domain/pattern';
+import { useState } from 'react';
+import {
+  ChevronDown,
+  ChevronRight,
+  FolderOpen,
+  MessageSquare,
+  Plus,
+  Settings,
+} from 'lucide-react';
+
 import type { ProjectRecord } from '@shared/domain/project';
 import type { SessionRecord } from '@shared/domain/session';
 import type { WorkspaceState } from '@shared/domain/workspace';
@@ -6,183 +15,164 @@ import type { WorkspaceState } from '@shared/domain/workspace';
 interface SidebarProps {
   workspace: WorkspaceState;
   onAddProject: () => void;
-  onCreateSession: () => void;
-  onNewPattern: () => void;
+  onNewSession: () => void;
   onProjectSelect: (projectId?: string) => void;
-  onPatternSelect: (patternId?: string) => void;
-  onSessionSelect: (sessionId?: string) => void;
+  onSessionSelect: (sessionId: string) => void;
+  onOpenSettings: () => void;
 }
 
-function itemClasses(active: boolean) {
-  return active
-    ? 'w-full rounded-lg border border-sky-500/60 bg-sky-500/10 px-3 py-2 text-left text-sm text-sky-200'
-    : 'w-full rounded-lg border border-transparent px-3 py-2 text-left text-sm text-slate-300 transition hover:border-slate-700 hover:bg-slate-800/70';
+function statusDot(status: SessionRecord['status']) {
+  if (status === 'running') return 'bg-blue-400';
+  if (status === 'error') return 'bg-red-400';
+  return 'bg-zinc-600';
 }
 
-function modeBadge(pattern: PatternDefinition) {
-  if (pattern.availability === 'unavailable') {
-    return 'bg-amber-500/15 text-amber-200';
-  }
+function ProjectGroup({
+  project,
+  sessions,
+  selectedSessionId,
+  onSessionSelect,
+}: {
+  project: ProjectRecord;
+  sessions: SessionRecord[];
+  selectedSessionId?: string;
+  onSessionSelect: (sessionId: string) => void;
+}) {
+  const [expanded, setExpanded] = useState(true);
 
-  return 'bg-emerald-500/10 text-emerald-200';
-}
+  return (
+    <div>
+      <button
+        className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] font-medium text-zinc-400 transition hover:bg-zinc-800/60 hover:text-zinc-200"
+        onClick={() => setExpanded(!expanded)}
+        type="button"
+      >
+        {expanded ? (
+          <ChevronDown className="size-3.5 shrink-0" />
+        ) : (
+          <ChevronRight className="size-3.5 shrink-0" />
+        )}
+        <FolderOpen className="size-3.5 shrink-0 text-zinc-500" />
+        <span className="truncate">{project.name}</span>
+        <span className="ml-auto text-[11px] text-zinc-600">{sessions.length}</span>
+      </button>
 
-function sessionCountLabel(project: ProjectRecord, sessions: SessionRecord[]) {
-  const count = sessions.filter((session) => session.projectId === project.id).length;
-  return `${count} session${count === 1 ? '' : 's'}`;
+      {expanded && (
+        <div className="ml-3 mt-0.5 space-y-0.5 border-l border-zinc-800 pl-3">
+          {sessions.length === 0 ? (
+            <div className="px-2 py-1.5 text-[12px] text-zinc-600">No sessions yet</div>
+          ) : (
+            sessions.map((session) => {
+              const isActive = selectedSessionId === session.id;
+              return (
+                <button
+                  className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] transition ${
+                    isActive
+                      ? 'bg-[var(--color-accent-muted)] text-indigo-200'
+                      : 'text-zinc-300 hover:bg-zinc-800/60 hover:text-zinc-100'
+                  }`}
+                  key={session.id}
+                  onClick={() => onSessionSelect(session.id)}
+                  type="button"
+                >
+                  <MessageSquare className="size-3.5 shrink-0 text-zinc-500" />
+                  <span className="truncate">{session.title}</span>
+                  <span className={`ml-auto size-2 shrink-0 rounded-full ${statusDot(session.status)}`} />
+                </button>
+              );
+            })
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function Sidebar({
   workspace,
   onAddProject,
-  onCreateSession,
-  onNewPattern,
+  onNewSession,
   onProjectSelect,
-  onPatternSelect,
   onSessionSelect,
+  onOpenSettings,
 }: SidebarProps) {
   return (
-    <div className="flex h-screen flex-col">
-      <div className="border-b border-slate-800 px-5 py-4">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <div className="text-xs uppercase tracking-[0.22em] text-slate-400">kopaya</div>
-            <h1 className="mt-1 text-xl font-semibold text-white">Agent Orchestrator</h1>
-            <p className="mt-1 text-sm text-slate-400">
-              React + Electron frontend with a bundled .NET sidecar.
-            </p>
+    <div className="flex h-full flex-col">
+      {/* Header */}
+      <div className="flex items-center justify-between border-b border-[var(--color-border)] px-4 py-3">
+        <div className="flex items-center gap-2">
+          <div className="flex size-7 items-center justify-center rounded-lg bg-indigo-600 text-[11px] font-bold text-white">
+            K
           </div>
+          <span className="text-sm font-semibold text-zinc-100">kopaya</span>
+        </div>
+        <div className="flex items-center gap-1">
           <button
-            className="rounded-lg border border-slate-700 px-3 py-2 text-sm font-medium text-slate-200 hover:bg-slate-800"
-            onClick={onAddProject}
+            className="flex size-8 items-center justify-center rounded-lg text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-200"
+            onClick={onOpenSettings}
+            title="Settings"
             type="button"
           >
-            Add Project
+            <Settings className="size-4" />
+          </button>
+          <button
+            className="flex size-8 items-center justify-center rounded-lg bg-indigo-600 text-white transition hover:bg-indigo-500"
+            onClick={onNewSession}
+            title="New session"
+            type="button"
+          >
+            <Plus className="size-4" />
           </button>
         </div>
       </div>
 
-      <div className="flex-1 space-y-6 overflow-y-auto px-4 py-4">
-        <section>
-          <div className="mb-3 flex items-center justify-between px-1">
+      {/* Project + Session Tree */}
+      <div className="flex-1 overflow-y-auto px-2 py-2">
+        {workspace.projects.length === 0 ? (
+          <div className="flex flex-col items-center gap-3 px-4 py-10 text-center">
+            <FolderOpen className="size-8 text-zinc-700" />
             <div>
-              <h2 className="text-sm font-semibold text-slate-200">Patterns</h2>
-              <p className="text-xs text-slate-500">Global orchestration library</p>
+              <p className="text-sm text-zinc-400">No projects yet</p>
+              <p className="mt-1 text-[12px] text-zinc-600">
+                Add a project folder to start orchestrating
+              </p>
             </div>
             <button
-              className="rounded-md border border-slate-700 px-2.5 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-800"
-              onClick={onNewPattern}
+              className="mt-1 rounded-lg bg-zinc-800 px-3 py-1.5 text-[13px] font-medium text-zinc-200 transition hover:bg-zinc-700"
+              onClick={onAddProject}
               type="button"
             >
-              New Pattern
+              Add Project
             </button>
           </div>
-          <div className="space-y-2">
-            {workspace.patterns.map((pattern) => (
-              <button
-                className={itemClasses(workspace.selectedPatternId === pattern.id && !workspace.selectedSessionId)}
-                key={pattern.id}
-                onClick={() => onPatternSelect(pattern.id)}
-                type="button"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="font-medium text-slate-100">{pattern.name}</div>
-                    <div className="mt-1 text-xs text-slate-400">{pattern.description}</div>
-                  </div>
-                  <span className={`rounded-full px-2 py-0.5 text-[11px] uppercase tracking-wide ${modeBadge(pattern)}`}>
-                    {pattern.mode}
-                  </span>
-                </div>
-              </button>
+        ) : (
+          <div className="space-y-1">
+            {workspace.projects.map((project) => (
+              <ProjectGroup
+                key={project.id}
+                onSessionSelect={onSessionSelect}
+                project={project}
+                selectedSessionId={workspace.selectedSessionId}
+                sessions={workspace.sessions.filter((s) => s.projectId === project.id)}
+              />
             ))}
           </div>
-        </section>
-
-        <section>
-          <div className="mb-3 flex items-center justify-between px-1">
-            <div>
-              <h2 className="text-sm font-semibold text-slate-200">Projects</h2>
-              <p className="text-xs text-slate-500">Workspace folders and their sessions</p>
-            </div>
-            <button
-              className="rounded-md border border-slate-700 px-2.5 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-800"
-              disabled={!workspace.selectedProjectId || !workspace.selectedPatternId}
-              onClick={onCreateSession}
-              type="button"
-            >
-              New Session
-            </button>
-          </div>
-
-          <div className="space-y-3">
-            {workspace.projects.map((project) => {
-              const sessions = workspace.sessions.filter((session) => session.projectId === project.id);
-              return (
-                <div
-                  className="rounded-xl border border-slate-800 bg-slate-900/60 p-3"
-                  key={project.id}
-                >
-                  <button
-                    className={itemClasses(workspace.selectedProjectId === project.id && !workspace.selectedSessionId)}
-                    onClick={() => onProjectSelect(project.id)}
-                    type="button"
-                  >
-                    <div className="font-medium text-slate-100">{project.name}</div>
-                    <div className="mt-1 text-xs text-slate-400">{project.path}</div>
-                    <div className="mt-2 text-[11px] uppercase tracking-wide text-slate-500">
-                      {sessionCountLabel(project, sessions)}
-                    </div>
-                  </button>
-
-                  {sessions.length > 0 ? (
-                    <div className="mt-3 space-y-2 border-t border-slate-800 pt-3">
-                      {sessions.map((session) => (
-                        <button
-                          className={itemClasses(workspace.selectedSessionId === session.id)}
-                          key={session.id}
-                          onClick={() => onSessionSelect(session.id)}
-                          type="button"
-                        >
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="min-w-0">
-                              <div className="truncate font-medium text-slate-100">{session.title}</div>
-                              <div className="mt-1 text-xs text-slate-400">
-                                {session.messages.length} message{session.messages.length === 1 ? '' : 's'}
-                              </div>
-                            </div>
-                            <span
-                              className={`rounded-full px-2 py-0.5 text-[11px] uppercase tracking-wide ${
-                                session.status === 'error'
-                                  ? 'bg-rose-500/15 text-rose-200'
-                                  : session.status === 'running'
-                                    ? 'bg-sky-500/15 text-sky-200'
-                                    : 'bg-slate-700 text-slate-200'
-                              }`}
-                            >
-                              {session.status}
-                            </span>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="mt-3 rounded-lg border border-dashed border-slate-800 px-3 py-2 text-xs text-slate-500">
-                      No sessions yet. Select a pattern, then start one.
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-
-            {workspace.projects.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-slate-800 bg-slate-900/50 px-4 py-5 text-sm text-slate-400">
-                Add one or more project folders to begin orchestrating sessions.
-              </div>
-            ) : null}
-          </div>
-        </section>
+        )}
       </div>
+
+      {/* Footer */}
+      {workspace.projects.length > 0 && (
+        <div className="border-t border-[var(--color-border)] px-3 py-2">
+          <button
+            className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-[13px] text-zinc-500 transition hover:bg-zinc-800/60 hover:text-zinc-300"
+            onClick={onAddProject}
+            type="button"
+          >
+            <Plus className="size-3.5" />
+            Add project
+          </button>
+        </div>
+      )}
     </div>
   );
 }

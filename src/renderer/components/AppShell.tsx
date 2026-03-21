@@ -3,13 +3,17 @@ import type { ReactNode } from 'react';
 interface AppShellProps {
   sidebar: ReactNode;
   content: ReactNode;
+  overlay?: ReactNode;
 }
 
-export function AppShell({ sidebar, content }: AppShellProps) {
+export function AppShell({ sidebar, content, overlay }: AppShellProps) {
   return (
-    <div className="flex min-h-screen bg-slate-950 text-slate-100">
-      <aside className="w-[360px] shrink-0 border-r border-slate-800 bg-slate-900/90">{sidebar}</aside>
-      <main className="min-w-0 flex-1">{content}</main>
+    <div className="relative flex h-screen bg-[var(--color-surface-0)] text-zinc-100">
+      <aside className="flex w-72 shrink-0 flex-col border-r border-[var(--color-border)] bg-[var(--color-surface-1)]">
+        {sidebar}
+      </aside>
+      <main className="relative min-w-0 flex-1">{content}</main>
+      {overlay}
     </div>
   );
 }

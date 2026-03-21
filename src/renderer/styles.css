@@ -103,6 +103,16 @@ textarea {
   max-height: 200px;
 }
 
+/* Sidebar running-session pulse animation */
+@keyframes sidebar-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.sidebar-pulse {
+  animation: sidebar-pulse 2s ease-in-out infinite;
+}
+
 /* Markdown prose styles for chat messages */
 .markdown-content {
   line-height: 1.7;

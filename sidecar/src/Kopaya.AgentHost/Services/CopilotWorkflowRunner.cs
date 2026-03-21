@@ -138,8 +138,19 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
             {
                 List<ChatMessage> allMessages = outputEvent.As<List<ChatMessage>>() ?? [];
                 List<ChatMessage> newMessages = allMessages.Skip(inputMessages.Count).ToList();
-                completedMessages = ConvertOutputMessages(command, newMessages, segments);
+                completedMessages = ProjectCompletedMessages(
+                    command,
+                    newMessages,
+                    segments.Select(segment => (segment.MessageId, segment.AuthorName, segment.Content.ToString())).ToList());
             }
+        }
+
+        if (completedMessages.Count == 0 && segments.Count > 0)
+        {
+            completedMessages = ProjectCompletedMessages(
+                command,
+                [],
+                segments.Select(segment => (segment.MessageId, segment.AuthorName, segment.Content.ToString())).ToList());
         }
 
         return completedMessages;
@@ -291,17 +302,18 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
         return created;
     }
 
-    private static List<ChatMessageDto> ConvertOutputMessages(
+    internal static List<ChatMessageDto> ProjectCompletedMessages(
         RunTurnCommandDto command,
         IReadOnlyList<ChatMessage> newMessages,
-        IReadOnlyList<StreamingSegment> segments)
+        IReadOnlyList<(string MessageId, string AuthorName, string Content)> segments)
     {
         List<ChatMessageDto> mapped = [];
         int segmentIndex = 0;
 
         foreach (ChatMessage message in newMessages.Where(message => message.Role != ChatRole.User))
         {
-            StreamingSegment? segment = segmentIndex < segments.Count ? segments[segmentIndex] : null;
+            (string MessageId, string AuthorName, string Content)? segment =
+                segmentIndex < segments.Count ? segments[segmentIndex] : null;
             segmentIndex++;
 
             mapped.Add(new ChatMessageDto
@@ -312,7 +324,7 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
                     command.Pattern,
                     message.AuthorName,
                     segment?.AuthorName),
-                Content = message.Text ?? segment?.Content.ToString() ?? string.Empty,
+                Content = message.Text ?? segment?.Content ?? string.Empty,
                 CreatedAt = DateTimeOffset.UtcNow.ToString("O"),
             });
         }
@@ -324,7 +336,7 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
                 Id = segment.MessageId,
                 Role = "assistant",
                 AuthorName = AgentIdentityResolver.ResolveDisplayAuthorName(command.Pattern, segment.AuthorName),
-                Content = segment.Content.ToString(),
+                Content = segment.Content,
                 CreatedAt = DateTimeOffset.UtcNow.ToString("O"),
             }));
         }

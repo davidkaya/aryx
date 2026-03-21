@@ -1,13 +1,6 @@
-import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { type KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { AlertCircle, ArrowUp, Bot, Loader2, User } from 'lucide-react';
 
-import {
-  buildAgentActivityRows,
-  formatAgentActivityLabel,
-  isAgentActivityActive,
-  isAgentActivityCompleted,
-  type SessionActivityState,
-} from '@renderer/lib/sessionActivity';
 import type { PatternDefinition } from '@shared/domain/pattern';
 import type { ProjectRecord } from '@shared/domain/project';
 import type { SessionRecord } from '@shared/domain/session';
@@ -23,25 +16,18 @@ function ThinkingDots() {
 }
 
 interface ChatPaneProps {
-  activity?: SessionActivityState;
   project: ProjectRecord;
   pattern: PatternDefinition;
   session: SessionRecord;
   onSend: (content: string) => Promise<void>;
 }
 
-export function ChatPane({ activity, project, pattern, session, onSend }: ChatPaneProps) {
+export function ChatPane({ project, pattern, session, onSend }: ChatPaneProps) {
   const [input, setInput] = useState('');
   const transcriptRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const isBusy = session.status === 'running';
-  const activityRows = useMemo(
-    () => buildAgentActivityRows(activity, pattern.agents),
-    [activity, pattern.agents],
-  );
-  const hasObservedActivity = activityRows.some((row) => !!row.activity);
-  const showActivityPanel = (isBusy || hasObservedActivity) && activityRows.length > 0;
 
   useEffect(() => {
     transcriptRef.current?.scrollTo({
@@ -139,35 +125,6 @@ export function ChatPane({ activity, project, pattern, session, onSend }: ChatPa
                 );
               })}
             </div>
-
-            {showActivityPanel && (
-              <div className="mb-4 rounded-xl border border-zinc-800 bg-zinc-900/60 px-4 py-3">
-                <div className="mb-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-600">
-                  Agent activity
-                </div>
-                <div className="space-y-2.5">
-                  {activityRows.map((row) => (
-                    <div className="flex items-start gap-3" key={row.key}>
-                      <span
-                        className={`mt-1.5 size-2 shrink-0 rounded-full ${
-                          isAgentActivityActive(row.activity)
-                            ? 'animate-pulse bg-blue-400'
-                            : isAgentActivityCompleted(row.activity)
-                              ? 'bg-emerald-400'
-                              : 'bg-zinc-700'
-                        }`}
-                      />
-                      <div className="min-w-0 flex-1">
-                        <div className="text-[12px] font-medium text-zinc-300">{row.agentName}</div>
-                        <div className="text-[12px] text-zinc-500">
-                          {formatAgentActivityLabel(row.activity)}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
         )}
       </div>

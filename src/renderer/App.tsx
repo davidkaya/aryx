@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { AppShell } from '@renderer/components/AppShell';
+import { ActivityPanel } from '@renderer/components/ActivityPanel';
 import { ChatPane } from '@renderer/components/ChatPane';
 import { NewSessionModal } from '@renderer/components/NewSessionModal';
 import { SettingsPanel } from '@renderer/components/SettingsPanel';
@@ -117,6 +118,7 @@ export default function App() {
 
   // Determine main content
   let content: React.ReactNode;
+  let detailPanel: React.ReactNode | undefined;
   if (error) {
     content = (
       <div className="flex h-full items-center justify-center px-8">
@@ -129,10 +131,16 @@ export default function App() {
   } else if (selectedSession && patternForSession && projectForSession) {
     content = (
       <ChatPane
-        activity={activityForSession}
         onSend={(c) => api.sendSessionMessage({ sessionId: selectedSession.id, content: c })}
         pattern={patternForSession}
         project={projectForSession}
+        session={selectedSession}
+      />
+    );
+    detailPanel = (
+      <ActivityPanel
+        activity={activityForSession}
+        pattern={patternForSession}
         session={selectedSession}
       />
     );
@@ -166,6 +174,7 @@ export default function App() {
     <>
       <AppShell
         content={content}
+        detailPanel={detailPanel}
         overlay={overlay}
         sidebar={
           <Sidebar

@@ -54,8 +54,8 @@ export function SettingsPanel({
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-[var(--color-surface-0)]">
-      {/* Header */}
-      <div className="flex items-center justify-between border-b border-[var(--color-border)] px-6 py-3">
+      {/* Header — top padding clears the title bar overlay zone */}
+      <div className="flex items-center justify-between border-b border-[var(--color-border)] px-6 pb-3 pt-12">
         <h2 className="text-sm font-semibold text-zinc-100">Settings</h2>
         <button
           className="flex size-8 items-center justify-center rounded-lg text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-200"

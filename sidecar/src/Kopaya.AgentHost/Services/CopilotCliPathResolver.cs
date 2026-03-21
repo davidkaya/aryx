@@ -1,3 +1,4 @@
+using System.Collections;
 using GitHub.Copilot.SDK;
 
 namespace Kopaya.AgentHost.Services;
@@ -6,6 +7,7 @@ internal static class CopilotCliPathResolver
 {
     private const string CopilotCommandName = "copilot";
     private const string DefaultWindowsPathExtensions = ".COM;.EXE;.BAT;.CMD";
+    private static readonly string[] BlockedCliEnvironmentPrefixes = ["BUN_", "COPILOT_", "ELECTRON_", "NODE_", "NPM_"];
 
     public static CopilotClientOptions CreateClientOptions()
     {
@@ -21,9 +23,16 @@ internal static class CopilotCliPathResolver
                 "Kopaya requires the system-installed 'copilot' command on PATH. Install the GitHub Copilot CLI and ensure it is available in the current environment.");
         }
 
+        CopilotCliLaunch launch = ResolveCliLaunch(
+            cliPath,
+            OperatingSystem.IsWindows(),
+            Environment.GetEnvironmentVariable("ComSpec"));
+
         return new CopilotClientOptions
         {
-            CliPath = cliPath,
+            CliPath = launch.Path,
+            CliArgs = launch.Args,
+            Environment = ResolveCliEnvironment(GetCurrentEnvironmentVariables()),
         };
     }
 
@@ -35,6 +44,50 @@ internal static class CopilotCliPathResolver
     {
         ArgumentNullException.ThrowIfNull(fileExists);
         return ResolveCliPath(pathValue, pathExtValue, isWindows, fileExists);
+    }
+
+    internal static IReadOnlyDictionary<string, string> ResolveCliEnvironment(
+        IEnumerable<KeyValuePair<string, string?>> environmentVariables)
+    {
+        ArgumentNullException.ThrowIfNull(environmentVariables);
+
+        Dictionary<string, string> sanitizedEnvironment = new(StringComparer.OrdinalIgnoreCase);
+
+        foreach (KeyValuePair<string, string?> entry in environmentVariables)
+        {
+            if (string.IsNullOrWhiteSpace(entry.Key) || entry.Value is null)
+            {
+                continue;
+            }
+
+            string normalizedKey = entry.Key.ToUpperInvariant();
+            if (BlockedCliEnvironmentPrefixes.Any(prefix => normalizedKey.StartsWith(prefix, StringComparison.Ordinal)))
+            {
+                continue;
+            }
+
+            sanitizedEnvironment[entry.Key] = entry.Value;
+        }
+
+        return sanitizedEnvironment;
+    }
+
+    internal static CopilotCliLaunch ResolveCliLaunch(string cliPath, bool isWindows, string? commandProcessorPath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(cliPath);
+
+        if (!isWindows)
+        {
+            return new CopilotCliLaunch(cliPath, []);
+        }
+
+        string launchPath = string.IsNullOrWhiteSpace(commandProcessorPath)
+            ? "cmd.exe"
+            : commandProcessorPath;
+
+        return new CopilotCliLaunch(
+            launchPath,
+            ["/d", "/s", "/c", CopilotCommandName]);
     }
 
     private static string? ResolveCliPath(
@@ -98,4 +151,15 @@ internal static class CopilotCliPathResolver
             }
         }
     }
+
+    private static IEnumerable<KeyValuePair<string, string?>> GetCurrentEnvironmentVariables()
+    {
+        return Environment.GetEnvironmentVariables()
+            .Cast<DictionaryEntry>()
+            .Select(entry => new KeyValuePair<string, string?>(
+                entry.Key?.ToString() ?? string.Empty,
+                entry.Value?.ToString()));
+    }
 }
+
+internal sealed record CopilotCliLaunch(string Path, string[] Args);

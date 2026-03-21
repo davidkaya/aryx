@@ -1,4 +1,4 @@
-const blockedEnvironmentKeys = new Set(['ELECTRON_RUN_AS_NODE', 'NODE_OPTIONS']);
+const blockedEnvironmentPrefixes = ['BUN_', 'COPILOT_', 'ELECTRON_', 'NODE_', 'NPM_'];
 
 export function createSidecarEnvironment(baseEnvironment: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const sanitizedEnvironment: NodeJS.ProcessEnv = {};
@@ -6,7 +6,7 @@ export function createSidecarEnvironment(baseEnvironment: NodeJS.ProcessEnv): No
   for (const [name, value] of Object.entries(baseEnvironment)) {
     const normalizedName = name.toUpperCase();
 
-    if (normalizedName.startsWith('COPILOT_') || blockedEnvironmentKeys.has(normalizedName)) {
+    if (blockedEnvironmentPrefixes.some((prefix) => normalizedName.startsWith(prefix))) {
       continue;
     }
 

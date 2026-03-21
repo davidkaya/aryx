@@ -500,11 +500,30 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
         private Workflow BuildHandoffWorkflow(PatternDefinitionDto pattern)
         {
             AIAgent firstAgent = Agents[0];
-            IReadOnlyList<AIAgent> specialists = Agents.Skip(1).ToList();
+            PatternAgentDefinitionDto triageDefinition = pattern.Agents[0];
+            IReadOnlyList<(AIAgent Agent, PatternAgentDefinitionDto Definition)> specialists =
+                Agents.Skip(1)
+                    .Zip(pattern.Agents.Skip(1), (agent, definition) => (agent, definition))
+                    .ToList();
 
             HandoffsWorkflowBuilder builder = AgentWorkflowBuilder.CreateHandoffBuilderWith(firstAgent)
-                .WithHandoffs(firstAgent, specialists)
-                .WithHandoffs(specialists, firstAgent);
+                .WithHandoffInstructions(HandoffWorkflowGuidance.CreateWorkflowInstructions());
+
+            foreach ((AIAgent specialist, PatternAgentDefinitionDto definition) in specialists)
+            {
+                builder = builder.WithHandoff(
+                    firstAgent,
+                    specialist,
+                    HandoffWorkflowGuidance.CreateForwardReason(definition));
+            }
+
+            foreach ((AIAgent specialist, _) in specialists)
+            {
+                builder = builder.WithHandoff(
+                    specialist,
+                    firstAgent,
+                    HandoffWorkflowGuidance.CreateReturnReason(triageDefinition));
+            }
 
             return builder.Build();
         }

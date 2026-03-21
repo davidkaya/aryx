@@ -316,8 +316,34 @@ export class KopayaAppService extends EventEmitter<AppServiceEvents> {
     });
   }
 
+  private emitCompletedActivity(
+    sessionId: string,
+    pattern: PatternDefinition,
+    message: ChatMessageRecord,
+  ): void {
+    if (message.role !== 'assistant') {
+      return;
+    }
+
+    const agent = pattern.agents.find((candidate) =>
+      candidate.id === message.authorName || candidate.name === message.authorName);
+    if (!agent) {
+      return;
+    }
+
+    this.emitSessionEvent({
+      sessionId,
+      kind: 'agent-activity',
+      occurredAt: nowIso(),
+      activityType: 'completed',
+      agentId: agent.id,
+      agentName: agent.name,
+    });
+  }
+
   private finalizeTurn(workspace: WorkspaceState, sessionId: string, messages: ChatMessageRecord[]): void {
     const session = this.requireSession(workspace, sessionId);
+    const pattern = this.requirePattern(workspace, session.patternId);
     const incomingIds = new Set(messages.map((message) => message.id));
 
     for (const message of messages) {
@@ -337,6 +363,8 @@ export class KopayaAppService extends EventEmitter<AppServiceEvents> {
         messageId: message.id,
         authorName: message.authorName,
       });
+
+      this.emitCompletedActivity(sessionId, pattern, message);
     }
 
     for (const message of session.messages) {

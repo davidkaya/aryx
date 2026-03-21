@@ -83,13 +83,13 @@ The Electron main process maps this to a `SessionEventRecord` with `kind: 'agent
 
 ### Renderer consumption
 
-`App.tsx` now subscribes to `onSessionEvent` and tracks live activity per agent for the selected session. `ChatPane.tsx` uses that state to show a status row for each agent while the run is active.
+`App.tsx` now subscribes to `onSessionEvent`, applies message-delta / message-complete updates into renderer workspace state so assistant responses can stream live, and tracks live activity per agent for the selected session. `ChatPane.tsx` uses that state to show a status row for each agent while the run is active.
 
 - "Code Reviewer is thinking…"
 - "Code Reviewer is using read_file…"
 - "Handing off to Summarizer…"
 
-The activity panel in `ChatPane.tsx` is now wired to this data, showing every agent in the pattern with observed activity such as thinking, tool usage, handoff, or completed. If no event has been observed for an agent yet, the UI states that no status has been reported instead of inventing a synthetic state. The panel also keeps the last observed statuses visible after a run completes, and resets them when the next run begins.
+The activity panel in `ChatPane.tsx` is now wired to this data, showing every agent in the pattern with observed activity such as thinking, tool usage, handoff, or completed. If no event has been observed for an agent yet, the UI states that no status has been reported instead of inventing a synthetic state. The panel also keeps the last observed statuses visible after a run completes, and resets them when the next run begins. Completed activity is emitted when final messages are applied, so the status no longer jumps to `Completed` before the corresponding response becomes visible.
 
 ## Files involved
 

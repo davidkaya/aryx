@@ -10,6 +10,7 @@ import {
   pruneSessionActivities,
   type SessionActivityMap,
 } from '@renderer/lib/sessionActivity';
+import { applySessionEventWorkspace } from '@renderer/lib/sessionWorkspace';
 import { WelcomePane } from '@renderer/components/WelcomePane';
 import { getElectronApi } from '@renderer/lib/electronApi';
 import type { PatternDefinition } from '@shared/domain/pattern';
@@ -70,6 +71,7 @@ export default function App() {
     });
 
     const offSessionEvent = api.onSessionEvent((event) => {
+      setWorkspace((current) => applySessionEventWorkspace(current, event));
       setSessionActivities((current) => applySessionEventActivity(current, event));
     });
 

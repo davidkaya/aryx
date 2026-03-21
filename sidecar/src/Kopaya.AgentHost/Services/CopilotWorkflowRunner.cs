@@ -49,7 +49,6 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
         List<ChatMessageDto> completedMessages = [];
         AgentIdentity? activeAgent = null;
         HashSet<string> startedAgents = new(StringComparer.OrdinalIgnoreCase);
-        HashSet<string> completedAgents = new(StringComparer.OrdinalIgnoreCase);
 
         await using StreamingRun run = await InProcessExecution.RunStreamingAsync(workflow, inputMessages).ConfigureAwait(false);
         await run.TrySendMessageAsync(new TurnToken(emitEvents: true)).ConfigureAwait(false);
@@ -81,7 +80,7 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
                     await onActivity(activity).ConfigureAwait(false);
                 }
             }
-            else if (evt is AgentResponseUpdateEvent update && !string.IsNullOrEmpty(update.Update.Text))
+            else if (evt is AgentResponseUpdateEvent update)
             {
                 AgentIdentity? updateAgent = null;
                 string authorName = update.ExecutorId;
@@ -94,10 +93,6 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
                     authorName = resolvedUpdateAgent.AgentName;
                 }
 
-                string messageId = update.Update.MessageId ?? $"{command.RequestId}-delta-{fallbackMessageIndex++}";
-                StreamingSegment segment = GetOrCreateSegment(segments, messageId, authorName);
-                segment.Content.Append(update.Update.Text);
-
                 if (updateAgent.HasValue)
                 {
                     activeAgent = updateAgent.Value;
@@ -107,6 +102,15 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
                         startedAgents,
                         onActivity).ConfigureAwait(false);
                 }
+
+                if (string.IsNullOrEmpty(update.Update.Text))
+                {
+                    continue;
+                }
+
+                string messageId = update.Update.MessageId ?? $"{command.RequestId}-delta-{fallbackMessageIndex++}";
+                StreamingSegment segment = GetOrCreateSegment(segments, messageId, authorName);
+                segment.Content.Append(update.Update.Text);
 
                 await onDelta(new TurnDeltaEventDto
                 {
@@ -124,14 +128,6 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
                     completed.ExecutorId,
                     out AgentIdentity completedAgent))
             {
-                if (completedAgents.Add(completedAgent.AgentId))
-                {
-                    await onActivity(CreateActivityEvent(
-                        command,
-                        activityType: "completed",
-                        agent: completedAgent)).ConfigureAwait(false);
-                }
-
                 if (activeAgent.HasValue
                     && string.Equals(activeAgent.Value.AgentId, completedAgent.AgentId, StringComparison.Ordinal))
                 {
@@ -143,11 +139,6 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
                 List<ChatMessage> allMessages = outputEvent.As<List<ChatMessage>>() ?? [];
                 List<ChatMessage> newMessages = allMessages.Skip(inputMessages.Count).ToList();
                 completedMessages = ConvertOutputMessages(command, newMessages, segments);
-                await EmitCompletedActivitiesForMessages(
-                    command,
-                    completedMessages,
-                    completedAgents,
-                    onActivity).ConfigureAwait(false);
             }
         }
 
@@ -212,34 +203,6 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
             command,
             activityType: "thinking",
             agent: agent)).ConfigureAwait(false);
-    }
-
-    private static async Task EmitCompletedActivitiesForMessages(
-        RunTurnCommandDto command,
-        IReadOnlyList<ChatMessageDto> messages,
-        ISet<string> completedAgents,
-        Func<AgentActivityEventDto, Task> onActivity)
-    {
-        foreach (ChatMessageDto message in messages)
-        {
-            if (!AgentIdentityResolver.TryResolveKnownAgentIdentity(
-                command.Pattern,
-                message.AuthorName,
-                out AgentIdentity messageAgent))
-            {
-                continue;
-            }
-
-            if (!completedAgents.Add(messageAgent.AgentId))
-            {
-                continue;
-            }
-
-            await onActivity(CreateActivityEvent(
-                command,
-                activityType: "completed",
-                agent: messageAgent)).ConfigureAwait(false);
-        }
     }
 
     private static bool TryGetHandoffTarget(

@@ -2,9 +2,11 @@ import { describe, expect, test } from 'bun:test';
 
 import { createBuiltinPatterns, validatePatternDefinition } from '@shared/domain/pattern';
 
+const BUILTIN_TIMESTAMP = '2026-03-22T00:00:00.000Z';
+
 describe('pattern validation', () => {
   test('builtin patterns are valid except explicitly unavailable modes', () => {
-    const patterns = createBuiltinPatterns('2026-03-22T00:00:00.000Z');
+    const patterns = createBuiltinPatterns(BUILTIN_TIMESTAMP);
 
     const validPatterns = patterns.filter((pattern) => pattern.availability !== 'unavailable');
 
@@ -14,11 +16,69 @@ describe('pattern validation', () => {
   });
 
   test('magentic pattern is marked unavailable', () => {
-    const magentic = createBuiltinPatterns('2026-03-22T00:00:00.000Z').find(
+    const magentic = createBuiltinPatterns(BUILTIN_TIMESTAMP).find(
       (pattern) => pattern.mode === 'magentic',
     );
 
     expect(magentic).toBeDefined();
     expect(validatePatternDefinition(magentic!)[0]?.message).toContain('unsupported');
+  });
+
+  test('single-agent mode reports agent count, warning, and model issues together', () => {
+    const singlePattern = createBuiltinPatterns(BUILTIN_TIMESTAMP).find(
+      (pattern) => pattern.mode === 'single',
+    );
+
+    expect(singlePattern).toBeDefined();
+
+    const issues = validatePatternDefinition({
+      ...singlePattern!,
+      agents: [
+        {
+          ...singlePattern!.agents[0],
+          instructions: '   ',
+        },
+        {
+          ...singlePattern!.agents[0],
+          id: 'agent-reviewer',
+          name: 'Reviewer',
+          model: '',
+        },
+      ],
+    });
+
+    expect(issues.find((issue) => issue.field === 'agents')?.message).toBe(
+      'Single-agent chat requires exactly one agent.',
+    );
+    expect(issues.find((issue) => issue.field === 'agents.instructions')?.level).toBe('warning');
+    expect(issues.find((issue) => issue.field === 'agents.instructions')?.message).toBe(
+      'Agent "Primary Agent" should have instructions.',
+    );
+    expect(issues.find((issue) => issue.field === 'agents.model')?.message).toBe(
+      'Agent "Reviewer" requires a model identifier.',
+    );
+  });
+
+  test('multi-agent orchestration modes reject single-agent configurations', () => {
+    const patterns = createBuiltinPatterns(BUILTIN_TIMESTAMP);
+    const handoff = patterns.find((pattern) => pattern.mode === 'handoff');
+    const groupChat = patterns.find((pattern) => pattern.mode === 'group-chat');
+
+    expect(handoff).toBeDefined();
+    expect(groupChat).toBeDefined();
+
+    expect(
+      validatePatternDefinition({
+        ...handoff!,
+        agents: handoff!.agents.slice(0, 1),
+      }).find((issue) => issue.field === 'agents')?.message,
+    ).toBe('Handoff orchestration requires at least two agents.');
+
+    expect(
+      validatePatternDefinition({
+        ...groupChat!,
+        agents: groupChat!.agents.slice(0, 1),
+      }).find((issue) => issue.field === 'agents')?.message,
+    ).toBe('Group chat requires at least two agents.');
   });
 });

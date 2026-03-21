@@ -1,6 +1,8 @@
 node_modules/
 dist/
 dist-electron/
+dist-sidecar/
+release/
 
 sidecar/**/bin/
 sidecar/**/obj/

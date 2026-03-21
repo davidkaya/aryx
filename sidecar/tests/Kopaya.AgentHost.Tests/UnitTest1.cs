@@ -10,60 +10,99 @@ public sealed class PatternValidatorTests
     [Fact]
     public void SingleAgentPattern_WithExactlyOneAgent_IsValid()
     {
-        PatternDefinitionDto pattern = new()
-        {
-            Id = "single",
-            Name = "Single",
-            Mode = "single",
-            Availability = "available",
-            Agents =
-            [
-                new PatternAgentDefinitionDto
-                {
-                    Id = "agent-1",
-                    Name = "Primary",
-                    Model = "gpt-5.4",
-                    Instructions = "Help with the user's request.",
-                },
-            ],
-        };
-
-        IReadOnlyList<PatternValidationIssueDto> issues = _validator.Validate(pattern);
+        IReadOnlyList<PatternValidationIssueDto> issues = _validator.Validate(
+            CreatePattern(
+                "single",
+                [CreateAgent()]));
 
         Assert.Empty(issues);
     }
 
     [Fact]
+    public void HandoffPattern_WithSingleAgent_IsReportedAsInvalid()
+    {
+        IReadOnlyList<PatternValidationIssueDto> issues = _validator.Validate(
+            CreatePattern(
+                "handoff",
+                [CreateAgent()]));
+
+        Assert.Contains(issues, issue =>
+            issue.Field == "agents"
+            && issue.Message == "Handoff orchestration requires at least two agents.");
+    }
+
+    [Fact]
+    public void AgentWithoutModel_IsReportedAsInvalid()
+    {
+        IReadOnlyList<PatternValidationIssueDto> issues = _validator.Validate(
+            CreatePattern(
+                "sequential",
+                [
+                    CreateAgent(model: ""),
+                    CreateAgent(id: "agent-2", name: "Reviewer"),
+                ]));
+
+        Assert.Contains(issues, issue =>
+            issue.Field == "agents.model"
+            && issue.Message == "Agent \"Primary\" requires a model identifier.");
+    }
+
+    [Fact]
     public void MagenticPattern_IsReportedAsUnavailable()
     {
-        PatternDefinitionDto pattern = new()
+        IReadOnlyList<PatternValidationIssueDto> issues = _validator.Validate(
+            CreatePattern(
+                "magentic",
+                [
+                    CreateAgent(id: "agent-1", name: "Planner", instructions: "Plan the task."),
+                    CreateAgent(
+                        id: "agent-2",
+                        name: "Specialist",
+                        model: "claude-opus-4.5",
+                        instructions: "Complete the task."),
+                ],
+                availability: "unavailable",
+                unavailabilityReason: "Unsupported in C#.",
+                name: "Magentic"));
+
+        Assert.Contains(issues, issue =>
+            issue.Field == "availability"
+            && issue.Message.Contains("Unsupported", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(issues, issue =>
+            issue.Field == "mode"
+            && issue.Message.Contains("Unsupported", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static PatternDefinitionDto CreatePattern(
+        string mode,
+        IReadOnlyList<PatternAgentDefinitionDto> agents,
+        string availability = "available",
+        string? unavailabilityReason = null,
+        string name = "Pattern")
+    {
+        return new PatternDefinitionDto
         {
-            Id = "magentic",
-            Name = "Magentic",
-            Mode = "magentic",
-            Availability = "unavailable",
-            UnavailabilityReason = "Unsupported in C#.",
-            Agents =
-            [
-                new PatternAgentDefinitionDto
-                {
-                    Id = "agent-1",
-                    Name = "Planner",
-                    Model = "gpt-5.4",
-                    Instructions = "Plan the task.",
-                },
-                new PatternAgentDefinitionDto
-                {
-                    Id = "agent-2",
-                    Name = "Specialist",
-                    Model = "claude-opus-4.5",
-                    Instructions = "Complete the task.",
-                },
-            ],
+            Id = $"{mode}-pattern",
+            Name = name,
+            Mode = mode,
+            Availability = availability,
+            UnavailabilityReason = unavailabilityReason,
+            Agents = agents,
         };
+    }
 
-        IReadOnlyList<PatternValidationIssueDto> issues = _validator.Validate(pattern);
-
-        Assert.Contains(issues, issue => issue.Message.Contains("Unsupported", StringComparison.OrdinalIgnoreCase));
+    private static PatternAgentDefinitionDto CreateAgent(
+        string id = "agent-1",
+        string name = "Primary",
+        string model = "gpt-5.4",
+        string instructions = "Help with the user's request.")
+    {
+        return new PatternAgentDefinitionDto
+        {
+            Id = id,
+            Name = name,
+            Model = model,
+            Instructions = instructions,
+        };
     }
 }

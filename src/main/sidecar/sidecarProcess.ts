@@ -1,6 +1,5 @@
 import { app } from 'electron';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import { join } from 'node:path';
 
 import type {
   SidecarCapabilities,
@@ -11,6 +10,7 @@ import type {
   RunTurnCommand,
 } from '@shared/contracts/sidecar';
 import type { ChatMessageRecord } from '@shared/domain/session';
+import { resolveSidecarProcess } from '@main/sidecar/sidecarRuntime';
 
 type PendingCommand =
   | {
@@ -29,30 +29,6 @@ type PendingCommand =
       reject: (error: Error) => void;
       onDelta: (event: TurnDeltaEvent) => void;
     };
-
-function getProjectRoot(): string {
-  return app.getAppPath();
-}
-
-function resolveSidecarProcess(): { command: string; args: string[] } {
-  if (app.isPackaged) {
-    return {
-      command: join(process.resourcesPath, 'sidecar', 'Kopaya.AgentHost.exe'),
-      args: ['--stdio'],
-    };
-  }
-
-  return {
-    command: 'dotnet',
-    args: [
-      'run',
-      '--project',
-      join(getProjectRoot(), 'sidecar', 'src', 'Kopaya.AgentHost', 'Kopaya.AgentHost.csproj'),
-      '--',
-      '--stdio',
-    ],
-  };
-}
 
 export class SidecarClient {
   private process?: ChildProcessWithoutNullStreams;
@@ -94,9 +70,14 @@ export class SidecarClient {
       return this.process;
     }
 
-    const sidecar = resolveSidecarProcess();
+    const sidecar = resolveSidecarProcess({
+      isPackaged: app.isPackaged,
+      appPath: app.getAppPath(),
+      resourcesPath: process.resourcesPath,
+      platform: process.platform,
+    });
     this.process = spawn(sidecar.command, sidecar.args, {
-      cwd: getProjectRoot(),
+      cwd: sidecar.cwd,
       stdio: 'pipe',
       windowsHide: true,
     });

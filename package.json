@@ -6,13 +6,16 @@
   "main": "dist-electron/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
-    "build": "electron-vite build && bun run sidecar:build",
+    "build:electron": "electron-vite build",
+    "build": "bun run build:electron && bun run sidecar:build",
+    "package": "bun run build:electron && bun run sidecar:publish && node \".\\scripts\\package-electron.mjs\"",
     "preview": "electron-vite preview",
     "lsp:typescript": "typescript-language-server --stdio",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "bun run typecheck && bun test",
     "sidecar:restore": "powershell -NoProfile -Command \"dotnet restore 'sidecar\\\\Kopaya.AgentHost.slnx'\"",
     "sidecar:build": "powershell -NoProfile -Command \"dotnet build 'sidecar\\\\Kopaya.AgentHost.slnx'\"",
+    "sidecar:publish": "powershell -NoProfile -Command \"if (Test-Path 'dist-sidecar\\\\win-x64') { Remove-Item 'dist-sidecar\\\\win-x64' -Recurse -Force }; dotnet publish 'sidecar\\\\src\\\\Kopaya.AgentHost\\\\Kopaya.AgentHost.csproj' -c Release -r win-x64 --self-contained true -p:DebugType=None -p:DebugSymbols=false -o 'dist-sidecar\\\\win-x64'\"",
     "sidecar:test": "powershell -NoProfile -Command \"dotnet test 'sidecar\\\\Kopaya.AgentHost.slnx'\""
   },
   "repository": {

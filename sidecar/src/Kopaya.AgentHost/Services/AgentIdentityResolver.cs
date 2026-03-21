@@ -35,6 +35,27 @@ internal static class AgentIdentityResolver
         return true;
     }
 
+    public static bool TryResolveObservedAgentIdentity(
+        PatternDefinitionDto pattern,
+        string? agentIdentifier,
+        AgentIdentity? fallbackAgent,
+        out AgentIdentity agent)
+    {
+        if (TryResolveKnownAgentIdentity(pattern, agentIdentifier, out agent))
+        {
+            return true;
+        }
+
+        if (fallbackAgent.HasValue && IsGenericAssistantIdentifier(agentIdentifier))
+        {
+            agent = fallbackAgent.Value;
+            return true;
+        }
+
+        agent = default;
+        return false;
+    }
+
     public static AgentIdentity ResolveAgentIdentity(
         PatternDefinitionDto pattern,
         string? agentId,
@@ -147,7 +168,7 @@ internal static class AgentIdentityResolver
             && normalizedCandidate.Contains(normalizedName, StringComparison.Ordinal);
     }
 
-    private static bool IsGenericAssistantIdentifier(string? candidate)
+    internal static bool IsGenericAssistantIdentifier(string? candidate)
     {
         return string.Equals(
             NormalizeComparisonKey(candidate),

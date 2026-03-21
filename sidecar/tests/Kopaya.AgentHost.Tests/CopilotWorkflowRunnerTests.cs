@@ -89,6 +89,84 @@ public sealed class CopilotWorkflowRunnerTests
         Assert.Equal("Hello", message.Content);
     }
 
+    [Fact]
+    public void ProjectCompletedMessages_UsesFallbackAgentForGenericAssistantOutput()
+    {
+        RunTurnCommandDto command = new()
+        {
+            RequestId = "turn-1",
+            SessionId = "session-1",
+            Pattern = new PatternDefinitionDto
+            {
+                Id = "pattern-handoff",
+                Name = "Handoff Support Flow",
+                Mode = "handoff",
+                Availability = "available",
+                Agents =
+                [
+                    CreateAgent(id: "agent-handoff-triage", name: "Triage"),
+                    CreateAgent(id: "agent-handoff-ux", name: "UX Specialist"),
+                ],
+            },
+        };
+
+        IReadOnlyList<ChatMessageDto> messages = CopilotWorkflowRunner.ProjectCompletedMessages(
+            command,
+            [
+                new ChatMessage(ChatRole.Assistant, "The button is in place.")
+                {
+                    AuthorName = "assistant",
+                },
+            ],
+            [],
+            new AgentIdentity("agent-handoff-ux", "UX Specialist"));
+
+        ChatMessageDto message = Assert.Single(messages);
+        Assert.Equal("UX Specialist", message.AuthorName);
+        Assert.Equal("The button is in place.", message.Content);
+    }
+
+    [Fact]
+    public void ProjectCompletedMessages_DropsBlankAssistantOutputMessages()
+    {
+        RunTurnCommandDto command = new()
+        {
+            RequestId = "turn-1",
+            SessionId = "session-1",
+            Pattern = new PatternDefinitionDto
+            {
+                Id = "pattern-handoff",
+                Name = "Handoff Support Flow",
+                Mode = "handoff",
+                Availability = "available",
+                Agents =
+                [
+                    CreateAgent(id: "agent-handoff-triage", name: "Triage"),
+                    CreateAgent(id: "agent-handoff-ux", name: "UX Specialist"),
+                ],
+            },
+        };
+
+        IReadOnlyList<ChatMessageDto> messages = CopilotWorkflowRunner.ProjectCompletedMessages(
+            command,
+            [
+                new ChatMessage(ChatRole.Assistant, string.Empty)
+                {
+                    AuthorName = "assistant",
+                },
+                new ChatMessage(ChatRole.Assistant, "Real content")
+                {
+                    AuthorName = "assistant",
+                },
+            ],
+            [],
+            new AgentIdentity("agent-handoff-ux", "UX Specialist"));
+
+        ChatMessageDto message = Assert.Single(messages);
+        Assert.Equal("UX Specialist", message.AuthorName);
+        Assert.Equal("Real content", message.Content);
+    }
+
     private static PatternAgentDefinitionDto CreateAgent(string id, string name)
     {
         return new PatternAgentDefinitionDto

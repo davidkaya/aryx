@@ -61,7 +61,7 @@ The .NET sidecar emits `agent-activity` events when the workflow stream exposes 
 
 In practice, `thinking` and `completed` are driven by executor lifecycle events, while `tool-calling` and `handoff` are emitted when request-info payloads expose recognizable tool-call or handoff targets.
 
-One important runtime nuance is that MAF / Copilot executor identifiers are not always the raw configured agent IDs. Real streams can emit composite values such as `Architect_agent_concurrent_architect` or generic names such as `assistant`. The sidecar therefore normalizes these runtime identifiers back to the configured pattern agents before emitting `agent-activity` events or choosing the visible author name.
+One important runtime nuance is that MAF / Copilot executor identifiers are not always the raw configured agent IDs. Real streams can emit composite values such as `Architect_agent_concurrent_architect` or generic names such as `assistant`. The sidecar therefore normalizes these runtime identifiers back to the configured pattern agents before emitting `agent-activity` events or choosing the visible author name. This is especially important in handoff flows, where the target agent can continue emitting generic `assistant` updates after control transfer; the sidecar now carries the handed-off identity forward so those updates and final messages still belong to the real target agent.
 
 ### .NET sidecar changes
 

@@ -95,6 +95,26 @@ public sealed class AgentIdentityResolverTests
         Assert.Equal("Implementer", authorName);
     }
 
+    [Fact]
+    public void TryResolveObservedAgentIdentity_UsesFallbackAgentForGenericAssistant()
+    {
+        PatternDefinitionDto pattern = CreatePattern(
+        [
+            CreateAgent(id: "agent-handoff-ux", name: "UX Specialist"),
+            CreateAgent(id: "agent-handoff-runtime", name: "Runtime Specialist"),
+        ]);
+
+        bool resolved = AgentIdentityResolver.TryResolveObservedAgentIdentity(
+            pattern,
+            "assistant",
+            new AgentIdentity("agent-handoff-ux", "UX Specialist"),
+            out AgentIdentity agent);
+
+        Assert.True(resolved);
+        Assert.Equal("agent-handoff-ux", agent.AgentId);
+        Assert.Equal("UX Specialist", agent.AgentName);
+    }
+
     private static PatternDefinitionDto CreatePattern(
         IReadOnlyList<PatternAgentDefinitionDto> agents,
         string mode = "concurrent")

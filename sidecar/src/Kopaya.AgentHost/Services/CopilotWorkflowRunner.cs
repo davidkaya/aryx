@@ -77,6 +77,13 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
 
                 if (activity is not null)
                 {
+                    if (string.Equals(activity.ActivityType, "handoff", StringComparison.Ordinal)
+                        && !string.IsNullOrWhiteSpace(activity.AgentId)
+                        && !string.IsNullOrWhiteSpace(activity.AgentName))
+                    {
+                        activeAgent = new AgentIdentity(activity.AgentId, activity.AgentName);
+                    }
+
                     await onActivity(activity).ConfigureAwait(false);
                 }
             }
@@ -84,9 +91,10 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
             {
                 AgentIdentity? updateAgent = null;
                 string authorName = update.ExecutorId;
-                if (AgentIdentityResolver.TryResolveKnownAgentIdentity(
+                if (AgentIdentityResolver.TryResolveObservedAgentIdentity(
                     command.Pattern,
                     update.ExecutorId,
+                    activeAgent,
                     out AgentIdentity resolvedUpdateAgent))
                 {
                     updateAgent = resolvedUpdateAgent;
@@ -123,9 +131,10 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
                 }).ConfigureAwait(false);
             }
             else if (evt is ExecutorCompletedEvent completed
-                && AgentIdentityResolver.TryResolveKnownAgentIdentity(
+                && AgentIdentityResolver.TryResolveObservedAgentIdentity(
                     command.Pattern,
                     completed.ExecutorId,
+                    activeAgent,
                     out AgentIdentity completedAgent))
             {
                 if (activeAgent.HasValue
@@ -141,7 +150,8 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
                 completedMessages = ProjectCompletedMessages(
                     command,
                     newMessages,
-                    segments.Select(segment => (segment.MessageId, segment.AuthorName, segment.Content.ToString())).ToList());
+                    segments.Select(segment => (segment.MessageId, segment.AuthorName, segment.Content.ToString())).ToList(),
+                    activeAgent);
             }
         }
 
@@ -150,7 +160,8 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
             completedMessages = ProjectCompletedMessages(
                 command,
                 [],
-                segments.Select(segment => (segment.MessageId, segment.AuthorName, segment.Content.ToString())).ToList());
+                segments.Select(segment => (segment.MessageId, segment.AuthorName, segment.Content.ToString())).ToList(),
+                activeAgent);
         }
 
         return completedMessages;
@@ -305,26 +316,40 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
     internal static List<ChatMessageDto> ProjectCompletedMessages(
         RunTurnCommandDto command,
         IReadOnlyList<ChatMessage> newMessages,
-        IReadOnlyList<(string MessageId, string AuthorName, string Content)> segments)
+        IReadOnlyList<(string MessageId, string AuthorName, string Content)> segments,
+        AgentIdentity? fallbackAgent = null)
     {
         List<ChatMessageDto> mapped = [];
         int segmentIndex = 0;
+        int fallbackOutputIndex = 0;
 
         foreach (ChatMessage message in newMessages.Where(message => message.Role != ChatRole.User))
         {
             (string MessageId, string AuthorName, string Content)? segment =
                 segmentIndex < segments.Count ? segments[segmentIndex] : null;
-            segmentIndex++;
+            string content = message.Text ?? segment?.Content ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(content))
+            {
+                continue;
+            }
+
+            if (segment.HasValue)
+            {
+                segmentIndex++;
+            }
+
+            fallbackOutputIndex++;
 
             mapped.Add(new ChatMessageDto
             {
-                Id = segment?.MessageId ?? $"{command.RequestId}-final-{segmentIndex}",
+                Id = segment?.MessageId ?? $"{command.RequestId}-final-{fallbackOutputIndex}",
                 Role = message.Role == ChatRole.System ? "system" : "assistant",
-                AuthorName = AgentIdentityResolver.ResolveDisplayAuthorName(
+                AuthorName = ResolveProjectedAuthorName(
                     command.Pattern,
                     message.AuthorName,
-                    segment?.AuthorName),
-                Content = message.Text ?? segment?.Content ?? string.Empty,
+                    segment?.AuthorName,
+                    fallbackAgent),
+                Content = content,
                 CreatedAt = DateTimeOffset.UtcNow.ToString("O"),
             });
         }
@@ -342,6 +367,23 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
         }
 
         return mapped;
+    }
+
+    private static string ResolveProjectedAuthorName(
+        PatternDefinitionDto pattern,
+        string? primaryIdentifier,
+        string? fallbackIdentifier,
+        AgentIdentity? fallbackAgent)
+    {
+        if (fallbackAgent.HasValue && AgentIdentityResolver.IsGenericAssistantIdentifier(primaryIdentifier))
+        {
+            return fallbackAgent.Value.AgentName;
+        }
+
+        return AgentIdentityResolver.ResolveDisplayAuthorName(
+            pattern,
+            primaryIdentifier,
+            fallbackIdentifier);
     }
 
     private static ChatMessage ToChatMessage(ChatMessageDto message)

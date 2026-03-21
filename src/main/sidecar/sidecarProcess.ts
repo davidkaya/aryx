@@ -1,0 +1,216 @@
+import { app } from 'electron';
+import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { join } from 'node:path';
+
+import type {
+  SidecarCapabilities,
+  SidecarCommand,
+  SidecarEvent,
+  TurnDeltaEvent,
+  ValidatePatternCommand,
+  RunTurnCommand,
+} from '@shared/contracts/sidecar';
+import type { ChatMessageRecord } from '@shared/domain/session';
+
+type PendingCommand =
+  | {
+      kind: 'capabilities';
+      resolve: (capabilities: SidecarCapabilities) => void;
+      reject: (error: Error) => void;
+    }
+  | {
+      kind: 'validate-pattern';
+      resolve: (issues: ValidatePatternCommand['pattern'] extends never ? never : unknown) => void;
+      reject: (error: Error) => void;
+    }
+  | {
+      kind: 'run-turn';
+      resolve: (messages: ChatMessageRecord[]) => void;
+      reject: (error: Error) => void;
+      onDelta: (event: TurnDeltaEvent) => void;
+    };
+
+function getProjectRoot(): string {
+  return app.getAppPath();
+}
+
+function resolveSidecarProcess(): { command: string; args: string[] } {
+  if (app.isPackaged) {
+    return {
+      command: join(process.resourcesPath, 'sidecar', 'Kopaya.AgentHost.exe'),
+      args: ['--stdio'],
+    };
+  }
+
+  return {
+    command: 'dotnet',
+    args: [
+      'run',
+      '--project',
+      join(getProjectRoot(), 'sidecar', 'src', 'Kopaya.AgentHost', 'Kopaya.AgentHost.csproj'),
+      '--',
+      '--stdio',
+    ],
+  };
+}
+
+export class SidecarClient {
+  private process?: ChildProcessWithoutNullStreams;
+  private stdoutBuffer = '';
+  private readonly pending = new Map<string, PendingCommand>();
+
+  async describeCapabilities(): Promise<SidecarCapabilities> {
+    const command = await this.dispatch<SidecarCapabilities>({
+      type: 'describe-capabilities',
+      requestId: `cap-${Date.now()}`,
+    });
+
+    return command;
+  }
+
+  async validatePattern(pattern: ValidatePatternCommand['pattern']): Promise<unknown> {
+    return this.dispatch<unknown>({
+      type: 'validate-pattern',
+      requestId: `validate-${Date.now()}`,
+      pattern,
+    });
+  }
+
+  async runTurn(command: RunTurnCommand, onDelta: (event: TurnDeltaEvent) => void): Promise<ChatMessageRecord[]> {
+    return this.dispatch<ChatMessageRecord[]>(command, onDelta);
+  }
+
+  async dispose(): Promise<void> {
+    if (!this.process) {
+      return;
+    }
+
+    this.process.kill();
+    this.process = undefined;
+  }
+
+  private async ensureProcess(): Promise<ChildProcessWithoutNullStreams> {
+    if (this.process && !this.process.killed) {
+      return this.process;
+    }
+
+    const sidecar = resolveSidecarProcess();
+    this.process = spawn(sidecar.command, sidecar.args, {
+      cwd: getProjectRoot(),
+      stdio: 'pipe',
+      windowsHide: true,
+    });
+
+    this.process.stdout.setEncoding('utf8');
+    this.process.stdout.on('data', (chunk: string) => {
+      this.stdoutBuffer += chunk;
+      this.flushStdoutBuffer();
+    });
+
+    this.process.stderr.setEncoding('utf8');
+    this.process.stderr.on('data', (chunk: string) => {
+      console.error('[kopaya sidecar]', chunk.trim());
+    });
+
+    this.process.on('exit', (code) => {
+      const error = new Error(`The .NET sidecar exited unexpectedly with code ${code ?? 'unknown'}.`);
+      for (const pending of this.pending.values()) {
+        pending.reject(error);
+      }
+      this.pending.clear();
+      this.process = undefined;
+      this.stdoutBuffer = '';
+    });
+
+    return this.process;
+  }
+
+  private async dispatch<TResult>(
+    command: SidecarCommand,
+    onDelta?: (event: TurnDeltaEvent) => void,
+  ): Promise<TResult> {
+    const process = await this.ensureProcess();
+
+    return new Promise<TResult>((resolve, reject) => {
+      if (command.type === 'run-turn') {
+        this.pending.set(command.requestId, {
+          kind: 'run-turn',
+          resolve: resolve as (messages: ChatMessageRecord[]) => void,
+          reject,
+          onDelta: onDelta ?? (() => undefined),
+        });
+      } else if (command.type === 'validate-pattern') {
+        this.pending.set(command.requestId, {
+          kind: 'validate-pattern',
+          resolve: resolve as (issues: unknown) => void,
+          reject,
+        });
+      } else {
+        this.pending.set(command.requestId, {
+          kind: 'capabilities',
+          resolve: resolve as (capabilities: SidecarCapabilities) => void,
+          reject,
+        });
+      }
+
+      process.stdin.write(`${JSON.stringify(command)}\n`);
+    });
+  }
+
+  private flushStdoutBuffer(): void {
+    let newlineIndex = this.stdoutBuffer.indexOf('\n');
+
+    while (newlineIndex >= 0) {
+      const rawLine = this.stdoutBuffer.slice(0, newlineIndex).trim();
+      this.stdoutBuffer = this.stdoutBuffer.slice(newlineIndex + 1);
+
+      if (rawLine) {
+        this.handleEvent(JSON.parse(rawLine) as SidecarEvent);
+      }
+
+      newlineIndex = this.stdoutBuffer.indexOf('\n');
+    }
+  }
+
+  private handleEvent(event: SidecarEvent): void {
+    const pending = this.pending.get(event.requestId);
+    if (!pending) {
+      return;
+    }
+
+    switch (event.type) {
+      case 'capabilities':
+        if (pending.kind === 'capabilities') {
+          pending.resolve(event.capabilities);
+          this.pending.delete(event.requestId);
+        }
+        return;
+      case 'pattern-validation':
+        if (pending.kind === 'validate-pattern') {
+          pending.resolve(event.issues);
+          this.pending.delete(event.requestId);
+        }
+        return;
+      case 'turn-delta':
+        if (pending.kind === 'run-turn') {
+          pending.onDelta(event);
+        }
+        return;
+      case 'turn-complete':
+        if (pending.kind === 'run-turn') {
+          pending.resolve(event.messages);
+          this.pending.delete(event.requestId);
+        }
+        return;
+      case 'command-error':
+        pending.reject(new Error(event.message));
+        this.pending.delete(event.requestId);
+        return;
+      case 'command-complete':
+        if (pending.kind !== 'run-turn') {
+          this.pending.delete(event.requestId);
+        }
+        return;
+    }
+  }
+}

@@ -1,0 +1,14 @@
+export const ipcChannels = {
+  loadWorkspace: 'workspace:load',
+  addProject: 'workspace:add-project',
+  removeProject: 'workspace:remove-project',
+  savePattern: 'patterns:save',
+  deletePattern: 'patterns:delete',
+  createSession: 'sessions:create',
+  sendSessionMessage: 'sessions:send-message',
+  selectProject: 'selection:project',
+  selectPattern: 'selection:pattern',
+  selectSession: 'selection:session',
+  workspaceUpdated: 'workspace:updated',
+  sessionEvent: 'sessions:event',
+} as const;

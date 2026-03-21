@@ -1,2 +1,9 @@
 node_modules/
-*.tsbuildinfo
+dist/
+dist-electron/
+
+sidecar/**/bin/
+sidecar/**/obj/
+
+.DS_Store
+Thumbs.db

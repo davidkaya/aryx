@@ -1,14 +1,16 @@
 # Backend UI Changes
 
-This document describes changes to the .NET sidecar / backend protocol that would enable richer agent-activity reporting in the chat UI. These are **not yet implemented** — the current UI infers activity state from existing events. A separate agent should implement these changes.
+This document describes the implemented .NET sidecar / backend protocol changes that enable richer agent-activity reporting in the chat UI.
+
+The repository now emits and consumes `agent-activity` events end to end. Because the current MAF workflow stream does not expose every lifecycle detail uniformly, activity events are emitted only when they can be detected reliably from the available workflow events.
 
 ## Context
 
 The chat UI now shows a "Thinking…" indicator while the agent processes a request (before streaming starts) and a blinking cursor while the response streams in. These states are inferred from the existing `status` and `message-delta` session events.
 
-To display more granular activity (e.g. "Using tool X…", "Agent Y is thinking…", "Handing off to Agent Z…"), the sidecar protocol needs a new event kind.
+To display more granular activity (e.g. "Using tool X…", "Agent Y is thinking…", "Handing off to Agent Z…"), the sidecar protocol uses a new event kind.
 
-## Proposed protocol addition
+## Protocol addition
 
 ### New event kind: `agent-activity`
 
@@ -47,7 +49,7 @@ export interface SessionEventRecord {
 
 ### Sidecar event mapping
 
-The .NET sidecar should emit `agent-activity` events at these points:
+The .NET sidecar emits `agent-activity` events when the workflow stream exposes these points reliably:
 
 | MAF lifecycle point | `activityType` | `agentName` | `toolName` |
 |---|---|---|---|
@@ -56,9 +58,11 @@ The .NET sidecar should emit `agent-activity` events at these points:
 | Handoff orchestration transfers control | `handoff` | target agent name | — |
 | Agent finishes its contribution | `completed` | agent name | — |
 
+In practice, `thinking` and `completed` are driven by executor lifecycle events, while `tool-calling` and `handoff` are emitted when request-info payloads expose recognizable tool-call or handoff targets.
+
 ### .NET sidecar changes
 
-In the sidecar's turn-execution pipeline, emit a new JSON event type alongside the existing `turn-delta` and `turn-complete`:
+In the sidecar's turn-execution pipeline, emit a new JSON event type alongside the existing `turn-delta` and `turn-complete` events:
 
 ```json
 {
@@ -71,23 +75,29 @@ In the sidecar's turn-execution pipeline, emit a new JSON event type alongside t
 }
 ```
 
-The Electron main process (`KopayaAppService`) should map this to a `SessionEventRecord` with `kind: 'agent-activity'` and forward it to the renderer via the existing `sessions:event` channel.
+The Electron main process maps this to a `SessionEventRecord` with `kind: 'agent-activity'` and forwards it to the renderer via the existing `sessions:event` channel.
 
-### Renderer consumption (already prepared)
+### Renderer consumption
 
-Once these events are available, the `ChatPane` activity indicator can be enhanced to show contextual messages like:
+`App.tsx` now subscribes to `onSessionEvent` and tracks the latest activity event for the selected session. `ChatPane.tsx` uses that state to show contextual messages like:
 
 - "Code Reviewer is thinking…"
 - "Code Reviewer is using read_file…"
 - "Handing off to Summarizer…"
 
-The `ThinkingDots` component and activity indicator section in `ChatPane.tsx` are designed to be extended with this data.
+The `ThinkingDots` component and activity indicator section in `ChatPane.tsx` are now wired to this data, with completed activity rendering as text-only status instead of an animated waiting state.
 
-## Files to change
+## Files involved
 
 | Layer | File | Change |
 |---|---|---|
 | Shared | `src/shared/domain/event.ts` | Add `'agent-activity'` to `SessionEventKind`, add optional `activityType` / `agentName` / `toolName` fields |
-| Main | `src/main/sidecar/sidecar.ts` | Parse `agent-activity` events from sidecar JSON output |
+| Shared | `src/shared/contracts/sidecar.ts` | Add `AgentActivityEvent` to the sidecar event union |
+| Main | `src/main/sidecar/sidecarProcess.ts` | Parse `agent-activity` events from sidecar JSON output |
 | Main | `src/main/KopayaAppService.ts` | Map parsed activity events to `SessionEventRecord` and emit via `session-event` |
-| Sidecar | `sidecar/src/Kopaya.AgentHost/…` | Emit `agent-activity` JSON events during MAF turn execution |
+| Renderer | `src/renderer/App.tsx` | Subscribe to `onSessionEvent` and track live activity state per session |
+| Renderer | `src/renderer/components/ChatPane.tsx` | Render contextual activity text in the existing activity indicator |
+| Renderer | `src/renderer/lib/sessionActivity.ts` | Provide pure helpers for activity-state updates and display text |
+| Sidecar | `sidecar/src/Kopaya.AgentHost/Contracts/ProtocolModels.cs` | Define `AgentActivityEventDto` |
+| Sidecar | `sidecar/src/Kopaya.AgentHost/Services/CopilotWorkflowRunner.cs` | Emit `agent-activity` events during MAF turn execution when observable |
+| Sidecar | `sidecar/src/Kopaya.AgentHost/Services/SidecarProtocolHost.cs` | Forward activity events over the stdio protocol |

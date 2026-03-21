@@ -8,15 +8,20 @@ namespace Kopaya.AgentHost.Services;
 public sealed class SidecarProtocolHost
 {
     private readonly PatternValidator _patternValidator;
-    private readonly CopilotWorkflowRunner _workflowRunner;
+    private readonly ITurnWorkflowRunner _workflowRunner;
     private readonly JsonSerializerOptions _jsonOptions;
     private readonly SemaphoreSlim _writeLock = new(1, 1);
     private readonly ConcurrentDictionary<string, Task> _inFlight = new(StringComparer.Ordinal);
 
     public SidecarProtocolHost()
+        : this(new PatternValidator())
     {
-        _patternValidator = new PatternValidator();
-        _workflowRunner = new CopilotWorkflowRunner(_patternValidator);
+    }
+
+    public SidecarProtocolHost(PatternValidator patternValidator, ITurnWorkflowRunner? workflowRunner = null)
+    {
+        _patternValidator = patternValidator;
+        _workflowRunner = workflowRunner ?? new CopilotWorkflowRunner(_patternValidator);
         _jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web)
         {
             DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
@@ -102,6 +107,7 @@ public sealed class SidecarProtocolHost
                     IReadOnlyList<ChatMessageDto> messages = await _workflowRunner.RunTurnAsync(
                         runTurnCommand,
                         delta => WriteAsync(output, delta, cancellationToken),
+                        activity => WriteAsync(output, activity, cancellationToken),
                         cancellationToken).ConfigureAwait(false);
 
                     await WriteAsync(output, new TurnCompleteEventDto

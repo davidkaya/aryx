@@ -5,6 +5,11 @@ import { ChatPane } from '@renderer/components/ChatPane';
 import { NewSessionModal } from '@renderer/components/NewSessionModal';
 import { SettingsPanel } from '@renderer/components/SettingsPanel';
 import { Sidebar } from '@renderer/components/Sidebar';
+import {
+  applySessionEventActivity,
+  pruneSessionActivities,
+  type SessionActivityMap,
+} from '@renderer/lib/sessionActivity';
 import { WelcomePane } from '@renderer/components/WelcomePane';
 import { getElectronApi } from '@renderer/lib/electronApi';
 import type { PatternDefinition } from '@shared/domain/pattern';
@@ -39,6 +44,7 @@ export default function App() {
   const api = getElectronApi();
   const [workspace, setWorkspace] = useState<WorkspaceState>();
   const [error, setError] = useState<string>();
+  const [sessionActivities, setSessionActivities] = useState<SessionActivityMap>({});
 
   const [showSettings, setShowSettings] = useState(false);
   const [showNewSession, setShowNewSession] = useState(false);
@@ -55,11 +61,22 @@ export default function App() {
     const offWorkspace = api.onWorkspaceUpdated((ws) => {
       setWorkspace(ws);
       setError(undefined);
+      setSessionActivities((current) =>
+        pruneSessionActivities(
+          current,
+          ws.sessions.map((session) => session.id),
+        ),
+      );
+    });
+
+    const offSessionEvent = api.onSessionEvent((event) => {
+      setSessionActivities((current) => applySessionEventActivity(current, event));
     });
 
     return () => {
       disposed = true;
       offWorkspace();
+      offSessionEvent();
     };
   }, [api]);
 
@@ -81,6 +98,10 @@ export default function App() {
         ? workspace?.projects.find((p) => p.id === selectedSession.projectId)
         : undefined,
     [selectedSession, workspace?.projects],
+  );
+  const activityForSession = useMemo(
+    () => (selectedSession ? sessionActivities[selectedSession.id] : undefined),
+    [selectedSession, sessionActivities],
   );
 
   // Loading state
@@ -106,6 +127,7 @@ export default function App() {
   } else if (selectedSession && patternForSession && projectForSession) {
     content = (
       <ChatPane
+        activity={activityForSession}
         onSend={(c) => api.sendSessionMessage({ sessionId: selectedSession.id, content: c })}
         pattern={patternForSession}
         project={projectForSession}

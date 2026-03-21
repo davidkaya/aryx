@@ -105,6 +105,14 @@ public sealed class TurnCompleteEventDto : SidecarEventDto
     public IReadOnlyList<ChatMessageDto> Messages { get; init; } = [];
 }
 
+public sealed class AgentActivityEventDto : SidecarEventDto
+{
+    public string SessionId { get; init; } = string.Empty;
+    public string ActivityType { get; init; } = string.Empty;
+    public string? AgentName { get; init; }
+    public string? ToolName { get; init; }
+}
+
 public sealed class CommandErrorEventDto : SidecarEventDto
 {
     public string Message { get; init; } = string.Empty;

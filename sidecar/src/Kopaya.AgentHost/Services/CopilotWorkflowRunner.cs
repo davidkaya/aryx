@@ -9,8 +9,18 @@ using Microsoft.Extensions.AI;
 
 namespace Kopaya.AgentHost.Services;
 
-public sealed class CopilotWorkflowRunner
+public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
 {
+    private static readonly Type? HandoffTargetType = LoadType(
+        "Microsoft.Agents.AI.Workflows.Specialized.HandoffTarget, Microsoft.Agents.AI.Workflows");
+    private static readonly Type? FunctionCallContentType = LoadType(
+        "Microsoft.Extensions.AI.FunctionCallContent, Microsoft.Extensions.AI.Abstractions");
+    private static readonly Type? McpServerToolCallContentType = LoadType(
+        "Microsoft.Extensions.AI.McpServerToolCallContent, Microsoft.Extensions.AI.Abstractions");
+    private static readonly Type? CodeInterpreterToolCallContentType = LoadType(
+        "Microsoft.Extensions.AI.CodeInterpreterToolCallContent, Microsoft.Extensions.AI.Abstractions");
+    private static readonly Type? ImageGenerationToolCallContentType = LoadType(
+        "Microsoft.Extensions.AI.ImageGenerationToolCallContent, Microsoft.Extensions.AI.Abstractions");
     private readonly PatternValidator _patternValidator;
 
     public CopilotWorkflowRunner(PatternValidator patternValidator)
@@ -21,6 +31,7 @@ public sealed class CopilotWorkflowRunner
     public async Task<IReadOnlyList<ChatMessageDto>> RunTurnAsync(
         RunTurnCommandDto command,
         Func<TurnDeltaEventDto, Task> onDelta,
+        Func<AgentActivityEventDto, Task> onActivity,
         CancellationToken cancellationToken)
     {
         PatternValidationIssueDto? validationError = _patternValidator.Validate(command.Pattern).FirstOrDefault();
@@ -36,17 +47,49 @@ public sealed class CopilotWorkflowRunner
         List<StreamingSegment> segments = [];
         int fallbackMessageIndex = 0;
         List<ChatMessageDto> completedMessages = [];
+        string? activeAgentId = null;
+        string? activeAgentName = null;
 
         await using StreamingRun run = await InProcessExecution.RunStreamingAsync(workflow, inputMessages).ConfigureAwait(false);
         await run.TrySendMessageAsync(new TurnToken(emitEvents: true)).ConfigureAwait(false);
 
         await foreach (WorkflowEvent evt in run.WatchStreamAsync(cancellationToken).ConfigureAwait(false))
         {
-            if (evt is AgentResponseUpdateEvent update && !string.IsNullOrEmpty(update.Update.Text))
+            if (evt is ExecutorInvokedEvent invoked
+                && TryResolveKnownAgentName(command.Pattern, invoked.ExecutorId, out string invokedAgentName)
+                && !string.Equals(activeAgentId, invoked.ExecutorId, StringComparison.Ordinal))
+            {
+                activeAgentId = invoked.ExecutorId;
+                activeAgentName = invokedAgentName;
+
+                await onActivity(CreateActivityEvent(
+                    command,
+                    activityType: "thinking",
+                    agentName: invokedAgentName)).ConfigureAwait(false);
+            }
+            else if (evt is RequestInfoEvent requestInfo)
+            {
+                AgentActivityEventDto? activity = TryCreateActivityFromRequest(
+                    command,
+                    requestInfo,
+                    activeAgentName);
+
+                if (activity is not null)
+                {
+                    await onActivity(activity).ConfigureAwait(false);
+                }
+            }
+            else if (evt is AgentResponseUpdateEvent update && !string.IsNullOrEmpty(update.Update.Text))
             {
                 string messageId = update.Update.MessageId ?? $"{command.RequestId}-delta-{fallbackMessageIndex++}";
                 StreamingSegment segment = GetOrCreateSegment(segments, messageId, update.ExecutorId);
                 segment.Content.Append(update.Update.Text);
+
+                if (TryResolveKnownAgentName(command.Pattern, update.ExecutorId, out string updateAgentName))
+                {
+                    activeAgentId = update.ExecutorId;
+                    activeAgentName = updateAgentName;
+                }
 
                 await onDelta(new TurnDeltaEventDto
                 {
@@ -58,6 +101,18 @@ public sealed class CopilotWorkflowRunner
                     ContentDelta = update.Update.Text,
                 }).ConfigureAwait(false);
             }
+            else if (evt is ExecutorCompletedEvent completed
+                && TryResolveKnownAgentName(command.Pattern, completed.ExecutorId, out string completedAgentName)
+                && string.Equals(activeAgentId, completed.ExecutorId, StringComparison.Ordinal))
+            {
+                await onActivity(CreateActivityEvent(
+                    command,
+                    activityType: "completed",
+                    agentName: completedAgentName)).ConfigureAwait(false);
+
+                activeAgentId = null;
+                activeAgentName = null;
+            }
             else if (evt is WorkflowOutputEvent outputEvent)
             {
                 List<ChatMessage> allMessages = outputEvent.As<List<ChatMessage>>() ?? [];
@@ -67,6 +122,172 @@ public sealed class CopilotWorkflowRunner
         }
 
         return completedMessages;
+    }
+
+    private static AgentActivityEventDto CreateActivityEvent(
+        RunTurnCommandDto command,
+        string activityType,
+        string agentName,
+        string? toolName = null)
+    {
+        return new AgentActivityEventDto
+        {
+            Type = "agent-activity",
+            RequestId = command.RequestId,
+            SessionId = command.SessionId,
+            ActivityType = activityType,
+            AgentName = agentName,
+            ToolName = toolName,
+        };
+    }
+
+    private static AgentActivityEventDto? TryCreateActivityFromRequest(
+        RunTurnCommandDto command,
+        RequestInfoEvent requestInfo,
+        string? activeAgentName)
+    {
+        if (TryGetHandoffTargetName(command.Pattern, requestInfo, out string handoffAgentName))
+        {
+            return CreateActivityEvent(
+                command,
+                activityType: "handoff",
+                agentName: handoffAgentName);
+        }
+
+        if (string.IsNullOrWhiteSpace(activeAgentName) || !TryGetToolName(requestInfo, out string toolName))
+        {
+            return null;
+        }
+
+        return CreateActivityEvent(
+            command,
+            activityType: "tool-calling",
+            agentName: activeAgentName,
+            toolName: toolName);
+    }
+
+    private static bool TryGetHandoffTargetName(
+        PatternDefinitionDto pattern,
+        RequestInfoEvent requestInfo,
+        out string agentName)
+    {
+        agentName = string.Empty;
+        if (!TryReadPortableValue(requestInfo.Request.Data, HandoffTargetType, out object? handoffTarget))
+        {
+            return false;
+        }
+
+        object? target = handoffTarget?.GetType().GetProperty("Target")?.GetValue(handoffTarget);
+        agentName = ResolveAgentName(
+            pattern,
+            GetStringProperty(target, "Id"),
+            GetStringProperty(target, "Name"));
+        return !string.IsNullOrWhiteSpace(agentName);
+    }
+
+    private static bool TryGetToolName(RequestInfoEvent requestInfo, out string toolName)
+    {
+        if (TryReadPortableValue(requestInfo.Request.Data, FunctionCallContentType, out object? functionCall))
+        {
+            toolName = GetStringProperty(functionCall, "Name") ?? "function";
+            return true;
+        }
+
+        if (TryReadPortableValue(requestInfo.Request.Data, McpServerToolCallContentType, out object? mcpToolCall))
+        {
+            toolName = GetStringProperty(mcpToolCall, "ToolName")
+                ?? GetStringProperty(mcpToolCall, "ServerName")
+                ?? string.Empty;
+            return !string.IsNullOrWhiteSpace(toolName);
+        }
+
+        if (TryReadPortableValue(requestInfo.Request.Data, CodeInterpreterToolCallContentType, out _))
+        {
+            toolName = "code interpreter";
+            return true;
+        }
+
+        if (TryReadPortableValue(requestInfo.Request.Data, ImageGenerationToolCallContentType, out _))
+        {
+            toolName = "image generation";
+            return true;
+        }
+
+        toolName = string.Empty;
+        return false;
+    }
+
+    private static bool TryResolveKnownAgentName(
+        PatternDefinitionDto pattern,
+        string? agentIdentifier,
+        out string agentName)
+    {
+        agentName = string.Empty;
+        if (string.IsNullOrWhiteSpace(agentIdentifier))
+        {
+            return false;
+        }
+
+        PatternAgentDefinitionDto? match = pattern.Agents.FirstOrDefault(agent =>
+            MatchesAgent(agent, agentIdentifier));
+
+        if (match is null)
+        {
+            return false;
+        }
+
+        agentName = string.IsNullOrWhiteSpace(match.Name) ? match.Id : match.Name;
+        return true;
+    }
+
+    private static string ResolveAgentName(
+        PatternDefinitionDto pattern,
+        string? agentId,
+        string? agentName)
+    {
+        PatternAgentDefinitionDto? match = pattern.Agents.FirstOrDefault(agent =>
+            MatchesAgent(agent, agentId) || MatchesAgent(agent, agentName));
+
+        if (match is not null)
+        {
+            return string.IsNullOrWhiteSpace(match.Name) ? match.Id : match.Name;
+        }
+
+        if (!string.IsNullOrWhiteSpace(agentName))
+        {
+            return agentName;
+        }
+
+        return agentId ?? string.Empty;
+    }
+
+    private static bool MatchesAgent(PatternAgentDefinitionDto agent, string? candidate)
+    {
+        return !string.IsNullOrWhiteSpace(candidate)
+            && (string.Equals(agent.Id, candidate, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(agent.Name, candidate, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static Type? LoadType(string assemblyQualifiedName)
+    {
+        return Type.GetType(assemblyQualifiedName, throwOnError: false);
+    }
+
+    private static bool TryReadPortableValue(PortableValue portableValue, Type? targetType, out object? value)
+    {
+        value = null;
+        if (targetType is null || !portableValue.IsType(targetType))
+        {
+            return false;
+        }
+
+        value = portableValue.AsType(targetType);
+        return value is not null;
+    }
+
+    private static string? GetStringProperty(object? instance, string propertyName)
+    {
+        return instance?.GetType().GetProperty(propertyName)?.GetValue(instance) as string;
     }
 
     private static StreamingSegment GetOrCreateSegment(List<StreamingSegment> segments, string messageId, string authorName)

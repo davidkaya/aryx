@@ -61,6 +61,17 @@ export interface TurnCompleteEvent {
   messages: ChatMessageRecord[];
 }
 
+export type AgentActivityType = 'thinking' | 'tool-calling' | 'handoff' | 'completed';
+
+export interface AgentActivityEvent {
+  type: 'agent-activity';
+  requestId: string;
+  sessionId: string;
+  activityType: AgentActivityType;
+  agentName?: string;
+  toolName?: string;
+}
+
 export interface CommandErrorEvent {
   type: 'command-error';
   requestId: string;
@@ -77,5 +88,6 @@ export type SidecarEvent =
   | PatternValidationEvent
   | TurnDeltaEvent
   | TurnCompleteEvent
+  | AgentActivityEvent
   | CommandErrorEvent
   | CommandCompleteEvent;

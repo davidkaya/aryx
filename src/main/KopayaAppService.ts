@@ -3,7 +3,7 @@ import { basename } from 'node:path';
 
 import { dialog } from 'electron';
 
-import type { TurnDeltaEvent } from '@shared/contracts/sidecar';
+import type { AgentActivityEvent, TurnDeltaEvent } from '@shared/contracts/sidecar';
 import { buildSessionTitle, validatePatternDefinition, type PatternDefinition } from '@shared/domain/pattern';
 import type { ProjectRecord } from '@shared/domain/project';
 import type { SessionEventRecord } from '@shared/domain/event';
@@ -199,6 +199,9 @@ export class KopayaAppService extends EventEmitter<AppServiceEvents> {
         async (event) => {
           await this.applyTurnDelta(workspace, session.id, event);
         },
+        (event) => {
+          this.emitAgentActivity(event);
+        },
       );
 
       this.finalizeTurn(workspace, session.id, responseMessages);
@@ -298,6 +301,17 @@ export class KopayaAppService extends EventEmitter<AppServiceEvents> {
       messageId: event.messageId,
       authorName: event.authorName,
       contentDelta: event.contentDelta,
+    });
+  }
+
+  private emitAgentActivity(event: AgentActivityEvent): void {
+    this.emitSessionEvent({
+      sessionId: event.sessionId,
+      kind: 'agent-activity',
+      occurredAt: nowIso(),
+      activityType: event.activityType,
+      agentName: event.agentName,
+      toolName: event.toolName,
     });
   }
 

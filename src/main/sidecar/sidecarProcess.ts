@@ -2,6 +2,7 @@ import { app } from 'electron';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 
 import type {
+  AgentActivityEvent,
   SidecarCapabilities,
   SidecarCommand,
   SidecarEvent,
@@ -28,7 +29,8 @@ type PendingCommand =
       kind: 'run-turn';
       resolve: (messages: ChatMessageRecord[]) => void;
       reject: (error: Error) => void;
-      onDelta: (event: TurnDeltaEvent) => void;
+      onDelta: (event: TurnDeltaEvent) => void | Promise<void>;
+      onActivity: (event: AgentActivityEvent) => void | Promise<void>;
     };
 
 export class SidecarClient {
@@ -53,8 +55,12 @@ export class SidecarClient {
     });
   }
 
-  async runTurn(command: RunTurnCommand, onDelta: (event: TurnDeltaEvent) => void): Promise<ChatMessageRecord[]> {
-    return this.dispatch<ChatMessageRecord[]>(command, onDelta);
+  async runTurn(
+    command: RunTurnCommand,
+    onDelta: (event: TurnDeltaEvent) => void | Promise<void>,
+    onActivity: (event: AgentActivityEvent) => void | Promise<void>,
+  ): Promise<ChatMessageRecord[]> {
+    return this.dispatch<ChatMessageRecord[]>(command, onDelta, onActivity);
   }
 
   async dispose(): Promise<void> {
@@ -110,7 +116,8 @@ export class SidecarClient {
 
   private async dispatch<TResult>(
     command: SidecarCommand,
-    onDelta?: (event: TurnDeltaEvent) => void,
+    onDelta?: (event: TurnDeltaEvent) => void | Promise<void>,
+    onActivity?: (event: AgentActivityEvent) => void | Promise<void>,
   ): Promise<TResult> {
     const process = await this.ensureProcess();
 
@@ -121,6 +128,7 @@ export class SidecarClient {
           resolve: resolve as (messages: ChatMessageRecord[]) => void,
           reject,
           onDelta: onDelta ?? (() => undefined),
+          onActivity: onActivity ?? (() => undefined),
         });
       } else if (command.type === 'validate-pattern') {
         this.pending.set(command.requestId, {
@@ -176,7 +184,12 @@ export class SidecarClient {
         return;
       case 'turn-delta':
         if (pending.kind === 'run-turn') {
-          pending.onDelta(event);
+          this.invokeRunTurnHandler(event.requestId, pending, () => pending.onDelta(event));
+        }
+        return;
+      case 'agent-activity':
+        if (pending.kind === 'run-turn') {
+          this.invokeRunTurnHandler(event.requestId, pending, () => pending.onActivity(event));
         }
         return;
       case 'turn-complete':
@@ -195,5 +208,16 @@ export class SidecarClient {
         }
         return;
     }
+  }
+
+  private invokeRunTurnHandler(
+    requestId: string,
+    pending: Extract<PendingCommand, { kind: 'run-turn' }>,
+    callback: () => void | Promise<void>,
+  ): void {
+    void Promise.resolve(callback()).catch((error: unknown) => {
+      this.pending.delete(requestId);
+      pending.reject(error instanceof Error ? error : new Error(String(error)));
+    });
   }
 }

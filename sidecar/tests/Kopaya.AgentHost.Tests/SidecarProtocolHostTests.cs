@@ -90,16 +90,133 @@ public sealed class SidecarProtocolHostTests
             });
     }
 
-    private static async Task<IReadOnlyList<JsonElement>> RunHostAsync<TCommand>(TCommand command)
+    [Fact]
+    public async Task RunTurnCommand_ReturnsActivityEventsAndCompletion()
+    {
+        SidecarProtocolHost host = new(
+            new PatternValidator(),
+            new FakeWorkflowRunner(async (command, onDelta, onActivity, cancellationToken) =>
+            {
+                await onActivity(new AgentActivityEventDto
+                {
+                    Type = "agent-activity",
+                    RequestId = command.RequestId,
+                    SessionId = command.SessionId,
+                    ActivityType = "thinking",
+                    AgentName = "Primary",
+                });
+
+                await onDelta(new TurnDeltaEventDto
+                {
+                    Type = "turn-delta",
+                    RequestId = command.RequestId,
+                    SessionId = command.SessionId,
+                    MessageId = "assistant-1",
+                    AuthorName = "Primary",
+                    ContentDelta = "Hello",
+                });
+
+                await onActivity(new AgentActivityEventDto
+                {
+                    Type = "agent-activity",
+                    RequestId = command.RequestId,
+                    SessionId = command.SessionId,
+                    ActivityType = "tool-calling",
+                    AgentName = "Primary",
+                    ToolName = "read_file",
+                });
+
+                return
+                [
+                    new ChatMessageDto
+                    {
+                        Id = "assistant-1",
+                        Role = "assistant",
+                        AuthorName = "Primary",
+                        Content = "Hello world",
+                        CreatedAt = "2026-01-01T00:00:00.0000000Z",
+                    },
+                ];
+            }));
+
+        IReadOnlyList<JsonElement> events = await RunHostAsync(
+            new RunTurnCommandDto
+            {
+                Type = "run-turn",
+                RequestId = "turn-1",
+                SessionId = "session-1",
+                ProjectPath = "C:\\workspace\\project",
+                Pattern = new PatternDefinitionDto
+                {
+                    Id = "pattern-1",
+                    Name = "Single Agent",
+                    Mode = "single",
+                    Availability = "available",
+                    Agents =
+                    [
+                        CreateAgent(name: "Primary"),
+                    ],
+                },
+                Messages =
+                [
+                    new ChatMessageDto
+                    {
+                        Id = "user-1",
+                        Role = "user",
+                        AuthorName = "You",
+                        Content = "Hello",
+                        CreatedAt = "2026-01-01T00:00:00.0000000Z",
+                    },
+                ],
+            },
+            host);
+
+        Assert.Collection(
+            events,
+            thinkingEvent =>
+            {
+                Assert.Equal("agent-activity", thinkingEvent.GetProperty("type").GetString());
+                Assert.Equal("turn-1", thinkingEvent.GetProperty("requestId").GetString());
+                Assert.Equal("session-1", thinkingEvent.GetProperty("sessionId").GetString());
+                Assert.Equal("thinking", thinkingEvent.GetProperty("activityType").GetString());
+                Assert.Equal("Primary", thinkingEvent.GetProperty("agentName").GetString());
+            },
+            deltaEvent =>
+            {
+                Assert.Equal("turn-delta", deltaEvent.GetProperty("type").GetString());
+                Assert.Equal("Hello", deltaEvent.GetProperty("contentDelta").GetString());
+            },
+            toolEvent =>
+            {
+                Assert.Equal("agent-activity", toolEvent.GetProperty("type").GetString());
+                Assert.Equal("tool-calling", toolEvent.GetProperty("activityType").GetString());
+                Assert.Equal("read_file", toolEvent.GetProperty("toolName").GetString());
+            },
+            completionEvent =>
+            {
+                Assert.Equal("turn-complete", completionEvent.GetProperty("type").GetString());
+                Assert.Equal("session-1", completionEvent.GetProperty("sessionId").GetString());
+                JsonElement[] messages = completionEvent.GetProperty("messages").EnumerateArray().ToArray();
+                Assert.Single(messages);
+                Assert.Equal("Hello world", messages[0].GetProperty("content").GetString());
+            },
+            commandCompleteEvent =>
+            {
+                Assert.Equal("command-complete", commandCompleteEvent.GetProperty("type").GetString());
+                Assert.Equal("turn-1", commandCompleteEvent.GetProperty("requestId").GetString());
+            });
+    }
+
+    private static async Task<IReadOnlyList<JsonElement>> RunHostAsync(
+        object command,
+        SidecarProtocolHost? host = null)
     {
         string input = JsonSerializer.Serialize(command, JsonOptions) + Environment.NewLine;
 
         using StringReader reader = new(input);
         using StringWriter writer = new();
 
-        SidecarProtocolHost host = new();
-        await host.RunAsync(reader, writer, CancellationToken.None);
-
+        await (host ?? new SidecarProtocolHost()).RunAsync(reader, writer, CancellationToken.None);
         return ParseEvents(writer.ToString());
     }
 
@@ -136,5 +253,35 @@ public sealed class SidecarProtocolHostTests
             Model = model,
             Instructions = instructions,
         };
+    }
+
+    private sealed class FakeWorkflowRunner : ITurnWorkflowRunner
+    {
+        private readonly Func<
+            RunTurnCommandDto,
+            Func<TurnDeltaEventDto, Task>,
+            Func<AgentActivityEventDto, Task>,
+            CancellationToken,
+            Task<IReadOnlyList<ChatMessageDto>>> _handler;
+
+        public FakeWorkflowRunner(
+            Func<
+                RunTurnCommandDto,
+                Func<TurnDeltaEventDto, Task>,
+                Func<AgentActivityEventDto, Task>,
+                CancellationToken,
+                Task<IReadOnlyList<ChatMessageDto>>> handler)
+        {
+            _handler = handler;
+        }
+
+        public Task<IReadOnlyList<ChatMessageDto>> RunTurnAsync(
+            RunTurnCommandDto command,
+            Func<TurnDeltaEventDto, Task> onDelta,
+            Func<AgentActivityEventDto, Task> onActivity,
+            CancellationToken cancellationToken)
+        {
+            return _handler(command, onDelta, onActivity, cancellationToken);
+        }
     }
 }

@@ -1,4 +1,11 @@
-export type SessionEventKind = 'status' | 'message-delta' | 'message-complete' | 'error';
+export type SessionActivityType = 'thinking' | 'tool-calling' | 'handoff' | 'completed';
+
+export type SessionEventKind =
+  | 'status'
+  | 'message-delta'
+  | 'message-complete'
+  | 'agent-activity'
+  | 'error';
 
 export interface SessionEventRecord {
   sessionId: string;
@@ -8,5 +15,8 @@ export interface SessionEventRecord {
   messageId?: string;
   authorName?: string;
   contentDelta?: string;
+  activityType?: SessionActivityType;
+  agentName?: string;
+  toolName?: string;
   error?: string;
 }

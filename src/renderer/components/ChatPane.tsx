@@ -1,6 +1,11 @@
 import { type KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { AlertCircle, ArrowUp, Bot, Loader2, User } from 'lucide-react';
 
+import {
+  formatSessionActivityLabel,
+  shouldAnimateSessionActivity,
+  type SessionActivityState,
+} from '@renderer/lib/sessionActivity';
 import type { PatternDefinition } from '@shared/domain/pattern';
 import type { ProjectRecord } from '@shared/domain/project';
 import type { SessionRecord } from '@shared/domain/session';
@@ -16,13 +21,14 @@ function ThinkingDots() {
 }
 
 interface ChatPaneProps {
+  activity?: SessionActivityState;
   project: ProjectRecord;
   pattern: PatternDefinition;
   session: SessionRecord;
   onSend: (content: string) => Promise<void>;
 }
 
-export function ChatPane({ project, pattern, session, onSend }: ChatPaneProps) {
+export function ChatPane({ activity, project, pattern, session, onSend }: ChatPaneProps) {
   const [input, setInput] = useState('');
   const transcriptRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -30,6 +36,8 @@ export function ChatPane({ project, pattern, session, onSend }: ChatPaneProps) {
   const isBusy = session.status === 'running';
   const hasPendingMessage = session.messages.some((m) => m.pending);
   const isThinking = isBusy && !hasPendingMessage;
+  const activityLabel = formatSessionActivityLabel(activity, pattern.agents[0]?.name ?? 'Agent');
+  const showActivityAnimation = shouldAnimateSessionActivity(activity);
 
   useEffect(() => {
     transcriptRef.current?.scrollTo({
@@ -136,10 +144,8 @@ export function ChatPane({ project, pattern, session, onSend }: ChatPaneProps) {
                     <Bot className="size-3.5" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="mb-1.5 text-[12px] font-medium text-zinc-500">
-                      {pattern.agents[0]?.name ?? 'Agent'}
-                    </div>
-                    <ThinkingDots />
+                    <div className="mb-1.5 text-[12px] font-medium text-zinc-500">{activityLabel}</div>
+                    {showActivityAnimation && <ThinkingDots />}
                   </div>
                 </div>
               </div>

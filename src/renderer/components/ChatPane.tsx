@@ -1,6 +1,8 @@
 import { type KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { AlertCircle, ArrowUp, Bot, Loader2, User } from 'lucide-react';
 
+import { MarkdownContent } from '@renderer/components/MarkdownContent';
+
 import type { PatternDefinition } from '@shared/domain/pattern';
 import type { ProjectRecord } from '@shared/domain/project';
 import type { SessionRecord } from '@shared/domain/session';
@@ -112,10 +114,10 @@ export function ChatPane({ project, pattern, session, onSend }: ChatPaneProps) {
                         <div className="mb-1 text-[12px] font-medium text-zinc-400">
                           {message.authorName}
                         </div>
-                        <div className="whitespace-pre-wrap text-[14px] leading-relaxed text-zinc-200">
-                          {message.content}
+                        <div className="text-[14px] leading-relaxed text-zinc-200">
+                          <MarkdownContent content={message.content} />
                           {message.pending && message.content && (
-                            <span className="ml-0.5 inline-block h-[18px] w-[2px] animate-pulse rounded-sm bg-zinc-400 align-text-bottom" />
+                            <span className="mt-1 inline-block h-4 w-[2px] animate-pulse rounded-sm bg-zinc-400" />
                           )}
                         </div>
                         {message.pending && !message.content && <ThinkingDots />}

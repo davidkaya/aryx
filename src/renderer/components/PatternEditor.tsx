@@ -27,7 +27,6 @@ import {
   providerMeta,
   findModel,
   inferProvider,
-  type ModelProvider,
   type ModelDefinition,
 } from '@shared/domain/models';
 
@@ -203,22 +202,7 @@ function InputField({
   );
 }
 
-const providerStyles: Record<ModelProvider, { bg: string; text: string; label: string }> = {
-  openai: { bg: 'bg-emerald-500/15', text: 'text-emerald-400', label: 'AI' },
-  anthropic: { bg: 'bg-orange-500/15', text: 'text-orange-400', label: 'A' },
-  google: { bg: 'bg-blue-500/15', text: 'text-blue-400', label: 'G' },
-};
-
-function ProviderIcon({ provider }: { provider: ModelProvider }) {
-  const s = providerStyles[provider];
-  return (
-    <span
-      className={`flex size-5 shrink-0 items-center justify-center rounded text-[8px] font-bold ${s.bg} ${s.text}`}
-    >
-      {s.label}
-    </span>
-  );
-}
+import { ProviderIcon } from './ProviderIcons';
 
 function TierBadge({ tier }: { tier: ModelDefinition['tier'] }) {
   const styles = {

@@ -8,15 +8,10 @@ import {
   isAgentActivityCompleted,
   type SessionActivityState,
 } from '@renderer/lib/sessionActivity';
-import { inferProvider, type ModelProvider } from '@shared/domain/models';
+import { inferProvider } from '@shared/domain/models';
 import type { PatternDefinition } from '@shared/domain/pattern';
 import type { SessionRecord } from '@shared/domain/session';
-
-const providerStyles: Record<ModelProvider, { bg: string; text: string; label: string }> = {
-  openai: { bg: 'bg-emerald-500/15', text: 'text-emerald-400', label: 'AI' },
-  anthropic: { bg: 'bg-orange-500/15', text: 'text-orange-400', label: 'A' },
-  google: { bg: 'bg-blue-500/15', text: 'text-blue-400', label: 'G' },
-};
+import { ProviderIcon } from './ProviderIcons';
 
 function formatModel(model: string): string {
   return model.replace(/-/g, '\u2011');
@@ -102,12 +97,7 @@ export function ActivityPanel({ activity, pattern, session }: ActivityPanelProps
                       {(() => {
                         const prov = inferProvider(agent.model);
                         if (prov) {
-                          const s = providerStyles[prov];
-                          return (
-                            <span className={`flex size-3.5 items-center justify-center rounded text-[7px] font-bold ${s.bg} ${s.text}`}>
-                              {s.label}
-                            </span>
-                          );
+                          return <ProviderIcon provider={prov} className="size-3" />;
                         }
                         return null;
                       })()}

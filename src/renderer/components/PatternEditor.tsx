@@ -224,8 +224,8 @@ export function PatternEditor({
 
   return (
     <div className="flex h-full flex-col">
-      {/* Header — top padding clears the title bar overlay zone */}
-      <div className="flex items-center justify-between border-b border-zinc-800 px-6 pb-3 pt-12">
+      {/* Header — consistent ← navigation */}
+      <div className="flex items-center justify-between border-b border-[var(--color-border)] px-5 pb-3 pt-12">
         <div className="flex items-center gap-3">
           <button
             className="flex size-8 items-center justify-center rounded-lg text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-200"

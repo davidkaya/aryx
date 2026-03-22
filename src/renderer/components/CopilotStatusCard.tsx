@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import {
   CheckCircle2,
-  AlertTriangle,
   XCircle,
   RefreshCw,
   ChevronDown,
@@ -28,8 +27,7 @@ interface StatusConfig {
   icon: React.ReactNode;
   label: string;
   accentClasses: string;
-  borderClasses: string;
-  bgClasses: string;
+  dotClasses: string;
   actionIcon?: React.ReactNode;
   actionLabel?: string;
 }
@@ -39,38 +37,34 @@ function getStatusConfig(status: SidecarConnectionStatus): StatusConfig {
     case 'ready':
       return {
         icon: <CheckCircle2 className="size-4 text-emerald-400" />,
-        label: 'Connected',
+        label: 'Connected to GitHub Copilot',
         accentClasses: 'text-emerald-400',
-        borderClasses: 'border-emerald-500/20',
-        bgClasses: 'bg-emerald-500/5',
+        dotClasses: 'bg-emerald-400',
       };
     case 'copilot-cli-missing':
       return {
         icon: <Download className="size-4 text-amber-400" />,
-        label: 'CLI Not Found',
+        label: 'Copilot CLI not found',
         accentClasses: 'text-amber-400',
-        borderClasses: 'border-amber-500/20',
-        bgClasses: 'bg-amber-500/5',
+        dotClasses: 'bg-amber-400',
         actionIcon: <Terminal className="size-3" />,
-        actionLabel: 'Install Copilot CLI',
+        actionLabel: 'Install the copilot CLI and ensure it is on your PATH',
       };
     case 'copilot-auth-required':
       return {
         icon: <LogIn className="size-4 text-blue-400" />,
-        label: 'Sign-in Required',
+        label: 'Sign-in required',
         accentClasses: 'text-blue-400',
-        borderClasses: 'border-blue-500/20',
-        bgClasses: 'bg-blue-500/5',
+        dotClasses: 'bg-blue-400',
         actionIcon: <Terminal className="size-3" />,
-        actionLabel: 'Run copilot auth login',
+        actionLabel: 'Run copilot auth login in your terminal, then refresh',
       };
     case 'copilot-error':
       return {
         icon: <XCircle className="size-4 text-red-400" />,
-        label: 'Connection Error',
+        label: 'Connection error',
         accentClasses: 'text-red-400',
-        borderClasses: 'border-red-500/20',
-        bgClasses: 'bg-red-500/5',
+        dotClasses: 'bg-red-400',
       };
   }
 }
@@ -94,6 +88,12 @@ function formatCheckedAt(iso: string): string {
   }
 }
 
+function shortenPath(fullPath: string): string {
+  const parts = fullPath.replace(/\\/g, '/').split('/');
+  if (parts.length <= 3) return fullPath;
+  return `…/${parts.slice(-2).join('/')}`;
+}
+
 export function CopilotStatusCard({
   connection,
   modelCount,
@@ -104,107 +104,102 @@ export function CopilotStatusCard({
 
   if (!connection) {
     return (
-      <div className="rounded-xl border border-[var(--color-border)] bg-zinc-900/40 p-4">
-        <div className="flex items-center gap-2">
-          <Cpu className="size-4 text-zinc-600" />
-          <span className="text-[13px] text-zinc-500">Checking Copilot connection…</span>
-          <RefreshCw className="ml-auto size-3.5 animate-spin text-zinc-600" />
-        </div>
+      <div className="flex items-center gap-3 rounded-xl border border-[var(--color-border)] bg-zinc-900/40 px-4 py-3">
+        <Cpu className="size-4 text-zinc-600" />
+        <span className="text-[13px] text-zinc-500">Checking connection…</span>
+        <RefreshCw className="ml-auto size-3.5 animate-spin text-zinc-600" />
       </div>
     );
   }
 
   const config = getStatusConfig(connection.status);
   const isHealthy = connection.status === 'ready';
-  const hasDetail = connection.detail || connection.copilotCliPath;
+  const hasDetail = connection.copilotCliPath;
   const checkedLabel = formatCheckedAt(connection.checkedAt);
 
   return (
-    <div className={`rounded-xl border ${config.borderClasses} ${config.bgClasses} p-4 transition-colors`}>
-      {/* Main status row */}
-      <div className="flex items-start gap-3">
-        <div className="mt-0.5 shrink-0">{config.icon}</div>
-
-        <div className="min-w-0 flex-1">
-          {/* Title row */}
-          <div className="flex items-center gap-2">
-            <span className={`text-[13px] font-semibold ${config.accentClasses}`}>
-              {config.label}
-            </span>
-            {isHealthy && (
-              <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-400">
-                {modelCount} model{modelCount === 1 ? '' : 's'}
-              </span>
-            )}
-          </div>
-
-          {/* Summary */}
-          <p className="mt-0.5 text-[12px] leading-relaxed text-zinc-400">
-            {connection.summary}
-          </p>
-
-          {/* Action hint for non-ready states */}
-          {!isHealthy && config.actionLabel && (
-            <div className="mt-2 flex items-center gap-1.5 rounded-lg bg-zinc-800/60 px-2.5 py-1.5 text-[11px] text-zinc-400">
-              {config.actionIcon}
-              <span>{config.actionLabel}</span>
-            </div>
+    <div className="space-y-3">
+      {/* Status indicator */}
+      <div className="flex items-center gap-3">
+        <div className={`size-2 shrink-0 rounded-full ${config.dotClasses}`} />
+        <span className={`text-[13px] font-medium ${config.accentClasses}`}>
+          {config.label}
+        </span>
+        {isHealthy && (
+          <span className="text-[12px] text-zinc-500">
+            · {modelCount} model{modelCount === 1 ? '' : 's'} available
+          </span>
+        )}
+        <div className="ml-auto flex items-center gap-2">
+          {checkedLabel && (
+            <span className="text-[11px] text-zinc-600">{checkedLabel}</span>
           )}
+          <button
+            className="flex size-6 items-center justify-center rounded-md text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-300 disabled:opacity-50"
+            disabled={isRefreshing}
+            onClick={onRefresh}
+            title="Refresh connection status"
+            type="button"
+          >
+            <RefreshCw className={`size-3 ${isRefreshing ? 'animate-spin' : ''}`} />
+          </button>
         </div>
-
-        {/* Refresh button */}
-        <button
-          className="flex size-7 shrink-0 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-300 disabled:opacity-50"
-          disabled={isRefreshing}
-          onClick={onRefresh}
-          title="Refresh connection status"
-          type="button"
-        >
-          <RefreshCw className={`size-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
-        </button>
       </div>
 
-      {/* Expandable details */}
-      {hasDetail && (
-        <div className="mt-3 border-t border-zinc-800/60 pt-2">
+      {/* Action hint for non-ready states */}
+      {!isHealthy && config.actionLabel && (
+        <div className="flex items-start gap-2 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2.5">
+          <div className="mt-0.5 shrink-0">{config.actionIcon}</div>
+          <p className="text-[12px] leading-relaxed text-zinc-400">{config.actionLabel}</p>
+        </div>
+      )}
+
+      {/* CLI path (always visible when healthy, expandable otherwise) */}
+      {isHealthy && hasDetail && (
+        <div className="space-y-2">
           <button
-            className="flex w-full items-center gap-1 text-[11px] text-zinc-600 transition hover:text-zinc-400"
+            className="flex w-full items-center gap-1.5 text-[11px] text-zinc-600 transition hover:text-zinc-400"
             onClick={() => setShowDetails((prev) => !prev)}
             type="button"
           >
-            {showDetails ? (
-              <ChevronDown className="size-3" />
-            ) : (
-              <ChevronRight className="size-3" />
-            )}
-            <span>Technical details</span>
-            {checkedLabel && (
-              <span className="ml-auto text-[10px] text-zinc-700">
-                checked {checkedLabel}
-              </span>
-            )}
+            {showDetails ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
+            <span>Details</span>
           </button>
 
           {showDetails && (
-            <div className="mt-2 space-y-1.5 rounded-lg bg-zinc-900/60 px-3 py-2 text-[11px] font-mono text-zinc-500">
+            <div className="overflow-hidden rounded-lg border border-zinc-800/60 bg-zinc-900/40">
               {connection.copilotCliPath && (
-                <div className="flex items-baseline gap-2">
-                  <span className="shrink-0 text-zinc-600">CLI path</span>
-                  <span className="truncate text-zinc-400">{connection.copilotCliPath}</span>
+                <div className="border-b border-zinc-800/40 px-3 py-2">
+                  <span className="text-[10px] font-medium uppercase tracking-wider text-zinc-600">CLI path</span>
+                  <p className="mt-0.5 break-all font-mono text-[11px] text-zinc-400" title={connection.copilotCliPath}>
+                    {connection.copilotCliPath}
+                  </p>
                 </div>
               )}
-              {connection.detail && (
-                <div className="flex items-baseline gap-2">
-                  <span className="shrink-0 text-zinc-600">Detail</span>
-                  <span className="break-words text-zinc-400">{connection.detail}</span>
-                </div>
-              )}
-              {checkedLabel && (
-                <div className="flex items-baseline gap-2">
-                  <span className="shrink-0 text-zinc-600">Checked</span>
-                  <span className="text-zinc-400">{connection.checkedAt}</span>
-                </div>
-              )}
+              <div className="px-3 py-2">
+                <span className="text-[10px] font-medium uppercase tracking-wider text-zinc-600">Last checked</span>
+                <p className="mt-0.5 text-[11px] text-zinc-400">
+                  {new Date(connection.checkedAt).toLocaleString()}
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Error detail for non-ready states */}
+      {!isHealthy && hasDetail && (
+        <div className="overflow-hidden rounded-lg border border-zinc-800/60 bg-zinc-900/40">
+          <div className="border-b border-zinc-800/40 px-3 py-2">
+            <span className="text-[10px] font-medium uppercase tracking-wider text-zinc-600">CLI path</span>
+            <p className="mt-0.5 break-all font-mono text-[11px] text-zinc-400" title={connection.copilotCliPath}>
+              {shortenPath(connection.copilotCliPath!)}
+            </p>
+          </div>
+          {connection.detail && (
+            <div className="px-3 py-2">
+              <span className="text-[10px] font-medium uppercase tracking-wider text-zinc-600">Error detail</span>
+              <p className="mt-0.5 break-words text-[11px] text-zinc-400">{connection.detail}</p>
             </div>
           )}
         </div>

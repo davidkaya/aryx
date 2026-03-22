@@ -37,6 +37,22 @@ public sealed class CopilotConnectionMetadataResolverTests
     }
 
     [Fact]
+    public void CreateCliCommand_UsesLaunchPathAndAppendsCommandArguments()
+    {
+        CopilotCliContext cliContext = new(
+            CliPath: @"C:\tools\copilot.exe",
+            LaunchPath: @"C:\Windows\System32\cmd.exe",
+            LaunchArgs: ["/d", "/s", "/c", "copilot"],
+            Environment: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase));
+
+        (string executablePath, string[] arguments) =
+            CopilotConnectionMetadataResolver.CreateCliCommand(cliContext, "version");
+
+        Assert.Equal(@"C:\Windows\System32\cmd.exe", executablePath);
+        Assert.Equal(["/d", "/s", "/c", "copilot", "version"], arguments);
+    }
+
+    [Fact]
     public void NormalizeHost_StripsSchemeAndTrailingSlash()
     {
         string? host = CopilotConnectionMetadataResolver.NormalizeHost("https://github.example.com/");

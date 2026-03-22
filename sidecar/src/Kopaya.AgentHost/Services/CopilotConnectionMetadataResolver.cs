@@ -32,9 +32,10 @@ internal static partial class CopilotConnectionMetadataResolver
     {
         try
         {
+            (string executablePath, string[] arguments) = CreateCliCommand(cliContext, "version");
             CommandResult result = await RunProcessAsync(
-                executablePath: cliContext.CliPath,
-                arguments: ["version"],
+                executablePath: executablePath,
+                arguments: arguments,
                 environment: cliContext.Environment,
                 timeout: CopilotVersionTimeout,
                 cancellationToken).ConfigureAwait(false);
@@ -57,6 +58,18 @@ internal static partial class CopilotConnectionMetadataResolver
                 Detail = $"Failed to check the installed GitHub Copilot CLI version: {exception.Message}",
             };
         }
+    }
+
+    internal static (string ExecutablePath, string[] Arguments) CreateCliCommand(
+        CopilotCliContext cliContext,
+        params string[] arguments)
+    {
+        ArgumentNullException.ThrowIfNull(cliContext);
+        ArgumentNullException.ThrowIfNull(arguments);
+
+        return (
+            cliContext.LaunchPath,
+            [.. cliContext.LaunchArgs, .. arguments]);
     }
 
     internal static SidecarCopilotCliVersionDiagnosticsDto ParseCliVersionOutput(

@@ -11,6 +11,13 @@ export type OrchestrationMode =
 export type PatternAvailability = 'available' | 'preview' | 'unavailable';
 export type ReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh';
 
+export const reasoningEffortOptions: ReadonlyArray<{ value: ReasoningEffort; label: string }> = [
+  { value: 'low', label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high', label: 'High' },
+  { value: 'xhigh', label: 'Maximum' },
+];
+
 export interface PatternAgentDefinition {
   id: string;
   name: string;
@@ -44,6 +51,12 @@ const defaultModels = {
   gpt54: 'gpt-5.4',
   gpt53: 'gpt-5.3-codex',
 } as const;
+
+const reasoningEffortSet = new Set<ReasoningEffort>(reasoningEffortOptions.map((option) => option.value));
+
+export function isReasoningEffort(value: string | undefined): value is ReasoningEffort {
+  return value !== undefined && reasoningEffortSet.has(value as ReasoningEffort);
+}
 
 export function createBuiltinPatterns(timestamp: string): PatternDefinition[] {
   return [

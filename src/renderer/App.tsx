@@ -16,6 +16,7 @@ import { WelcomePane } from '@renderer/components/WelcomePane';
 import { getElectronApi } from '@renderer/lib/electronApi';
 import type { PatternDefinition } from '@shared/domain/pattern';
 import { isScratchpadProject } from '@shared/domain/project';
+import { applyScratchpadSessionConfig } from '@shared/domain/session';
 import type { WorkspaceState } from '@shared/domain/workspace';
 import { createId, nowIso } from '@shared/utils/ids';
 
@@ -89,13 +90,6 @@ export default function App() {
     () => workspace?.sessions.find((s) => s.id === workspace.selectedSessionId),
     [workspace?.selectedSessionId, workspace?.sessions],
   );
-  const patternForSession = useMemo(
-    () =>
-      selectedSession
-        ? workspace?.patterns.find((p) => p.id === selectedSession.patternId)
-        : undefined,
-    [selectedSession, workspace?.patterns],
-  );
   const projectForSession = useMemo(
     () =>
       selectedSession
@@ -103,6 +97,20 @@ export default function App() {
         : undefined,
     [selectedSession, workspace?.projects],
   );
+  const patternForSession = useMemo(() => {
+    if (!selectedSession) {
+      return undefined;
+    }
+
+    const basePattern = workspace?.patterns.find((pattern) => pattern.id === selectedSession.patternId);
+    if (!basePattern) {
+      return undefined;
+    }
+
+    return projectForSession && isScratchpadProject(projectForSession)
+      ? applyScratchpadSessionConfig(basePattern, selectedSession)
+      : basePattern;
+  }, [projectForSession, selectedSession, workspace?.patterns]);
   const activityForSession = useMemo(
     () => (selectedSession ? sessionActivities[selectedSession.id] : undefined),
     [selectedSession, sessionActivities],
@@ -135,12 +143,19 @@ export default function App() {
     );
   } else if (selectedSession && patternForSession && projectForSession) {
     content = (
-      <ChatPane
-        onSend={(c) => api.sendSessionMessage({ sessionId: selectedSession.id, content: c })}
-        pattern={patternForSession}
-        project={projectForSession}
-        session={selectedSession}
-      />
+        <ChatPane
+          onSend={(c) => api.sendSessionMessage({ sessionId: selectedSession.id, content: c })}
+          onUpdateScratchpadConfig={(config) =>
+            api.updateScratchpadSessionConfig({
+              sessionId: selectedSession.id,
+              model: config.model,
+              reasoningEffort: config.reasoningEffort,
+            })
+          }
+          pattern={patternForSession}
+          project={projectForSession}
+          session={selectedSession}
+        />
     );
     detailPanel = (
       <ActivityPanel

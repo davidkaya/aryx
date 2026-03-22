@@ -4,10 +4,22 @@ import { basename } from 'node:path';
 import { dialog } from 'electron';
 
 import type { AgentActivityEvent, TurnDeltaEvent } from '@shared/contracts/sidecar';
-import { buildSessionTitle, validatePatternDefinition, type PatternDefinition } from '@shared/domain/pattern';
+import { findModel } from '@shared/domain/models';
+import {
+  buildSessionTitle,
+  isReasoningEffort,
+  type PatternDefinition,
+  type ReasoningEffort,
+  validatePatternDefinition,
+} from '@shared/domain/pattern';
 import { isScratchpadProject, type ProjectRecord } from '@shared/domain/project';
 import type { SessionEventRecord } from '@shared/domain/event';
-import type { ChatMessageRecord, SessionRecord } from '@shared/domain/session';
+import {
+  applyScratchpadSessionConfig,
+  createScratchpadSessionConfig,
+  type ChatMessageRecord,
+  type SessionRecord,
+} from '@shared/domain/session';
 import type { WorkspaceState } from '@shared/domain/workspace';
 import { createId, nowIso } from '@shared/utils/ids';
 import { mergeStreamingText } from '@shared/utils/streamingText';
@@ -150,6 +162,7 @@ export class KopayaAppService extends EventEmitter<AppServiceEvents> {
       updatedAt: nowIso(),
       status: 'idle',
       messages: [],
+      scratchpadConfig: isScratchpadProject(project) ? createScratchpadSessionConfig(pattern) : undefined,
     };
 
     workspace.sessions.unshift(session);
@@ -164,6 +177,9 @@ export class KopayaAppService extends EventEmitter<AppServiceEvents> {
     const session = this.requireSession(workspace, sessionId);
     const project = this.requireProject(workspace, session.projectId);
     const pattern = this.requirePattern(workspace, session.patternId);
+    const effectivePattern = isScratchpadProject(project)
+      ? applyScratchpadSessionConfig(pattern, session)
+      : pattern;
 
     const trimmed = content.trim();
     if (!trimmed) {
@@ -177,7 +193,7 @@ export class KopayaAppService extends EventEmitter<AppServiceEvents> {
       content: trimmed,
       createdAt: nowIso(),
     });
-    session.title = buildSessionTitle(pattern, session.messages);
+    session.title = buildSessionTitle(effectivePattern, session.messages);
     session.status = 'running';
     session.lastError = undefined;
     session.updatedAt = nowIso();
@@ -200,7 +216,7 @@ export class KopayaAppService extends EventEmitter<AppServiceEvents> {
           sessionId: session.id,
           projectPath: project.path,
           workspaceKind,
-          pattern,
+          pattern: effectivePattern,
           messages: session.messages,
         },
         async (event) => {
@@ -227,6 +243,42 @@ export class KopayaAppService extends EventEmitter<AppServiceEvents> {
 
       await this.persistAndBroadcast(workspace);
     }
+  }
+
+  async updateScratchpadSessionConfig(
+    sessionId: string,
+    model: string,
+    reasoningEffort: ReasoningEffort,
+  ): Promise<WorkspaceState> {
+    const workspace = await this.loadWorkspace();
+    const session = this.requireSession(workspace, sessionId);
+    const project = this.requireProject(workspace, session.projectId);
+    const pattern = this.requirePattern(workspace, session.patternId);
+
+    if (!isScratchpadProject(project)) {
+      throw new Error('Only scratchpad sessions can change model settings in chat.');
+    }
+
+    if (session.status === 'running') {
+      throw new Error('Wait for the current scratchpad response to finish before changing model settings.');
+    }
+
+    const normalizedModel = model.trim();
+    if (!normalizedModel || !findModel(normalizedModel)) {
+      throw new Error(`Model "${model}" is not available.`);
+    }
+    if (!isReasoningEffort(reasoningEffort)) {
+      throw new Error(`Reasoning effort "${reasoningEffort}" is not supported.`);
+    }
+
+    session.scratchpadConfig = {
+      ...(createScratchpadSessionConfig(pattern) ?? {}),
+      model: normalizedModel,
+      reasoningEffort,
+    };
+    session.updatedAt = nowIso();
+
+    return this.persistAndBroadcast(workspace);
   }
 
   async selectProject(projectId?: string): Promise<WorkspaceState> {

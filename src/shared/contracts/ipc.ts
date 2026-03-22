@@ -1,4 +1,4 @@
-import type { PatternDefinition } from '@shared/domain/pattern';
+import type { PatternDefinition, ReasoningEffort } from '@shared/domain/pattern';
 import type { ProjectRecord } from '@shared/domain/project';
 import type { SessionEventRecord } from '@shared/domain/event';
 import type { WorkspaceState } from '@shared/domain/workspace';
@@ -17,6 +17,12 @@ export interface SendSessionMessageInput {
   content: string;
 }
 
+export interface UpdateScratchpadSessionConfigInput {
+  sessionId: string;
+  model: string;
+  reasoningEffort: ReasoningEffort;
+}
+
 export interface ElectronApi {
   loadWorkspace(): Promise<WorkspaceState>;
   addProject(): Promise<WorkspaceState>;
@@ -25,6 +31,7 @@ export interface ElectronApi {
   deletePattern(patternId: string): Promise<WorkspaceState>;
   createSession(input: CreateSessionInput): Promise<WorkspaceState>;
   sendSessionMessage(input: SendSessionMessageInput): Promise<void>;
+  updateScratchpadSessionConfig(input: UpdateScratchpadSessionConfigInput): Promise<WorkspaceState>;
   selectProject(projectId?: string): Promise<WorkspaceState>;
   selectPattern(patternId?: string): Promise<WorkspaceState>;
   selectSession(sessionId?: string): Promise<WorkspaceState>;

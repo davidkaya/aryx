@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import {
   AlertCircle,
   ArrowLeftRight,
@@ -19,16 +19,10 @@ import {
   validatePatternDefinition,
   type OrchestrationMode,
   type PatternDefinition,
-  type ReasoningEffort,
   type PatternAgentDefinition,
 } from '@shared/domain/pattern';
-import {
-  modelCatalog,
-  providerMeta,
-  findModel,
-  inferProvider,
-  type ModelDefinition,
-} from '@shared/domain/models';
+
+import { ModelSelect, ReasoningEffortSelect } from './AgentConfigFields';
 
 interface PatternEditorProps {
   pattern: PatternDefinition;
@@ -38,13 +32,6 @@ interface PatternEditorProps {
   onSave: () => void;
   onBack: () => void;
 }
-
-const reasoningEfforts: { value: ReasoningEffort; label: string }[] = [
-  { value: 'low', label: 'Low' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'high', label: 'High' },
-  { value: 'xhigh', label: 'Maximum' },
-];
 
 interface ModeInfo {
   icon: LucideIcon;
@@ -198,95 +185,6 @@ function InputField({
           value={value}
         />
       )}
-    </label>
-  );
-}
-
-import { ProviderIcon } from './ProviderIcons';
-
-function TierBadge({ tier }: { tier: ModelDefinition['tier'] }) {
-  const styles = {
-    premium: 'bg-amber-500/10 text-amber-400',
-    standard: 'bg-zinc-700/50 text-zinc-500',
-    fast: 'bg-emerald-500/10 text-emerald-400',
-  };
-  return (
-    <span className={`ml-auto rounded px-1.5 py-0.5 text-[9px] font-medium ${styles[tier]}`}>
-      {tier}
-    </span>
-  );
-}
-
-function ModelSelect({ value, onChange }: { value: string; onChange: (model: string) => void }) {
-  const [open, setOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    function handleClick(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, [open]);
-
-  const selected = findModel(value);
-  const provider = selected?.provider ?? inferProvider(value);
-
-  return (
-    <label className="block space-y-1.5">
-      <span className="text-[12px] font-medium text-zinc-400">Model</span>
-      <div className="relative" ref={containerRef}>
-        <button
-          className="flex w-full items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-left text-[13px] text-zinc-100 outline-none transition hover:border-zinc-600 focus:border-indigo-500/50"
-          onClick={() => setOpen(!open)}
-          type="button"
-        >
-          {provider && <ProviderIcon provider={provider} />}
-          <span className="flex-1 truncate">{selected?.name ?? (value || 'Select model')}</span>
-          <ChevronDown
-            className={`size-3.5 text-zinc-500 transition ${open ? 'rotate-180' : ''}`}
-          />
-        </button>
-
-        {open && (
-          <div className="absolute z-30 mt-1 max-h-72 w-full overflow-y-auto rounded-lg border border-zinc-700 bg-zinc-900 py-1 shadow-2xl">
-            {providerMeta.map((p) => {
-              const models = modelCatalog.filter((m) => m.provider === p.id);
-              return (
-                <div key={p.id}>
-                  <div className="flex items-center gap-2 px-3 pb-1 pt-2.5">
-                    <ProviderIcon provider={p.id} />
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
-                      {p.label}
-                    </span>
-                  </div>
-                  {models.map((model) => (
-                    <button
-                      className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] transition hover:bg-zinc-800 ${
-                        model.id === value
-                          ? 'bg-indigo-500/10 text-indigo-200'
-                          : 'text-zinc-300'
-                      }`}
-                      key={model.id}
-                      onClick={() => {
-                        onChange(model.id);
-                        setOpen(false);
-                      }}
-                      type="button"
-                    >
-                      <span className="flex-1">{model.name}</span>
-                      <TierBadge tier={model.tier} />
-                    </button>
-                  ))}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
     </label>
   );
 }
@@ -513,24 +411,11 @@ export function PatternEditor({ pattern, isBuiltin, onChange, onDelete, onSave, 
                       onChange={(v) => updateAgent(agent.id, { model: v })}
                       value={agent.model}
                     />
-                    <label className="block space-y-1.5">
-                      <span className="text-[12px] font-medium text-zinc-400">Reasoning</span>
-                      <select
-                        className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-[13px] text-zinc-100 outline-none transition focus:border-indigo-500/50"
-                        onChange={(e) =>
-                          updateAgent(agent.id, {
-                            reasoningEffort: e.target.value as ReasoningEffort,
-                          })
-                        }
-                        value={agent.reasoningEffort ?? 'high'}
-                      >
-                        {reasoningEfforts.map((r) => (
-                          <option key={r.value} value={r.value}>
-                            {r.label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
+                    <ReasoningEffortSelect
+                      label="Reasoning"
+                      onChange={(value) => updateAgent(agent.id, { reasoningEffort: value })}
+                      value={agent.reasoningEffort ?? 'high'}
+                    />
                   </div>
                   <div className="mt-3">
                     <InputField

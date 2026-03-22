@@ -6,6 +6,7 @@ export const ipcChannels = {
   deletePattern: 'patterns:delete',
   createSession: 'sessions:create',
   sendSessionMessage: 'sessions:send-message',
+  updateScratchpadSessionConfig: 'sessions:update-scratchpad-config',
   selectProject: 'selection:project',
   selectPattern: 'selection:pattern',
   selectSession: 'selection:session',

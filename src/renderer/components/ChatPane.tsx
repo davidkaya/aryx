@@ -3,8 +3,9 @@ import { AlertCircle, ArrowUp, Bot, Loader2, User } from 'lucide-react';
 
 import { MarkdownContent } from '@renderer/components/MarkdownContent';
 import { getAssistantMessagePhase } from '@renderer/lib/messagePhase';
+import { ModelSelect, ReasoningEffortSelect } from '@renderer/components/AgentConfigFields';
 
-import type { PatternDefinition } from '@shared/domain/pattern';
+import type { PatternDefinition, ReasoningEffort } from '@shared/domain/pattern';
 import { isScratchpadProject, type ProjectRecord } from '@shared/domain/project';
 import type { SessionRecord } from '@shared/domain/session';
 
@@ -23,28 +24,72 @@ interface ChatPaneProps {
   pattern: PatternDefinition;
   session: SessionRecord;
   onSend: (content: string) => Promise<void>;
+  onUpdateScratchpadConfig: (config: {
+    model: string;
+    reasoningEffort: ReasoningEffort;
+  }) => Promise<unknown>;
 }
 
-export function ChatPane({ project, pattern, session, onSend }: ChatPaneProps) {
+export function ChatPane({
+  project,
+  pattern,
+  session,
+  onSend,
+  onUpdateScratchpadConfig,
+}: ChatPaneProps) {
   const [input, setInput] = useState('');
+  const [configError, setConfigError] = useState<string>();
+  const [isUpdatingScratchpadConfig, setIsUpdatingScratchpadConfig] = useState(false);
   const transcriptRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const isBusy = session.status === 'running';
+  const isSessionBusy = session.status === 'running';
   const isScratchpad = isScratchpadProject(project);
+  const primaryAgent = pattern.agents[0];
+  const scratchpadReasoningEffort = primaryAgent?.reasoningEffort ?? 'high';
+  const isComposerDisabled = isSessionBusy || isUpdatingScratchpadConfig;
 
   useEffect(() => {
     transcriptRef.current?.scrollTo({
       top: transcriptRef.current.scrollHeight,
       behavior: 'smooth',
     });
-  }, [session.messages.length, isBusy]);
+  }, [session.messages.length, isSessionBusy]);
+
+  useEffect(() => {
+    setConfigError(undefined);
+    setIsUpdatingScratchpadConfig(false);
+  }, [session.id]);
 
   async function handleSubmit() {
     const text = input.trim();
-    if (!text || isBusy) return;
+    if (!text || isComposerDisabled) return;
     setInput('');
     await onSend(text);
+  }
+
+  async function handleScratchpadConfigChange(config: {
+    model: string;
+    reasoningEffort: ReasoningEffort;
+  }) {
+    if (!isScratchpad || !primaryAgent || isComposerDisabled) {
+      return;
+    }
+
+    if (config.model === primaryAgent.model && config.reasoningEffort === scratchpadReasoningEffort) {
+      return;
+    }
+
+    setConfigError(undefined);
+    setIsUpdatingScratchpadConfig(true);
+
+    try {
+      await onUpdateScratchpadConfig(config);
+    } catch (error) {
+      setConfigError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsUpdatingScratchpadConfig(false);
+    }
   }
 
   function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
@@ -65,7 +110,7 @@ export function ChatPane({ project, pattern, session, onSend }: ChatPaneProps) {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {session.status === 'running' && (
+          {isSessionBusy && (
             <span className="size-2 animate-pulse rounded-full bg-blue-400" />
           )}
           {session.status === 'error' && (
@@ -178,29 +223,77 @@ export function ChatPane({ project, pattern, session, onSend }: ChatPaneProps) {
           </div>
         )}
 
+        {configError && (
+          <div className="mb-3 flex items-start gap-2 rounded-lg bg-red-500/10 px-3 py-2 text-[13px] text-red-300">
+            <AlertCircle className="mt-0.5 size-4 shrink-0 text-red-400" />
+            <span>{configError}</span>
+          </div>
+        )}
+
         <div className="mx-auto max-w-3xl">
+          {isScratchpad && primaryAgent && (
+            <div className="mb-3 rounded-xl border border-zinc-800 bg-zinc-900/40 p-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                <div className="min-w-0 flex-1">
+                  <ModelSelect
+                    disabled={isComposerDisabled}
+                    onChange={(model) =>
+                      void handleScratchpadConfigChange({
+                        model,
+                        reasoningEffort: scratchpadReasoningEffort,
+                      })
+                    }
+                    value={primaryAgent.model}
+                  />
+                </div>
+                <div className="sm:w-44">
+                  <ReasoningEffortSelect
+                    disabled={isComposerDisabled}
+                    label="Thinking"
+                    onChange={(reasoningEffort) =>
+                      void handleScratchpadConfigChange({
+                        model: primaryAgent.model,
+                        reasoningEffort,
+                      })
+                    }
+                    value={scratchpadReasoningEffort}
+                  />
+                </div>
+              </div>
+              <p className="mt-2 text-[11px] text-zinc-500">
+                Applies to future replies in this scratchpad.
+              </p>
+            </div>
+          )}
+
           <div className="relative rounded-xl border border-zinc-700 bg-zinc-900 transition-colors focus-within:border-indigo-500/50">
             <textarea
               className="auto-resize-textarea block w-full resize-none bg-transparent px-4 py-3 pr-12 text-[14px] text-zinc-100 placeholder-zinc-600 outline-none"
-              disabled={isBusy}
+              disabled={isComposerDisabled}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={isBusy ? 'Waiting for response...' : 'Message...'}
+              placeholder={
+                isSessionBusy
+                  ? 'Waiting for response...'
+                  : isUpdatingScratchpadConfig
+                    ? 'Saving scratchpad settings...'
+                    : 'Message...'
+              }
               ref={textareaRef}
               rows={1}
               value={input}
             />
             <button
               className={`absolute bottom-2 right-2 flex size-8 items-center justify-center rounded-lg transition ${
-                input.trim() && !isBusy
+                input.trim() && !isComposerDisabled
                   ? 'bg-indigo-600 text-white hover:bg-indigo-500'
                   : 'bg-zinc-800 text-zinc-600'
               }`}
-              disabled={isBusy || !input.trim()}
+              disabled={isComposerDisabled || !input.trim()}
               onClick={() => void handleSubmit()}
               type="button"
             >
-              {isBusy ? (
+              {isSessionBusy ? (
                 <Loader2 className="size-4 animate-spin" />
               ) : (
                 <ArrowUp className="size-4" />

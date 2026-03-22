@@ -1,0 +1,97 @@
+import { describe, expect, test } from 'bun:test';
+
+import type { PatternDefinition } from '@shared/domain/pattern';
+import {
+  applyScratchpadSessionConfig,
+  createScratchpadSessionConfig,
+  resolveScratchpadSessionConfig,
+  type SessionRecord,
+} from '@shared/domain/session';
+
+function createPattern(): PatternDefinition {
+  return {
+    id: 'pattern-single',
+    name: '1-on-1 Copilot Chat',
+    description: 'Single agent chat',
+    mode: 'single',
+    availability: 'available',
+    maxIterations: 1,
+    agents: [
+      {
+        id: 'agent-primary',
+        name: 'Primary Agent',
+        description: 'Helpful assistant',
+        instructions: 'Help the user.',
+        model: 'gpt-5.4',
+        reasoningEffort: 'high',
+      },
+      {
+        id: 'agent-secondary',
+        name: 'Secondary Agent',
+        description: 'Unused here',
+        instructions: 'Review.',
+        model: 'claude-sonnet-4.5',
+        reasoningEffort: 'medium',
+      },
+    ],
+    createdAt: '2026-03-23T00:00:00.000Z',
+    updatedAt: '2026-03-23T00:00:00.000Z',
+  };
+}
+
+function createSession(overrides?: Partial<SessionRecord>): SessionRecord {
+  return {
+    id: 'session-1',
+    projectId: 'project-scratchpad',
+    patternId: 'pattern-single',
+    title: 'Scratchpad',
+    createdAt: '2026-03-23T00:00:00.000Z',
+    updatedAt: '2026-03-23T00:00:00.000Z',
+    status: 'idle',
+    messages: [],
+    ...overrides,
+  };
+}
+
+describe('scratchpad session config helpers', () => {
+  test('captures the initial scratchpad model settings from the primary agent', () => {
+    expect(createScratchpadSessionConfig(createPattern())).toEqual({
+      model: 'gpt-5.4',
+      reasoningEffort: 'high',
+    });
+  });
+
+  test('resolves persisted scratchpad overrides over the pattern defaults', () => {
+    const config = resolveScratchpadSessionConfig(
+      createSession({
+        scratchpadConfig: {
+          model: 'claude-opus-4.5',
+          reasoningEffort: 'medium',
+        },
+      }),
+      createPattern(),
+    );
+
+    expect(config).toEqual({
+      model: 'claude-opus-4.5',
+      reasoningEffort: 'medium',
+    });
+  });
+
+  test('applies scratchpad settings only to the primary agent', () => {
+    const pattern = createPattern();
+    const updated = applyScratchpadSessionConfig(
+      pattern,
+      createSession({
+        scratchpadConfig: {
+          model: 'gpt-5.4-mini',
+          reasoningEffort: 'low',
+        },
+      }),
+    );
+
+    expect(updated.agents[0].model).toBe('gpt-5.4-mini');
+    expect(updated.agents[0].reasoningEffort).toBe('low');
+    expect(updated.agents[1]).toEqual(pattern.agents[1]);
+  });
+});

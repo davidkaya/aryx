@@ -11,6 +11,8 @@ const api: ElectronApi = {
   deletePattern: (patternId) => ipcRenderer.invoke(ipcChannels.deletePattern, patternId),
   createSession: (input) => ipcRenderer.invoke(ipcChannels.createSession, input),
   sendSessionMessage: (input) => ipcRenderer.invoke(ipcChannels.sendSessionMessage, input),
+  updateScratchpadSessionConfig: (input) =>
+    ipcRenderer.invoke(ipcChannels.updateScratchpadSessionConfig, input),
   selectProject: (projectId) => ipcRenderer.invoke(ipcChannels.selectProject, projectId),
   selectPattern: (patternId) => ipcRenderer.invoke(ipcChannels.selectPattern, patternId),
   selectSession: (sessionId) => ipcRenderer.invoke(ipcChannels.selectSession, sessionId),

@@ -1,7 +1,12 @@
 import { BrowserWindow, ipcMain } from 'electron';
 
 import { ipcChannels } from '@shared/contracts/channels';
-import type { CreateSessionInput, SavePatternInput, SendSessionMessageInput } from '@shared/contracts/ipc';
+import type {
+  CreateSessionInput,
+  SavePatternInput,
+  SendSessionMessageInput,
+  UpdateScratchpadSessionConfigInput,
+} from '@shared/contracts/ipc';
 
 import { KopayaAppService } from '@main/KopayaAppService';
 
@@ -16,6 +21,11 @@ export function registerIpcHandlers(window: BrowserWindow, service: KopayaAppSer
   );
   ipcMain.handle(ipcChannels.sendSessionMessage, (_event, input: SendSessionMessageInput) =>
     service.sendSessionMessage(input.sessionId, input.content),
+  );
+  ipcMain.handle(
+    ipcChannels.updateScratchpadSessionConfig,
+    (_event, input: UpdateScratchpadSessionConfigInput) =>
+      service.updateScratchpadSessionConfig(input.sessionId, input.model, input.reasoningEffort),
   );
   ipcMain.handle(ipcChannels.selectProject, (_event, projectId?: string) => service.selectProject(projectId));
   ipcMain.handle(ipcChannels.selectPattern, (_event, patternId?: string) => service.selectPattern(patternId));

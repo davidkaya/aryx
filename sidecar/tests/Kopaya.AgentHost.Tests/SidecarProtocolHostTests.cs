@@ -37,6 +37,9 @@ public sealed class SidecarProtocolHostTests
                 JsonElement model = Assert.Single(models);
                 Assert.Equal("gpt-5.4", model.GetProperty("id").GetString());
                 Assert.Equal("medium", model.GetProperty("defaultReasoningEffort").GetString());
+                JsonElement connection = capabilities.GetProperty("connection");
+                Assert.Equal("ready", connection.GetProperty("status").GetString());
+                Assert.Equal(@"C:\tools\copilot\copilot.exe", connection.GetProperty("copilotCliPath").GetString());
 
                 string magenticReason = modes.GetProperty("magentic").GetProperty("reason").GetString() ?? string.Empty;
                 Assert.Contains("unsupported", magenticReason, StringComparison.OrdinalIgnoreCase);
@@ -215,6 +218,27 @@ public sealed class SidecarProtocolHostTests
             });
     }
 
+    [Fact]
+    public void ClassifyConnectionStatus_ReturnsAuthRequiredForLoginFailures()
+    {
+        string status = SidecarProtocolHost.ClassifyConnectionStatus(
+            new InvalidOperationException("Please run copilot auth login to continue."));
+
+        Assert.Equal("copilot-auth-required", status);
+    }
+
+    [Fact]
+    public void CreateReadyConnectionDiagnostics_ReportsCliPathAndModelCount()
+    {
+        SidecarConnectionDiagnosticsDto diagnostics =
+            SidecarProtocolHost.CreateReadyConnectionDiagnostics(@"C:\tools\copilot\copilot.exe", 2);
+
+        Assert.Equal("ready", diagnostics.Status);
+        Assert.Equal(@"C:\tools\copilot\copilot.exe", diagnostics.CopilotCliPath);
+        Assert.Contains("2 models", diagnostics.Summary, StringComparison.OrdinalIgnoreCase);
+        Assert.False(string.IsNullOrWhiteSpace(diagnostics.CheckedAt));
+    }
+
     private static async Task<IReadOnlyList<JsonElement>> RunHostAsync(
         object command,
         SidecarProtocolHost? host = null)
@@ -257,6 +281,13 @@ public sealed class SidecarProtocolHostTests
                         DefaultReasoningEffort = "medium",
                     },
                 ],
+                Connection = new SidecarConnectionDiagnosticsDto
+                {
+                    Status = "ready",
+                    Summary = "Connected to GitHub Copilot. 1 model is available.",
+                    CopilotCliPath = @"C:\tools\copilot\copilot.exe",
+                    CheckedAt = "2026-01-01T00:00:00.0000000Z",
+                },
             }));
     }
 

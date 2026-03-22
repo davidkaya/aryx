@@ -6,6 +6,20 @@ export interface SidecarModeCapability {
   reason?: string;
 }
 
+export type SidecarConnectionStatus =
+  | 'ready'
+  | 'copilot-cli-missing'
+  | 'copilot-auth-required'
+  | 'copilot-error';
+
+export interface SidecarConnectionDiagnostics {
+  status: SidecarConnectionStatus;
+  summary: string;
+  detail?: string;
+  copilotCliPath?: string;
+  checkedAt: string;
+}
+
 export interface SidecarModelCapability {
   id: string;
   name: string;
@@ -17,6 +31,7 @@ export interface SidecarCapabilities {
   runtime: 'dotnet-maf';
   modes: Record<PatternDefinition['mode'], SidecarModeCapability>;
   models: SidecarModelCapability[];
+  connection: SidecarConnectionDiagnostics;
 }
 
 export interface DescribeCapabilitiesCommand {

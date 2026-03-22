@@ -11,6 +11,11 @@ internal static class CopilotCliPathResolver
 
     public static CopilotClientOptions CreateClientOptions()
     {
+        return CreateClientOptions(ResolveCliContext());
+    }
+
+    internal static CopilotCliContext ResolveCliContext()
+    {
         string? cliPath = Resolve(
             Environment.GetEnvironmentVariable("PATH"),
             Environment.GetEnvironmentVariable("PATHEXT"),
@@ -28,11 +33,22 @@ internal static class CopilotCliPathResolver
             OperatingSystem.IsWindows(),
             Environment.GetEnvironmentVariable("ComSpec"));
 
+        return new CopilotCliContext(
+            cliPath,
+            launch.Path,
+            launch.Args,
+            ResolveCliEnvironment(GetCurrentEnvironmentVariables()));
+    }
+
+    internal static CopilotClientOptions CreateClientOptions(CopilotCliContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
         return new CopilotClientOptions
         {
-            CliPath = launch.Path,
-            CliArgs = launch.Args,
-            Environment = ResolveCliEnvironment(GetCurrentEnvironmentVariables()),
+            CliPath = context.LaunchPath,
+            CliArgs = context.LaunchArgs,
+            Environment = context.Environment,
         };
     }
 
@@ -161,5 +177,11 @@ internal static class CopilotCliPathResolver
                 entry.Value?.ToString()));
     }
 }
+
+internal sealed record CopilotCliContext(
+    string CliPath,
+    string LaunchPath,
+    string[] LaunchArgs,
+    IReadOnlyDictionary<string, string> Environment);
 
 internal sealed record CopilotCliLaunch(string Path, string[] Args);

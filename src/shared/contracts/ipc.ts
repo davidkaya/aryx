@@ -26,6 +26,7 @@ export interface UpdateScratchpadSessionConfigInput {
 
 export interface ElectronApi {
   describeSidecarCapabilities(): Promise<SidecarCapabilities>;
+  refreshSidecarCapabilities(): Promise<SidecarCapabilities>;
   loadWorkspace(): Promise<WorkspaceState>;
   addProject(): Promise<WorkspaceState>;
   removeProject(projectId: string): Promise<WorkspaceState>;

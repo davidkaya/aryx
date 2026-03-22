@@ -8,6 +8,19 @@ namespace Kopaya.AgentHost.Services;
 
 public sealed class SidecarProtocolHost
 {
+    private static readonly string[] AuthenticationErrorIndicators =
+    [
+        "login",
+        "log in",
+        "sign in",
+        "authenticate",
+        "authentication",
+        "not signed in",
+        "not logged in",
+        "reauth",
+        "credential",
+    ];
+
     private readonly Func<CancellationToken, Task<SidecarCapabilitiesDto>> _capabilitiesProvider;
     private readonly PatternValidator _patternValidator;
     private readonly ITurnWorkflowRunner _workflowRunner;
@@ -164,39 +177,67 @@ public sealed class SidecarProtocolHost
     private static async Task<SidecarCapabilitiesDto> BuildCapabilitiesAsync(CancellationToken cancellationToken)
     {
         IReadOnlyList<SidecarModelCapabilityDto> models = [];
+        CopilotCliContext cliContext;
+        SidecarConnectionDiagnosticsDto connection;
 
         try
         {
-            models = await ListAvailableModelsAsync(cancellationToken).ConfigureAwait(false);
+            cliContext = CopilotCliPathResolver.ResolveCliContext();
         }
         catch (Exception exception)
         {
+            connection = CreateMissingCliDiagnostics(exception);
+            Console.Error.WriteLine($"[kopaya sidecar] {connection.Summary} {exception.Message}");
+
+            return new SidecarCapabilitiesDto
+            {
+                Modes = BuildModeCapabilities(),
+                Models = models,
+                Connection = connection,
+            };
+        }
+
+        try
+        {
+            models = await ListAvailableModelsAsync(cliContext, cancellationToken).ConfigureAwait(false);
+            connection = CreateReadyConnectionDiagnostics(cliContext.CliPath, models.Count);
+        }
+        catch (Exception exception)
+        {
+            connection = CreateFailureConnectionDiagnostics(cliContext.CliPath, exception);
             Console.Error.WriteLine($"[kopaya sidecar] Failed to list available Copilot models: {exception.Message}");
         }
 
         return new SidecarCapabilitiesDto
         {
-            Modes = new Dictionary<string, SidecarModeCapabilityDto>(StringComparer.OrdinalIgnoreCase)
-            {
-                ["single"] = new() { Available = true },
-                ["sequential"] = new() { Available = true },
-                ["concurrent"] = new() { Available = true },
-                ["handoff"] = new() { Available = true },
-                ["group-chat"] = new() { Available = true },
-                ["magentic"] = new()
-                {
-                    Available = false,
-                    Reason = "Microsoft Agent Framework currently documents Magentic orchestration as unsupported in C#.",
-                },
-            },
+            Modes = BuildModeCapabilities(),
             Models = models,
+            Connection = connection,
+        };
+    }
+
+    private static Dictionary<string, SidecarModeCapabilityDto> BuildModeCapabilities()
+    {
+        return new Dictionary<string, SidecarModeCapabilityDto>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["single"] = new() { Available = true },
+            ["sequential"] = new() { Available = true },
+            ["concurrent"] = new() { Available = true },
+            ["handoff"] = new() { Available = true },
+            ["group-chat"] = new() { Available = true },
+            ["magentic"] = new()
+            {
+                Available = false,
+                Reason = "Microsoft Agent Framework currently documents Magentic orchestration as unsupported in C#.",
+            },
         };
     }
 
     private static async Task<IReadOnlyList<SidecarModelCapabilityDto>> ListAvailableModelsAsync(
+        CopilotCliContext cliContext,
         CancellationToken cancellationToken)
     {
-        CopilotClientOptions clientOptions = CopilotCliPathResolver.CreateClientOptions();
+        CopilotClientOptions clientOptions = CopilotCliPathResolver.CreateClientOptions(cliContext);
 
         await using CopilotClient client = new(clientOptions);
         await client.StartAsync(cancellationToken).ConfigureAwait(false);
@@ -222,5 +263,68 @@ public sealed class SidecarProtocolHost
     private static bool IsReasoningEffort(string? value)
     {
         return value is "low" or "medium" or "high" or "xhigh";
+    }
+
+    internal static SidecarConnectionDiagnosticsDto CreateMissingCliDiagnostics(Exception exception)
+    {
+        return new SidecarConnectionDiagnosticsDto
+        {
+            Status = "copilot-cli-missing",
+            Summary = "GitHub Copilot CLI is not installed or is not available on PATH.",
+            Detail = exception.Message,
+            CheckedAt = DateTimeOffset.UtcNow.ToString("O"),
+        };
+    }
+
+    internal static SidecarConnectionDiagnosticsDto CreateReadyConnectionDiagnostics(
+        string cliPath,
+        int modelCount)
+    {
+        string summary = modelCount switch
+        {
+            0 => "Connected to GitHub Copilot, but no models were reported.",
+            1 => "Connected to GitHub Copilot. 1 model is available.",
+            _ => $"Connected to GitHub Copilot. {modelCount} models are available.",
+        };
+
+        return new SidecarConnectionDiagnosticsDto
+        {
+            Status = "ready",
+            Summary = summary,
+            Detail = $"Using Copilot CLI at {cliPath}.",
+            CopilotCliPath = cliPath,
+            CheckedAt = DateTimeOffset.UtcNow.ToString("O"),
+        };
+    }
+
+    internal static SidecarConnectionDiagnosticsDto CreateFailureConnectionDiagnostics(
+        string? cliPath,
+        Exception exception)
+    {
+        string status = ClassifyConnectionStatus(exception);
+        string summary = status == "copilot-auth-required"
+            ? "GitHub Copilot requires authentication before Kopaya can load models."
+            : "GitHub Copilot was found, but Kopaya could not load its model list.";
+
+        return new SidecarConnectionDiagnosticsDto
+        {
+            Status = status,
+            Summary = summary,
+            Detail = exception.Message,
+            CopilotCliPath = cliPath,
+            CheckedAt = DateTimeOffset.UtcNow.ToString("O"),
+        };
+    }
+
+    internal static string ClassifyConnectionStatus(Exception exception)
+    {
+        string message = exception.Message;
+        if (AuthenticationErrorIndicators.Any(indicator =>
+            message.Contains(indicator, StringComparison.OrdinalIgnoreCase)))
+        {
+            return "copilot-auth-required";
+        }
+
+        return "copilot-error";
     }
 }

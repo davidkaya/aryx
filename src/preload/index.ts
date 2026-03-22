@@ -5,6 +5,7 @@ import type { ElectronApi } from '@shared/contracts/ipc';
 
 const api: ElectronApi = {
   describeSidecarCapabilities: () => ipcRenderer.invoke(ipcChannels.describeSidecarCapabilities),
+  refreshSidecarCapabilities: () => ipcRenderer.invoke(ipcChannels.refreshSidecarCapabilities),
   loadWorkspace: () => ipcRenderer.invoke(ipcChannels.loadWorkspace),
   addProject: () => ipcRenderer.invoke(ipcChannels.addProject),
   removeProject: (projectId) => ipcRenderer.invoke(ipcChannels.removeProject, projectId),

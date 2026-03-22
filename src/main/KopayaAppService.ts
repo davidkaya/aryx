@@ -54,11 +54,11 @@ export class KopayaAppService extends EventEmitter<AppServiceEvents> {
   private sidecarCapabilities?: SidecarCapabilities;
 
   async describeSidecarCapabilities(): Promise<SidecarCapabilities> {
-    if (!this.sidecarCapabilities) {
-      this.sidecarCapabilities = await this.sidecar.describeCapabilities();
-    }
+    return this.loadSidecarCapabilities();
+  }
 
-    return this.sidecarCapabilities;
+  async refreshSidecarCapabilities(): Promise<SidecarCapabilities> {
+    return this.loadSidecarCapabilities(true);
   }
 
   async loadWorkspace(): Promise<WorkspaceState> {
@@ -493,5 +493,13 @@ export class KopayaAppService extends EventEmitter<AppServiceEvents> {
 
   private emitSessionEvent(event: SessionEventRecord): void {
     this.emit('session-event', event);
+  }
+
+  private async loadSidecarCapabilities(forceRefresh = false): Promise<SidecarCapabilities> {
+    if (forceRefresh || !this.sidecarCapabilities) {
+      this.sidecarCapabilities = await this.sidecar.describeCapabilities();
+    }
+
+    return this.sidecarCapabilities;
   }
 }

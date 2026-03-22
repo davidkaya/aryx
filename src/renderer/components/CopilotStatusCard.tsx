@@ -9,11 +9,15 @@ import {
   LogIn,
   Download,
   Cpu,
+  ArrowUpCircle,
+  User,
+  Building2,
 } from 'lucide-react';
 
 import type {
   SidecarConnectionDiagnostics,
   SidecarConnectionStatus,
+  SidecarCopilotCliVersionStatus,
 } from '@shared/contracts/sidecar';
 
 interface CopilotStatusCardProps {
@@ -94,6 +98,85 @@ function shortenPath(fullPath: string): string {
   return `…/${parts.slice(-2).join('/')}`;
 }
 
+function VersionBadge({ status, installedVersion }: { status: SidecarCopilotCliVersionStatus; installedVersion?: string }) {
+  const versionLabel = installedVersion ? `v${installedVersion}` : undefined;
+
+  switch (status) {
+    case 'latest':
+      return (
+        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-400">
+          <CheckCircle2 className="size-2.5" />
+          {versionLabel ?? 'Up to date'}
+        </span>
+      );
+    case 'outdated':
+      return (
+        <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-400">
+          <ArrowUpCircle className="size-2.5" />
+          Update available
+        </span>
+      );
+    case 'unknown':
+      return (
+        <span className="inline-flex items-center gap-1 rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] font-medium text-zinc-500">
+          {versionLabel ?? 'Version unknown'}
+        </span>
+      );
+  }
+}
+
+function AccountSection({ connection }: { connection: SidecarConnectionDiagnostics }) {
+  const { account } = connection;
+  if (!account) return null;
+
+  const hasLogin = !!account.login;
+  const hasOrgs = account.organizations && account.organizations.length > 0;
+  if (!hasLogin && !account.statusMessage) return null;
+
+  const MAX_VISIBLE_ORGS = 5;
+  const visibleOrgs = hasOrgs ? account.organizations!.slice(0, MAX_VISIBLE_ORGS) : [];
+  const remainingOrgs = hasOrgs ? account.organizations!.length - MAX_VISIBLE_ORGS : 0;
+
+  return (
+    <div className="space-y-2.5">
+      {/* Identity row */}
+      <div className="flex items-center gap-2">
+        <User className="size-3.5 text-zinc-500" />
+        {hasLogin ? (
+          <div className="flex items-center gap-1.5 text-[12px]">
+            <span className="font-medium text-zinc-200">{account.login}</span>
+            {account.host && (
+              <span className="text-zinc-500">· {account.host}</span>
+            )}
+          </div>
+        ) : (
+          <span className="text-[12px] text-zinc-500">{account.statusMessage}</span>
+        )}
+      </div>
+
+      {/* Organizations */}
+      {hasOrgs && (
+        <div className="flex items-start gap-2">
+          <Building2 className="mt-0.5 size-3.5 shrink-0 text-zinc-500" />
+          <div className="flex flex-wrap items-center gap-1">
+            {visibleOrgs.map((org) => (
+              <span
+                className="rounded-md bg-zinc-800 px-1.5 py-0.5 text-[10px] font-medium text-zinc-400"
+                key={org}
+              >
+                {org}
+              </span>
+            ))}
+            {remainingOrgs > 0 && (
+              <span className="text-[10px] text-zinc-600">+{remainingOrgs} more</span>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function CopilotStatusCard({
   connection,
   modelCount,
@@ -116,6 +199,8 @@ export function CopilotStatusCard({
   const isHealthy = connection.status === 'ready';
   const hasDetail = connection.copilotCliPath;
   const checkedLabel = formatCheckedAt(connection.checkedAt);
+  const hasVersionInfo = !!connection.copilotCliVersion;
+  const hasAccountInfo = !!connection.account;
 
   return (
     <div className="space-y-3">
@@ -131,6 +216,12 @@ export function CopilotStatusCard({
           </span>
         )}
         <div className="ml-auto flex items-center gap-2">
+          {hasVersionInfo && (
+            <VersionBadge
+              installedVersion={connection.copilotCliVersion!.installedVersion}
+              status={connection.copilotCliVersion!.status}
+            />
+          )}
           {checkedLabel && (
             <span className="text-[11px] text-zinc-600">{checkedLabel}</span>
           )}
@@ -146,6 +237,11 @@ export function CopilotStatusCard({
         </div>
       </div>
 
+      {/* Account info (when healthy) */}
+      {isHealthy && hasAccountInfo && (
+        <AccountSection connection={connection} />
+      )}
+
       {/* Action hint for non-ready states */}
       {!isHealthy && config.actionLabel && (
         <div className="flex items-start gap-2 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2.5">
@@ -154,7 +250,7 @@ export function CopilotStatusCard({
         </div>
       )}
 
-      {/* CLI path (always visible when healthy, expandable otherwise) */}
+      {/* Expandable details (healthy state) */}
       {isHealthy && hasDetail && (
         <div className="space-y-2">
           <button
@@ -173,6 +269,14 @@ export function CopilotStatusCard({
                   <span className="text-[10px] font-medium uppercase tracking-wider text-zinc-600">CLI path</span>
                   <p className="mt-0.5 break-all font-mono text-[11px] text-zinc-400" title={connection.copilotCliPath}>
                     {connection.copilotCliPath}
+                  </p>
+                </div>
+              )}
+              {hasVersionInfo && connection.copilotCliVersion!.status === 'outdated' && connection.copilotCliVersion!.latestVersion && (
+                <div className="border-b border-zinc-800/40 px-3 py-2">
+                  <span className="text-[10px] font-medium uppercase tracking-wider text-zinc-600">Latest version</span>
+                  <p className="mt-0.5 font-mono text-[11px] text-zinc-400">
+                    {connection.copilotCliVersion!.latestVersion}
                   </p>
                 </div>
               )}

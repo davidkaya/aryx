@@ -83,8 +83,8 @@ Implemented foundation:
 
 Still worth adding:
 
-- [ ] outdated Copilot CLI state
-- [ ] active GitHub account or organization context when available
+- [x] outdated Copilot CLI state
+- [x] active GitHub account or organization context when available
 - [ ] clear model availability explanation when a model is unavailable
 - [ ] reconnect and troubleshooting actions beyond refresh
 - [ ] optional per-project or per-pattern account selection later if Kopaya supports multiple Copilot identities

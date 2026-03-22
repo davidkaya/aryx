@@ -313,26 +313,28 @@ export function ChatPane({
   return (
     <div className="flex h-full flex-col">
       {/* Header — extra top padding clears the title bar overlay zone */}
-      <header className="flex items-center justify-between border-b border-[var(--color-border)] px-6 pb-3 pt-12">
-        <div className="min-w-0">
-          <h2 className="truncate text-sm font-semibold text-zinc-100">{session.title}</h2>
-          <p className="mt-0.5 truncate text-[12px] text-zinc-500">
-            {isScratchpad ? `Scratchpad · ${pattern.name}` : `${project.name} · ${pattern.name} · ${pattern.mode}`}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {isSessionBusy && <span className="size-2 animate-pulse rounded-full bg-blue-400" />}
-          {session.status === 'error' && (
-            <div className="flex items-center gap-1.5 text-[12px] text-red-400">
-              <AlertCircle className="size-3.5" />
-              Error
-            </div>
-          )}
-          {session.status === 'idle' && session.messages.length > 0 && (
-            <span className="text-[12px] text-zinc-600">
-              {session.messages.length} message{session.messages.length === 1 ? '' : 's'}
-            </span>
-          )}
+      <header className="border-b border-[var(--color-border)] px-6 pb-3 pt-12">
+        <div className="flex min-h-8 items-center justify-between">
+          <div className="min-w-0">
+            <h2 className="truncate text-[13px] font-semibold leading-tight text-zinc-100">{session.title}</h2>
+            <p className="truncate text-[11px] leading-tight text-zinc-500">
+              {isScratchpad ? `Scratchpad · ${pattern.name}` : `${project.name} · ${pattern.name} · ${pattern.mode}`}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {isSessionBusy && <span className="size-2 animate-pulse rounded-full bg-blue-400" />}
+            {session.status === 'error' && (
+              <div className="flex items-center gap-1.5 text-[12px] text-red-400">
+                <AlertCircle className="size-3.5" />
+                Error
+              </div>
+            )}
+            {session.status === 'idle' && session.messages.length > 0 && (
+              <span className="text-[12px] text-zinc-600">
+                {session.messages.length} message{session.messages.length === 1 ? '' : 's'}
+              </span>
+            )}
+          </div>
         </div>
       </header>
 

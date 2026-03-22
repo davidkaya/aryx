@@ -146,7 +146,7 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
             else if (evt is WorkflowOutputEvent outputEvent)
             {
                 List<ChatMessage> allMessages = outputEvent.As<List<ChatMessage>>() ?? [];
-                List<ChatMessage> newMessages = allMessages.Skip(inputMessages.Count).ToList();
+                List<ChatMessage> newMessages = SelectNewOutputMessages(allMessages, inputMessages);
                 completedMessages = ProjectCompletedMessages(
                     command,
                     newMessages,
@@ -367,6 +367,70 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
         }
 
         return mapped;
+    }
+
+    internal static List<ChatMessage> SelectNewOutputMessages(
+        IReadOnlyList<ChatMessage> outputMessages,
+        IReadOnlyList<ChatMessage> inputMessages)
+    {
+        if (outputMessages.Count == 0)
+        {
+            return [];
+        }
+
+        if (inputMessages.Count == 0)
+        {
+            return outputMessages.ToList();
+        }
+
+        int overlapLength = FindOutputInputOverlapLength(outputMessages, inputMessages);
+        return outputMessages.Skip(overlapLength).ToList();
+    }
+
+    private static int FindOutputInputOverlapLength(
+        IReadOnlyList<ChatMessage> outputMessages,
+        IReadOnlyList<ChatMessage> inputMessages)
+    {
+        int maxOverlap = Math.Min(outputMessages.Count, inputMessages.Count);
+
+        for (int overlapLength = maxOverlap; overlapLength > 0; overlapLength--)
+        {
+            int inputStart = inputMessages.Count - overlapLength;
+            bool matches = true;
+
+            for (int index = 0; index < overlapLength; index++)
+            {
+                if (!ChatMessagesMatch(inputMessages[inputStart + index], outputMessages[index]))
+                {
+                    matches = false;
+                    break;
+                }
+            }
+
+            if (matches)
+            {
+                return overlapLength;
+            }
+        }
+
+        return 0;
+    }
+
+    private static bool ChatMessagesMatch(ChatMessage inputMessage, ChatMessage outputMessage)
+    {
+        if (inputMessage.Role != outputMessage.Role)
+        {
+            return false;
+        }
+
+        if (!string.Equals(inputMessage.Text, outputMessage.Text, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        return string.IsNullOrWhiteSpace(inputMessage.AuthorName)
+            || string.IsNullOrWhiteSpace(outputMessage.AuthorName)
+            || string.Equals(inputMessage.AuthorName, outputMessage.AuthorName, StringComparison.Ordinal);
     }
 
     private static string ResolveProjectedAuthorName(

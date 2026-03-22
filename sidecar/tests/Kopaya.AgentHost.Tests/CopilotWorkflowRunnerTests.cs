@@ -7,6 +7,72 @@ namespace Kopaya.AgentHost.Tests;
 public sealed class CopilotWorkflowRunnerTests
 {
     [Fact]
+    public void SelectNewOutputMessages_SkipsFullTranscriptPrefix()
+    {
+        List<ChatMessage> inputMessages =
+        [
+            new(ChatRole.User, "Hello"),
+        ];
+        List<ChatMessage> outputMessages =
+        [
+            new(ChatRole.User, "Hello"),
+            new(ChatRole.Assistant, "Hi there."),
+        ];
+
+        IReadOnlyList<ChatMessage> newMessages = CopilotWorkflowRunner.SelectNewOutputMessages(
+            outputMessages,
+            inputMessages);
+
+        ChatMessage message = Assert.Single(newMessages);
+        Assert.Equal(ChatRole.Assistant, message.Role);
+        Assert.Equal("Hi there.", message.Text);
+    }
+
+    [Fact]
+    public void SelectNewOutputMessages_SkipsOnlyTheLatestInputOverlap()
+    {
+        List<ChatMessage> inputMessages =
+        [
+            new(ChatRole.Assistant, "Earlier answer"),
+            new(ChatRole.User, "Hello"),
+        ];
+        List<ChatMessage> outputMessages =
+        [
+            new(ChatRole.User, "Hello"),
+            new(ChatRole.Assistant, "Hi there."),
+        ];
+
+        IReadOnlyList<ChatMessage> newMessages = CopilotWorkflowRunner.SelectNewOutputMessages(
+            outputMessages,
+            inputMessages);
+
+        ChatMessage message = Assert.Single(newMessages);
+        Assert.Equal(ChatRole.Assistant, message.Role);
+        Assert.Equal("Hi there.", message.Text);
+    }
+
+    [Fact]
+    public void SelectNewOutputMessages_PreservesAssistantOnlyOutput()
+    {
+        List<ChatMessage> inputMessages =
+        [
+            new(ChatRole.User, "Hello"),
+        ];
+        List<ChatMessage> outputMessages =
+        [
+            new(ChatRole.Assistant, "Hi there."),
+        ];
+
+        IReadOnlyList<ChatMessage> newMessages = CopilotWorkflowRunner.SelectNewOutputMessages(
+            outputMessages,
+            inputMessages);
+
+        ChatMessage message = Assert.Single(newMessages);
+        Assert.Equal(ChatRole.Assistant, message.Role);
+        Assert.Equal("Hi there.", message.Text);
+    }
+
+    [Fact]
     public void ProjectCompletedMessages_FallsBackToStreamingSegmentsWhenWorkflowOutputIsMissing()
     {
         RunTurnCommandDto command = new()

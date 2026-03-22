@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { X } from 'lucide-react';
+import { Star, X } from 'lucide-react';
 
 import type { PatternDefinition } from '@shared/domain/pattern';
 import { isScratchpadProject, type ProjectRecord } from '@shared/domain/project';
@@ -10,6 +10,7 @@ interface NewSessionModalProps {
   defaultProjectId?: string;
   onClose: () => void;
   onCreate: (projectId: string, patternId: string) => void;
+  onTogglePatternFavorite?: (patternId: string, isFavorite: boolean) => void;
 }
 
 export function NewSessionModal({
@@ -18,15 +19,22 @@ export function NewSessionModal({
   defaultProjectId,
   onClose,
   onCreate,
+  onTogglePatternFavorite,
 }: NewSessionModalProps) {
   const [projectId, setProjectId] = useState(defaultProjectId ?? projects[0]?.id ?? '');
   const availablePatterns = useMemo(
     () =>
-      patterns.filter(
-        (pattern) =>
-          pattern.availability !== 'unavailable'
-          && (!isScratchpadProject(projectId) || pattern.mode === 'single'),
-      ),
+      patterns
+        .filter(
+          (pattern) =>
+            pattern.availability !== 'unavailable'
+            && (!isScratchpadProject(projectId) || pattern.mode === 'single'),
+        )
+        .sort((a, b) => {
+          if (a.isFavorite && !b.isFavorite) return -1;
+          if (!a.isFavorite && b.isFavorite) return 1;
+          return 0;
+        }),
     [patterns, projectId],
   );
   const [patternId, setPatternId] = useState(availablePatterns[0]?.id ?? '');
@@ -79,17 +87,41 @@ export function NewSessionModal({
 
           <label className="block space-y-1.5">
             <span className="text-[12px] font-medium text-zinc-400">Pattern</span>
-            <select
-              className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-[13px] text-zinc-100 outline-none transition focus:border-indigo-500/50"
-              onChange={(e) => setPatternId(e.target.value)}
-              value={patternId}
-            >
+            <div className="space-y-1 rounded-lg border border-zinc-700 bg-zinc-950 p-1.5">
               {availablePatterns.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name} ({p.mode})
-                </option>
+                <div
+                  key={p.id}
+                  className={`flex cursor-pointer items-center gap-2 rounded-md px-2.5 py-1.5 text-[13px] transition ${
+                    patternId === p.id
+                      ? 'bg-indigo-500/15 text-zinc-100 ring-1 ring-indigo-500/25'
+                      : 'text-zinc-300 hover:bg-zinc-800/60'
+                  }`}
+                  onClick={() => setPatternId(p.id)}
+                >
+                  <span className="flex-1 truncate">
+                    {p.name}
+                    <span className="ml-1.5 text-[11px] text-zinc-500">({p.mode})</span>
+                  </span>
+                  {onTogglePatternFavorite && (
+                    <button
+                      className={`shrink-0 transition ${
+                        p.isFavorite
+                          ? 'text-amber-400 hover:text-amber-300'
+                          : 'text-zinc-700 hover:text-zinc-400'
+                      }`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onTogglePatternFavorite(p.id, !p.isFavorite);
+                      }}
+                      title={p.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                      type="button"
+                    >
+                      <Star className={`size-3.5 ${p.isFavorite ? 'fill-current' : ''}`} />
+                    </button>
+                  )}
+                </div>
               ))}
-            </select>
+            </div>
             {patternId && (
               <p className="text-[12px] text-zinc-600">
                 {availablePatterns.find((p) => p.id === patternId)?.description}

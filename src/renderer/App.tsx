@@ -253,6 +253,18 @@ export default function App() {
             onSessionSelect={(sessionId) => {
               void api.selectSession(sessionId);
             }}
+            onRenameSession={(sessionId, title) => {
+              void api.renameSession({ sessionId, title });
+            }}
+            onDuplicateSession={(sessionId) => {
+              void api.duplicateSession({ sessionId });
+            }}
+            onSetSessionPinned={(sessionId, isPinned) => {
+              void api.setSessionPinned({ sessionId, isPinned });
+            }}
+            onSetSessionArchived={(sessionId, isArchived) => {
+              void api.setSessionArchived({ sessionId, isArchived });
+            }}
             workspace={workspace}
           />
         }
@@ -265,6 +277,9 @@ export default function App() {
           onCreate={(projectId, patternId) => {
             setShowNewSession(false);
             void api.createSession({ projectId, patternId });
+          }}
+          onTogglePatternFavorite={(patternId, isFavorite) => {
+            void api.setPatternFavorite({ patternId, isFavorite });
           }}
           patterns={workspace.patterns}
           projects={workspace.projects}

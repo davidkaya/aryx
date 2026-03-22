@@ -1,23 +1,31 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Archive,
   ArrowLeftRight,
   ChevronDown,
   ChevronRight,
+  Copy,
   FolderOpen,
   GitFork,
   ListOrdered,
   Lock,
   MessageSquare,
+  MoreHorizontal,
+  Pencil,
+  Pin,
   Plus,
+  Search,
   Settings,
   Sparkles,
   Users,
+  X,
   type LucideIcon,
 } from 'lucide-react';
 
 import type { OrchestrationMode, PatternDefinition } from '@shared/domain/pattern';
 import { isScratchpadProject, type ProjectRecord } from '@shared/domain/project';
-import type { SessionRecord } from '@shared/domain/session';
+import type { SessionRecord, SessionStatus } from '@shared/domain/session';
+import { querySessions } from '@shared/domain/sessionLibrary';
 import type { WorkspaceState } from '@shared/domain/workspace';
 
 interface SidebarProps {
@@ -27,6 +35,10 @@ interface SidebarProps {
   onProjectSelect: (projectId?: string) => void;
   onSessionSelect: (sessionId: string) => void;
   onOpenSettings: () => void;
+  onRenameSession: (sessionId: string, title: string) => void;
+  onDuplicateSession: (sessionId: string) => void;
+  onSetSessionPinned: (sessionId: string, isPinned: boolean) => void;
+  onSetSessionArchived: (sessionId: string, isArchived: boolean) => void;
 }
 
 /* ── Mode icon + accent colour mapping ─────────────────────── */
@@ -56,18 +68,75 @@ function relativeTime(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
+/* ── Filter chip ────────────────────────────────────────────── */
+
+function FilterChip({
+  label,
+  active,
+  activeClass,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  activeClass: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      className={`rounded-full px-2 py-0.5 text-[10px] font-medium transition ${
+        active ? activeClass : 'bg-zinc-800/60 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-400'
+      }`}
+      onClick={onClick}
+      type="button"
+    >
+      {label}
+    </button>
+  );
+}
+
+/* ── Context menu item ─────────────────────────────────────── */
+
+function ActionMenuItem({
+  icon: Icon,
+  label,
+  onClick,
+}: {
+  icon: LucideIcon;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      className="flex w-full items-center gap-2 px-3 py-1.5 text-[12px] text-zinc-300 transition hover:bg-zinc-800"
+      onClick={onClick}
+      type="button"
+    >
+      <Icon className="size-3.5" />
+      {label}
+    </button>
+  );
+}
+
 /* ── Session item ──────────────────────────────────────────── */
 
 function SessionItem({
   session,
   pattern,
   isActive,
+  isRenaming,
   onSelect,
+  onOpenMenu,
+  onRenameSubmit,
+  onRenameCancel,
 }: {
   session: SessionRecord;
   pattern?: PatternDefinition;
   isActive: boolean;
+  isRenaming: boolean;
   onSelect: () => void;
+  onOpenMenu: (e: React.MouseEvent) => void;
+  onRenameSubmit: (title: string) => void;
+  onRenameCancel: () => void;
 }) {
   const isRunning = session.status === 'running';
   const isError = session.status === 'error';
@@ -76,15 +145,47 @@ function SessionItem({
   const ModeIcon = visual.icon;
   const agentCount = pattern?.agents.length ?? 1;
 
+  const [renameText, setRenameText] = useState(session.title);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isRenaming) {
+      setRenameText(session.title);
+      requestAnimationFrame(() => {
+        inputRef.current?.focus();
+        inputRef.current?.select();
+      });
+    }
+  }, [isRenaming, session.title]);
+
+  function handleRenameKeyDown(e: React.KeyboardEvent) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const trimmed = renameText.trim();
+      if (trimmed) onRenameSubmit(trimmed);
+      else onRenameCancel();
+    } else if (e.key === 'Escape') {
+      onRenameCancel();
+    }
+  }
+
+  function handleRenameBlur() {
+    const trimmed = renameText.trim();
+    if (trimmed && trimmed !== session.title) onRenameSubmit(trimmed);
+    else onRenameCancel();
+  }
+
   return (
-    <button
-      className={`group relative flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-all duration-150 ${
+    <div
+      className={`group relative flex w-full cursor-pointer items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-all duration-150 ${
         isActive
           ? 'bg-indigo-500/10 ring-1 ring-indigo-500/25'
           : 'hover:bg-zinc-800/60'
-      } ${isRunning ? 'sidebar-running' : ''}`}
-      onClick={onSelect}
-      type="button"
+      } ${isRunning ? 'sidebar-running' : ''} ${session.isArchived ? 'opacity-50' : ''}`}
+      onClick={isRenaming ? undefined : onSelect}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.key === 'Enter' && !isRenaming) onSelect(); }}
     >
       {/* Running left accent bar */}
       {isRunning && (
@@ -103,25 +204,35 @@ function SessionItem({
       {/* Content */}
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
-          <span
-            className={`truncate text-[13px] font-medium leading-tight ${
-              isActive ? 'text-indigo-100' : 'text-zinc-200 group-hover:text-zinc-100'
-            }`}
-          >
-            {session.title}
-          </span>
+          {session.isPinned && <Pin className="size-3 shrink-0 text-amber-500/70" />}
+          {isRenaming ? (
+            <input
+              ref={inputRef}
+              className="w-full rounded bg-zinc-800 px-1.5 py-0.5 text-[13px] font-medium text-zinc-100 outline-none ring-1 ring-indigo-500/50"
+              value={renameText}
+              onChange={(e) => setRenameText(e.target.value)}
+              onKeyDown={handleRenameKeyDown}
+              onBlur={handleRenameBlur}
+              onClick={(e) => e.stopPropagation()}
+            />
+          ) : (
+            <span
+              className={`truncate text-[13px] font-medium leading-tight ${
+                isActive ? 'text-indigo-100' : 'text-zinc-200 group-hover:text-zinc-100'
+              }`}
+            >
+              {session.title}
+            </span>
+          )}
         </div>
 
         <div className="mt-1 flex items-center gap-2">
-          {/* Agent count badge for multi-agent patterns */}
           {agentCount > 1 && (
             <span className="inline-flex items-center gap-0.5 text-[10px] text-zinc-500">
               <Users className="size-2.5" />
               {agentCount}
             </span>
           )}
-
-          {/* Status indicator */}
           {isRunning && (
             <span className="inline-flex items-center gap-1 text-[10px] font-medium text-blue-400">
               <span className="size-1.5 rounded-full bg-blue-400 sidebar-pulse" />
@@ -134,14 +245,29 @@ function SessionItem({
               Error
             </span>
           )}
-
-          {/* Relative time */}
+          {session.isArchived && (
+            <span className="inline-flex items-center gap-1 text-[10px] text-zinc-600">
+              <Archive className="size-2.5" />
+              Archived
+            </span>
+          )}
           <span className="ml-auto text-[10px] text-zinc-600 group-hover:text-zinc-500">
             {relativeTime(session.updatedAt)}
           </span>
         </div>
       </div>
-    </button>
+
+      {/* Actions button (hidden during rename) */}
+      {!isRenaming && (
+        <button
+          className="absolute right-1.5 top-1.5 flex size-6 items-center justify-center rounded-md text-zinc-600 opacity-0 transition hover:bg-zinc-700 hover:text-zinc-300 group-hover:opacity-100"
+          onClick={(e) => { e.stopPropagation(); onOpenMenu(e); }}
+          type="button"
+        >
+          <MoreHorizontal className="size-3.5" />
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -152,13 +278,21 @@ function ProjectGroup({
   sessions,
   patterns,
   selectedSessionId,
+  renamingSessionId,
   onSessionSelect,
+  onOpenMenu,
+  onRenameSubmit,
+  onRenameCancel,
 }: {
   project: ProjectRecord;
   sessions: SessionRecord[];
   patterns: PatternDefinition[];
   selectedSessionId?: string;
+  renamingSessionId?: string;
   onSessionSelect: (sessionId: string) => void;
+  onOpenMenu: (sessionId: string, e: React.MouseEvent) => void;
+  onRenameSubmit: (sessionId: string, title: string) => void;
+  onRenameCancel: () => void;
 }) {
   const [expanded, setExpanded] = useState(true);
   const isScratchpad = isScratchpadProject(project);
@@ -169,7 +303,18 @@ function ProjectGroup({
     return map;
   }, [patterns]);
 
-  const runningCount = sessions.filter((s) => s.status === 'running').length;
+  const visibleSessions = useMemo(() =>
+    sessions
+      .filter((s) => !s.isArchived)
+      .sort((a, b) => {
+        if (a.isPinned && !b.isPinned) return -1;
+        if (!a.isPinned && b.isPinned) return 1;
+        return 0;
+      }),
+    [sessions],
+  );
+
+  const runningCount = visibleSessions.filter((s) => s.status === 'running').length;
 
   return (
     <div>
@@ -198,23 +343,27 @@ function ProjectGroup({
             </span>
           )}
           <span className="rounded-full bg-zinc-800 px-1.5 py-0.5 text-[10px] font-medium text-zinc-500">
-            {sessions.length}
+            {visibleSessions.length}
           </span>
         </div>
       </button>
 
       {expanded && (
         <div className="ml-2 mt-0.5 space-y-0.5 border-l border-zinc-800/60 pl-2">
-          {sessions.length === 0 ? (
+          {visibleSessions.length === 0 ? (
             <div className="px-3 py-3 text-center text-[12px] text-zinc-600">
               {isScratchpad ? 'No scratchpad chats yet' : 'No sessions yet'}
             </div>
           ) : (
-            sessions.map((session) => (
+            visibleSessions.map((session) => (
               <SessionItem
                 isActive={selectedSessionId === session.id}
+                isRenaming={renamingSessionId === session.id}
                 key={session.id}
                 onSelect={() => onSessionSelect(session.id)}
+                onOpenMenu={(e) => onOpenMenu(session.id, e)}
+                onRenameSubmit={(title) => onRenameSubmit(session.id, title)}
+                onRenameCancel={onRenameCancel}
                 pattern={patternMap.get(session.patternId)}
                 session={session}
               />
@@ -235,9 +384,77 @@ export function Sidebar({
   onProjectSelect,
   onSessionSelect,
   onOpenSettings,
+  onRenameSession,
+  onDuplicateSession,
+  onSetSessionPinned,
+  onSetSessionArchived,
 }: SidebarProps) {
   const scratchpadProject = workspace.projects.find((project) => isScratchpadProject(project));
   const userProjects = workspace.projects.filter((project) => !isScratchpadProject(project));
+
+  /* ── Search & filter state ─────────────────────────────────── */
+
+  const [searchText, setSearchText] = useState('');
+  const [filterRunning, setFilterRunning] = useState(false);
+  const [filterErrored, setFilterErrored] = useState(false);
+  const [filterPinned, setFilterPinned] = useState(false);
+  const [filterIncludeArchived, setFilterIncludeArchived] = useState(false);
+
+  const isQueryActive =
+    searchText.trim().length > 0 || filterRunning || filterErrored || filterPinned || filterIncludeArchived;
+
+  const patternMap = useMemo(() => {
+    const map = new Map<string, PatternDefinition>();
+    for (const p of workspace.patterns) map.set(p.id, p);
+    return map;
+  }, [workspace.patterns]);
+
+  const queryResults = useMemo(() => {
+    if (!isQueryActive) return [];
+
+    const statuses: SessionStatus[] = [];
+    if (filterRunning) statuses.push('running');
+    if (filterErrored) statuses.push('error');
+
+    const results = querySessions(workspace, {
+      searchText: searchText.trim() || undefined,
+      statuses: statuses.length > 0 ? statuses : undefined,
+      onlyPinned: filterPinned || undefined,
+      includeArchived: filterIncludeArchived || undefined,
+    });
+
+    return results
+      .map((r) => workspace.sessions.find((s) => s.id === r.sessionId))
+      .filter((s): s is SessionRecord => s !== undefined);
+  }, [workspace, searchText, filterRunning, filterErrored, filterPinned, filterIncludeArchived, isQueryActive]);
+
+  /* ── Context menu state ────────────────────────────────────── */
+
+  const [menuState, setMenuState] = useState<{ sessionId: string; top: number; left: number } | null>(null);
+  const [renamingSessionId, setRenamingSessionId] = useState<string>();
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  function handleOpenMenu(sessionId: string, e: React.MouseEvent) {
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setMenuState({
+      sessionId,
+      top: rect.bottom + 4,
+      left: Math.max(8, rect.right - 160),
+    });
+  }
+
+  function closeMenu() {
+    setMenuState(null);
+  }
+
+  function handleRenameSubmit(sessionId: string, title: string) {
+    setRenamingSessionId(undefined);
+    onRenameSession(sessionId, title);
+  }
+
+  const menuSession = menuState
+    ? workspace.sessions.find((s) => s.id === menuState.sessionId)
+    : undefined;
 
   return (
     <div className="flex h-full flex-col">
@@ -266,8 +483,37 @@ export function Sidebar({
         </div>
       </div>
 
+      {/* Search + Filters */}
+      <div className="space-y-2 px-3 pt-3 pb-1">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-zinc-500" />
+          <input
+            className="w-full rounded-lg border border-zinc-800 bg-zinc-900/60 py-1.5 pl-8 pr-8 text-[12px] text-zinc-200 placeholder-zinc-600 outline-none transition focus:border-zinc-700 focus:bg-zinc-900"
+            placeholder="Search sessions…"
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+          />
+          {searchText && (
+            <button
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+              onClick={() => setSearchText('')}
+              type="button"
+            >
+              <X className="size-3.5" />
+            </button>
+          )}
+        </div>
+
+        <div className="flex flex-wrap gap-1">
+          <FilterChip label="Running" active={filterRunning} activeClass="bg-blue-500/15 text-blue-300 ring-1 ring-blue-500/25" onClick={() => setFilterRunning(!filterRunning)} />
+          <FilterChip label="Error" active={filterErrored} activeClass="bg-red-500/15 text-red-300 ring-1 ring-red-500/25" onClick={() => setFilterErrored(!filterErrored)} />
+          <FilterChip label="Pinned" active={filterPinned} activeClass="bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/25" onClick={() => setFilterPinned(!filterPinned)} />
+          <FilterChip label="Archived" active={filterIncludeArchived} activeClass="bg-zinc-600/20 text-zinc-300 ring-1 ring-zinc-600/30" onClick={() => setFilterIncludeArchived(!filterIncludeArchived)} />
+        </div>
+      </div>
+
       {/* New session CTA */}
-      <div className="px-3 pt-3 pb-1">
+      <div className="px-3 pt-2 pb-1">
         <button
           className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-zinc-700 bg-zinc-800/30 px-3 py-2 text-[13px] font-medium text-zinc-400 transition hover:border-indigo-500/40 hover:bg-indigo-500/5 hover:text-indigo-300"
           onClick={onNewSession}
@@ -278,67 +524,108 @@ export function Sidebar({
         </button>
       </div>
 
-      {/* Project + Session Tree */}
-      <div className="flex-1 overflow-y-auto px-2 py-2">
-        <div className="space-y-3">
-          {scratchpadProject && (
-            <div className="space-y-1">
-              <div className="px-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-600">
-                Scratchpad
-              </div>
-              <ProjectGroup
-                key={scratchpadProject.id}
-                onSessionSelect={onSessionSelect}
-                patterns={workspace.patterns}
-                project={scratchpadProject}
-                selectedSessionId={workspace.selectedSessionId}
-                sessions={workspace.sessions.filter((session) => session.projectId === scratchpadProject.id)}
-              />
+      {/* Session list */}
+      <div
+        className="flex-1 overflow-y-auto px-2 py-2"
+        ref={scrollRef}
+        onScroll={closeMenu}
+      >
+        {isQueryActive ? (
+          /* ── Flat search / filter results ──────────────────────── */
+          <div className="space-y-1">
+            <div className="px-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-600">
+              Results ({queryResults.length})
             </div>
-          )}
-
-          {userProjects.length === 0 ? (
-            <div className="flex flex-col items-center gap-4 px-4 py-8 text-center">
-              <div className="relative">
-                <div className="flex size-14 items-center justify-center rounded-2xl bg-zinc-800/50 ring-1 ring-zinc-700/50">
-                  <FolderOpen className="size-7 text-zinc-600" />
-                </div>
-                <div className="absolute -bottom-1 -right-1 flex size-6 items-center justify-center rounded-full bg-indigo-600 ring-2 ring-[var(--color-surface-1)]">
-                  <Plus className="size-3 text-white" />
-                </div>
+            {queryResults.length === 0 ? (
+              <div className="px-3 py-6 text-center text-[12px] text-zinc-600">
+                No sessions match your search
               </div>
-              <div>
-                <p className="text-[13px] font-medium text-zinc-300">No projects yet</p>
-                <p className="mt-1 text-[12px] leading-relaxed text-zinc-500">
-                  Use Scratchpad for ad-hoc chat or add a repo<br />to work against project files
-                </p>
-              </div>
-              <button
-                className="rounded-lg bg-indigo-600 px-4 py-2 text-[13px] font-medium text-white transition hover:bg-indigo-500"
-                onClick={onAddProject}
-                type="button"
-              >
-                Add Project
-              </button>
-            </div>
-          ) : (
-            <div className="space-y-1">
-              <div className="px-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-600">
-                Projects
-              </div>
-              {userProjects.map((project) => (
-                <ProjectGroup
-                  key={project.id}
-                  onSessionSelect={onSessionSelect}
-                  patterns={workspace.patterns}
-                  project={project}
-                  selectedSessionId={workspace.selectedSessionId}
-                  sessions={workspace.sessions.filter((session) => session.projectId === project.id)}
+            ) : (
+              queryResults.map((session) => (
+                <SessionItem
+                  isActive={workspace.selectedSessionId === session.id}
+                  isRenaming={renamingSessionId === session.id}
+                  key={session.id}
+                  onSelect={() => onSessionSelect(session.id)}
+                  onOpenMenu={(e) => handleOpenMenu(session.id, e)}
+                  onRenameSubmit={(title) => handleRenameSubmit(session.id, title)}
+                  onRenameCancel={() => setRenamingSessionId(undefined)}
+                  pattern={patternMap.get(session.patternId)}
+                  session={session}
                 />
-              ))}
-            </div>
-          )}
-        </div>
+              ))
+            )}
+          </div>
+        ) : (
+          /* ── Normal project tree ───────────────────────────────── */
+          <div className="space-y-3">
+            {scratchpadProject && (
+              <div className="space-y-1">
+                <div className="px-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-600">
+                  Scratchpad
+                </div>
+                <ProjectGroup
+                  key={scratchpadProject.id}
+                  onSessionSelect={onSessionSelect}
+                  onOpenMenu={handleOpenMenu}
+                  onRenameSubmit={handleRenameSubmit}
+                  onRenameCancel={() => setRenamingSessionId(undefined)}
+                  renamingSessionId={renamingSessionId}
+                  patterns={workspace.patterns}
+                  project={scratchpadProject}
+                  selectedSessionId={workspace.selectedSessionId}
+                  sessions={workspace.sessions.filter((session) => session.projectId === scratchpadProject.id)}
+                />
+              </div>
+            )}
+
+            {userProjects.length === 0 ? (
+              <div className="flex flex-col items-center gap-4 px-4 py-8 text-center">
+                <div className="relative">
+                  <div className="flex size-14 items-center justify-center rounded-2xl bg-zinc-800/50 ring-1 ring-zinc-700/50">
+                    <FolderOpen className="size-7 text-zinc-600" />
+                  </div>
+                  <div className="absolute -bottom-1 -right-1 flex size-6 items-center justify-center rounded-full bg-indigo-600 ring-2 ring-[var(--color-surface-1)]">
+                    <Plus className="size-3 text-white" />
+                  </div>
+                </div>
+                <div>
+                  <p className="text-[13px] font-medium text-zinc-300">No projects yet</p>
+                  <p className="mt-1 text-[12px] leading-relaxed text-zinc-500">
+                    Use Scratchpad for ad-hoc chat or add a repo<br />to work against project files
+                  </p>
+                </div>
+                <button
+                  className="rounded-lg bg-indigo-600 px-4 py-2 text-[13px] font-medium text-white transition hover:bg-indigo-500"
+                  onClick={onAddProject}
+                  type="button"
+                >
+                  Add Project
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-1">
+                <div className="px-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-600">
+                  Projects
+                </div>
+                {userProjects.map((project) => (
+                  <ProjectGroup
+                    key={project.id}
+                    onSessionSelect={onSessionSelect}
+                    onOpenMenu={handleOpenMenu}
+                    onRenameSubmit={handleRenameSubmit}
+                    onRenameCancel={() => setRenamingSessionId(undefined)}
+                    renamingSessionId={renamingSessionId}
+                    patterns={workspace.patterns}
+                    project={project}
+                    selectedSessionId={workspace.selectedSessionId}
+                    sessions={workspace.sessions.filter((session) => session.projectId === project.id)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Footer */}
@@ -353,6 +640,50 @@ export function Sidebar({
             Add another project
           </button>
         </div>
+      )}
+
+      {/* Context menu overlay */}
+      {menuState && menuSession && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={closeMenu} />
+          <div
+            className="fixed z-50 w-40 rounded-lg border border-zinc-700 bg-zinc-900 py-1 shadow-xl"
+            style={{ top: menuState.top, left: menuState.left }}
+          >
+            <ActionMenuItem
+              icon={Pencil}
+              label="Rename"
+              onClick={() => {
+                setRenamingSessionId(menuState.sessionId);
+                closeMenu();
+              }}
+            />
+            <ActionMenuItem
+              icon={Copy}
+              label="Duplicate"
+              onClick={() => {
+                onDuplicateSession(menuState.sessionId);
+                closeMenu();
+              }}
+            />
+            <ActionMenuItem
+              icon={Pin}
+              label={menuSession.isPinned ? 'Unpin' : 'Pin'}
+              onClick={() => {
+                onSetSessionPinned(menuState.sessionId, !menuSession.isPinned);
+                closeMenu();
+              }}
+            />
+            <ActionMenuItem
+              icon={Archive}
+              label={menuSession.isArchived ? 'Restore' : 'Archive'}
+              onClick={() => {
+                onSetSessionArchived(menuState.sessionId, !menuSession.isArchived);
+                closeMenu();
+              }}
+            />
+          </div>
+        </>
       )}
     </div>
   );

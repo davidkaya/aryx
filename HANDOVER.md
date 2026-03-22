@@ -1,24 +1,24 @@
-# Handover: Copilot connection status UI
+# Handover: Copilot version + account context UI
 
-This document is for the frontend/UX model that will build the user-facing experience on top of the backend changes implemented in this task.
+This document is for the frontend/UX agent that will extend the existing Copilot connection UI.
 
 ## Goal
 
-Build UI for the roadmap's highest-priority backend work:
+Build on top of the current Settings → `AI Provider` → `Connection` view so it can show:
 
-- show whether Kopaya can reach GitHub Copilot successfully
-- explain why it cannot when something is wrong
-- let the user refresh capability status after installing or logging into Copilot CLI
+- whether the installed Copilot CLI is current or outdated
+- which GitHub account Copilot is currently using
+- organization context when it can be discovered
 
-Do **not** build raw provider-secret management UI for this flow. Kopaya currently relies on the system-installed GitHub Copilot CLI rather than storing provider API keys itself.
+Do **not** add provider-secret management for this flow. Kopaya still relies on the system-installed GitHub Copilot CLI.
 
-## Backend changes already implemented
+## Backend changes now implemented
 
-### 1. `SidecarCapabilities` now includes connection diagnostics
+### 1. `SidecarCapabilities.connection` has new structured fields
 
 File: `src/shared/contracts/sidecar.ts`
 
-New field:
+New payload shape:
 
 ```ts
 connection: {
@@ -27,196 +27,183 @@ connection: {
   detail?: string;
   copilotCliPath?: string;
   checkedAt: string;
+  copilotCliVersion?: {
+    status: 'latest' | 'outdated' | 'unknown';
+    installedVersion?: string;
+    latestVersion?: string;
+    detail?: string;
+  };
+  account?: {
+    authenticated: boolean;
+    login?: string;
+    host?: string;
+    authType?: string;
+    statusMessage?: string;
+    organizations?: string[];
+  };
 }
 ```
 
-This comes from the .NET sidecar and is included alongside `runtime`, `modes`, and `models`.
-
-### 2. There is now a refreshable backend API
+### 2. Version state is now resolved by the sidecar
 
 Files:
 
-- `src/shared/contracts/ipc.ts`
-- `src/shared/contracts/channels.ts`
-- `src/preload/index.ts`
-- `src/main/ipc/registerIpcHandlers.ts`
-- `src/main/KopayaAppService.ts`
-
-New renderer-callable method:
-
-```ts
-window.kopayaApi.refreshSidecarCapabilities()
-```
-
-This bypasses the cached capability result in `KopayaAppService` and fetches a fresh capability payload from the sidecar. Use this for Retry / Refresh buttons after the user fixes CLI install or login state.
-
-### 3. Sidecar diagnostics now distinguish common failure modes
-
-Files:
-
-- `sidecar/src/Kopaya.AgentHost/Services/CopilotCliPathResolver.cs`
+- `sidecar/src/Kopaya.AgentHost/Services/CopilotConnectionMetadataResolver.cs`
 - `sidecar/src/Kopaya.AgentHost/Services/SidecarProtocolHost.cs`
+
+The sidecar now runs `copilot version` and classifies the result as:
+
+- `latest`: the CLI explicitly reported that the install is current
+- `outdated`: the CLI reported that a newer version is available
+- `unknown`: the version command timed out, failed, or did not return a recognizable update state
+
+Important nuance:
+
+- this **does not** change `connection.status`
+- `connection.status` still means install/auth/model-list health
+- version freshness is a separate concern and should be rendered separately in the UI
+
+### 3. Account context is now resolved by the sidecar
+
+Files:
+
+- `sidecar/src/Kopaya.AgentHost/Services/CopilotConnectionMetadataResolver.cs`
+- `sidecar/src/Kopaya.AgentHost/Services/SidecarProtocolHost.cs`
+
+The sidecar now uses the Copilot SDK auth-status call to populate:
+
+- `account.authenticated`
+- `account.login`
+- `account.host`
+- `account.authType`
+- `account.statusMessage`
+
+### 4. Organization context is best-effort
+
+When the Copilot auth status provides a login + host, the sidecar also makes a best-effort `gh` CLI lookup for org memberships:
+
+- it verifies the `gh` authenticated user matches the Copilot login on the same host
+- if that succeeds, it fetches `user/orgs`
+- those org logins are returned as `account.organizations`
+
+Important nuance:
+
+- `organizations` may be missing entirely
+- that can mean `gh` is not installed, not authenticated, lacks `read:org`, timed out, or the accounts did not match
+- the frontend should treat organizations as optional enhancement data, not a guaranteed field
+
+## Files changed
+
+Backend / shared contracts:
+
+- `src/shared/contracts/sidecar.ts`
 - `sidecar/src/Kopaya.AgentHost/Contracts/ProtocolModels.cs`
+- `sidecar/src/Kopaya.AgentHost/Services/SidecarProtocolHost.cs`
+- `sidecar/src/Kopaya.AgentHost/Services/CopilotConnectionMetadataResolver.cs`
 
-The backend now reports:
+Tests:
 
-- `ready`: Copilot CLI was found and model listing succeeded
-- `copilot-cli-missing`: Kopaya could not find the `copilot` command on `PATH`
-- `copilot-auth-required`: Copilot CLI exists, but the error looks like login/auth is required
-- `copilot-error`: Copilot CLI exists, but model loading failed for another reason
+- `sidecar/tests/Kopaya.AgentHost.Tests/SidecarProtocolHostTests.cs`
+- `sidecar/tests/Kopaya.AgentHost.Tests/CopilotConnectionMetadataResolverTests.cs`
 
-### 4. Validation status
+## Validation status
 
 Validated successfully after the change:
 
 - `bun test`
-- `dotnet test sidecar\Kopaya.AgentHost.slnx` using an alternate build output path to avoid a locked local executable in the shared environment
+- `dotnet test sidecar\Kopaya.AgentHost.slnx -p:BaseOutputPath="<session-sidecar-build-path>"`
 
-## Important architecture note
+## Current renderer state
 
-Kopaya currently does **not** manage provider credentials directly for this path.
+There is already a Copilot settings surface:
 
-The sidecar resolves the system-installed `copilot` command and uses that runtime. That means the near-term UI should be about:
+- `src/renderer/components/SettingsPanel.tsx`
+- `src/renderer/components/CopilotStatusCard.tsx`
 
-- install state
-- login state
-- connection health
-- model availability
-- refresh / retry
+Current behavior:
 
-It should **not** ask the user for OpenAI, Anthropic, or Google secrets as part of this specific Copilot status flow.
+- shows connection readiness / missing CLI / auth required / generic error
+- shows model count, CLI path, and checked timestamp
+- **does not yet render** the new `copilotCliVersion` or `account` fields
 
-## Current renderer integration point
+## Recommended frontend follow-up
 
-File: `src/renderer/App.tsx`
+### 1. Show the active GitHub account prominently
 
-On mount, the renderer already does:
+Good options:
 
-```ts
-api.describeSidecarCapabilities().then(setSidecarCapabilities)
-```
+- a compact identity row like `davidkaya · github.com`
+- a small pill/chip under the connection status
+- a labeled metadata grid in the expanded details area
 
-This state is already stored in:
+Suggested fallback behavior:
 
-```ts
-const [sidecarCapabilities, setSidecarCapabilities] = useState<SidecarCapabilities>();
-```
+- if `account.login` exists, show it
+- if `account.host` exists, show it next to the login
+- if `account.statusMessage` exists but login is missing, use that as secondary text
 
-So the frontend work is mostly about:
+### 2. Show CLI freshness as a separate badge/state
 
-1. reading `sidecarCapabilities.connection`
-2. rendering the right UX state
-3. calling `api.refreshSidecarCapabilities()` when the user retries
+Recommended mapping:
 
-## Recommended UI states
+- `latest` → subtle positive/neutral badge like `Up to date`
+- `outdated` → amber warning badge like `Update available`
+- `unknown` → low-emphasis muted label like `Version unknown`
 
-### `ready`
+Good details to show in the expanded area:
 
-Show:
+- installed version
+- latest version (when known)
+- raw `detail` text only as secondary / technical detail
 
-- positive connected state
-- connection summary
-- model count (`sidecarCapabilities.models.length`)
-- optional advanced details like CLI path and last checked time
+### 3. Show organizations only when present
 
-Good copy direction:
+If `account.organizations` exists and has values:
 
-- "Connected to GitHub Copilot"
-- "19 models available"
+- render them as small pills/tags
+- cap the visible count if the list is long
+- consider `+N more` if there are many
 
-### `copilot-cli-missing`
+If it is missing:
 
-Show:
+- do not show an empty placeholder
+- fall back to host/account info instead
 
-- an actionable install state
-- summary from backend
-- detail text in an expandable "technical details" area
-- a Refresh button that calls `refreshSidecarCapabilities()`
+### 4. Keep account/version separate from the main connection summary
 
-Good copy direction:
+Do **not** overload the existing top-level connection state.
 
-- "GitHub Copilot CLI not found"
-- "Install the `copilot` CLI and make sure it is available on PATH"
+Recommended mental model:
 
-### `copilot-auth-required`
+- main status row = “Can Kopaya use Copilot right now?”
+- version badge = “Should the CLI be updated?”
+- account info = “Who is Kopaya connected as?”
+- org pills = “What org context is discoverable?”
 
-Show:
+## Suggested UI copy
 
-- an actionable login state
-- summary from backend
-- technical details if available
-- a Refresh button after the user logs in externally
+For account:
 
-Good copy direction:
+- `Signed in as davidkaya`
+- `github.com`
 
-- "GitHub Copilot needs sign-in"
-- "Finish login in the Copilot CLI, then refresh"
+For version:
 
-### `copilot-error`
+- `Copilot CLI is up to date`
+- `Copilot CLI update available`
+- `Could not determine Copilot CLI version`
 
-Show:
+For orgs:
 
-- a generic error state
-- summary from backend
-- `detail` in a technical details area
-- Refresh button
+- `Organizations`
 
-Good copy direction:
+## Non-goals of this backend change
 
-- "Kopaya found Copilot, but could not load models"
+Still not implemented:
 
-## Recommended frontend implementation shape
+- an in-app `copilot update` action
+- an in-app `copilot login` action
+- direct provider credentials for OpenAI / Anthropic / Google
+- guaranteed authoritative “active organization” selection semantics
 
-### Suggested state additions in `App.tsx`
-
-- keep using the existing `sidecarCapabilities` state
-- add a small `isRefreshingCapabilities` boolean state
-- create a refresh handler that calls `api.refreshSidecarCapabilities()`
-
-Example shape:
-
-```ts
-const refreshCapabilities = async () => {
-  setIsRefreshingCapabilities(true);
-  try {
-    const capabilities = await api.refreshSidecarCapabilities();
-    setSidecarCapabilities(capabilities);
-  } finally {
-    setIsRefreshingCapabilities(false);
-  }
-};
-```
-
-### Suggested component split
-
-Any of these would be reasonable:
-
-- a new `CopilotStatusCard` in settings
-- a small status section near model/pattern settings
-- a dedicated connectivity block in the settings panel
-
-### Suggested UX details
-
-- treat `detail` as secondary, not primary
-- show the backend `summary` prominently
-- expose CLI path only in advanced details
-- keep the empty/loading state graceful
-- do not block the rest of the app if capabilities are degraded
-
-## What is intentionally not implemented yet
-
-These are still future enhancements, not part of this backend change:
-
-- actual GitHub account or org identity reporting
-- CLI version reporting
-- an in-app "log in to Copilot" action
-- push-based status updates when the external CLI state changes
-- direct provider credential storage for OpenAI / Anthropic / Google
-
-## Suggested follow-up order for the frontend model
-
-1. Add a settings/status UI for `sidecarCapabilities.connection`
-2. Add a Refresh button using `refreshSidecarCapabilities()`
-3. Surface model count and summary in the connected state
-4. Add expandable technical details for `detail` and `copilotCliPath`
-5. Keep future direct-provider credential UX separate from this Copilot flow
+The new org data is “best effort discovered context,” not a firm entitlement model.

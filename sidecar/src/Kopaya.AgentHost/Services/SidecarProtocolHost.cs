@@ -179,6 +179,8 @@ public sealed class SidecarProtocolHost
         IReadOnlyList<SidecarModelCapabilityDto> models = [];
         CopilotCliContext cliContext;
         SidecarConnectionDiagnosticsDto connection;
+        SidecarCopilotCliVersionDiagnosticsDto? cliVersion = null;
+        SidecarCopilotAccountDiagnosticsDto? account = null;
 
         try
         {
@@ -197,14 +199,31 @@ public sealed class SidecarProtocolHost
             };
         }
 
+        Task<SidecarCopilotCliVersionDiagnosticsDto> cliVersionTask =
+            CopilotConnectionMetadataResolver.GetCliVersionDiagnosticsAsync(cliContext, cancellationToken);
+
         try
         {
-            models = await ListAvailableModelsAsync(cliContext, cancellationToken).ConfigureAwait(false);
-            connection = CreateReadyConnectionDiagnostics(cliContext.CliPath, models.Count);
+            CopilotClientOptions clientOptions = CopilotCliPathResolver.CreateClientOptions(cliContext);
+
+            await using CopilotClient client = new(clientOptions);
+            await client.StartAsync(cancellationToken).ConfigureAwait(false);
+
+            GetAuthStatusResponse? authStatus =
+                await CopilotConnectionMetadataResolver.TryGetAuthStatusAsync(client, cancellationToken).ConfigureAwait(false);
+            account = await CopilotConnectionMetadataResolver.CreateAccountDiagnosticsAsync(
+                authStatus,
+                cliContext.Environment,
+                cancellationToken).ConfigureAwait(false);
+
+            models = await ListAvailableModelsAsync(client, cancellationToken).ConfigureAwait(false);
+            cliVersion = await cliVersionTask.ConfigureAwait(false);
+            connection = CreateReadyConnectionDiagnostics(cliContext.CliPath, models.Count, cliVersion, account);
         }
         catch (Exception exception)
         {
-            connection = CreateFailureConnectionDiagnostics(cliContext.CliPath, exception);
+            cliVersion = await cliVersionTask.ConfigureAwait(false);
+            connection = CreateFailureConnectionDiagnostics(cliContext.CliPath, exception, cliVersion, account);
             Console.Error.WriteLine($"[kopaya sidecar] Failed to list available Copilot models: {exception.Message}");
         }
 
@@ -234,14 +253,9 @@ public sealed class SidecarProtocolHost
     }
 
     private static async Task<IReadOnlyList<SidecarModelCapabilityDto>> ListAvailableModelsAsync(
-        CopilotCliContext cliContext,
+        CopilotClient client,
         CancellationToken cancellationToken)
     {
-        CopilotClientOptions clientOptions = CopilotCliPathResolver.CreateClientOptions(cliContext);
-
-        await using CopilotClient client = new(clientOptions);
-        await client.StartAsync(cancellationToken).ConfigureAwait(false);
-
         List<ModelInfo> models = await client.ListModelsAsync(cancellationToken).ConfigureAwait(false);
         return models
             .Select(model => new SidecarModelCapabilityDto
@@ -278,7 +292,9 @@ public sealed class SidecarProtocolHost
 
     internal static SidecarConnectionDiagnosticsDto CreateReadyConnectionDiagnostics(
         string cliPath,
-        int modelCount)
+        int modelCount,
+        SidecarCopilotCliVersionDiagnosticsDto? cliVersion = null,
+        SidecarCopilotAccountDiagnosticsDto? account = null)
     {
         string summary = modelCount switch
         {
@@ -293,13 +309,17 @@ public sealed class SidecarProtocolHost
             Summary = summary,
             Detail = $"Using Copilot CLI at {cliPath}.",
             CopilotCliPath = cliPath,
+            CopilotCliVersion = cliVersion,
+            Account = account,
             CheckedAt = DateTimeOffset.UtcNow.ToString("O"),
         };
     }
 
     internal static SidecarConnectionDiagnosticsDto CreateFailureConnectionDiagnostics(
         string? cliPath,
-        Exception exception)
+        Exception exception,
+        SidecarCopilotCliVersionDiagnosticsDto? cliVersion = null,
+        SidecarCopilotAccountDiagnosticsDto? account = null)
     {
         string status = ClassifyConnectionStatus(exception);
         string summary = status == "copilot-auth-required"
@@ -312,6 +332,8 @@ public sealed class SidecarProtocolHost
             Summary = summary,
             Detail = exception.Message,
             CopilotCliPath = cliPath,
+            CopilotCliVersion = cliVersion,
+            Account = account,
             CheckedAt = DateTimeOffset.UtcNow.ToString("O"),
         };
     }

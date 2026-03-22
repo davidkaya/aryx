@@ -40,6 +40,12 @@ public sealed class SidecarProtocolHostTests
                 JsonElement connection = capabilities.GetProperty("connection");
                 Assert.Equal("ready", connection.GetProperty("status").GetString());
                 Assert.Equal(@"C:\tools\copilot\copilot.exe", connection.GetProperty("copilotCliPath").GetString());
+                JsonElement cliVersion = connection.GetProperty("copilotCliVersion");
+                Assert.Equal("latest", cliVersion.GetProperty("status").GetString());
+                Assert.Equal("1.0.10", cliVersion.GetProperty("installedVersion").GetString());
+                JsonElement account = connection.GetProperty("account");
+                Assert.True(account.GetProperty("authenticated").GetBoolean());
+                Assert.Equal("octocat", account.GetProperty("login").GetString());
 
                 string magenticReason = modes.GetProperty("magentic").GetProperty("reason").GetString() ?? string.Empty;
                 Assert.Contains("unsupported", magenticReason, StringComparison.OrdinalIgnoreCase);
@@ -231,11 +237,29 @@ public sealed class SidecarProtocolHostTests
     public void CreateReadyConnectionDiagnostics_ReportsCliPathAndModelCount()
     {
         SidecarConnectionDiagnosticsDto diagnostics =
-            SidecarProtocolHost.CreateReadyConnectionDiagnostics(@"C:\tools\copilot\copilot.exe", 2);
+            SidecarProtocolHost.CreateReadyConnectionDiagnostics(
+                @"C:\tools\copilot\copilot.exe",
+                2,
+                new SidecarCopilotCliVersionDiagnosticsDto
+                {
+                    Status = "outdated",
+                    InstalledVersion = "1.0.9",
+                    LatestVersion = "1.0.10",
+                },
+                new SidecarCopilotAccountDiagnosticsDto
+                {
+                    Authenticated = true,
+                    Login = "octocat",
+                    Host = "github.com",
+                    Organizations = ["github"],
+                });
 
         Assert.Equal("ready", diagnostics.Status);
         Assert.Equal(@"C:\tools\copilot\copilot.exe", diagnostics.CopilotCliPath);
         Assert.Contains("2 models", diagnostics.Summary, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("outdated", diagnostics.CopilotCliVersion?.Status);
+        Assert.Equal("octocat", diagnostics.Account?.Login);
+        Assert.Equal(["github"], diagnostics.Account?.Organizations);
         Assert.False(string.IsNullOrWhiteSpace(diagnostics.CheckedAt));
     }
 
@@ -286,6 +310,19 @@ public sealed class SidecarProtocolHostTests
                     Status = "ready",
                     Summary = "Connected to GitHub Copilot. 1 model is available.",
                     CopilotCliPath = @"C:\tools\copilot\copilot.exe",
+                    CopilotCliVersion = new SidecarCopilotCliVersionDiagnosticsDto
+                    {
+                        Status = "latest",
+                        InstalledVersion = "1.0.10",
+                        LatestVersion = "1.0.10",
+                    },
+                    Account = new SidecarCopilotAccountDiagnosticsDto
+                    {
+                        Authenticated = true,
+                        Login = "octocat",
+                        Host = "github.com",
+                        Organizations = ["github", "mona"],
+                    },
                     CheckedAt = "2026-01-01T00:00:00.0000000Z",
                 },
             }));

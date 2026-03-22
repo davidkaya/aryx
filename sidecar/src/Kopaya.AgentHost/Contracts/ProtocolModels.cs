@@ -62,7 +62,27 @@ public sealed class SidecarConnectionDiagnosticsDto
     public string Summary { get; init; } = string.Empty;
     public string? Detail { get; init; }
     public string? CopilotCliPath { get; init; }
+    public SidecarCopilotCliVersionDiagnosticsDto? CopilotCliVersion { get; init; }
+    public SidecarCopilotAccountDiagnosticsDto? Account { get; init; }
     public string CheckedAt { get; init; } = string.Empty;
+}
+
+public sealed class SidecarCopilotCliVersionDiagnosticsDto
+{
+    public string Status { get; init; } = "unknown";
+    public string? InstalledVersion { get; init; }
+    public string? LatestVersion { get; init; }
+    public string? Detail { get; init; }
+}
+
+public sealed class SidecarCopilotAccountDiagnosticsDto
+{
+    public bool Authenticated { get; init; }
+    public string? Login { get; init; }
+    public string? Host { get; init; }
+    public string? AuthType { get; init; }
+    public string? StatusMessage { get; init; }
+    public IReadOnlyList<string>? Organizations { get; init; }
 }
 
 public sealed class SidecarCapabilitiesDto

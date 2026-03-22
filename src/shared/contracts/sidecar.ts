@@ -12,11 +12,31 @@ export type SidecarConnectionStatus =
   | 'copilot-auth-required'
   | 'copilot-error';
 
+export type SidecarCopilotCliVersionStatus = 'latest' | 'outdated' | 'unknown';
+
+export interface SidecarCopilotCliVersionDiagnostics {
+  status: SidecarCopilotCliVersionStatus;
+  installedVersion?: string;
+  latestVersion?: string;
+  detail?: string;
+}
+
+export interface SidecarCopilotAccountDiagnostics {
+  authenticated: boolean;
+  login?: string;
+  host?: string;
+  authType?: string;
+  statusMessage?: string;
+  organizations?: string[];
+}
+
 export interface SidecarConnectionDiagnostics {
   status: SidecarConnectionStatus;
   summary: string;
   detail?: string;
   copilotCliPath?: string;
+  copilotCliVersion?: SidecarCopilotCliVersionDiagnostics;
+  account?: SidecarCopilotAccountDiagnostics;
   checkedAt: string;
 }
 

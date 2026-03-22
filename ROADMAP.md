@@ -26,7 +26,8 @@ Based on the current codebase, Kopaya already has:
 - real-time turn streaming and agent activity events in `src/shared/contracts/sidecar.ts`, `src/shared/domain/event.ts`, and `sidecar/src/Kopaya.AgentHost/Services/CopilotWorkflowRunner.cs`
 - a right-side activity panel that already surfaces per-agent state, model, and effort in `src/renderer/components/ActivityPanel.tsx`
 - a pattern editor and settings flow in `src/renderer/components/SettingsPanel.tsx`
-- an OS secret store wrapper in `src/main/secrets/secretStore.ts`
+- Copilot CLI-backed runtime access via the system-installed `copilot` command, with Kopaya sanitizing inherited runtime env vars before spawning the sidecar
+- an OS secret store wrapper in `src/main/secrets/secretStore.ts` that can support future non-Copilot secrets and integrations
 
 That is a strong base. The biggest gaps are not around "can it run agents?" but around:
 
@@ -61,7 +62,7 @@ These are the improvements users will expect from any serious AI desktop app.
 
 | Priority | Initiative | Why users need it | Likely layers |
 | --- | --- | --- | --- |
-| Highest | Credentials and account management | Users need a clear way to add, switch, validate, and troubleshoot provider access. The secret store already exists but is not exposed in product UX. | Renderer, main, sidecar |
+| Highest | Copilot connection and account status management | Users need a clear way to see whether Copilot is installed, authenticated, healthy, and able to serve the expected models. | Renderer, main, sidecar |
 | Highest | Conversation organization and search | Users need to find old work quickly, pin important threads, archive noise, and search by project, title, agent, and content. | Renderer, persistence |
 | Highest | Session export and sharing | Users will want to export runs to Markdown/JSON/PDF, share patterns, and preserve outcomes outside the app. | Renderer, main, persistence |
 | High | Attachments and artifact handling | Modern chat apps let users drop files into a thread and keep generated artifacts nearby. This is table stakes for research and coding workflows. | Renderer, main, sidecar |
@@ -70,15 +71,20 @@ These are the improvements users will expect from any serious AI desktop app.
 
 ### What this should look like
 
-#### Credentials and account management
+#### Copilot connection and account status management
 
-- a dedicated settings area for provider credentials
+- a dedicated settings area for Copilot install, login, and connection health
+- installed / missing / outdated Copilot CLI state
+- logged in / expired / broken auth state
+- active GitHub account or organization context when available
 - test-connection and last-validated status
-- per-project or per-pattern account selection
 - clear model availability explanation when a model is unavailable
-- secret scopes for local-only vs shared pattern metadata
+- reconnect and troubleshooting actions
+- optional per-project or per-pattern account selection later if Kopaya supports multiple Copilot identities
 
-This is especially important because `src/main/secrets/secretStore.ts` exists already, which means the product has a natural place to grow.
+Because Kopaya currently appears to authenticate through the system-installed Copilot CLI rather than owning provider secrets directly, this should be treated as a connection/account-state UX problem first, not a raw credential-storage problem.
+
+If Kopaya later adds direct OpenAI, Anthropic, Google, MCP, or team-managed secrets, broader credential management becomes a separate roadmap item. The existing `src/main/secrets/secretStore.ts` gives the product a natural place to grow when that happens.
 
 #### Conversation organization and search
 
@@ -393,7 +399,7 @@ The best sequence is not to chase the fanciest orchestration idea first. It is t
 
 Focus on:
 
-- credentials and account management
+- Copilot connection and account status management
 - conversation search and organization
 - export/share
 - attachments and artifacts
@@ -436,7 +442,7 @@ Focus on:
 
 If only a handful of roadmap items are chosen next, these would likely create the most user value:
 
-1. Credentials and provider account settings
+1. Copilot connection and account settings
 2. Conversation search, pinning, archive, and export
 3. Session forking and branch comparison
 4. Project context controls with git-aware working sets

@@ -24,7 +24,7 @@ import {
 
 import type { OrchestrationMode, PatternDefinition } from '@shared/domain/pattern';
 import { isScratchpadProject, type ProjectRecord } from '@shared/domain/project';
-import type { SessionRecord, SessionStatus } from '@shared/domain/session';
+import type { SessionRecord } from '@shared/domain/session';
 import { querySessions } from '@shared/domain/sessionLibrary';
 import type { WorkspaceState } from '@shared/domain/workspace';
 
@@ -66,37 +66,6 @@ function relativeTime(iso: string): string {
   if (days === 1) return 'yesterday';
   if (days < 7) return `${days}d ago`;
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-}
-
-/* ── Filter toggle ──────────────────────────────────────────── */
-
-function FilterToggle({
-  label,
-  active,
-  dotColor,
-  onClick,
-}: {
-  label: string;
-  active: boolean;
-  dotColor: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      className={`flex items-center gap-1 text-[11px] transition ${
-        active ? 'text-zinc-300' : 'text-zinc-600 hover:text-zinc-400'
-      }`}
-      onClick={onClick}
-      type="button"
-    >
-      <span
-        className={`inline-block size-1.5 rounded-full transition-colors ${
-          active ? dotColor : 'bg-zinc-700'
-        }`}
-      />
-      {label}
-    </button>
-  );
 }
 
 /* ── Context menu item ─────────────────────────────────────── */
@@ -400,13 +369,8 @@ export function Sidebar({
   /* ── Search & filter state ─────────────────────────────────── */
 
   const [searchText, setSearchText] = useState('');
-  const [filterRunning, setFilterRunning] = useState(false);
-  const [filterErrored, setFilterErrored] = useState(false);
-  const [filterPinned, setFilterPinned] = useState(false);
-  const [filterIncludeArchived, setFilterIncludeArchived] = useState(false);
 
-  const isQueryActive =
-    searchText.trim().length > 0 || filterRunning || filterErrored || filterPinned || filterIncludeArchived;
+  const isQueryActive = searchText.trim().length > 0;
 
   const patternMap = useMemo(() => {
     const map = new Map<string, PatternDefinition>();
@@ -417,21 +381,14 @@ export function Sidebar({
   const queryResults = useMemo(() => {
     if (!isQueryActive) return [];
 
-    const statuses: SessionStatus[] = [];
-    if (filterRunning) statuses.push('running');
-    if (filterErrored) statuses.push('error');
-
     const results = querySessions(workspace, {
       searchText: searchText.trim() || undefined,
-      statuses: statuses.length > 0 ? statuses : undefined,
-      onlyPinned: filterPinned || undefined,
-      includeArchived: filterIncludeArchived || undefined,
     });
 
     return results
       .map((r) => workspace.sessions.find((s) => s.id === r.sessionId))
       .filter((s): s is SessionRecord => s !== undefined);
-  }, [workspace, searchText, filterRunning, filterErrored, filterPinned, filterIncludeArchived, isQueryActive]);
+  }, [workspace, searchText, isQueryActive]);
 
   /* ── Context menu state ────────────────────────────────────── */
 
@@ -507,13 +464,6 @@ export function Sidebar({
               <X className="size-3.5" />
             </button>
           )}
-        </div>
-
-        <div className="flex items-center gap-3">
-          <FilterToggle label="Running" active={filterRunning} dotColor="bg-blue-400" onClick={() => setFilterRunning(!filterRunning)} />
-          <FilterToggle label="Error" active={filterErrored} dotColor="bg-red-400" onClick={() => setFilterErrored(!filterErrored)} />
-          <FilterToggle label="Pinned" active={filterPinned} dotColor="bg-amber-400" onClick={() => setFilterPinned(!filterPinned)} />
-          <FilterToggle label="Archived" active={filterIncludeArchived} dotColor="bg-zinc-400" onClick={() => setFilterIncludeArchived(!filterIncludeArchived)} />
         </div>
       </div>
 

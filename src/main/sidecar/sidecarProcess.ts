@@ -1,5 +1,4 @@
 import { app } from 'electron';
-import { once } from 'node:events';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 
 import type {
@@ -13,10 +12,6 @@ import type {
 } from '@shared/contracts/sidecar';
 import type { ChatMessageRecord } from '@shared/domain/session';
 import { createSidecarEnvironment } from '@main/sidecar/sidecarEnvironment';
-import {
-  shouldHandleSidecarExit,
-  shouldRestartSidecarOnCapabilityRefresh,
-} from '@main/sidecar/sidecarRefresh';
 import {
   markRunTurnPendingErrored,
   shouldHandleRunTurnEvent,
@@ -51,14 +46,6 @@ export class SidecarClient {
     return command;
   }
 
-  async refreshCapabilities(): Promise<SidecarCapabilities> {
-    if (shouldRestartSidecarOnCapabilityRefresh(this.hasActiveRunTurn())) {
-      await this.dispose();
-    }
-
-    return this.describeCapabilities();
-  }
-
   async validatePattern(pattern: ValidatePatternCommand['pattern']): Promise<unknown> {
     return this.dispatch<unknown>({
       type: 'validate-pattern',
@@ -76,28 +63,12 @@ export class SidecarClient {
   }
 
   async dispose(): Promise<void> {
-    const sidecar = this.process;
-    if (!sidecar) {
+    if (!this.process) {
       return;
     }
 
-    if (sidecar.exitCode !== null || sidecar.signalCode !== null) {
-      return;
-    }
-
-    const exitPromise = once(sidecar, 'exit');
-    sidecar.kill();
-    await exitPromise;
-  }
-
-  hasActiveRunTurn(): boolean {
-    for (const pending of this.pending.values()) {
-      if (pending.kind === 'run-turn') {
-        return true;
-      }
-    }
-
-    return false;
+    this.process.kill();
+    this.process = undefined;
   }
 
   private async ensureProcess(): Promise<ChildProcessWithoutNullStreams> {
@@ -131,10 +102,6 @@ export class SidecarClient {
     });
 
     childProcess.on('exit', (code) => {
-      if (!shouldHandleSidecarExit(this.process?.pid, childProcess.pid)) {
-        return;
-      }
-
       const error = new Error(`The .NET sidecar exited unexpectedly with code ${code ?? 'unknown'}.`);
       for (const pending of this.pending.values()) {
         pending.reject(error);

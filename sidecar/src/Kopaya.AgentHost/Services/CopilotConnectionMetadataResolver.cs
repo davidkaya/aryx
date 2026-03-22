@@ -298,6 +298,7 @@ internal static partial class CopilotConnectionMetadataResolver
             throw new InvalidOperationException($"Failed to start command '{executablePath}'.");
         }
 
+        process.StandardInput.Close();
         Task<string> standardOutputTask = process.StandardOutput.ReadToEndAsync(timeoutSource.Token);
         Task<string> standardErrorTask = process.StandardError.ReadToEndAsync(timeoutSource.Token);
 
@@ -318,6 +319,7 @@ internal static partial class CopilotConnectionMetadataResolver
         {
             RedirectStandardOutput = true,
             RedirectStandardError = true,
+            RedirectStandardInput = true,
             UseShellExecute = false,
             CreateNoWindow = true,
             StandardOutputEncoding = Encoding.UTF8,

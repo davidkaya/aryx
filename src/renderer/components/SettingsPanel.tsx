@@ -3,11 +3,16 @@ import { ChevronRight, Plus, X } from 'lucide-react';
 
 import type { ModelDefinition } from '@shared/domain/models';
 import type { PatternDefinition } from '@shared/domain/pattern';
+import type { SidecarCapabilities } from '@shared/contracts/sidecar';
+import { CopilotStatusCard } from '@renderer/components/CopilotStatusCard';
 import { PatternEditor } from '@renderer/components/PatternEditor';
 
 interface SettingsPanelProps {
   availableModels: ReadonlyArray<ModelDefinition>;
   patterns: PatternDefinition[];
+  sidecarCapabilities?: SidecarCapabilities;
+  isRefreshingCapabilities: boolean;
+  onRefreshCapabilities: () => void;
   onClose: () => void;
   onSavePattern: (pattern: PatternDefinition) => Promise<void>;
   onDeletePattern: (patternId: string) => Promise<void>;
@@ -22,6 +27,9 @@ function modeBadgeClasses(pattern: PatternDefinition) {
 export function SettingsPanel({
   availableModels,
   patterns,
+  sidecarCapabilities,
+  isRefreshingCapabilities,
+  onRefreshCapabilities,
   onClose,
   onSavePattern,
   onDeletePattern,
@@ -73,6 +81,20 @@ export function SettingsPanel({
       {/* Body */}
       <div className="flex-1 overflow-y-auto px-6 py-5">
         <div className="mx-auto max-w-2xl">
+          {/* Copilot Connection Status */}
+          <div className="mb-6">
+            <h3 className="mb-2 text-sm font-semibold text-zinc-200">GitHub Copilot</h3>
+            <CopilotStatusCard
+              connection={sidecarCapabilities?.connection}
+              isRefreshing={isRefreshingCapabilities}
+              modelCount={sidecarCapabilities?.models.length ?? 0}
+              onRefresh={onRefreshCapabilities}
+            />
+          </div>
+
+          {/* Separator */}
+          <div className="mb-6 border-t border-[var(--color-border)]" />
+
           <div className="mb-4 flex items-center justify-between">
             <div>
               <h3 className="text-sm font-semibold text-zinc-200">Orchestration Patterns</h3>

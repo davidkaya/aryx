@@ -57,6 +57,7 @@ export default function App() {
   const [error, setError] = useState<string>();
   const [sidecarCapabilities, setSidecarCapabilities] = useState<SidecarCapabilities>();
   const [sessionActivities, setSessionActivities] = useState<SessionActivityMap>({});
+  const [isRefreshingCapabilities, setIsRefreshingCapabilities] = useState(false);
 
   const [showSettings, setShowSettings] = useState(false);
   const [showNewSession, setShowNewSession] = useState(false);
@@ -152,6 +153,16 @@ export default function App() {
     );
   }
 
+  const refreshCapabilities = async () => {
+    setIsRefreshingCapabilities(true);
+    try {
+      const capabilities = await api.refreshSidecarCapabilities();
+      setSidecarCapabilities(capabilities);
+    } finally {
+      setIsRefreshingCapabilities(false);
+    }
+  };
+
   // Determine main content
   let content: React.ReactNode;
   let detailPanel: React.ReactNode | undefined;
@@ -203,6 +214,7 @@ export default function App() {
   const overlay = showSettings ? (
       <SettingsPanel
         availableModels={availableModels}
+        isRefreshingCapabilities={isRefreshingCapabilities}
         onClose={() => setShowSettings(false)}
       onDeletePattern={async (id) => {
         await api.deletePattern(id);
@@ -215,10 +227,12 @@ export default function App() {
           resolveReasoningEffort(defaultModel, 'high'),
         );
       }}
+      onRefreshCapabilities={refreshCapabilities}
       onSavePattern={async (pattern) => {
         await api.savePattern({ pattern });
       }}
       patterns={workspace.patterns}
+      sidecarCapabilities={sidecarCapabilities}
     />
   ) : null;
 

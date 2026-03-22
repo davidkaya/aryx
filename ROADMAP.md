@@ -95,11 +95,12 @@ If Kopaya later adds direct OpenAI, Anthropic, Google, MCP, or team-managed secr
 
 #### Conversation organization and search
 
-- global search across sessions, messages, projects, and patterns
-- pinned sessions, archived sessions, and lightweight tags
-- filters like "running", "errored", "scratchpad", "project X", "pattern Y"
-- duplicate session, rename session, and favorite pattern
-- recent activity views and "resume where I left off"
+- [x] global search across sessions, messages, projects, and patterns
+- [x] pinned sessions, archived sessions
+- [x] filters like "running", "errored", "scratchpad", "project X", "pattern Y"
+- [x] duplicate session, rename session, and favorite pattern
+- [ ] lightweight tags
+- [ ] recent activity views and "resume where I left off"
 
 #### Session export and sharing
 

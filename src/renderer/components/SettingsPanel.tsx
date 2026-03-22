@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronLeft, ChevronRight, Cpu, Layers, Plus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Cpu, Layers, Plus, Workflow } from 'lucide-react';
 
 import type { ModelDefinition } from '@shared/domain/models';
 import type { PatternDefinition } from '@shared/domain/pattern';
@@ -27,9 +27,24 @@ interface NavItem {
   icon: React.ReactNode;
 }
 
-const navItems: NavItem[] = [
-  { id: 'connection', label: 'Connection', icon: <Cpu className="size-4" /> },
-  { id: 'patterns', label: 'Patterns', icon: <Layers className="size-4" /> },
+interface NavGroup {
+  label: string;
+  items: NavItem[];
+}
+
+const navGroups: NavGroup[] = [
+  {
+    label: 'AI Provider',
+    items: [
+      { id: 'connection', label: 'Connection', icon: <Cpu className="size-3.5" /> },
+    ],
+  },
+  {
+    label: 'Orchestration',
+    items: [
+      { id: 'patterns', label: 'Patterns', icon: <Workflow className="size-3.5" /> },
+    ],
+  },
 ];
 
 function modeBadgeClasses(pattern: PatternDefinition) {
@@ -97,25 +112,34 @@ export function SettingsPanel({
       <div className="flex min-h-0 flex-1">
         {/* Left navigation */}
         <nav className="w-52 shrink-0 border-r border-[var(--color-border)] bg-[var(--color-surface-1)] p-3">
-          <div className="space-y-0.5">
-            {navItems.map((item) => {
-              const isActive = item.id === activeSection;
-              return (
-                <button
-                  className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] transition ${
-                    isActive
-                      ? 'bg-zinc-800 font-medium text-zinc-100'
-                      : 'text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-300'
-                  }`}
-                  key={item.id}
-                  onClick={() => setActiveSection(item.id)}
-                  type="button"
-                >
-                  <span className={isActive ? 'text-zinc-300' : 'text-zinc-500'}>{item.icon}</span>
-                  {item.label}
-                </button>
-              );
-            })}
+          <div className="space-y-4">
+            {navGroups.map((group) => (
+              <div key={group.label}>
+                <span className="mb-1 block px-3 text-[10px] font-semibold uppercase tracking-wider text-zinc-600">
+                  {group.label}
+                </span>
+                <div className="space-y-0.5">
+                  {group.items.map((item) => {
+                    const isActive = item.id === activeSection;
+                    return (
+                      <button
+                        className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] transition ${
+                          isActive
+                            ? 'bg-zinc-800 font-medium text-zinc-100'
+                            : 'text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-300'
+                        }`}
+                        key={item.id}
+                        onClick={() => setActiveSection(item.id)}
+                        type="button"
+                      >
+                        <span className={isActive ? 'text-zinc-300' : 'text-zinc-500'}>{item.icon}</span>
+                        {item.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
         </nav>
 

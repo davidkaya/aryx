@@ -27,6 +27,7 @@ Based on the current codebase, Kopaya already has:
 - a right-side activity panel that already surfaces per-agent state, model, and effort in `src/renderer/components/ActivityPanel.tsx`
 - a pattern editor and settings flow in `src/renderer/components/SettingsPanel.tsx`
 - Copilot CLI-backed runtime access via the system-installed `copilot` command, with Kopaya sanitizing inherited runtime env vars before spawning the sidecar
+- refreshable Copilot connection diagnostics and settings UI for `ready`, `copilot-cli-missing`, `copilot-auth-required`, and `copilot-error` states in `src/renderer/components/CopilotStatusCard.tsx`, `src/renderer/components/SettingsPanel.tsx`, `src/main/KopayaAppService.ts`, and `sidecar/src/Kopaya.AgentHost/Services/SidecarProtocolHost.cs`
 - an OS secret store wrapper in `src/main/secrets/secretStore.ts` that can support future non-Copilot secrets and integrations
 
 That is a strong base. The biggest gaps are not around "can it run agents?" but around:
@@ -73,14 +74,20 @@ These are the improvements users will expect from any serious AI desktop app.
 
 #### Copilot connection and account status management
 
-- a dedicated settings area for Copilot install, login, and connection health
-- installed / missing / outdated Copilot CLI state
-- logged in / expired / broken auth state
-- active GitHub account or organization context when available
-- test-connection and last-validated status
-- clear model availability explanation when a model is unavailable
-- reconnect and troubleshooting actions
-- optional per-project or per-pattern account selection later if Kopaya supports multiple Copilot identities
+Implemented foundation:
+
+- [x] a dedicated settings area for Copilot install, login, and connection health
+- [x] installed / missing Copilot CLI state
+- [x] logged in / auth-required / broken connection state
+- [x] refresh and last-validated status
+
+Still worth adding:
+
+- [ ] outdated Copilot CLI state
+- [ ] active GitHub account or organization context when available
+- [ ] clear model availability explanation when a model is unavailable
+- [ ] reconnect and troubleshooting actions beyond refresh
+- [ ] optional per-project or per-pattern account selection later if Kopaya supports multiple Copilot identities
 
 Because Kopaya currently appears to authenticate through the system-installed Copilot CLI rather than owning provider secrets directly, this should be treated as a connection/account-state UX problem first, not a raw credential-storage problem.
 
@@ -399,7 +406,7 @@ The best sequence is not to chase the fanciest orchestration idea first. It is t
 
 Focus on:
 
-- Copilot connection and account status management
+- complete the remaining Copilot connection and account status management work
 - conversation search and organization
 - export/share
 - attachments and artifacts
@@ -442,7 +449,7 @@ Focus on:
 
 If only a handful of roadmap items are chosen next, these would likely create the most user value:
 
-1. Copilot connection and account settings
+1. Finish the remaining Copilot connection and account settings work
 2. Conversation search, pinning, archive, and export
 3. Session forking and branch comparison
 4. Project context controls with git-aware working sets

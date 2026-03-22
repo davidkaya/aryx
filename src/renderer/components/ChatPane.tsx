@@ -2,6 +2,7 @@ import { type KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { AlertCircle, ArrowUp, Bot, Loader2, User } from 'lucide-react';
 
 import { MarkdownContent } from '@renderer/components/MarkdownContent';
+import { getAssistantMessagePhase } from '@renderer/lib/messagePhase';
 
 import type { PatternDefinition } from '@shared/domain/pattern';
 import type { ProjectRecord } from '@shared/domain/project';
@@ -96,8 +97,22 @@ export function ChatPane({ project, pattern, session, onSend }: ChatPaneProps) {
         ) : (
           <div className="mx-auto max-w-3xl px-6 py-4">
             <div className="space-y-1">
-              {session.messages.map((message) => {
+              {session.messages.map((message, index) => {
                 const isUser = message.role === 'user';
+                const phase = getAssistantMessagePhase(session, message, index);
+                const assistantContainerClass =
+                  phase === 'thinking'
+                    ? 'border-sky-500/20 bg-sky-500/5'
+                    : phase === 'final'
+                      ? 'border-emerald-500/20 bg-emerald-500/5'
+                      : 'border-zinc-800 bg-zinc-900/40';
+                const assistantBadgeClass =
+                  phase === 'thinking'
+                    ? 'border-sky-400/20 bg-sky-400/10 text-sky-300'
+                    : 'border-emerald-400/20 bg-emerald-400/10 text-emerald-300';
+                const phaseLabel =
+                  phase === 'thinking' ? 'Thinking' : phase === 'final' ? 'Final' : undefined;
+
                 return (
                   <div className="group py-3" key={message.id}>
                     <div className="flex gap-3">
@@ -111,10 +126,23 @@ export function ChatPane({ project, pattern, session, onSend }: ChatPaneProps) {
                         {isUser ? <User className="size-3.5" /> : <Bot className="size-3.5" />}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className="mb-1 text-[12px] font-medium text-zinc-400">
-                          {message.authorName}
+                        <div className="mb-1 flex items-center gap-2 text-[12px] font-medium text-zinc-400">
+                          <span>{message.authorName}</span>
+                          {!isUser && phaseLabel && (
+                            <span
+                              className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] ${assistantBadgeClass}`}
+                            >
+                              {phaseLabel}
+                            </span>
+                          )}
                         </div>
-                        <div className="text-[14px] leading-relaxed text-zinc-200">
+                        <div
+                          className={
+                            isUser
+                              ? 'text-[14px] leading-relaxed text-zinc-200'
+                              : `rounded-xl border px-4 py-3 text-[14px] leading-relaxed text-zinc-200 ${assistantContainerClass}`
+                          }
+                        >
                           <MarkdownContent content={message.content} />
                           {message.pending && message.content && (
                             <span className="mt-1 inline-block h-4 w-[2px] animate-pulse rounded-sm bg-zinc-400" />

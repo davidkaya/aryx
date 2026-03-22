@@ -496,7 +496,12 @@ export class KopayaAppService extends EventEmitter<AppServiceEvents> {
   }
 
   private async loadSidecarCapabilities(forceRefresh = false): Promise<SidecarCapabilities> {
-    if (forceRefresh || !this.sidecarCapabilities) {
+    if (forceRefresh) {
+      this.sidecarCapabilities = await this.sidecar.refreshCapabilities();
+      return this.sidecarCapabilities;
+    }
+
+    if (!this.sidecarCapabilities) {
       this.sidecarCapabilities = await this.sidecar.describeCapabilities();
     }
 

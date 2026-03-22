@@ -12,6 +12,7 @@ import type {
 } from '@shared/contracts/sidecar';
 import type { ChatMessageRecord } from '@shared/domain/session';
 import { createSidecarEnvironment } from '@main/sidecar/sidecarEnvironment';
+import { shouldRestartSidecarOnCapabilityRefresh } from '@main/sidecar/sidecarRefresh';
 import {
   markRunTurnPendingErrored,
   shouldHandleRunTurnEvent,
@@ -46,6 +47,14 @@ export class SidecarClient {
     return command;
   }
 
+  async refreshCapabilities(): Promise<SidecarCapabilities> {
+    if (shouldRestartSidecarOnCapabilityRefresh(this.hasActiveRunTurn())) {
+      await this.dispose();
+    }
+
+    return this.describeCapabilities();
+  }
+
   async validatePattern(pattern: ValidatePatternCommand['pattern']): Promise<unknown> {
     return this.dispatch<unknown>({
       type: 'validate-pattern',
@@ -69,6 +78,16 @@ export class SidecarClient {
 
     this.process.kill();
     this.process = undefined;
+  }
+
+  hasActiveRunTurn(): boolean {
+    for (const pending of this.pending.values()) {
+      if (pending.kind === 'run-turn') {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   private async ensureProcess(): Promise<ChildProcessWithoutNullStreams> {

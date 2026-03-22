@@ -1,4 +1,5 @@
 import { app } from 'electron';
+import { once } from 'node:events';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 
 import type {
@@ -12,7 +13,10 @@ import type {
 } from '@shared/contracts/sidecar';
 import type { ChatMessageRecord } from '@shared/domain/session';
 import { createSidecarEnvironment } from '@main/sidecar/sidecarEnvironment';
-import { shouldRestartSidecarOnCapabilityRefresh } from '@main/sidecar/sidecarRefresh';
+import {
+  shouldHandleSidecarExit,
+  shouldRestartSidecarOnCapabilityRefresh,
+} from '@main/sidecar/sidecarRefresh';
 import {
   markRunTurnPendingErrored,
   shouldHandleRunTurnEvent,
@@ -72,12 +76,18 @@ export class SidecarClient {
   }
 
   async dispose(): Promise<void> {
-    if (!this.process) {
+    const sidecar = this.process;
+    if (!sidecar) {
       return;
     }
 
-    this.process.kill();
-    this.process = undefined;
+    if (sidecar.exitCode !== null || sidecar.signalCode !== null) {
+      return;
+    }
+
+    const exitPromise = once(sidecar, 'exit');
+    sidecar.kill();
+    await exitPromise;
   }
 
   hasActiveRunTurn(): boolean {
@@ -101,25 +111,30 @@ export class SidecarClient {
       resourcesPath: process.resourcesPath,
       platform: process.platform,
     });
-    this.process = spawn(sidecar.command, sidecar.args, {
+    const childProcess = spawn(sidecar.command, sidecar.args, {
       cwd: sidecar.cwd,
       env: createSidecarEnvironment(process.env),
       stdio: 'pipe',
       windowsHide: true,
     });
+    this.process = childProcess;
 
-    this.process.stdout.setEncoding('utf8');
-    this.process.stdout.on('data', (chunk: string) => {
+    childProcess.stdout.setEncoding('utf8');
+    childProcess.stdout.on('data', (chunk: string) => {
       this.stdoutBuffer += chunk;
       this.flushStdoutBuffer();
     });
 
-    this.process.stderr.setEncoding('utf8');
-    this.process.stderr.on('data', (chunk: string) => {
+    childProcess.stderr.setEncoding('utf8');
+    childProcess.stderr.on('data', (chunk: string) => {
       console.error('[kopaya sidecar]', chunk.trim());
     });
 
-    this.process.on('exit', (code) => {
+    childProcess.on('exit', (code) => {
+      if (!shouldHandleSidecarExit(this.process?.pid, childProcess.pid)) {
+        return;
+      }
+
       const error = new Error(`The .NET sidecar exited unexpectedly with code ${code ?? 'unknown'}.`);
       for (const pending of this.pending.values()) {
         pending.reject(error);
@@ -129,7 +144,7 @@ export class SidecarClient {
       this.stdoutBuffer = '';
     });
 
-    return this.process;
+    return childProcess;
   }
 
   private async dispatch<TResult>(

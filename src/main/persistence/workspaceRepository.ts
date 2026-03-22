@@ -1,9 +1,12 @@
+import { mkdir } from 'node:fs/promises';
+
 import { createBuiltinPatterns } from '@shared/domain/pattern';
 import type { PatternDefinition } from '@shared/domain/pattern';
+import { mergeScratchpadProject } from '@shared/domain/project';
 import { createWorkspaceSeed, type WorkspaceState } from '@shared/domain/workspace';
 import { nowIso } from '@shared/utils/ids';
 
-import { getWorkspaceFilePath } from '@main/persistence/appPaths';
+import { getScratchpadDirectoryPath, getWorkspaceFilePath } from '@main/persistence/appPaths';
 import { readJsonFile, writeJsonFile } from '@main/persistence/jsonStore';
 
 function mergePatterns(existingPatterns: PatternDefinition[]): PatternDefinition[] {
@@ -32,20 +35,34 @@ function mergePatterns(existingPatterns: PatternDefinition[]): PatternDefinition
 
 export class WorkspaceRepository {
   readonly filePath = getWorkspaceFilePath();
+  readonly scratchpadPath = getScratchpadDirectoryPath();
 
   async load(): Promise<WorkspaceState> {
+    await mkdir(this.scratchpadPath, { recursive: true });
+
     const stored = await readJsonFile<WorkspaceState>(this.filePath);
     if (!stored) {
-      const seeded = createWorkspaceSeed();
+      const seededBase = createWorkspaceSeed();
+      const projects = mergeScratchpadProject([], this.scratchpadPath);
+      const seeded: WorkspaceState = {
+        ...seededBase,
+        projects,
+        selectedProjectId: projects[0]?.id,
+      };
       await this.save(seeded);
       return seeded;
     }
 
+    const projects = mergeScratchpadProject(stored.projects ?? [], this.scratchpadPath);
+
     const workspace: WorkspaceState = {
       ...stored,
       patterns: mergePatterns(stored.patterns ?? []),
-      projects: stored.projects ?? [],
+      projects,
       sessions: stored.sessions ?? [],
+      selectedProjectId: projects.some((project) => project.id === stored.selectedProjectId)
+        ? stored.selectedProjectId
+        : projects[0]?.id,
       lastUpdatedAt: stored.lastUpdatedAt ?? nowIso(),
     };
 

@@ -27,6 +27,7 @@ export interface RunTurnCommand {
   requestId: string;
   sessionId: string;
   projectPath: string;
+  workspaceKind?: 'project' | 'scratchpad';
   pattern: PatternDefinition;
   messages: ChatMessageRecord[];
 }

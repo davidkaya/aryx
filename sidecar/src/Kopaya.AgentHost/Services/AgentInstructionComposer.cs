@@ -7,12 +7,22 @@ internal static class AgentInstructionComposer
     public static string Compose(
         PatternDefinitionDto pattern,
         PatternAgentDefinitionDto agent,
-        int agentIndex)
+        int agentIndex,
+        string workspaceKind = "project")
     {
         string baseInstructions = agent.Instructions.Trim();
+        string workspaceGuidance = string.Equals(workspaceKind, "scratchpad", StringComparison.OrdinalIgnoreCase)
+            ? """
+              You are operating in scratchpad mode.
+              Treat this session as pure ad-hoc Q&A rather than repository automation.
+              Do not inspect, modify, create, or delete files, and do not behave as though you are working inside a user project.
+              Answer conversationally and focus on the user's question directly.
+              """
+            : string.Empty;
+
         if (!string.Equals(pattern.Mode, "handoff", StringComparison.OrdinalIgnoreCase))
         {
-            return baseInstructions;
+            return JoinInstructionBlocks(baseInstructions, workspaceGuidance);
         }
 
         string runtimeGuidance = agentIndex == 0
@@ -28,8 +38,13 @@ internal static class AgentInstructionComposer
               Do not push the actual work back to triage unless you are blocked or the request is clearly outside your specialty.
               """;
 
-        return string.IsNullOrWhiteSpace(baseInstructions)
-            ? runtimeGuidance
-            : $"{baseInstructions}\n\n{runtimeGuidance}";
+        return JoinInstructionBlocks(baseInstructions, workspaceGuidance, runtimeGuidance);
+    }
+
+    private static string JoinInstructionBlocks(params string[] blocks)
+    {
+        return string.Join(
+            "\n\n",
+            blocks.Where(block => !string.IsNullOrWhiteSpace(block)).Select(block => block.Trim()));
     }
 }

@@ -40,7 +40,7 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
             throw new InvalidOperationException(validationError.Message);
         }
 
-        await using AgentBundle bundle = await AgentBundle.CreateAsync(command.Pattern, command.ProjectPath, cancellationToken);
+        await using AgentBundle bundle = await AgentBundle.CreateAsync(command, cancellationToken);
         Workflow workflow = bundle.BuildWorkflow(command.Pattern);
         List<ChatMessage> inputMessages = command.Messages.Select(ToChatMessage).ToList();
 
@@ -436,15 +436,15 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
         public IReadOnlyList<AIAgent> Agents { get; }
 
         public static async Task<AgentBundle> CreateAsync(
-            PatternDefinitionDto pattern,
-            string projectPath,
+            RunTurnCommandDto command,
             CancellationToken cancellationToken)
         {
             List<IAsyncDisposable> disposables = [];
             List<AIAgent> agents = [];
             CopilotClientOptions clientOptions = CopilotCliPathResolver.CreateClientOptions();
+            bool isScratchpad = string.Equals(command.WorkspaceKind, "scratchpad", StringComparison.OrdinalIgnoreCase);
 
-            foreach ((PatternAgentDefinitionDto definition, int agentIndex) in pattern.Agents.Select((definition, index) => (definition, index)))
+            foreach ((PatternAgentDefinitionDto definition, int agentIndex) in command.Pattern.Agents.Select((definition, index) => (definition, index)))
             {
                 CopilotClient client = new(clientOptions);
                 await client.StartAsync(cancellationToken).ConfigureAwait(false);
@@ -455,12 +455,17 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
                     ReasoningEffort = definition.ReasoningEffort,
                     SystemMessage = new SystemMessageConfig
                     {
-                        Content = AgentInstructionComposer.Compose(pattern, definition, agentIndex),
+                        Content = AgentInstructionComposer.Compose(command.Pattern, definition, agentIndex, command.WorkspaceKind),
                     },
-                    WorkingDirectory = projectPath,
+                    WorkingDirectory = command.ProjectPath,
                     OnPermissionRequest = ApprovePermissionAsync,
                     Streaming = true,
                 };
+
+                if (isScratchpad)
+                {
+                    sessionConfig.AvailableTools = [];
+                }
 
                 GitHubCopilotAgent agent = new(
                     client,

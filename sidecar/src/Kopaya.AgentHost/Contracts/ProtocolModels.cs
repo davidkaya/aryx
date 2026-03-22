@@ -71,6 +71,7 @@ public sealed class RunTurnCommandDto : SidecarCommandEnvelope
 {
     public string SessionId { get; init; } = string.Empty;
     public string ProjectPath { get; init; } = string.Empty;
+    public string WorkspaceKind { get; init; } = "project";
     public PatternDefinitionDto Pattern { get; init; } = new();
     public IReadOnlyList<ChatMessageDto> Messages { get; init; } = [];
 }

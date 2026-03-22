@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 
 import type { OrchestrationMode, PatternDefinition } from '@shared/domain/pattern';
-import type { ProjectRecord } from '@shared/domain/project';
+import { isScratchpadProject, type ProjectRecord } from '@shared/domain/project';
 import type { SessionRecord } from '@shared/domain/session';
 import type { WorkspaceState } from '@shared/domain/workspace';
 
@@ -161,6 +161,7 @@ function ProjectGroup({
   onSessionSelect: (sessionId: string) => void;
 }) {
   const [expanded, setExpanded] = useState(true);
+  const isScratchpad = isScratchpadProject(project);
 
   const patternMap = useMemo(() => {
     const map = new Map<string, PatternDefinition>();
@@ -182,7 +183,11 @@ function ProjectGroup({
         ) : (
           <ChevronRight className="size-3 shrink-0 text-zinc-500" />
         )}
-        <FolderOpen className="size-3.5 shrink-0 text-zinc-500 transition group-hover:text-indigo-400" />
+        {isScratchpad ? (
+          <MessageSquare className="size-3.5 shrink-0 text-zinc-500 transition group-hover:text-indigo-400" />
+        ) : (
+          <FolderOpen className="size-3.5 shrink-0 text-zinc-500 transition group-hover:text-indigo-400" />
+        )}
         <span className="truncate">{project.name}</span>
 
         <div className="ml-auto flex items-center gap-1.5">
@@ -202,7 +207,7 @@ function ProjectGroup({
         <div className="ml-2 mt-0.5 space-y-0.5 border-l border-zinc-800/60 pl-2">
           {sessions.length === 0 ? (
             <div className="px-3 py-3 text-center text-[12px] text-zinc-600">
-              No sessions yet
+              {isScratchpad ? 'No scratchpad chats yet' : 'No sessions yet'}
             </div>
           ) : (
             sessions.map((session) => (
@@ -231,6 +236,9 @@ export function Sidebar({
   onSessionSelect,
   onOpenSettings,
 }: SidebarProps) {
+  const scratchpadProject = workspace.projects.find((project) => isScratchpadProject(project));
+  const userProjects = workspace.projects.filter((project) => !isScratchpadProject(project));
+
   return (
     <div className="flex h-full flex-col">
       {/* Header — extra top padding clears the title bar overlay zone */}
@@ -272,48 +280,69 @@ export function Sidebar({
 
       {/* Project + Session Tree */}
       <div className="flex-1 overflow-y-auto px-2 py-2">
-        {workspace.projects.length === 0 ? (
-          <div className="flex flex-col items-center gap-4 px-4 py-10 text-center">
-            <div className="relative">
-              <div className="flex size-14 items-center justify-center rounded-2xl bg-zinc-800/50 ring-1 ring-zinc-700/50">
-                <FolderOpen className="size-7 text-zinc-600" />
+        <div className="space-y-3">
+          {scratchpadProject && (
+            <div className="space-y-1">
+              <div className="px-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-600">
+                Scratchpad
               </div>
-              <div className="absolute -bottom-1 -right-1 flex size-6 items-center justify-center rounded-full bg-indigo-600 ring-2 ring-[var(--color-surface-1)]">
-                <Plus className="size-3 text-white" />
-              </div>
-            </div>
-            <div>
-              <p className="text-[13px] font-medium text-zinc-300">No projects yet</p>
-              <p className="mt-1 text-[12px] leading-relaxed text-zinc-500">
-                Add a project folder to start<br />orchestrating AI agents
-              </p>
-            </div>
-            <button
-              className="rounded-lg bg-indigo-600 px-4 py-2 text-[13px] font-medium text-white transition hover:bg-indigo-500"
-              onClick={onAddProject}
-              type="button"
-            >
-              Add Project
-            </button>
-          </div>
-        ) : (
-          <div className="space-y-1">
-            {workspace.projects.map((project) => (
               <ProjectGroup
-                key={project.id}
+                key={scratchpadProject.id}
                 onSessionSelect={onSessionSelect}
                 patterns={workspace.patterns}
-                project={project}
+                project={scratchpadProject}
                 selectedSessionId={workspace.selectedSessionId}
-                sessions={workspace.sessions.filter((s) => s.projectId === project.id)}
+                sessions={workspace.sessions.filter((session) => session.projectId === scratchpadProject.id)}
               />
-            ))}
-          </div>
-        )}
+            </div>
+          )}
+
+          {userProjects.length === 0 ? (
+            <div className="flex flex-col items-center gap-4 px-4 py-8 text-center">
+              <div className="relative">
+                <div className="flex size-14 items-center justify-center rounded-2xl bg-zinc-800/50 ring-1 ring-zinc-700/50">
+                  <FolderOpen className="size-7 text-zinc-600" />
+                </div>
+                <div className="absolute -bottom-1 -right-1 flex size-6 items-center justify-center rounded-full bg-indigo-600 ring-2 ring-[var(--color-surface-1)]">
+                  <Plus className="size-3 text-white" />
+                </div>
+              </div>
+              <div>
+                <p className="text-[13px] font-medium text-zinc-300">No projects yet</p>
+                <p className="mt-1 text-[12px] leading-relaxed text-zinc-500">
+                  Use Scratchpad for ad-hoc chat or add a repo<br />to work against project files
+                </p>
+              </div>
+              <button
+                className="rounded-lg bg-indigo-600 px-4 py-2 text-[13px] font-medium text-white transition hover:bg-indigo-500"
+                onClick={onAddProject}
+                type="button"
+              >
+                Add Project
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-1">
+              <div className="px-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-600">
+                Projects
+              </div>
+              {userProjects.map((project) => (
+                <ProjectGroup
+                  key={project.id}
+                  onSessionSelect={onSessionSelect}
+                  patterns={workspace.patterns}
+                  project={project}
+                  selectedSessionId={workspace.selectedSessionId}
+                  sessions={workspace.sessions.filter((session) => session.projectId === project.id)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Footer */}
-      {workspace.projects.length > 0 && (
+      {userProjects.length > 0 && (
         <div className="border-t border-[var(--color-border)] px-3 py-2">
           <button
             className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-[12px] text-zinc-500 transition hover:bg-zinc-800/60 hover:text-zinc-300"

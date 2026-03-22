@@ -67,6 +67,32 @@ public sealed class AgentInstructionComposerTests
         Assert.Contains("own the substantive answer", instructions, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void Compose_AddsScratchpadGuidanceForProjectlessQaSessions()
+    {
+        PatternDefinitionDto pattern = new()
+        {
+            Id = "pattern-single",
+            Name = "Single",
+            Mode = "single",
+            Availability = "available",
+        };
+        PatternAgentDefinitionDto agent = CreateAgent(
+            id: "agent-primary",
+            name: "Primary Agent",
+            instructions: "You are a helpful assistant.");
+
+        string instructions = AgentInstructionComposer.Compose(
+            pattern,
+            agent,
+            agentIndex: 0,
+            workspaceKind: "scratchpad");
+
+        Assert.Contains("scratchpad mode", instructions, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("pure ad-hoc Q&A", instructions, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Do not inspect, modify, create, or delete files", instructions, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static PatternAgentDefinitionDto CreateAgent(string id, string name, string instructions)
     {
         return new PatternAgentDefinitionDto

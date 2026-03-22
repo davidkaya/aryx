@@ -15,6 +15,7 @@ import { applySessionEventWorkspace } from '@renderer/lib/sessionWorkspace';
 import { WelcomePane } from '@renderer/components/WelcomePane';
 import { getElectronApi } from '@renderer/lib/electronApi';
 import type { PatternDefinition } from '@shared/domain/pattern';
+import { isScratchpadProject } from '@shared/domain/project';
 import type { WorkspaceState } from '@shared/domain/workspace';
 import { createId, nowIso } from '@shared/utils/ids';
 
@@ -106,6 +107,10 @@ export default function App() {
     () => (selectedSession ? sessionActivities[selectedSession.id] : undefined),
     [selectedSession, sessionActivities],
   );
+  const hasUserProjects = useMemo(
+    () => (workspace?.projects.some((project) => !isScratchpadProject(project)) ?? false),
+    [workspace?.projects],
+  );
 
   // Loading state
   if (!workspace) {
@@ -147,7 +152,7 @@ export default function App() {
   } else {
     content = (
       <WelcomePane
-        hasProjects={workspace.projects.length > 0}
+        hasProjects={hasUserProjects}
         onAddProject={() => void api.addProject()}
         onNewSession={() => setShowNewSession(true)}
         onOpenSettings={() => setShowSettings(true)}

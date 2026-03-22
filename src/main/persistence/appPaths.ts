@@ -4,3 +4,7 @@ import { join } from 'node:path';
 export function getWorkspaceFilePath(): string {
   return join(app.getPath('userData'), 'workspace.json');
 }
+
+export function getScratchpadDirectoryPath(): string {
+  return join(app.getPath('userData'), 'scratchpad');
+}

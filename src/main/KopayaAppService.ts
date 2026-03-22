@@ -5,7 +5,7 @@ import { dialog } from 'electron';
 
 import type { AgentActivityEvent, TurnDeltaEvent } from '@shared/contracts/sidecar';
 import { buildSessionTitle, validatePatternDefinition, type PatternDefinition } from '@shared/domain/pattern';
-import type { ProjectRecord } from '@shared/domain/project';
+import { isScratchpadProject, type ProjectRecord } from '@shared/domain/project';
 import type { SessionEventRecord } from '@shared/domain/event';
 import type { ChatMessageRecord, SessionRecord } from '@shared/domain/session';
 import type { WorkspaceState } from '@shared/domain/workspace';
@@ -75,6 +75,10 @@ export class KopayaAppService extends EventEmitter<AppServiceEvents> {
   }
 
   async removeProject(projectId: string): Promise<WorkspaceState> {
+    if (isScratchpadProject(projectId)) {
+      throw new Error('Scratchpad cannot be removed.');
+    }
+
     const workspace = await this.loadWorkspace();
     workspace.projects = workspace.projects.filter((project) => project.id !== projectId);
     workspace.sessions = workspace.sessions.filter((session) => session.projectId !== projectId);
@@ -187,6 +191,7 @@ export class KopayaAppService extends EventEmitter<AppServiceEvents> {
     });
 
     const requestId = createId('turn');
+    const workspaceKind = isScratchpadProject(project) ? 'scratchpad' : 'project';
     try {
       const responseMessages = await this.sidecar.runTurn(
         {
@@ -194,6 +199,7 @@ export class KopayaAppService extends EventEmitter<AppServiceEvents> {
           requestId,
           sessionId: session.id,
           projectPath: project.path,
+          workspaceKind,
           pattern,
           messages: session.messages,
         },

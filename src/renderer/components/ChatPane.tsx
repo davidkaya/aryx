@@ -5,7 +5,7 @@ import { MarkdownContent } from '@renderer/components/MarkdownContent';
 import { getAssistantMessagePhase } from '@renderer/lib/messagePhase';
 
 import type { PatternDefinition } from '@shared/domain/pattern';
-import type { ProjectRecord } from '@shared/domain/project';
+import { isScratchpadProject, type ProjectRecord } from '@shared/domain/project';
 import type { SessionRecord } from '@shared/domain/session';
 
 function ThinkingDots() {
@@ -31,6 +31,7 @@ export function ChatPane({ project, pattern, session, onSend }: ChatPaneProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const isBusy = session.status === 'running';
+  const isScratchpad = isScratchpadProject(project);
 
   useEffect(() => {
     transcriptRef.current?.scrollTo({
@@ -60,7 +61,7 @@ export function ChatPane({ project, pattern, session, onSend }: ChatPaneProps) {
         <div className="min-w-0">
           <h2 className="truncate text-sm font-semibold text-zinc-100">{session.title}</h2>
           <p className="mt-0.5 truncate text-[12px] text-zinc-500">
-            {project.name} · {pattern.name} · {pattern.mode}
+            {isScratchpad ? `Scratchpad · ${pattern.name}` : `${project.name} · ${pattern.name} · ${pattern.mode}`}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -90,8 +91,17 @@ export function ChatPane({ project, pattern, session, onSend }: ChatPaneProps) {
               Send a message to start the conversation
             </p>
             <p className="text-[12px] text-zinc-700">
-              Using <span className="text-zinc-500">{pattern.name}</span> in{' '}
-              <span className="text-zinc-500">{project.name}</span>
+              {isScratchpad ? (
+                <>
+                  Scratchpad is ready for ad-hoc questions using{' '}
+                  <span className="text-zinc-500">{pattern.name}</span>
+                </>
+              ) : (
+                <>
+                  Using <span className="text-zinc-500">{pattern.name}</span> in{' '}
+                  <span className="text-zinc-500">{project.name}</span>
+                </>
+              )}
             </p>
           </div>
         ) : (

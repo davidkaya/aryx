@@ -1,11 +1,13 @@
 import { type KeyboardEvent, useEffect, useRef, useState } from 'react';
-import { AlertCircle, ArrowUp, Bot, Loader2, User } from 'lucide-react';
+import { AlertCircle, ArrowUp, Bot, ChevronDown, Loader2, Sparkles, User } from 'lucide-react';
 
 import { MarkdownContent } from '@renderer/components/MarkdownContent';
 import { getAssistantMessagePhase } from '@renderer/lib/messagePhase';
-import { ModelSelect, ReasoningEffortSelect } from '@renderer/components/AgentConfigFields';
+import { ProviderIcon } from '@renderer/components/ProviderIcons';
 
+import { findModel, inferProvider, modelCatalog, providerMeta, type ModelDefinition } from '@shared/domain/models';
 import type { PatternDefinition, ReasoningEffort } from '@shared/domain/pattern';
+import { reasoningEffortOptions } from '@shared/domain/pattern';
 import { isScratchpadProject, type ProjectRecord } from '@shared/domain/project';
 import type { SessionRecord } from '@shared/domain/session';
 
@@ -19,12 +21,169 @@ function ThinkingDots() {
   );
 }
 
+/* ── Tier badge for model dropdown ─────────────────────────── */
+
+function TierBadge({ tier }: { tier: ModelDefinition['tier'] }) {
+  const styles = {
+    premium: 'bg-amber-500/10 text-amber-400',
+    standard: 'bg-zinc-700/50 text-zinc-500',
+    fast: 'bg-emerald-500/10 text-emerald-400',
+  };
+  return (
+    <span className={`ml-auto rounded px-1.5 py-0.5 text-[9px] font-medium ${styles[tier]}`}>
+      {tier}
+    </span>
+  );
+}
+
+/* ── Inline model pill with dropdown ───────────────────────── */
+
+function InlineModelPill({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: string;
+  onChange: (model: string) => void;
+  disabled: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [open]);
+
+  const selected = findModel(value);
+  const provider = selected?.provider ?? inferProvider(value);
+  const displayName = selected?.name ?? value ?? 'Model';
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[12px] font-medium transition ${
+          open
+            ? 'border-indigo-500/40 bg-indigo-500/10 text-indigo-300'
+            : 'border-zinc-700/60 bg-zinc-800/40 text-zinc-400 hover:border-zinc-600 hover:text-zinc-300'
+        } disabled:cursor-not-allowed disabled:opacity-50`}
+        disabled={disabled}
+        onClick={() => setOpen(!open)}
+        type="button"
+      >
+        {provider && <ProviderIcon provider={provider} className="size-3" />}
+        <span className="max-w-[140px] truncate">{displayName}</span>
+        <ChevronDown className={`size-3 transition ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {open && !disabled && (
+        <div className="absolute bottom-full left-0 z-40 mb-1.5 max-h-72 w-64 overflow-y-auto rounded-lg border border-zinc-700 bg-zinc-900 py-1 shadow-2xl">
+          {providerMeta.map((pg) => {
+            const models = modelCatalog.filter((m) => m.provider === pg.id);
+            return (
+              <div key={pg.id}>
+                <div className="flex items-center gap-2 px-3 pb-1 pt-2.5">
+                  <ProviderIcon provider={pg.id} className="size-3.5" />
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                    {pg.label}
+                  </span>
+                </div>
+                {models.map((model) => (
+                  <button
+                    className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] transition hover:bg-zinc-800 ${
+                      model.id === value ? 'bg-indigo-500/10 text-indigo-200' : 'text-zinc-300'
+                    }`}
+                    key={model.id}
+                    onClick={() => { onChange(model.id); setOpen(false); }}
+                    type="button"
+                  >
+                    <span className="flex-1">{model.name}</span>
+                    <TierBadge tier={model.tier} />
+                  </button>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Inline thinking effort pill with dropdown ─────────────── */
+
+function InlineThinkingPill({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: ReasoningEffort;
+  onChange: (effort: ReasoningEffort) => void;
+  disabled: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [open]);
+
+  const currentLabel = reasoningEffortOptions.find((o) => o.value === value)?.label ?? value;
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[12px] font-medium transition ${
+          open
+            ? 'border-indigo-500/40 bg-indigo-500/10 text-indigo-300'
+            : 'border-zinc-700/60 bg-zinc-800/40 text-zinc-400 hover:border-zinc-600 hover:text-zinc-300'
+        } disabled:cursor-not-allowed disabled:opacity-50`}
+        disabled={disabled}
+        onClick={() => setOpen(!open)}
+        type="button"
+      >
+        <Sparkles className="size-3" />
+        <span>{currentLabel}</span>
+        <ChevronDown className={`size-3 transition ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {open && !disabled && (
+        <div className="absolute bottom-full left-0 z-40 mb-1.5 w-36 overflow-hidden rounded-lg border border-zinc-700 bg-zinc-900 py-1 shadow-2xl">
+          {reasoningEffortOptions.map((option) => (
+            <button
+              className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] transition hover:bg-zinc-800 ${
+                option.value === value ? 'bg-indigo-500/10 text-indigo-200' : 'text-zinc-300'
+              }`}
+              key={option.value}
+              onClick={() => { onChange(option.value); setOpen(false); }}
+              type="button"
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── ChatPane ──────────────────────────────────────────────── */
+
 interface ChatPaneProps {
   project: ProjectRecord;
   pattern: PatternDefinition;
   session: SessionRecord;
   onSend: (content: string) => Promise<void>;
-  onUpdateScratchpadConfig: (config: {
+  onUpdateScratchpadConfig?: (config: {
     model: string;
     reasoningEffort: ReasoningEffort;
   }) => Promise<unknown>;
@@ -72,7 +231,7 @@ export function ChatPane({
     model: string;
     reasoningEffort: ReasoningEffort;
   }) {
-    if (!isScratchpad || !primaryAgent || isComposerDisabled) {
+    if (!isScratchpad || !primaryAgent || isComposerDisabled || !onUpdateScratchpadConfig) {
       return;
     }
 
@@ -231,38 +390,32 @@ export function ChatPane({
         )}
 
         <div className="mx-auto max-w-3xl">
+          {/* Scratchpad config pills — inline above composer */}
           {isScratchpad && primaryAgent && (
-            <div className="mb-3 rounded-xl border border-zinc-800 bg-zinc-900/40 p-3">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-                <div className="min-w-0 flex-1">
-                  <ModelSelect
-                    disabled={isComposerDisabled}
-                    onChange={(model) =>
-                      void handleScratchpadConfigChange({
-                        model,
-                        reasoningEffort: scratchpadReasoningEffort,
-                      })
-                    }
-                    value={primaryAgent.model}
-                  />
-                </div>
-                <div className="sm:w-44">
-                  <ReasoningEffortSelect
-                    disabled={isComposerDisabled}
-                    label="Thinking"
-                    onChange={(reasoningEffort) =>
-                      void handleScratchpadConfigChange({
-                        model: primaryAgent.model,
-                        reasoningEffort,
-                      })
-                    }
-                    value={scratchpadReasoningEffort}
-                  />
-                </div>
-              </div>
-              <p className="mt-2 text-[11px] text-zinc-500">
-                Applies to future replies in this scratchpad.
-              </p>
+            <div className="mb-2 flex items-center gap-2">
+              <InlineModelPill
+                disabled={isComposerDisabled}
+                onChange={(model) =>
+                  void handleScratchpadConfigChange({
+                    model,
+                    reasoningEffort: scratchpadReasoningEffort,
+                  })
+                }
+                value={primaryAgent.model}
+              />
+              <InlineThinkingPill
+                disabled={isComposerDisabled}
+                onChange={(reasoningEffort) =>
+                  void handleScratchpadConfigChange({
+                    model: primaryAgent.model,
+                    reasoningEffort,
+                  })
+                }
+                value={scratchpadReasoningEffort}
+              />
+              {isUpdatingScratchpadConfig && (
+                <Loader2 className="size-3 animate-spin text-zinc-500" />
+              )}
             </div>
           )}
 

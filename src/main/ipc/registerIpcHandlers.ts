@@ -3,10 +3,16 @@ import { BrowserWindow, ipcMain } from 'electron';
 import { ipcChannels } from '@shared/contracts/channels';
 import type {
   CreateSessionInput,
+  DuplicateSessionInput,
+  RenameSessionInput,
   SavePatternInput,
   SendSessionMessageInput,
+  SetPatternFavoriteInput,
+  SetSessionArchivedInput,
+  SetSessionPinnedInput,
   UpdateScratchpadSessionConfigInput,
 } from '@shared/contracts/ipc';
+import type { QuerySessionsInput } from '@shared/domain/sessionLibrary';
 
 import { KopayaAppService } from '@main/KopayaAppService';
 
@@ -18,8 +24,23 @@ export function registerIpcHandlers(window: BrowserWindow, service: KopayaAppSer
   ipcMain.handle(ipcChannels.removeProject, (_event, projectId: string) => service.removeProject(projectId));
   ipcMain.handle(ipcChannels.savePattern, (_event, input: SavePatternInput) => service.savePattern(input.pattern));
   ipcMain.handle(ipcChannels.deletePattern, (_event, patternId: string) => service.deletePattern(patternId));
+  ipcMain.handle(ipcChannels.setPatternFavorite, (_event, input: SetPatternFavoriteInput) =>
+    service.setPatternFavorite(input.patternId, input.isFavorite),
+  );
   ipcMain.handle(ipcChannels.createSession, (_event, input: CreateSessionInput) =>
     service.createSession(input.projectId, input.patternId),
+  );
+  ipcMain.handle(ipcChannels.duplicateSession, (_event, input: DuplicateSessionInput) =>
+    service.duplicateSession(input.sessionId),
+  );
+  ipcMain.handle(ipcChannels.renameSession, (_event, input: RenameSessionInput) =>
+    service.renameSession(input.sessionId, input.title),
+  );
+  ipcMain.handle(ipcChannels.setSessionPinned, (_event, input: SetSessionPinnedInput) =>
+    service.setSessionPinned(input.sessionId, input.isPinned),
+  );
+  ipcMain.handle(ipcChannels.setSessionArchived, (_event, input: SetSessionArchivedInput) =>
+    service.setSessionArchived(input.sessionId, input.isArchived),
   );
   ipcMain.handle(ipcChannels.sendSessionMessage, (_event, input: SendSessionMessageInput) =>
     service.sendSessionMessage(input.sessionId, input.content),
@@ -29,6 +50,7 @@ export function registerIpcHandlers(window: BrowserWindow, service: KopayaAppSer
     (_event, input: UpdateScratchpadSessionConfigInput) =>
       service.updateScratchpadSessionConfig(input.sessionId, input.model, input.reasoningEffort),
   );
+  ipcMain.handle(ipcChannels.querySessions, (_event, input: QuerySessionsInput) => service.querySessions(input));
   ipcMain.handle(ipcChannels.selectProject, (_event, projectId?: string) => service.selectProject(projectId));
   ipcMain.handle(ipcChannels.selectPattern, (_event, patternId?: string) => service.selectPattern(patternId));
   ipcMain.handle(ipcChannels.selectSession, (_event, sessionId?: string) => service.selectSession(sessionId));

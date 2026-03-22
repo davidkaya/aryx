@@ -15,17 +15,24 @@ import {
   resolveReasoningEffort,
 } from '@shared/domain/models';
 import {
-  buildSessionTitle,
   isReasoningEffort,
   type PatternDefinition,
   type ReasoningEffort,
   validatePatternDefinition,
 } from '@shared/domain/pattern';
 import { isScratchpadProject, type ProjectRecord } from '@shared/domain/project';
+import {
+  duplicateSessionRecord,
+  querySessions as queryWorkspaceSessions,
+  renameSessionRecord,
+  type QuerySessionsInput,
+  type SessionQueryResult,
+} from '@shared/domain/sessionLibrary';
 import type { SessionEventRecord } from '@shared/domain/event';
 import {
   applyScratchpadSessionConfig,
   createScratchpadSessionConfig,
+  resolveSessionTitle,
   type ChatMessageRecord,
   type SessionRecord,
 } from '@shared/domain/session';
@@ -137,6 +144,7 @@ export class KopayaAppService extends EventEmitter<AppServiceEvents> {
     const existingIndex = workspace.patterns.findIndex((current) => current.id === pattern.id);
     const candidate: PatternDefinition = {
       ...pattern,
+      isFavorite: pattern.isFavorite ?? workspace.patterns[existingIndex]?.isFavorite,
       createdAt: existingIndex >= 0 ? workspace.patterns[existingIndex].createdAt : nowIso(),
       updatedAt: nowIso(),
     };
@@ -148,6 +156,14 @@ export class KopayaAppService extends EventEmitter<AppServiceEvents> {
     }
 
     workspace.selectedPatternId = candidate.id;
+    return this.persistAndBroadcast(workspace);
+  }
+
+  async setPatternFavorite(patternId: string, isFavorite: boolean): Promise<WorkspaceState> {
+    const workspace = await this.loadWorkspace();
+    const pattern = this.requirePattern(workspace, patternId);
+    pattern.isFavorite = isFavorite;
+    pattern.updatedAt = nowIso();
     return this.persistAndBroadcast(workspace);
   }
 
@@ -178,6 +194,7 @@ export class KopayaAppService extends EventEmitter<AppServiceEvents> {
       projectId: project.id,
       patternId: pattern.id,
       title: pattern.name,
+      titleSource: 'auto',
       createdAt: nowIso(),
       updatedAt: nowIso(),
       status: 'idle',
@@ -191,6 +208,43 @@ export class KopayaAppService extends EventEmitter<AppServiceEvents> {
     workspace.selectedProjectId = project.id;
     workspace.selectedPatternId = pattern.id;
     workspace.selectedSessionId = session.id;
+    return this.persistAndBroadcast(workspace);
+  }
+
+  async duplicateSession(sessionId: string): Promise<WorkspaceState> {
+    const workspace = await this.loadWorkspace();
+    const session = this.requireSession(workspace, sessionId);
+    const duplicate = duplicateSessionRecord(session, createId('session'), nowIso());
+
+    workspace.sessions.unshift(duplicate);
+    workspace.selectedProjectId = duplicate.projectId;
+    workspace.selectedPatternId = duplicate.patternId;
+    workspace.selectedSessionId = duplicate.id;
+    return this.persistAndBroadcast(workspace);
+  }
+
+  async renameSession(sessionId: string, title: string): Promise<WorkspaceState> {
+    const workspace = await this.loadWorkspace();
+    const session = this.requireSession(workspace, sessionId);
+    const renamed = renameSessionRecord(session, title, nowIso());
+
+    Object.assign(session, renamed);
+    return this.persistAndBroadcast(workspace);
+  }
+
+  async setSessionPinned(sessionId: string, isPinned: boolean): Promise<WorkspaceState> {
+    const workspace = await this.loadWorkspace();
+    const session = this.requireSession(workspace, sessionId);
+    session.isPinned = isPinned;
+    session.updatedAt = nowIso();
+    return this.persistAndBroadcast(workspace);
+  }
+
+  async setSessionArchived(sessionId: string, isArchived: boolean): Promise<WorkspaceState> {
+    const workspace = await this.loadWorkspace();
+    const session = this.requireSession(workspace, sessionId);
+    session.isArchived = isArchived;
+    session.updatedAt = nowIso();
     return this.persistAndBroadcast(workspace);
   }
 
@@ -213,7 +267,7 @@ export class KopayaAppService extends EventEmitter<AppServiceEvents> {
       content: trimmed,
       createdAt: nowIso(),
     });
-    session.title = buildSessionTitle(effectivePattern, session.messages);
+    session.title = resolveSessionTitle(session, effectivePattern, session.messages);
     session.status = 'running';
     session.lastError = undefined;
     session.updatedAt = nowIso();
@@ -299,6 +353,11 @@ export class KopayaAppService extends EventEmitter<AppServiceEvents> {
     session.updatedAt = nowIso();
 
     return this.persistAndBroadcast(workspace);
+  }
+
+  async querySessions(input: QuerySessionsInput): Promise<SessionQueryResult[]> {
+    const workspace = await this.loadWorkspace();
+    return queryWorkspaceSessions(workspace, input);
   }
 
   async selectProject(projectId?: string): Promise<WorkspaceState> {

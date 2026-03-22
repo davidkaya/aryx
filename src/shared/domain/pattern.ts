@@ -31,6 +31,7 @@ export interface PatternDefinition {
   id: string;
   name: string;
   description: string;
+  isFavorite?: boolean;
   mode: OrchestrationMode;
   availability: PatternAvailability;
   unavailabilityReason?: string;

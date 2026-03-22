@@ -1,0 +1,205 @@
+import { describe, expect, test } from 'bun:test';
+
+import { querySessions, duplicateSessionRecord, renameSessionRecord } from '@shared/domain/sessionLibrary';
+import type { PatternDefinition } from '@shared/domain/pattern';
+import type { ProjectRecord } from '@shared/domain/project';
+import type { SessionRecord } from '@shared/domain/session';
+import type { WorkspaceState } from '@shared/domain/workspace';
+
+function createPattern(overrides?: Partial<PatternDefinition>): PatternDefinition {
+  return {
+    id: 'pattern-sequential-review',
+    name: 'Sequential Review',
+    description: 'Multi-agent review workflow.',
+    mode: 'sequential',
+    availability: 'available',
+    maxIterations: 1,
+    agents: [
+      {
+        id: 'agent-analyst',
+        name: 'Analyst',
+        description: 'Reviews the request and finds issues.',
+        instructions: 'Analyze the request.',
+        model: 'gpt-5.4',
+        reasoningEffort: 'high',
+      },
+    ],
+    createdAt: '2026-03-23T00:00:00.000Z',
+    updatedAt: '2026-03-23T00:00:00.000Z',
+    ...overrides,
+  };
+}
+
+function createProject(overrides?: Partial<ProjectRecord>): ProjectRecord {
+  return {
+    id: 'project-alpha',
+    name: 'alpha',
+    path: 'C:\\workspace\\alpha',
+    addedAt: '2026-03-23T00:00:00.000Z',
+    ...overrides,
+  };
+}
+
+function createSession(overrides?: Partial<SessionRecord>): SessionRecord {
+  return {
+    id: 'session-1',
+    projectId: 'project-alpha',
+    patternId: 'pattern-sequential-review',
+    title: 'Investigate Copilot refresh bug',
+    createdAt: '2026-03-23T00:00:00.000Z',
+    updatedAt: '2026-03-23T00:05:00.000Z',
+    status: 'idle',
+    messages: [
+      {
+        id: 'msg-1',
+        role: 'user',
+        authorName: 'You',
+        content: 'Please debug why the Copilot CLI version keeps showing unknown.',
+        createdAt: '2026-03-23T00:00:00.000Z',
+      },
+    ],
+    ...overrides,
+  };
+}
+
+function createWorkspace(overrides?: Partial<WorkspaceState>): WorkspaceState {
+  return {
+    projects: [createProject(), createProject({ id: 'project-scratchpad', name: 'Scratchpad', path: 'C:\\scratchpad' })],
+    patterns: [createPattern(), createPattern({ id: 'pattern-single-chat', name: '1-on-1 Copilot Chat', mode: 'single' })],
+    sessions: [
+      createSession(),
+      createSession({
+        id: 'session-2',
+        projectId: 'project-scratchpad',
+        patternId: 'pattern-single-chat',
+        title: 'Scratchpad brainstorm',
+        status: 'running',
+        updatedAt: '2026-03-23T00:10:00.000Z',
+        isPinned: true,
+        messages: [
+          {
+            id: 'msg-2',
+            role: 'assistant',
+            authorName: 'Primary Agent',
+            content: 'I am thinking through a scratchpad plan.',
+            createdAt: '2026-03-23T00:09:00.000Z',
+            pending: true,
+          },
+        ],
+      }),
+      createSession({
+        id: 'session-3',
+        title: 'Archived error session',
+        status: 'error',
+        isArchived: true,
+        updatedAt: '2026-03-23T00:08:00.000Z',
+      }),
+    ],
+    selectedProjectId: 'project-alpha',
+    selectedPatternId: 'pattern-sequential-review',
+    selectedSessionId: 'session-1',
+    lastUpdatedAt: '2026-03-23T00:10:00.000Z',
+    ...overrides,
+  };
+}
+
+describe('session library helpers', () => {
+  test('renames sessions with trimmed manual titles', () => {
+    const session = renameSessionRecord(createSession(), '  Incident review  ', '2026-03-23T00:06:00.000Z');
+
+    expect(session.title).toBe('Incident review');
+    expect(session.titleSource).toBe('manual');
+    expect(session.updatedAt).toBe('2026-03-23T00:06:00.000Z');
+  });
+
+  test('duplicates sessions as idle unpinned copies', () => {
+    const session = duplicateSessionRecord(
+      createSession({
+        status: 'error',
+        isPinned: true,
+        isArchived: true,
+        lastError: 'sidecar crashed',
+        messages: [
+          {
+            id: 'msg-1',
+            role: 'assistant',
+            authorName: 'Reviewer',
+            content: 'Done.',
+            createdAt: '2026-03-23T00:00:00.000Z',
+            pending: true,
+          },
+        ],
+      }),
+      'session-copy',
+      '2026-03-23T00:07:00.000Z',
+    );
+
+    expect(session).toMatchObject({
+      id: 'session-copy',
+      title: 'Investigate Copilot refresh bug (Copy)',
+      titleSource: 'manual',
+      status: 'idle',
+      isPinned: false,
+      isArchived: false,
+      lastError: undefined,
+      createdAt: '2026-03-23T00:07:00.000Z',
+      updatedAt: '2026-03-23T00:07:00.000Z',
+    });
+    expect(session.messages[0]?.pending).toBe(false);
+  });
+
+  test('searches across session title, messages, projects, and patterns', () => {
+    const workspace = createWorkspace();
+
+    expect(querySessions(workspace, { searchText: 'copilot alpha review' })).toEqual([
+      {
+        sessionId: 'session-1',
+        score: 31,
+        matchedFields: ['title', 'message', 'project', 'pattern'],
+      },
+    ]);
+  });
+
+  test('filters archived sessions by default and can include them explicitly', () => {
+    const workspace = createWorkspace();
+
+    expect(querySessions(workspace, { statuses: ['error'] })).toEqual([]);
+    expect(querySessions(workspace, { statuses: ['error'], includeArchived: true })).toEqual([
+      {
+        sessionId: 'session-3',
+        score: 0,
+        matchedFields: [],
+      },
+    ]);
+  });
+
+  test('supports pinned and scratchpad filters while keeping pinned sessions first', () => {
+    const workspace = createWorkspace({
+      sessions: [
+        createSession({ id: 'session-4', title: 'Pinned idle session', isPinned: true, updatedAt: '2026-03-23T00:04:00.000Z' }),
+        ...createWorkspace().sessions,
+      ],
+    });
+
+    expect(querySessions(workspace, { onlyPinned: true })).toEqual([
+      {
+        sessionId: 'session-2',
+        score: 0,
+        matchedFields: [],
+      },
+      {
+        sessionId: 'session-4',
+        score: 0,
+        matchedFields: [],
+      },
+    ]);
+
+    expect(querySessions(workspace, { workspaceKinds: ['scratchpad'] })).toEqual([
+      {
+        sessionId: 'session-2',
+        score: 0,
+        matchedFields: [],
+      },
+    ]);
+  });
+});

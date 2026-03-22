@@ -1,7 +1,8 @@
-import type { PatternDefinition, ReasoningEffort } from '@shared/domain/pattern';
+import { buildSessionTitle, type PatternDefinition, type ReasoningEffort } from '@shared/domain/pattern';
 
 export type ChatRole = 'system' | 'user' | 'assistant';
 export type SessionStatus = 'idle' | 'running' | 'error';
+export type SessionTitleSource = 'auto' | 'manual';
 
 export interface ScratchpadSessionConfig {
   model: string;
@@ -22,12 +23,27 @@ export interface SessionRecord {
   projectId: string;
   patternId: string;
   title: string;
+  titleSource?: SessionTitleSource;
   createdAt: string;
   updatedAt: string;
   status: SessionStatus;
+  isPinned?: boolean;
+  isArchived?: boolean;
   messages: ChatMessageRecord[];
   lastError?: string;
   scratchpadConfig?: ScratchpadSessionConfig;
+}
+
+export function resolveSessionTitle(
+  session: Pick<SessionRecord, 'title' | 'titleSource'>,
+  pattern: PatternDefinition,
+  messages: ChatMessageRecord[],
+): string {
+  if (session.titleSource === 'manual') {
+    return session.title;
+  }
+
+  return buildSessionTitle(pattern, messages);
 }
 
 export function createScratchpadSessionConfig(

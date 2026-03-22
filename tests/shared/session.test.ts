@@ -4,6 +4,7 @@ import type { PatternDefinition } from '@shared/domain/pattern';
 import {
   applyScratchpadSessionConfig,
   createScratchpadSessionConfig,
+  resolveSessionTitle,
   resolveScratchpadSessionConfig,
   type SessionRecord,
 } from '@shared/domain/session';
@@ -93,5 +94,27 @@ describe('scratchpad session config helpers', () => {
     expect(updated.agents[0].model).toBe('gpt-5.4-mini');
     expect(updated.agents[0].reasoningEffort).toBe('low');
     expect(updated.agents[1]).toEqual(pattern.agents[1]);
+  });
+});
+
+describe('session title helpers', () => {
+  test('keeps a manual title instead of recomputing it from the first user message', () => {
+    const pattern = createPattern();
+    const session = createSession({
+      title: 'Release readiness review',
+      titleSource: 'manual',
+    });
+
+    expect(
+      resolveSessionTitle(session, pattern, [
+        {
+          id: 'msg-1',
+          role: 'user',
+          authorName: 'You',
+          content: 'Investigate why the version badge keeps saying unknown after refresh.',
+          createdAt: '2026-03-23T00:00:00.000Z',
+        },
+      ]),
+    ).toBe('Release readiness review');
   });
 });

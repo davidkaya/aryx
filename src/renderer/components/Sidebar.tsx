@@ -68,27 +68,32 @@ function relativeTime(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
-/* ── Filter chip ────────────────────────────────────────────── */
+/* ── Filter toggle ──────────────────────────────────────────── */
 
-function FilterChip({
+function FilterToggle({
   label,
   active,
-  activeClass,
+  dotColor,
   onClick,
 }: {
   label: string;
   active: boolean;
-  activeClass: string;
+  dotColor: string;
   onClick: () => void;
 }) {
   return (
     <button
-      className={`rounded-full px-2 py-0.5 text-[10px] font-medium transition ${
-        active ? activeClass : 'bg-zinc-800/60 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-400'
+      className={`flex items-center gap-1 text-[11px] transition ${
+        active ? 'text-zinc-300' : 'text-zinc-600 hover:text-zinc-400'
       }`}
       onClick={onClick}
       type="button"
     >
+      <span
+        className={`inline-block size-1.5 rounded-full transition-colors ${
+          active ? dotColor : 'bg-zinc-700'
+        }`}
+      />
       {label}
     </button>
   );
@@ -504,11 +509,11 @@ export function Sidebar({
           )}
         </div>
 
-        <div className="flex flex-wrap gap-1">
-          <FilterChip label="Running" active={filterRunning} activeClass="bg-blue-500/15 text-blue-300 ring-1 ring-blue-500/25" onClick={() => setFilterRunning(!filterRunning)} />
-          <FilterChip label="Error" active={filterErrored} activeClass="bg-red-500/15 text-red-300 ring-1 ring-red-500/25" onClick={() => setFilterErrored(!filterErrored)} />
-          <FilterChip label="Pinned" active={filterPinned} activeClass="bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/25" onClick={() => setFilterPinned(!filterPinned)} />
-          <FilterChip label="Archived" active={filterIncludeArchived} activeClass="bg-zinc-600/20 text-zinc-300 ring-1 ring-zinc-600/30" onClick={() => setFilterIncludeArchived(!filterIncludeArchived)} />
+        <div className="flex items-center gap-3">
+          <FilterToggle label="Running" active={filterRunning} dotColor="bg-blue-400" onClick={() => setFilterRunning(!filterRunning)} />
+          <FilterToggle label="Error" active={filterErrored} dotColor="bg-red-400" onClick={() => setFilterErrored(!filterErrored)} />
+          <FilterToggle label="Pinned" active={filterPinned} dotColor="bg-amber-400" onClick={() => setFilterPinned(!filterPinned)} />
+          <FilterToggle label="Archived" active={filterIncludeArchived} dotColor="bg-zinc-400" onClick={() => setFilterIncludeArchived(!filterIncludeArchived)} />
         </div>
       </div>
 

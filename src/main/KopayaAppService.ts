@@ -3,8 +3,17 @@ import { basename } from 'node:path';
 
 import { dialog } from 'electron';
 
-import type { AgentActivityEvent, TurnDeltaEvent } from '@shared/contracts/sidecar';
-import { findModel } from '@shared/domain/models';
+import type {
+  AgentActivityEvent,
+  SidecarCapabilities,
+  TurnDeltaEvent,
+} from '@shared/contracts/sidecar';
+import {
+  buildAvailableModelCatalog,
+  findModel,
+  normalizePatternModels,
+  resolveReasoningEffort,
+} from '@shared/domain/models';
 import {
   buildSessionTitle,
   isReasoningEffort,
@@ -42,6 +51,15 @@ export class KopayaAppService extends EventEmitter<AppServiceEvents> {
   private readonly sidecar = new SidecarClient();
   private readonly secretStore = new SecretStore();
   private workspace?: WorkspaceState;
+  private sidecarCapabilities?: SidecarCapabilities;
+
+  async describeSidecarCapabilities(): Promise<SidecarCapabilities> {
+    if (!this.sidecarCapabilities) {
+      this.sidecarCapabilities = await this.sidecar.describeCapabilities();
+    }
+
+    return this.sidecarCapabilities;
+  }
 
   async loadWorkspace(): Promise<WorkspaceState> {
     if (!this.workspace) {
@@ -152,6 +170,8 @@ export class KopayaAppService extends EventEmitter<AppServiceEvents> {
     const workspace = await this.loadWorkspace();
     const project = this.requireProject(workspace, projectId);
     const pattern = this.requirePattern(workspace, patternId);
+    const modelCatalog = await this.loadAvailableModelCatalog();
+    const normalizedPattern = normalizePatternModels(pattern, modelCatalog);
 
     const session: SessionRecord = {
       id: createId('session'),
@@ -162,7 +182,9 @@ export class KopayaAppService extends EventEmitter<AppServiceEvents> {
       updatedAt: nowIso(),
       status: 'idle',
       messages: [],
-      scratchpadConfig: isScratchpadProject(project) ? createScratchpadSessionConfig(pattern) : undefined,
+      scratchpadConfig: isScratchpadProject(project)
+        ? createScratchpadSessionConfig(normalizedPattern)
+        : undefined,
     };
 
     workspace.sessions.unshift(session);
@@ -177,9 +199,7 @@ export class KopayaAppService extends EventEmitter<AppServiceEvents> {
     const session = this.requireSession(workspace, sessionId);
     const project = this.requireProject(workspace, session.projectId);
     const pattern = this.requirePattern(workspace, session.patternId);
-    const effectivePattern = isScratchpadProject(project)
-      ? applyScratchpadSessionConfig(pattern, session)
-      : pattern;
+    const effectivePattern = await this.buildEffectivePattern(project, pattern, session);
 
     const trimmed = content.trim();
     if (!trimmed) {
@@ -248,12 +268,12 @@ export class KopayaAppService extends EventEmitter<AppServiceEvents> {
   async updateScratchpadSessionConfig(
     sessionId: string,
     model: string,
-    reasoningEffort: ReasoningEffort,
+    reasoningEffort?: ReasoningEffort,
   ): Promise<WorkspaceState> {
     const workspace = await this.loadWorkspace();
     const session = this.requireSession(workspace, sessionId);
     const project = this.requireProject(workspace, session.projectId);
-    const pattern = this.requirePattern(workspace, session.patternId);
+    const modelCatalog = await this.loadAvailableModelCatalog();
 
     if (!isScratchpadProject(project)) {
       throw new Error('Only scratchpad sessions can change model settings in chat.');
@@ -264,17 +284,17 @@ export class KopayaAppService extends EventEmitter<AppServiceEvents> {
     }
 
     const normalizedModel = model.trim();
-    if (!normalizedModel || !findModel(normalizedModel)) {
+    const selectedModel = normalizedModel ? findModel(normalizedModel, modelCatalog) : undefined;
+    if (!selectedModel) {
       throw new Error(`Model "${model}" is not available.`);
     }
-    if (!isReasoningEffort(reasoningEffort)) {
+    if (reasoningEffort && !isReasoningEffort(reasoningEffort)) {
       throw new Error(`Reasoning effort "${reasoningEffort}" is not supported.`);
     }
 
     session.scratchpadConfig = {
-      ...(createScratchpadSessionConfig(pattern) ?? {}),
       model: normalizedModel,
-      reasoningEffort,
+      reasoningEffort: resolveReasoningEffort(selectedModel, reasoningEffort),
     };
     session.updatedAt = nowIso();
 
@@ -447,6 +467,28 @@ export class KopayaAppService extends EventEmitter<AppServiceEvents> {
     await this.workspaceRepository.save(workspace);
     this.emit('workspace-updated', workspace);
     return workspace;
+  }
+
+  private async loadAvailableModelCatalog() {
+    try {
+      const capabilities = await this.describeSidecarCapabilities();
+      return buildAvailableModelCatalog(capabilities.models);
+    } catch {
+      return buildAvailableModelCatalog();
+    }
+  }
+
+  private async buildEffectivePattern(
+    project: ProjectRecord,
+    pattern: PatternDefinition,
+    session: SessionRecord,
+  ): Promise<PatternDefinition> {
+    const patternWithSessionConfig = isScratchpadProject(project)
+      ? applyScratchpadSessionConfig(pattern, session)
+      : pattern;
+
+    const modelCatalog = await this.loadAvailableModelCatalog();
+    return normalizePatternModels(patternWithSessionConfig, modelCatalog);
   }
 
   private emitSessionEvent(event: SessionEventRecord): void {

@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { ChevronRight, Plus, X } from 'lucide-react';
 
+import type { ModelDefinition } from '@shared/domain/models';
 import type { PatternDefinition } from '@shared/domain/pattern';
 import { PatternEditor } from '@renderer/components/PatternEditor';
 
 interface SettingsPanelProps {
+  availableModels: ReadonlyArray<ModelDefinition>;
   patterns: PatternDefinition[];
   onClose: () => void;
   onSavePattern: (pattern: PatternDefinition) => Promise<void>;
@@ -18,6 +20,7 @@ function modeBadgeClasses(pattern: PatternDefinition) {
 }
 
 export function SettingsPanel({
+  availableModels,
   patterns,
   onClose,
   onSavePattern,
@@ -31,6 +34,7 @@ export function SettingsPanel({
     return (
       <div className="fixed inset-0 z-50 flex flex-col bg-[var(--color-surface-0)]">
         <PatternEditor
+          availableModels={availableModels}
           isBuiltin={isBuiltin}
           onBack={() => setEditingPattern(null)}
           onChange={setEditingPattern}

@@ -16,6 +16,12 @@ import {
 } from 'lucide-react';
 
 import {
+  findModel,
+  getSupportedReasoningEfforts,
+  resolveReasoningEffort,
+  type ModelDefinition,
+} from '@shared/domain/models';
+import {
   validatePatternDefinition,
   type OrchestrationMode,
   type PatternDefinition,
@@ -25,6 +31,7 @@ import {
 import { ModelSelect, ReasoningEffortSelect } from './AgentConfigFields';
 
 interface PatternEditorProps {
+  availableModels: ReadonlyArray<ModelDefinition>;
   pattern: PatternDefinition;
   isBuiltin: boolean;
   onChange: (pattern: PatternDefinition) => void;
@@ -189,13 +196,29 @@ function InputField({
   );
 }
 
-export function PatternEditor({ pattern, isBuiltin, onChange, onDelete, onSave, onBack }: PatternEditorProps) {
+export function PatternEditor({
+  availableModels,
+  pattern,
+  isBuiltin,
+  onChange,
+  onDelete,
+  onSave,
+  onBack,
+}: PatternEditorProps) {
   const issues = validatePatternDefinition(pattern);
 
   function updateAgent(agentId: string, patch: Partial<PatternAgentDefinition>) {
     onChange({
       ...pattern,
       agents: pattern.agents.map((a) => (a.id === agentId ? { ...a, ...patch } : a)),
+    });
+  }
+
+  function updateAgentModel(agent: PatternAgentDefinition, modelId: string) {
+    const model = findModel(modelId, availableModels);
+    updateAgent(agent.id, {
+      model: modelId,
+      reasoningEffort: resolveReasoningEffort(model, agent.reasoningEffort),
     });
   }
 
@@ -408,13 +431,15 @@ export function PatternEditor({ pattern, isBuiltin, onChange, onDelete, onSave, 
                       value={agent.name}
                     />
                     <ModelSelect
-                      onChange={(v) => updateAgent(agent.id, { model: v })}
+                      models={availableModels}
+                      onChange={(value) => updateAgentModel(agent, value)}
                       value={agent.model}
                     />
                     <ReasoningEffortSelect
                       label="Reasoning"
                       onChange={(value) => updateAgent(agent.id, { reasoningEffort: value })}
-                      value={agent.reasoningEffort ?? 'high'}
+                      supportedEfforts={getSupportedReasoningEfforts(findModel(agent.model, availableModels))}
+                      value={resolveReasoningEffort(findModel(agent.model, availableModels), agent.reasoningEffort)}
                     />
                   </div>
                   <div className="mt-3">

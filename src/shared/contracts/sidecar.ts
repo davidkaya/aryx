@@ -1,4 +1,4 @@
-import type { PatternDefinition, PatternValidationIssue } from '@shared/domain/pattern';
+import type { PatternDefinition, PatternValidationIssue, ReasoningEffort } from '@shared/domain/pattern';
 import type { ChatMessageRecord } from '@shared/domain/session';
 
 export interface SidecarModeCapability {
@@ -6,9 +6,17 @@ export interface SidecarModeCapability {
   reason?: string;
 }
 
+export interface SidecarModelCapability {
+  id: string;
+  name: string;
+  supportedReasoningEfforts?: ReasoningEffort[];
+  defaultReasoningEffort?: ReasoningEffort;
+}
+
 export interface SidecarCapabilities {
   runtime: 'dotnet-maf';
   modes: Record<PatternDefinition['mode'], SidecarModeCapability>;
+  models: SidecarModelCapability[];
 }
 
 export interface DescribeCapabilitiesCommand {

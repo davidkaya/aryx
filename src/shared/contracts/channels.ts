@@ -1,4 +1,5 @@
 export const ipcChannels = {
+  describeSidecarCapabilities: 'sidecar:describe-capabilities',
   loadWorkspace: 'workspace:load',
   addProject: 'workspace:add-project',
   removeProject: 'workspace:remove-project',

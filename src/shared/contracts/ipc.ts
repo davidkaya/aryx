@@ -1,3 +1,4 @@
+import type { SidecarCapabilities } from '@shared/contracts/sidecar';
 import type { PatternDefinition, ReasoningEffort } from '@shared/domain/pattern';
 import type { ProjectRecord } from '@shared/domain/project';
 import type { SessionEventRecord } from '@shared/domain/event';
@@ -20,10 +21,11 @@ export interface SendSessionMessageInput {
 export interface UpdateScratchpadSessionConfigInput {
   sessionId: string;
   model: string;
-  reasoningEffort: ReasoningEffort;
+  reasoningEffort?: ReasoningEffort;
 }
 
 export interface ElectronApi {
+  describeSidecarCapabilities(): Promise<SidecarCapabilities>;
   loadWorkspace(): Promise<WorkspaceState>;
   addProject(): Promise<WorkspaceState>;
   removeProject(projectId: string): Promise<WorkspaceState>;

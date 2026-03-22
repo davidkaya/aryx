@@ -11,6 +11,7 @@ import type {
 import { KopayaAppService } from '@main/KopayaAppService';
 
 export function registerIpcHandlers(window: BrowserWindow, service: KopayaAppService): void {
+  ipcMain.handle(ipcChannels.describeSidecarCapabilities, () => service.describeSidecarCapabilities());
   ipcMain.handle(ipcChannels.loadWorkspace, () => service.loadWorkspace());
   ipcMain.handle(ipcChannels.addProject, () => service.addProject());
   ipcMain.handle(ipcChannels.removeProject, (_event, projectId: string) => service.removeProject(projectId));

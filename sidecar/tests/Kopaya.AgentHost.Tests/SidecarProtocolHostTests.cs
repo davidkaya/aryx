@@ -18,7 +18,7 @@ public sealed class SidecarProtocolHostTests
         {
             Type = "describe-capabilities",
             RequestId = "cap-1",
-        });
+        }, CreateHostForTests());
 
         Assert.Collection(
             events,
@@ -33,6 +33,10 @@ public sealed class SidecarProtocolHostTests
                 JsonElement modes = capabilities.GetProperty("modes");
                 Assert.True(modes.GetProperty("single").GetProperty("available").GetBoolean());
                 Assert.False(modes.GetProperty("magentic").GetProperty("available").GetBoolean());
+                JsonElement[] models = capabilities.GetProperty("models").EnumerateArray().ToArray();
+                JsonElement model = Assert.Single(models);
+                Assert.Equal("gpt-5.4", model.GetProperty("id").GetString());
+                Assert.Equal("medium", model.GetProperty("defaultReasoningEffort").GetString());
 
                 string magenticReason = modes.GetProperty("magentic").GetProperty("reason").GetString() ?? string.Empty;
                 Assert.Contains("unsupported", magenticReason, StringComparison.OrdinalIgnoreCase);
@@ -220,8 +224,40 @@ public sealed class SidecarProtocolHostTests
         using StringReader reader = new(input);
         using StringWriter writer = new();
 
-        await (host ?? new SidecarProtocolHost()).RunAsync(reader, writer, CancellationToken.None);
+        await (host ?? CreateHostForTests()).RunAsync(reader, writer, CancellationToken.None);
         return ParseEvents(writer.ToString());
+    }
+
+    private static SidecarProtocolHost CreateHostForTests()
+    {
+        return new SidecarProtocolHost(
+            new PatternValidator(),
+            capabilitiesProvider: _ => Task.FromResult(new SidecarCapabilitiesDto
+            {
+                Modes = new Dictionary<string, SidecarModeCapabilityDto>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["single"] = new() { Available = true },
+                    ["sequential"] = new() { Available = true },
+                    ["concurrent"] = new() { Available = true },
+                    ["handoff"] = new() { Available = true },
+                    ["group-chat"] = new() { Available = true },
+                    ["magentic"] = new()
+                    {
+                        Available = false,
+                        Reason = "Microsoft Agent Framework currently documents Magentic orchestration as unsupported in C#.",
+                    },
+                },
+                Models =
+                [
+                    new SidecarModelCapabilityDto
+                    {
+                        Id = "gpt-5.4",
+                        Name = "GPT-5.4",
+                        SupportedReasoningEfforts = ["low", "medium", "high", "xhigh"],
+                        DefaultReasoningEffort = "medium",
+                    },
+                ],
+            }));
     }
 
     private static IReadOnlyList<JsonElement> ParseEvents(string output)

@@ -1,12 +1,14 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using GitHub.Copilot.SDK;
 using Kopaya.AgentHost.Contracts;
 
 namespace Kopaya.AgentHost.Services;
 
 public sealed class SidecarProtocolHost
 {
+    private readonly Func<CancellationToken, Task<SidecarCapabilitiesDto>> _capabilitiesProvider;
     private readonly PatternValidator _patternValidator;
     private readonly ITurnWorkflowRunner _workflowRunner;
     private readonly JsonSerializerOptions _jsonOptions;
@@ -18,10 +20,14 @@ public sealed class SidecarProtocolHost
     {
     }
 
-    public SidecarProtocolHost(PatternValidator patternValidator, ITurnWorkflowRunner? workflowRunner = null)
+    public SidecarProtocolHost(
+        PatternValidator patternValidator,
+        ITurnWorkflowRunner? workflowRunner = null,
+        Func<CancellationToken, Task<SidecarCapabilitiesDto>>? capabilitiesProvider = null)
     {
         _patternValidator = patternValidator;
         _workflowRunner = workflowRunner ?? new CopilotWorkflowRunner(_patternValidator);
+        _capabilitiesProvider = capabilitiesProvider ?? BuildCapabilitiesAsync;
         _jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web)
         {
             DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
@@ -82,7 +88,7 @@ public sealed class SidecarProtocolHost
                     {
                         Type = "capabilities",
                         RequestId = envelope.RequestId,
-                        Capabilities = BuildCapabilities(),
+                        Capabilities = await _capabilitiesProvider(cancellationToken).ConfigureAwait(false),
                     }, cancellationToken).ConfigureAwait(false);
                     break;
 
@@ -155,8 +161,19 @@ public sealed class SidecarProtocolHost
         }
     }
 
-    private static SidecarCapabilitiesDto BuildCapabilities()
+    private static async Task<SidecarCapabilitiesDto> BuildCapabilitiesAsync(CancellationToken cancellationToken)
     {
+        IReadOnlyList<SidecarModelCapabilityDto> models = [];
+
+        try
+        {
+            models = await ListAvailableModelsAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            Console.Error.WriteLine($"[kopaya sidecar] Failed to list available Copilot models: {exception.Message}");
+        }
+
         return new SidecarCapabilitiesDto
         {
             Modes = new Dictionary<string, SidecarModeCapabilityDto>(StringComparer.OrdinalIgnoreCase)
@@ -172,6 +189,38 @@ public sealed class SidecarProtocolHost
                     Reason = "Microsoft Agent Framework currently documents Magentic orchestration as unsupported in C#.",
                 },
             },
+            Models = models,
         };
+    }
+
+    private static async Task<IReadOnlyList<SidecarModelCapabilityDto>> ListAvailableModelsAsync(
+        CancellationToken cancellationToken)
+    {
+        CopilotClientOptions clientOptions = CopilotCliPathResolver.CreateClientOptions();
+
+        await using CopilotClient client = new(clientOptions);
+        await client.StartAsync(cancellationToken).ConfigureAwait(false);
+
+        List<ModelInfo> models = await client.ListModelsAsync(cancellationToken).ConfigureAwait(false);
+        return models
+            .Select(model => new SidecarModelCapabilityDto
+            {
+                Id = model.Id,
+                Name = model.Name,
+                SupportedReasoningEfforts = (model.SupportedReasoningEfforts ?? [])
+                    .Where(IsReasoningEffort)
+                    .Distinct(StringComparer.Ordinal)
+                    .ToList(),
+                DefaultReasoningEffort = IsReasoningEffort(model.DefaultReasoningEffort)
+                    ? model.DefaultReasoningEffort
+                    : null,
+            })
+            .OrderBy(model => model.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static bool IsReasoningEffort(string? value)
+    {
+        return value is "low" or "medium" or "high" or "xhigh";
     }
 }

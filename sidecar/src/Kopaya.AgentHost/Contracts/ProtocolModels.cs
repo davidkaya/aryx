@@ -48,10 +48,19 @@ public sealed class SidecarModeCapabilityDto
     public string? Reason { get; init; }
 }
 
+public sealed class SidecarModelCapabilityDto
+{
+    public string Id { get; init; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
+    public IReadOnlyList<string> SupportedReasoningEfforts { get; init; } = [];
+    public string? DefaultReasoningEffort { get; init; }
+}
+
 public sealed class SidecarCapabilitiesDto
 {
     public string Runtime { get; init; } = "dotnet-maf";
     public Dictionary<string, SidecarModeCapabilityDto> Modes { get; init; } = new(StringComparer.OrdinalIgnoreCase);
+    public IReadOnlyList<SidecarModelCapabilityDto> Models { get; init; } = [];
 }
 
 public class SidecarCommandEnvelope

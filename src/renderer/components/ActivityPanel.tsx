@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
-import { Activity, Bot, Sparkles } from 'lucide-react';
+import { useMemo, type ReactNode } from 'react';
+import { Activity, Bot, Server, Code, Sparkles } from 'lucide-react';
 
 import {
   buildAgentActivityRows,
@@ -80,66 +80,60 @@ export function ActivityPanel({
       {/* Agent cards */}
       <div className="flex-1 overflow-y-auto px-3 py-3">
         <div className="space-y-3">
-          <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 px-3 py-3">
+          <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 px-3 py-2.5">
             <div className="flex items-center justify-between gap-2">
-              <div>
-                <h3 className="text-[12px] font-semibold text-zinc-200">Session tools</h3>
-                <p className="mt-0.5 text-[11px] text-zinc-500">
-                  Enable globally configured MCPs and LSPs for this session.
-                </p>
-              </div>
+              <h3 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
+                Session tools
+              </h3>
               {toolsDisabled && (
-                <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] font-medium text-zinc-400">
-                  {projectIsScratchpad ? 'Scratchpad disabled' : 'Locked while running'}
+                <span className="text-[10px] text-zinc-600">
+                  {projectIsScratchpad ? 'Scratchpad' : 'Running'}
                 </span>
               )}
             </div>
 
             {projectIsScratchpad ? (
-              <p className="mt-3 text-[11px] leading-relaxed text-zinc-500">
-                Scratchpad stays tool-free. Start a project-backed session to use MCPs or LSPs.
+              <p className="mt-2 text-[11px] leading-relaxed text-zinc-600">
+                Start a project-backed session to use MCPs or LSPs.
+              </p>
+            ) : mcpServers.length === 0 && lspProfiles.length === 0 ? (
+              <p className="mt-2 text-[11px] leading-relaxed text-zinc-600">
+                Add MCP servers or LSP profiles in Settings to enable them here.
               </p>
             ) : (
-              <div className="mt-3 space-y-3">
-                <ToolToggleGroup
-                  description="Globally configured MCP servers"
-                  emptyMessage="No MCP servers configured in Settings."
-                  enabledIds={selection.enabledMcpServerIds}
-                  items={mcpServers.map((server) => ({
-                    id: server.id,
-                    label: server.name,
-                    detail:
-                      server.transport === 'local'
-                        ? server.command
-                        : server.url,
-                  }))}
-                  onToggle={(id) =>
-                    onUpdateSessionTooling({
-                      ...selection,
-                      enabledMcpServerIds: toggleId(selection.enabledMcpServerIds, id),
-                    })
-                  }
-                  title="MCP servers"
-                  disabled={toolsDisabled}
-                />
-                <ToolToggleGroup
-                  description="Globally configured LSP profiles"
-                  emptyMessage="No LSP profiles configured in Settings."
-                  enabledIds={selection.enabledLspProfileIds}
-                  items={lspProfiles.map((profile) => ({
-                    id: profile.id,
-                    label: profile.name,
-                    detail: `${profile.languageId} · ${profile.command}`,
-                  }))}
-                  onToggle={(id) =>
-                    onUpdateSessionTooling({
-                      ...selection,
-                      enabledLspProfileIds: toggleId(selection.enabledLspProfileIds, id),
-                    })
-                  }
-                  title="LSP profiles"
-                  disabled={toolsDisabled}
-                />
+              <div className="mt-2 space-y-0.5">
+                {mcpServers.map((server) => (
+                  <ToolToggleRow
+                    detail={server.transport === 'local' ? server.command : server.url}
+                    disabled={toolsDisabled}
+                    enabled={selection.enabledMcpServerIds.includes(server.id)}
+                    icon={<Server className="size-3 text-zinc-600" />}
+                    key={server.id}
+                    label={server.name}
+                    onToggle={() =>
+                      onUpdateSessionTooling({
+                        ...selection,
+                        enabledMcpServerIds: toggleId(selection.enabledMcpServerIds, server.id),
+                      })
+                    }
+                  />
+                ))}
+                {lspProfiles.map((profile) => (
+                  <ToolToggleRow
+                    detail={profile.command}
+                    disabled={toolsDisabled}
+                    enabled={selection.enabledLspProfileIds.includes(profile.id)}
+                    icon={<Code className="size-3 text-zinc-600" />}
+                    key={profile.id}
+                    label={profile.name}
+                    onToggle={() =>
+                      onUpdateSessionTooling({
+                        ...selection,
+                        enabledLspProfileIds: toggleId(selection.enabledLspProfileIds, profile.id),
+                      })
+                    }
+                  />
+                ))}
               </div>
             )}
           </div>
@@ -235,71 +229,55 @@ export function ActivityPanel({
   );
 }
 
-function ToolToggleGroup({
-  title,
-  description,
-  items,
-  enabledIds,
-  onToggle,
-  emptyMessage,
+function ToolToggleRow({
+  label,
+  detail,
+  icon,
+  enabled,
   disabled,
+  onToggle,
 }: {
-  title: string;
-  description: string;
-  items: Array<{ id: string; label: string; detail?: string }>;
-  enabledIds: string[];
-  onToggle: (id: string) => void;
-  emptyMessage: string;
+  label: string;
+  detail?: string;
+  icon: ReactNode;
+  enabled: boolean;
   disabled: boolean;
+  onToggle: () => void;
 }) {
   return (
-    <div>
-      <div className="mb-2">
-        <h4 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
-          {title}
-        </h4>
-        <p className="mt-0.5 text-[11px] text-zinc-600">{description}</p>
+    <button
+      className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition ${
+        disabled ? 'cursor-not-allowed opacity-50' : 'hover:bg-zinc-800/60'
+      }`}
+      disabled={disabled}
+      onClick={onToggle}
+      type="button"
+    >
+      {icon}
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-[12px] font-medium text-zinc-300">{label}</div>
+        {detail && (
+          <div className="truncate text-[10px] text-zinc-600">{detail}</div>
+        )}
       </div>
+      <ToggleSwitch enabled={enabled} />
+    </button>
+  );
+}
 
-      {items.length === 0 ? (
-        <p className="text-[11px] text-zinc-600">{emptyMessage}</p>
-      ) : (
-        <div className="space-y-1.5">
-          {items.map((item) => {
-            const enabled = enabledIds.includes(item.id);
-            return (
-              <button
-                className={`flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-2 text-left transition ${
-                  enabled
-                    ? 'border-blue-500/30 bg-blue-500/5'
-                    : 'border-zinc-800 bg-zinc-900/30'
-                } ${disabled ? 'cursor-not-allowed opacity-60' : 'hover:border-zinc-700 hover:bg-zinc-900/60'}`}
-                disabled={disabled}
-                key={item.id}
-                onClick={() => onToggle(item.id)}
-                type="button"
-              >
-                <div className="min-w-0">
-                  <div className="text-[12px] font-medium text-zinc-200">{item.label}</div>
-                  {item.detail && (
-                    <div className="truncate text-[11px] text-zinc-500">{item.detail}</div>
-                  )}
-                </div>
-                <span
-                  className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                    enabled
-                      ? 'bg-blue-500/10 text-blue-300'
-                      : 'bg-zinc-800 text-zinc-500'
-                  }`}
-                >
-                  {enabled ? 'Enabled' : 'Disabled'}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </div>
+function ToggleSwitch({ enabled }: { enabled: boolean }) {
+  return (
+    <span
+      className={`relative inline-flex h-[16px] w-[28px] shrink-0 items-center rounded-full transition-colors ${
+        enabled ? 'bg-indigo-500' : 'bg-zinc-700'
+      }`}
+    >
+      <span
+        className={`inline-block size-[12px] rounded-full bg-white shadow-sm transition-transform ${
+          enabled ? 'translate-x-[14px]' : 'translate-x-[2px]'
+        }`}
+      />
+    </span>
   );
 }
 

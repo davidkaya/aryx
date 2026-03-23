@@ -269,11 +269,11 @@ export default function App() {
         onNewPattern={() => {
           const defaultModel = availableModels[0] ?? findModel('gpt-5.4', availableModels) ?? findModel('gpt-5.4');
 
-        return createDraftPattern(
-          defaultModel?.id ?? 'gpt-5.4',
-          resolveReasoningEffort(defaultModel, 'high'),
-        );
-      }}
+          return createDraftPattern(
+            defaultModel?.id ?? 'gpt-5.4',
+            resolveReasoningEffort(defaultModel, 'high'),
+          );
+        }}
         onRefreshCapabilities={refreshCapabilities}
         onSaveLspProfile={async (profile) => {
           await api.saveLspProfile({ profile });

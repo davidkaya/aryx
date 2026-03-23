@@ -1,5 +1,5 @@
 import { useState, type HTMLAttributes, type ReactNode } from 'react';
-import { ChevronLeft, ChevronRight, Cpu, Layers, Plus, Workflow } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Code, Cpu, Info, Plus, Server, Workflow } from 'lucide-react';
 
 import { CopilotStatusCard } from '@renderer/components/CopilotStatusCard';
 import { PatternEditor } from '@renderer/components/PatternEditor';
@@ -65,8 +65,8 @@ const navGroups: NavGroup[] = [
   {
     label: 'Tooling',
     items: [
-      { id: 'mcp-servers', label: 'MCP Servers', icon: <Layers className="size-3.5" /> },
-      { id: 'lsp-profiles', label: 'LSP Profiles', icon: <Cpu className="size-3.5" /> },
+      { id: 'mcp-servers', label: 'MCP Servers', icon: <Server className="size-3.5" /> },
+      { id: 'lsp-profiles', label: 'LSP Profiles', icon: <Code className="size-3.5" /> },
     ],
   },
 ];
@@ -367,8 +367,8 @@ function McpServersSection({
           <ToolingListButton
             detail={
               server.transport === 'local'
-                ? `${server.command || 'No command'} · ${server.tools.length} tool filter${server.tools.length === 1 ? '' : 's'}`
-                : `${server.url} · ${server.transport.toUpperCase()}`
+                ? server.command || 'No command set'
+                : server.url || 'No URL set'
             }
             key={server.id}
             label={server.name}
@@ -407,10 +407,10 @@ function LspProfilesSection({
         )}
         {profiles.map((profile) => (
           <ToolingListButton
-            detail={`${profile.languageId} · ${profile.command || 'No command'}`}
+            detail={profile.command || 'No command set'}
             key={profile.id}
             label={profile.name}
-            meta={profile.fileExtensions.join(', ')}
+            meta={profile.languageId}
             onClick={() => onEditProfile(profile)}
           />
         ))}
@@ -672,7 +672,7 @@ function ToolingListButton({
 
 function EmptyState({ children }: { children: ReactNode }) {
   return (
-    <div className="rounded-xl border border-dashed border-zinc-800 bg-zinc-900/30 px-4 py-6 text-[12px] leading-relaxed text-zinc-500">
+    <div className="rounded-xl border border-dashed border-zinc-800 bg-zinc-900/20 px-5 py-8 text-center text-[12px] leading-relaxed text-zinc-500">
       {children}
     </div>
   );
@@ -716,7 +716,7 @@ function ToolingEditorShell({
         <div className="flex items-center gap-2">
           {onDelete && (
             <button
-              className="rounded-lg border border-zinc-700 px-3 py-1.5 text-[13px] font-medium text-zinc-300 transition hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-300"
+              className="rounded-lg border border-zinc-800 px-3 py-1.5 text-[13px] font-medium text-zinc-400 transition hover:border-red-500/30 hover:bg-red-500/10 hover:text-red-300"
               onClick={() => void onDelete()}
               type="button"
             >
@@ -724,7 +724,7 @@ function ToolingEditorShell({
             </button>
           )}
           <button
-            className="rounded-lg bg-zinc-100 px-3 py-1.5 text-[13px] font-semibold text-zinc-900 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-lg bg-indigo-600 px-3 py-1.5 text-[13px] font-semibold text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-40"
             disabled={disableSave}
             onClick={() => void onSave()}
             type="button"
@@ -783,7 +783,7 @@ function TextInput({
 }) {
   return (
     <input
-      className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-[13px] text-zinc-100 outline-none transition placeholder:text-zinc-600 focus:border-zinc-600"
+      className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-[13px] text-zinc-100 outline-none transition placeholder:text-zinc-600 focus:border-indigo-500/50"
       inputMode={inputMode}
       onChange={(event) => onChange(event.target.value)}
       placeholder={placeholder}
@@ -805,7 +805,7 @@ function TextareaInput({
 }) {
   return (
     <textarea
-      className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-[13px] text-zinc-100 outline-none transition placeholder:text-zinc-600 focus:border-zinc-600"
+      className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-[13px] text-zinc-100 outline-none transition placeholder:text-zinc-600 focus:border-indigo-500/50"
       onChange={(event) => onChange(event.target.value)}
       placeholder={placeholder}
       rows={rows}
@@ -825,7 +825,7 @@ function SelectInput({
 }) {
   return (
     <select
-      className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-[13px] text-zinc-100 outline-none transition focus:border-zinc-600"
+      className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-[13px] text-zinc-100 outline-none transition focus:border-indigo-500/50"
       onChange={(event) => onChange(event.target.value)}
       value={value}
     >
@@ -840,8 +840,9 @@ function SelectInput({
 
 function InfoCallout({ children }: { children: ReactNode }) {
   return (
-    <div className="rounded-xl border border-zinc-800 bg-zinc-900/30 px-4 py-3 text-[12px] leading-relaxed text-zinc-500">
-      {children}
+    <div className="flex items-start gap-2.5 rounded-xl border border-zinc-800 bg-zinc-900/30 px-4 py-3 text-[12px] leading-relaxed text-zinc-500">
+      <Info className="mt-0.5 size-3.5 shrink-0 text-zinc-600" />
+      <span>{children}</span>
     </div>
   );
 }

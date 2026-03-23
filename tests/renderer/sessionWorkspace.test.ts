@@ -90,6 +90,41 @@ describe('session workspace helpers', () => {
     });
   });
 
+  test('keeps snapshot-like streamed updates readable while a message is pending', () => {
+    const first = applySessionEventWorkspace(createWorkspace(), {
+      sessionId: 'session-1',
+      kind: 'message-delta',
+      occurredAt: '2026-03-23T00:00:01.000Z',
+      messageId: 'assistant-1',
+      authorName: 'Writer',
+      contentDelta: 'How about',
+    } satisfies SessionEventRecord);
+
+    const second = applySessionEventWorkspace(first, {
+      sessionId: 'session-1',
+      kind: 'message-delta',
+      occurredAt: '2026-03-23T00:00:02.000Z',
+      messageId: 'assistant-1',
+      authorName: 'Writer',
+      contentDelta: 'The **Ashen Crown** feels',
+    } satisfies SessionEventRecord);
+
+    const third = applySessionEventWorkspace(second, {
+      sessionId: 'session-1',
+      kind: 'message-delta',
+      occurredAt: '2026-03-23T00:00:03.000Z',
+      messageId: 'assistant-1',
+      authorName: 'Writer',
+      contentDelta: 'classic and timeless.',
+    } satisfies SessionEventRecord);
+
+    expect(third?.sessions[0].messages[0]).toMatchObject({
+      authorName: 'Writer',
+      content: 'How about The **Ashen Crown** feels classic and timeless.',
+      pending: true,
+    });
+  });
+
   test('updates session status and error state from session events', () => {
     const running = applySessionEventWorkspace(createWorkspace(), {
       sessionId: 'session-1',

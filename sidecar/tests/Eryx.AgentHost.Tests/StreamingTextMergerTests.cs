@@ -36,4 +36,23 @@ public sealed class StreamingTextMergerTests
 
         Assert.Equal(incoming, StreamingTextMerger.Merge(current, incoming));
     }
+
+    [Fact]
+    public void Merge_InsertsWhitespaceWhenSnapshotLikeUpdatesWouldOtherwiseGlueWordsTogether()
+    {
+        Assert.Equal(
+            "How about The **Ashen Crown** feels",
+            StreamingTextMerger.Merge("How about", "The **Ashen Crown** feels"));
+        Assert.Equal(
+            "The **Ashen Crown** feels classic and timeless.",
+            StreamingTextMerger.Merge("The **Ashen Crown** feels", "classic and timeless."));
+    }
+
+    [Fact]
+    public void Merge_InsertsNewlineBeforeStreamedMarkdownBlockMarkers()
+    {
+        Assert.Equal(
+            "If you want, I can also give you\n- darker titles",
+            StreamingTextMerger.Merge("If you want, I can also give you", "- darker titles"));
+    }
 }

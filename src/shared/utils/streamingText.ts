@@ -5,6 +5,52 @@ function tokenize(value: string): string[] {
     .filter((token) => token.length > 0);
 }
 
+function shouldInsertNewlineBoundary(current: string, incoming: string): boolean {
+  if (current.endsWith('\n')) {
+    return false;
+  }
+
+  return /^(?:#{1,6}\s|[-*+]\s|\d+\.\s|>\s|```)/.test(incoming.trimStart());
+}
+
+function shouldInsertSpaceBoundary(current: string, incoming: string): boolean {
+  const lastChar = current.at(-1);
+  const firstChar = incoming[0];
+  if (!lastChar || !firstChar) {
+    return false;
+  }
+
+  if (/\s/.test(lastChar) || /\s/.test(firstChar) || /[([{/"'`]/.test(lastChar)) {
+    return false;
+  }
+
+  if (/^[.,!?;:%)\]}]/.test(firstChar)) {
+    return false;
+  }
+
+  if (/^[*_`~\[]/.test(firstChar) || /^[A-Z0-9]/.test(firstChar)) {
+    return true;
+  }
+
+  const currentTokens = tokenize(current);
+  const incomingTokens = tokenize(incoming);
+  const firstIncomingToken = incomingTokens[0] ?? '';
+
+  return currentTokens.length >= 2 && incomingTokens.length >= 2 && firstIncomingToken.length >= 2;
+}
+
+function appendWithNaturalBoundary(current: string, incoming: string): string {
+  if (shouldInsertNewlineBoundary(current, incoming)) {
+    return `${current}\n${incoming}`;
+  }
+
+  if (shouldInsertSpaceBoundary(current, incoming)) {
+    return `${current} ${incoming}`;
+  }
+
+  return current + incoming;
+}
+
 function computeSuffixPrefixOverlap(current: string, incoming: string): number {
   const maxOverlap = Math.min(current.length, incoming.length);
   for (let length = maxOverlap; length > 0; length -= 1) {
@@ -63,5 +109,5 @@ export function mergeStreamingText(current: string, incoming: string): string {
     return incoming;
   }
 
-  return current + incoming;
+  return appendWithNaturalBoundary(current, incoming);
 }

@@ -25,4 +25,19 @@ describe('streaming text merge', () => {
 
     expect(mergeStreamingText(current, incoming)).toBe(incoming);
   });
+
+  test('inserts whitespace when snapshot-like updates would otherwise glue words together', () => {
+    expect(mergeStreamingText('How about', 'The **Ashen Crown** feels')).toBe(
+      'How about The **Ashen Crown** feels',
+    );
+    expect(mergeStreamingText('The **Ashen Crown** feels', 'classic and timeless.')).toBe(
+      'The **Ashen Crown** feels classic and timeless.',
+    );
+  });
+
+  test('inserts a newline before streamed markdown block markers', () => {
+    expect(mergeStreamingText('If you want, I can also give you', '- darker titles')).toBe(
+      'If you want, I can also give you\n- darker titles',
+    );
+  });
 });

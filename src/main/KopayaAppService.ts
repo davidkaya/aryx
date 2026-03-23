@@ -43,6 +43,7 @@ import { mergeStreamingText } from '@shared/utils/streamingText';
 import { WorkspaceRepository } from '@main/persistence/workspaceRepository';
 import { SecretStore } from '@main/secrets/secretStore';
 import { SidecarClient } from '@main/sidecar/sidecarProcess';
+import { GitService } from '@main/git/gitService';
 
 type AppServiceEvents = {
   'workspace-updated': [WorkspaceState];
@@ -57,8 +58,10 @@ export class KopayaAppService extends EventEmitter<AppServiceEvents> {
   private readonly workspaceRepository = new WorkspaceRepository();
   private readonly sidecar = new SidecarClient();
   private readonly secretStore = new SecretStore();
+  private readonly gitService = new GitService();
   private workspace?: WorkspaceState;
   private sidecarCapabilities?: SidecarCapabilities;
+  private didScheduleInitialProjectGitRefresh = false;
 
   async describeSidecarCapabilities(): Promise<SidecarCapabilities> {
     return this.loadSidecarCapabilities();
@@ -71,6 +74,13 @@ export class KopayaAppService extends EventEmitter<AppServiceEvents> {
   async loadWorkspace(): Promise<WorkspaceState> {
     if (!this.workspace) {
       this.workspace = await this.workspaceRepository.load();
+    }
+
+    if (!this.didScheduleInitialProjectGitRefresh) {
+      this.didScheduleInitialProjectGitRefresh = true;
+      void this.refreshProjectGitContext().catch((error) => {
+        console.error('[kopaya git]', error);
+      });
     }
 
     return this.workspace;
@@ -104,6 +114,7 @@ export class KopayaAppService extends EventEmitter<AppServiceEvents> {
       name: basename(folderPath),
       path: folderPath,
       addedAt: nowIso(),
+      git: await this.gitService.describeProject(folderPath),
     };
 
     workspace.projects.push(project);
@@ -360,6 +371,21 @@ export class KopayaAppService extends EventEmitter<AppServiceEvents> {
     return queryWorkspaceSessions(workspace, input);
   }
 
+  async refreshProjectGitContext(projectId?: string): Promise<WorkspaceState> {
+    const workspace = await this.loadWorkspace();
+    const projects = projectId
+      ? [this.requireProject(workspace, projectId)]
+      : workspace.projects;
+
+    let changed = false;
+    for (const project of projects) {
+      const projectChanged = await this.refreshGitContextForProject(project);
+      changed = projectChanged || changed;
+    }
+
+    return changed ? this.persistAndBroadcast(workspace) : workspace;
+  }
+
   async selectProject(projectId?: string): Promise<WorkspaceState> {
     const workspace = await this.loadWorkspace();
     workspace.selectedProjectId = projectId;
@@ -387,6 +413,20 @@ export class KopayaAppService extends EventEmitter<AppServiceEvents> {
     }
 
     return project;
+  }
+
+  private async refreshGitContextForProject(project: ProjectRecord): Promise<boolean> {
+    if (isScratchpadProject(project)) {
+      if (!project.git) {
+        return false;
+      }
+
+      project.git = undefined;
+      return true;
+    }
+
+    project.git = await this.gitService.describeProject(project.path);
+    return true;
   }
 
   private requirePattern(workspace: WorkspaceState, patternId: string): PatternDefinition {

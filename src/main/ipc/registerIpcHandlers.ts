@@ -22,6 +22,9 @@ export function registerIpcHandlers(window: BrowserWindow, service: KopayaAppSer
   ipcMain.handle(ipcChannels.loadWorkspace, () => service.loadWorkspace());
   ipcMain.handle(ipcChannels.addProject, () => service.addProject());
   ipcMain.handle(ipcChannels.removeProject, (_event, projectId: string) => service.removeProject(projectId));
+  ipcMain.handle(ipcChannels.refreshProjectGitContext, (_event, projectId?: string) =>
+    service.refreshProjectGitContext(projectId),
+  );
   ipcMain.handle(ipcChannels.savePattern, (_event, input: SavePatternInput) => service.savePattern(input.pattern));
   ipcMain.handle(ipcChannels.deletePattern, (_event, patternId: string) => service.deletePattern(patternId));
   ipcMain.handle(ipcChannels.setPatternFavorite, (_event, input: SetPatternFavoriteInput) =>

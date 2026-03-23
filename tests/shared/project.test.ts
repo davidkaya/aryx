@@ -15,6 +15,7 @@ describe('scratchpad project helpers', () => {
     expect(project.id).toBe(SCRATCHPAD_PROJECT_ID);
     expect(project.name).toBe(SCRATCHPAD_PROJECT_NAME);
     expect(project.path).toContain('scratchpad');
+    expect(project.git).toBeUndefined();
   });
 
   test('recognizes scratchpad project ids and records', () => {
@@ -42,5 +43,49 @@ describe('scratchpad project helpers', () => {
 
     expect(merged[0].id).toBe(SCRATCHPAD_PROJECT_ID);
     expect(merged[1].id).toBe('project-a');
+  });
+
+  test('preserves git context on non-scratchpad projects when merging scratchpad project', () => {
+    const merged = mergeScratchpadProject(
+      [
+        {
+          id: 'project-a',
+          name: 'Repo A',
+          path: 'C:\\repo-a',
+          addedAt: '2026-03-23T00:00:00.000Z',
+          git: {
+            status: 'ready',
+            scannedAt: '2026-03-23T00:05:00.000Z',
+            repoRoot: 'C:\\repo-a',
+            branch: 'main',
+            isDirty: true,
+            changedFileCount: 2,
+            changes: {
+              staged: 1,
+              unstaged: 1,
+              untracked: 0,
+              conflicted: 0,
+            },
+          },
+        },
+      ],
+      'C:\\Users\\me\\AppData\\Roaming\\kopaya\\scratchpad',
+    );
+
+    expect(merged[0].git).toBeUndefined();
+    expect(merged[1].git).toEqual({
+      status: 'ready',
+      scannedAt: '2026-03-23T00:05:00.000Z',
+      repoRoot: 'C:\\repo-a',
+      branch: 'main',
+      isDirty: true,
+      changedFileCount: 2,
+      changes: {
+        staged: 1,
+        unstaged: 1,
+        untracked: 0,
+        conflicted: 0,
+      },
+    });
   });
 });

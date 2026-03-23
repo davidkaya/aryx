@@ -55,6 +55,7 @@ export interface ElectronApi {
   loadWorkspace(): Promise<WorkspaceState>;
   addProject(): Promise<WorkspaceState>;
   removeProject(projectId: string): Promise<WorkspaceState>;
+  refreshProjectGitContext(projectId?: string): Promise<WorkspaceState>;
   savePattern(input: SavePatternInput): Promise<WorkspaceState>;
   deletePattern(patternId: string): Promise<WorkspaceState>;
   createSession(input: CreateSessionInput): Promise<WorkspaceState>;

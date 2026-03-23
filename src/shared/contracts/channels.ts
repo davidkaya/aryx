@@ -4,6 +4,7 @@ export const ipcChannels = {
   loadWorkspace: 'workspace:load',
   addProject: 'workspace:add-project',
   removeProject: 'workspace:remove-project',
+  refreshProjectGitContext: 'projects:refresh-git-context',
   savePattern: 'patterns:save',
   deletePattern: 'patterns:delete',
   setPatternFavorite: 'patterns:set-favorite',

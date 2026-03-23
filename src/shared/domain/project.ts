@@ -1,10 +1,42 @@
 import { nowIso } from '@shared/utils/ids';
 
+export type ProjectGitContextStatus = 'ready' | 'not-repository' | 'git-missing' | 'error';
+
+export interface ProjectGitChangeSummary {
+  staged: number;
+  unstaged: number;
+  untracked: number;
+  conflicted: number;
+}
+
+export interface ProjectGitCommitSummary {
+  hash: string;
+  shortHash: string;
+  subject: string;
+  committedAt: string;
+}
+
+export interface ProjectGitContext {
+  status: ProjectGitContextStatus;
+  scannedAt: string;
+  repoRoot?: string;
+  branch?: string;
+  upstream?: string;
+  ahead?: number;
+  behind?: number;
+  isDirty?: boolean;
+  changedFileCount?: number;
+  changes?: ProjectGitChangeSummary;
+  head?: ProjectGitCommitSummary;
+  errorMessage?: string;
+}
+
 export interface ProjectRecord {
   id: string;
   name: string;
   path: string;
   addedAt: string;
+  git?: ProjectGitContext;
 }
 
 export const SCRATCHPAD_PROJECT_ID = 'project-scratchpad';

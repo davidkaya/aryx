@@ -11,8 +11,8 @@ const outputDirectoryName = 'win-unpacked';
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = resolve(scriptDirectory, '..');
 const assetDirectory = join(repositoryRoot, 'assets');
-const windowsIconPath = join(assetDirectory, 'icons', 'app-icon.ico');
-const windowIconPath = join(assetDirectory, 'icons', 'app-icon.png');
+const sourceIconPath = join(assetDirectory, 'icons', 'icon.png');
+const windowsIconPath = join(assetDirectory, 'icons', 'windows', 'icon.ico');
 const electronDistributionDirectory = join(repositoryRoot, 'node_modules', 'electron', 'dist');
 const rendererBuildDirectory = join(repositoryRoot, 'dist');
 const electronBuildDirectory = join(repositoryRoot, 'dist-electron');
@@ -94,7 +94,7 @@ async function main() {
 
   await Promise.all([
     ensurePathExists(assetDirectory, 'Application assets'),
-    ensurePathExists(windowIconPath, 'Window icon'),
+    ensurePathExists(sourceIconPath, 'Source application icon'),
     ensurePathExists(windowsIconPath, 'Windows application icon'),
     ensurePathExists(electronDistributionDirectory, 'Electron runtime'),
     ensurePathExists(rendererBuildDirectory, 'Renderer build output'),

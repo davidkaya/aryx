@@ -11,7 +11,14 @@ function getPathModule(platform: NodeJS.Platform) {
 
 export function resolveWindowIconPath(context: WindowIconPathContext): string {
   const pathModule = getPathModule(context.platform);
-  const iconFileName = context.platform === 'win32' ? 'app-icon.ico' : 'app-icon.png';
-
-  return pathModule.join(context.appPath, 'assets', 'icons', iconFileName);
+  switch (context.platform) {
+    case 'win32':
+      return pathModule.join(context.appPath, 'assets', 'icons', 'windows', 'icon.ico');
+    case 'darwin':
+      return pathModule.join(context.appPath, 'assets', 'icons', 'macos', 'icon.icns');
+    case 'linux':
+      return pathModule.join(context.appPath, 'assets', 'icons', 'linux', 'icons', '512x512.png');
+    default:
+      return pathModule.join(context.appPath, 'assets', 'icons', 'icon.png');
+  }
 }

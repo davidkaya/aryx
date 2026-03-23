@@ -1,5 +1,5 @@
 import { useMemo, type ReactNode } from 'react';
-import { Activity, Server, Code, Sparkles, Users } from 'lucide-react';
+import { Activity, Clock, Server, Code, Sparkles, Users } from 'lucide-react';
 
 import {
   buildAgentActivityRows,
@@ -9,6 +9,7 @@ import {
   type AgentActivityRow,
   type SessionActivityState,
 } from '@renderer/lib/sessionActivity';
+import { RunTimeline } from '@renderer/components/RunTimeline';
 import { inferProvider } from '@shared/domain/models';
 import type { OrchestrationMode, PatternAgentDefinition, PatternDefinition } from '@shared/domain/pattern';
 import {
@@ -158,6 +159,7 @@ interface ActivityPanelProps {
   activity?: SessionActivityState;
   lspProfiles: LspProfileDefinition[];
   mcpServers: McpServerDefinition[];
+  onJumpToMessage?: (messageId: string) => void;
   onUpdateSessionTooling: (selection: SessionToolingSelection) => void;
   pattern: PatternDefinition;
   projectIsScratchpad: boolean;
@@ -168,6 +170,7 @@ export function ActivityPanel({
   activity,
   lspProfiles,
   mcpServers,
+  onJumpToMessage,
   onUpdateSessionTooling,
   pattern,
   projectIsScratchpad,
@@ -226,6 +229,21 @@ export function ActivityPanel({
           ) : (
             <p className="py-4 text-center text-[11px] text-zinc-600">No agents configured</p>
           )}
+        </div>
+
+        {/* ── Run timeline section ─────────────────────────── */}
+        <div className="mb-4">
+          <SectionHeader>
+            <Clock className="size-3" />
+            <span>Timeline</span>
+            {session.runs.length > 0 && (
+              <span className="rounded-full bg-zinc-800 px-1.5 py-0.5 text-[9px] tabular-nums text-zinc-500">
+                {session.runs.length}
+              </span>
+            )}
+          </SectionHeader>
+
+          <RunTimeline onJumpToMessage={onJumpToMessage} runs={session.runs} />
         </div>
 
         {/* ── Tools section ────────────────────────────────── */}

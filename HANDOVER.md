@@ -197,9 +197,31 @@ Suggested UI plan:
 - Duplicate sessions intentionally start with empty run history. If product wants copied traces later, that needs an explicit decision.
 - Live `run-updated` events currently send the full run snapshot each time. That keeps the reducer simple; optimize later only if payload size becomes a problem.
 
+## Frontend implementation (completed)
+
+The UI has been implemented with the following files:
+
+- `src/renderer/lib/runTimelineFormatting.ts` — formatting helpers for timestamps, durations, event labels, and a thinking-event collapsing algorithm
+- `src/renderer/components/RunTimeline.tsx` — the main timeline UI component with collapsible run cards, vertical timeline connector lines, event icons, and jump-to-message support
+- `src/renderer/components/ActivityPanel.tsx` — updated to include a Timeline section between Agents and Tools
+- `src/renderer/App.tsx` — wired `onJumpToMessage` callback that scrolls to the target message with a temporary highlight ring
+- `src/renderer/components/ChatPane.tsx` — added `data-message-id` attributes on message elements for DOM-based scroll targeting
+- `tests/renderer/runTimelineFormatting.test.ts` — unit tests for all formatting helpers
+
+### UI features
+
+- **Collapsible run cards** — newest first, auto-expanded for the latest run, with pattern name and live status badge
+- **Vertical timeline** — ordered event list with connector lines and per-kind icons (Brain for thinking, ArrowRight for handoff, Wrench for tool-call, MessageSquare for message, etc.)
+- **Thinking collapse** — consecutive thinking events from the same agent are collapsed into a single "×N" row
+- **Message preview** — message events show a truncated content preview
+- **Jump to message** — clicking a message or run-started event scrolls the ChatPane to the corresponding message with a brief indigo highlight ring
+- **Agent badges** — multi-agent runs show agent lane badges at the top of the expanded timeline
+- **Duration footer** — completed runs show total wall-clock duration
+- **Status animations** — running events pulse, completed events show green checks, failed events show red alerts
+
 ## Validation completed
 
 - `bun run typecheck`
-- `bun test`
-- `bun run sidecar:test`
+- `bun test` (81 tests, 0 failures)
+- `bun run sidecar:test` (55 tests, 0 failures)
 - `bun run build`

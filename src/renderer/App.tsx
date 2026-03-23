@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { AppShell } from '@renderer/components/AppShell';
 import { ActivityPanel } from '@renderer/components/ActivityPanel';
@@ -192,6 +192,15 @@ export default function App() {
     }
   };
 
+  const jumpToMessage = useCallback((messageId: string) => {
+    const element = document.querySelector(`[data-message-id="${CSS.escape(messageId)}"]`);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      element.classList.add('ring-1', 'ring-indigo-500/40', 'rounded-lg');
+      setTimeout(() => element.classList.remove('ring-1', 'ring-indigo-500/40', 'rounded-lg'), 1500);
+    }
+  }, []);
+
   // Determine main content
   let content: React.ReactNode;
   let detailPanel: React.ReactNode | undefined;
@@ -226,6 +235,7 @@ export default function App() {
         activity={activityForSession}
         lspProfiles={workspace.settings.tooling.lspProfiles}
         mcpServers={workspace.settings.tooling.mcpServers}
+        onJumpToMessage={jumpToMessage}
         onUpdateSessionTooling={(selection) => {
           void api.updateSessionTooling({
             sessionId: selectedSession.id,

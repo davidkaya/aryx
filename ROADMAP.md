@@ -175,18 +175,18 @@ The current activity model already exposes `thinking`, `tool-calling`, `handoff`
 
 Build on that with:
 
-- [ ] a vertical run timeline in the side panel
-- [ ] event cards with timestamps, agent identity, tool name, and result status
+- [x] a vertical run timeline in the side panel
+- [x] event cards with timestamps, agent identity, tool name, and result status
 - [ ] per-agent run lanes
-- [ ] grouping of streaming deltas into one coherent answer step
+- [x] grouping of streaming deltas into one coherent answer step
 - [ ] jump-to-message and jump-to-agent actions
 
 ### Replayable run traces
 
-- [ ] store a structured event log per run
+- [x] store a structured event log per run
 - [ ] replay a completed run step by step
 - [ ] scrub through the run like a debugger timeline
-- [ ] inspect the exact sequence of agent activations and tool invocations
+- [x] inspect the exact sequence of agent activations and tool invocations
 - [ ] preserve environment metadata such as model, effort, project path, and pattern version
 
 This would be a major differentiator. Most chat apps show outputs; very few make multi-agent execution truly inspectable.
@@ -348,7 +348,7 @@ These are the ideas with the best chance of making Eryx feel distinct rather tha
 
 A proper debugger for AI runs:
 
-- [ ] event timeline
+- [x] event timeline
 - [ ] step replay
 - [ ] handoff graph
 - [ ] tool call trace

@@ -2,6 +2,7 @@ import { access, cp, mkdir, readFile, rename, rm, writeFile } from 'node:fs/prom
 import { constants } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { rcedit } from 'rcedit';
 
 const productName = 'Kopaya';
 const sidecarRuntime = 'win-x64';
@@ -9,6 +10,9 @@ const outputDirectoryName = 'win-unpacked';
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = resolve(scriptDirectory, '..');
+const assetDirectory = join(repositoryRoot, 'assets');
+const windowsIconPath = join(assetDirectory, 'icons', 'app-icon.ico');
+const windowIconPath = join(assetDirectory, 'icons', 'app-icon.png');
 const electronDistributionDirectory = join(repositoryRoot, 'node_modules', 'electron', 'dist');
 const rendererBuildDirectory = join(repositoryRoot, 'dist');
 const electronBuildDirectory = join(repositoryRoot, 'dist-electron');
@@ -16,6 +20,7 @@ const publishedSidecarDirectory = join(repositoryRoot, 'dist-sidecar', sidecarRu
 const outputDirectory = join(repositoryRoot, 'release', outputDirectoryName);
 const outputResourcesDirectory = join(outputDirectory, 'resources');
 const packagedAppDirectory = join(outputResourcesDirectory, 'app');
+const packagedExecutablePath = join(outputDirectory, `${productName}.exe`);
 
 async function ensurePathExists(path, label) {
   try {
@@ -88,6 +93,9 @@ async function main() {
   }
 
   await Promise.all([
+    ensurePathExists(assetDirectory, 'Application assets'),
+    ensurePathExists(windowIconPath, 'Window icon'),
+    ensurePathExists(windowsIconPath, 'Windows application icon'),
     ensurePathExists(electronDistributionDirectory, 'Electron runtime'),
     ensurePathExists(rendererBuildDirectory, 'Renderer build output'),
     ensurePathExists(electronBuildDirectory, 'Electron build output'),
@@ -99,16 +107,18 @@ async function main() {
   await rm(outputDirectory, { recursive: true, force: true });
   await mkdir(outputDirectory, { recursive: true });
   await cp(electronDistributionDirectory, outputDirectory, { recursive: true });
-  await rename(join(outputDirectory, 'electron.exe'), join(outputDirectory, `${productName}.exe`));
+  await rename(join(outputDirectory, 'electron.exe'), packagedExecutablePath);
 
   await mkdir(packagedAppDirectory, { recursive: true });
   await Promise.all([
     writePackagedManifest(),
+    cp(assetDirectory, join(packagedAppDirectory, 'assets'), { recursive: true }),
     cp(rendererBuildDirectory, join(packagedAppDirectory, 'dist'), { recursive: true }),
     cp(electronBuildDirectory, join(packagedAppDirectory, 'dist-electron'), { recursive: true }),
     cp(publishedSidecarDirectory, join(outputResourcesDirectory, 'sidecar'), { recursive: true }),
   ]);
   await copyRuntimeDependencies(runtimeDependencies);
+  await rcedit(packagedExecutablePath, { icon: windowsIconPath });
 
   console.log(`Packaged ${productName} to ${outputDirectory}`);
   console.log(`Bundled ${runtimeDependencies.length} runtime dependencies and the self-contained .NET sidecar.`);

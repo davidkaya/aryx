@@ -1,5 +1,7 @@
-import { BrowserWindow, Menu, shell } from 'electron';
+import { app, BrowserWindow, Menu, shell } from 'electron';
 import { join } from 'node:path';
+
+import { resolveWindowIconPath } from '@main/windows/appIcon';
 
 export function createMainWindow(): BrowserWindow {
   Menu.setApplicationMenu(null);
@@ -10,6 +12,10 @@ export function createMainWindow(): BrowserWindow {
     minWidth: 1120,
     minHeight: 720,
     title: 'kopaya',
+    icon: resolveWindowIconPath({
+      appPath: app.getAppPath(),
+      platform: process.platform,
+    }),
     backgroundColor: '#09090b',
     titleBarStyle: 'hidden',
     titleBarOverlay: {

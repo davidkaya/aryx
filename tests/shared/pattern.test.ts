@@ -90,4 +90,15 @@ describe('pattern validation', () => {
     expect(handoff?.agents[1].instructions).toContain('own the substantive answer');
     expect(handoff?.agents[2].instructions).toContain('own the substantive answer');
   });
+
+  test('group chat builtin instructions frame iterative drafting and review', () => {
+    const groupChat = createBuiltinPatterns(BUILTIN_TIMESTAMP).find(
+      (pattern) => pattern.mode === 'group-chat',
+    );
+
+    expect(groupChat).toBeDefined();
+    expect(groupChat?.agents[0].instructions).toContain('refine your earlier draft');
+    expect(groupChat?.agents[1].instructions).toContain('specific improvements');
+    expect(groupChat?.agents[1].instructions).toContain('instead of restarting the conversation');
+  });
 });

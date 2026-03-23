@@ -26,6 +26,34 @@ public sealed class AgentInstructionComposerTests
     }
 
     [Fact]
+    public void Compose_StrengthensGroupChatCollaborationRoles()
+    {
+        PatternDefinitionDto pattern = new()
+        {
+            Id = "pattern-group-chat",
+            Name = "Group Chat",
+            Mode = "group-chat",
+            Availability = "available",
+        };
+        PatternAgentDefinitionDto writer = CreateAgent(
+            id: "agent-group-writer",
+            name: "Writer",
+            instructions: "Draft an answer.");
+        PatternAgentDefinitionDto reviewer = CreateAgent(
+            id: "agent-group-reviewer",
+            name: "Reviewer",
+            instructions: "Review the draft.");
+
+        string writerInstructions = AgentInstructionComposer.Compose(pattern, writer, agentIndex: 0);
+        string reviewerInstructions = AgentInstructionComposer.Compose(pattern, reviewer, agentIndex: 1);
+
+        Assert.Contains("collaborative multi-turn group chat", writerInstructions, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("refine your earlier draft", writerInstructions, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("specific critique or improvements", reviewerInstructions, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Do not restart the conversation", reviewerInstructions, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Compose_StrengthensHandoffTriageInstructions()
     {
         PatternDefinitionDto pattern = new()

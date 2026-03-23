@@ -204,7 +204,8 @@ export function createBuiltinPatterns(timestamp: string): PatternDefinition[] {
           id: 'agent-group-writer',
           name: 'Writer',
           description: 'Produces candidate answers.',
-          instructions: 'You draft a concise, useful answer for the task.',
+          instructions:
+            'You draft a concise, useful answer for the task. On later turns, refine your earlier draft based on peer feedback rather than restarting.',
           model: defaultModels.gpt54,
           reasoningEffort: 'medium',
         },
@@ -212,7 +213,8 @@ export function createBuiltinPatterns(timestamp: string): PatternDefinition[] {
           id: 'agent-group-reviewer',
           name: 'Reviewer',
           description: 'Critiques and refines the answer.',
-          instructions: 'You review the latest answer and improve it when needed.',
+          instructions:
+            'You review the latest draft and offer specific improvements. Focus on critique and refinement instead of restarting the conversation.',
           model: defaultModels.claude,
           reasoningEffort: 'medium',
         },

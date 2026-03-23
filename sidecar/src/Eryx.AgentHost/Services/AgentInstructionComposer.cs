@@ -20,6 +20,25 @@ internal static class AgentInstructionComposer
               """
             : string.Empty;
 
+        if (string.Equals(pattern.Mode, "group-chat", StringComparison.OrdinalIgnoreCase))
+        {
+            string groupChatGuidance = agentIndex == 0
+                ? """
+                  You are participating in a collaborative multi-turn group chat under a round-robin manager.
+                  On your first turn, produce the initial draft for the user.
+                  On later turns, refine your earlier draft based on the other agents' feedback instead of restarting from scratch.
+                  Do not greet the user again or reset the conversation once work is underway.
+                  """
+                : """
+                  You are participating in a collaborative multi-turn group chat under a round-robin manager.
+                  Build on the latest draft from the other agents and contribute specific critique or improvements.
+                  Do not restart the conversation, greet the user again, or answer as though no draft exists yet.
+                  Focus on refining the answer already in progress.
+                  """;
+
+            return JoinInstructionBlocks(baseInstructions, workspaceGuidance, groupChatGuidance);
+        }
+
         if (!string.Equals(pattern.Mode, "handoff", StringComparison.OrdinalIgnoreCase))
         {
             return JoinInstructionBlocks(baseInstructions, workspaceGuidance);

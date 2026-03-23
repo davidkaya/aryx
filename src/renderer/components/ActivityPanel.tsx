@@ -1,15 +1,16 @@
 import { useMemo, type ReactNode } from 'react';
-import { Activity, Bot, Server, Code, Sparkles } from 'lucide-react';
+import { Activity, Server, Code, Sparkles, Users } from 'lucide-react';
 
 import {
   buildAgentActivityRows,
   formatAgentActivityLabel,
   isAgentActivityActive,
   isAgentActivityCompleted,
+  type AgentActivityRow,
   type SessionActivityState,
 } from '@renderer/lib/sessionActivity';
 import { inferProvider } from '@shared/domain/models';
-import type { PatternDefinition } from '@shared/domain/pattern';
+import type { OrchestrationMode, PatternAgentDefinition, PatternDefinition } from '@shared/domain/pattern';
 import {
   resolveSessionToolingSelection,
   type SessionRecord,
@@ -21,6 +22,19 @@ import type {
 } from '@shared/domain/tooling';
 import { ProviderIcon } from './ProviderIcons';
 
+/* ── Mode accent colours ───────────────────────────────────── */
+
+const modeAccent: Record<OrchestrationMode, { dot: string; bar: string; label: string }> = {
+  single:       { dot: 'bg-indigo-400',  bar: 'bg-indigo-500/60',  label: 'text-indigo-400' },
+  sequential:   { dot: 'bg-amber-400',   bar: 'bg-amber-500/60',   label: 'text-amber-400' },
+  concurrent:   { dot: 'bg-emerald-400', bar: 'bg-emerald-500/60', label: 'text-emerald-400' },
+  handoff:      { dot: 'bg-sky-400',     bar: 'bg-sky-500/60',     label: 'text-sky-400' },
+  'group-chat': { dot: 'bg-violet-400',  bar: 'bg-violet-500/60',  label: 'text-violet-400' },
+  magentic:     { dot: 'bg-zinc-500',    bar: 'bg-zinc-600/60',    label: 'text-zinc-500' },
+};
+
+/* ── Helpers ───────────────────────────────────────────────── */
+
 function formatModel(model: string): string {
   return model.replace(/-/g, '\u2011');
 }
@@ -28,13 +42,117 @@ function formatModel(model: string): string {
 function formatEffort(effort: string | undefined): string | undefined {
   if (!effort) return undefined;
   const labels: Record<string, string> = {
-    low: 'Low effort',
-    medium: 'Medium effort',
-    high: 'High effort',
-    xhigh: 'Max effort',
+    low: 'Low',
+    medium: 'Medium',
+    high: 'High',
+    xhigh: 'Max',
   };
   return labels[effort] ?? effort;
 }
+
+const modeLabels: Record<OrchestrationMode, string> = {
+  single: 'Single agent',
+  sequential: 'Sequential',
+  concurrent: 'Concurrent',
+  handoff: 'Handoff',
+  'group-chat': 'Group chat',
+  magentic: 'Magentic',
+};
+
+/* ── Section header ────────────────────────────────────────── */
+
+function SectionHeader({ children }: { children: ReactNode }) {
+  return (
+    <h3 className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-600">
+      {children}
+    </h3>
+  );
+}
+
+/* ── Agent row ─────────────────────────────────────────────── */
+
+function AgentRow({
+  row,
+  agent,
+  accent,
+  isLast,
+}: {
+  row: AgentActivityRow;
+  agent?: PatternAgentDefinition;
+  accent: (typeof modeAccent)[OrchestrationMode];
+  isLast: boolean;
+}) {
+  const isActive = isAgentActivityActive(row.activity);
+  const isCompleted = isAgentActivityCompleted(row.activity);
+
+  return (
+    <div className={`relative flex gap-2.5 py-2.5 ${isLast ? '' : 'border-b border-zinc-800/50'}`}>
+      {/* Left accent bar — visible only when this agent is actively working */}
+      {isActive && (
+        <div className={`absolute -left-3 bottom-2 top-2 w-[3px] rounded-full ${accent.bar}`} />
+      )}
+
+      {/* Status dot */}
+      <div className="flex shrink-0 pt-0.5">
+        <span
+          className={`size-2 rounded-full ${
+            isActive
+              ? `animate-pulse ${accent.dot}`
+              : isCompleted
+                ? 'bg-emerald-400'
+                : 'bg-zinc-700'
+          }`}
+        />
+      </div>
+
+      {/* Content */}
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5">
+          <span className="truncate text-[12px] font-medium text-zinc-200">{row.agentName}</span>
+        </div>
+
+        {/* Model + effort inline */}
+        {agent && (
+          <div className="mt-1 flex flex-wrap items-center gap-1">
+            <span className="inline-flex items-center gap-1 text-[10px] text-zinc-500">
+              {(() => {
+                const prov = inferProvider(agent.model);
+                return prov ? <ProviderIcon provider={prov} className="size-2.5" /> : null;
+              })()}
+              {formatModel(agent.model)}
+            </span>
+            {agent.reasoningEffort && (
+              <>
+                <span className="text-[10px] text-zinc-700">·</span>
+                <span className="inline-flex items-center gap-0.5 text-[10px] text-zinc-500">
+                  <Sparkles className="size-2" />
+                  {formatEffort(agent.reasoningEffort)}
+                </span>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Activity label */}
+        <div className="mt-1 flex items-center gap-1">
+          <span
+            className={`text-[10px] ${
+              isActive
+                ? accent.label
+                : isCompleted
+                  ? 'text-emerald-400'
+                  : 'text-zinc-600'
+            }`}
+          >
+            {formatAgentActivityLabel(row.activity)}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── ActivityPanel ─────────────────────────────────────────── */
 
 interface ActivityPanelProps {
   activity?: SessionActivityState;
@@ -63,6 +181,8 @@ export function ActivityPanel({
 
   const isBusy = session.status === 'running';
   const toolsDisabled = isBusy || projectIsScratchpad;
+  const accent = modeAccent[pattern.mode] ?? modeAccent.single;
+  const hasTools = mcpServers.length > 0 || lspProfiles.length > 0;
 
   return (
     <div className="flex h-full flex-col">
@@ -77,31 +197,60 @@ export function ActivityPanel({
         </div>
       </div>
 
-      {/* Agent cards */}
       <div className="flex-1 overflow-y-auto px-3 py-3">
-        <div className="space-y-3">
-          <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 px-3 py-2.5">
-            <div className="flex items-center justify-between gap-2">
-              <h3 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
-                Session tools
-              </h3>
-              {toolsDisabled && (
-                <span className="text-[10px] text-zinc-600">
-                  {projectIsScratchpad ? 'Scratchpad' : 'Running'}
-                </span>
-              )}
-            </div>
+        {/* ── Agents section ───────────────────────────────── */}
+        <div className="mb-4">
+          <SectionHeader>
+            <Users className="size-3" />
+            <span>Agents</span>
+            <span className="rounded-full bg-zinc-800 px-1.5 py-0.5 text-[9px] tabular-nums text-zinc-500">
+              {activityRows.length}
+            </span>
+            <span className={`ml-auto text-[9px] font-medium normal-case tracking-normal ${accent.label}`}>
+              {modeLabels[pattern.mode]}
+            </span>
+          </SectionHeader>
 
+          {activityRows.length > 0 ? (
+            <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 px-3">
+              {activityRows.map((row, index) => (
+                <AgentRow
+                  accent={accent}
+                  agent={pattern.agents[index]}
+                  isLast={index === activityRows.length - 1}
+                  key={row.key}
+                  row={row}
+                />
+              ))}
+            </div>
+          ) : (
+            <p className="py-4 text-center text-[11px] text-zinc-600">No agents configured</p>
+          )}
+        </div>
+
+        {/* ── Tools section ────────────────────────────────── */}
+        <div>
+          <SectionHeader>
+            <Server className="size-3" />
+            <span>Tools</span>
+            {toolsDisabled && (
+              <span className="ml-auto text-[9px] font-medium normal-case tracking-normal text-zinc-600">
+                {projectIsScratchpad ? 'Scratchpad' : 'Running'}
+              </span>
+            )}
+          </SectionHeader>
+
+          <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 px-3 py-2.5">
             {projectIsScratchpad ? (
-              <p className="mt-2 text-[11px] leading-relaxed text-zinc-600">
+              <p className="text-[11px] leading-relaxed text-zinc-600">
                 Start a project-backed session to use MCPs or LSPs.
               </p>
-            ) : mcpServers.length === 0 && lspProfiles.length === 0 ? (
-              <p className="mt-2 text-[11px] leading-relaxed text-zinc-600">
+            ) : !hasTools ? (
+              <p className="text-[11px] leading-relaxed text-zinc-600">
                 Add MCP servers or LSP profiles in Settings to enable them here.
               </p>
             ) : (
-              <div className="mt-2 space-y-0.5">
+              <div className="space-y-0.5">
                 {mcpServers.map((server) => (
                   <ToolToggleRow
                     detail={server.transport === 'local' ? server.command : server.url}
@@ -137,93 +286,7 @@ export function ActivityPanel({
               </div>
             )}
           </div>
-
-          {activityRows.map((row, index) => {
-            const agent = pattern.agents[index];
-            const isActive = isAgentActivityActive(row.activity);
-            const isCompleted = isAgentActivityCompleted(row.activity);
-
-            return (
-              <div
-                className={`rounded-lg border px-3 py-2.5 transition-colors ${
-                  isActive
-                    ? 'border-blue-500/20 bg-blue-500/5'
-                    : isCompleted
-                      ? 'border-emerald-500/15 bg-emerald-500/5'
-                      : 'border-zinc-800 bg-zinc-900/40'
-                }`}
-                key={row.key}
-              >
-                {/* Agent name + status dot */}
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`size-2 shrink-0 rounded-full ${
-                      isActive
-                        ? 'animate-pulse bg-blue-400'
-                        : isCompleted
-                          ? 'bg-emerald-400'
-                          : 'bg-zinc-700'
-                    }`}
-                  />
-                  <span className="truncate text-[12px] font-semibold text-zinc-200">
-                    {row.agentName}
-                  </span>
-                </div>
-
-                {/* Model + reasoning effort badges */}
-                {agent && (
-                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                    <span className="inline-flex items-center gap-1 rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] font-medium text-zinc-400">
-                      {(() => {
-                        const prov = inferProvider(agent.model);
-                        if (prov) {
-                          return <ProviderIcon provider={prov} className="size-3" />;
-                        }
-                        return null;
-                      })()}
-                      {formatModel(agent.model)}
-                    </span>
-                    {agent.reasoningEffort && (
-                      <span className="inline-flex items-center gap-1 rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] font-medium text-zinc-400">
-                        <Sparkles className="size-2.5" />
-                        {formatEffort(agent.reasoningEffort)}
-                      </span>
-                    )}
-                  </div>
-                )}
-
-                {/* Description */}
-                {agent?.description && (
-                  <p className="mt-1.5 text-[11px] leading-relaxed text-zinc-500">
-                    {agent.description}
-                  </p>
-                )}
-
-                {/* Activity status */}
-                <div className="mt-2 flex items-center gap-1.5">
-                  <Bot className="size-3 text-zinc-600" />
-                  <span
-                    className={`text-[11px] ${
-                      isActive
-                        ? 'text-blue-400'
-                        : isCompleted
-                          ? 'text-emerald-400'
-                          : 'text-zinc-600'
-                    }`}
-                  >
-                    {formatAgentActivityLabel(row.activity)}
-                  </span>
-                </div>
-              </div>
-            );
-          })}
         </div>
-
-        {activityRows.length === 0 && (
-          <p className="py-6 text-center text-[12px] text-zinc-600">
-            No agents configured
-          </p>
-        )}
       </div>
     </div>
   );

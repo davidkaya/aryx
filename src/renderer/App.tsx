@@ -265,6 +265,9 @@ export default function App() {
             onSetSessionArchived={(sessionId, isArchived) => {
               void api.setSessionArchived({ sessionId, isArchived });
             }}
+            onRefreshGitContext={(projectId) => {
+              void api.refreshProjectGitContext(projectId);
+            }}
             workspace={workspace}
           />
         }

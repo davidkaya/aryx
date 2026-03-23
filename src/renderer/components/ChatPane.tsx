@@ -1,5 +1,5 @@
 import { type KeyboardEvent, useEffect, useRef, useState } from 'react';
-import { AlertCircle, ArrowUp, Bot, ChevronDown, Loader2, Sparkles, User } from 'lucide-react';
+import { AlertCircle, ArrowUp, Bot, ChevronDown, Circle, GitBranch, Loader2, Sparkles, User } from 'lucide-react';
 
 import { MarkdownContent } from '@renderer/components/MarkdownContent';
 import { getAssistantMessagePhase } from '@renderer/lib/messagePhase';
@@ -318,7 +318,20 @@ export function ChatPane({
           <div className="min-w-0">
             <h2 className="truncate text-[13px] font-semibold leading-tight text-zinc-100">{session.title}</h2>
             <p className="truncate text-[11px] leading-tight text-zinc-500">
-              {isScratchpad ? `Scratchpad · ${pattern.name}` : `${project.name} · ${pattern.name} · ${pattern.mode}`}
+              {isScratchpad
+                ? `Scratchpad · ${pattern.name}`
+                : `${project.name} · ${pattern.name} · ${pattern.mode}`}
+              {!isScratchpad && project.git?.status === 'ready' && (
+                <span className="ml-2 inline-flex items-center gap-1 text-zinc-600">
+                  <GitBranch className="inline size-2.5" />
+                  {project.git.branch ?? project.git.head?.shortHash ?? 'HEAD'}
+                  {project.git.isDirty && (
+                    <Circle className="inline size-1.5 fill-amber-500 text-amber-500" />
+                  )}
+                  {(project.git.ahead ?? 0) > 0 && <span>↑{project.git.ahead}</span>}
+                  {(project.git.behind ?? 0) > 0 && <span>↓{project.git.behind}</span>}
+                </span>
+              )}
             </p>
           </div>
           <div className="flex items-center gap-2">

@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  AlertTriangle,
   Archive,
   ArrowLeftRight,
   ChevronDown,
   ChevronRight,
+  Circle,
   Copy,
   FolderOpen,
+  GitBranch,
   GitFork,
   ListOrdered,
   Lock,
@@ -14,6 +17,7 @@ import {
   Pencil,
   Pin,
   Plus,
+  RefreshCw,
   Search,
   Settings,
   Sparkles,
@@ -23,7 +27,7 @@ import {
 } from 'lucide-react';
 
 import type { OrchestrationMode, PatternDefinition } from '@shared/domain/pattern';
-import { isScratchpadProject, type ProjectRecord } from '@shared/domain/project';
+import { isScratchpadProject, type ProjectRecord, type ProjectGitContext } from '@shared/domain/project';
 import type { SessionRecord } from '@shared/domain/session';
 import { querySessions } from '@shared/domain/sessionLibrary';
 import type { WorkspaceState } from '@shared/domain/workspace';
@@ -39,6 +43,7 @@ interface SidebarProps {
   onDuplicateSession: (sessionId: string) => void;
   onSetSessionPinned: (sessionId: string, isPinned: boolean) => void;
   onSetSessionArchived: (sessionId: string, isArchived: boolean) => void;
+  onRefreshGitContext: (projectId: string) => void;
 }
 
 /* ── Mode icon + accent colour mapping ─────────────────────── */
@@ -66,6 +71,53 @@ function relativeTime(iso: string): string {
   if (days === 1) return 'yesterday';
   if (days < 7) return `${days}d ago`;
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+/* ── Git context badge ──────────────────────────────────────── */
+
+function GitContextBadge({ git }: { git: ProjectGitContext }) {
+  if (git.status === 'not-repository') {
+    return (
+      <span className="text-[10px] text-zinc-600" title="Not a git repository">
+        no repo
+      </span>
+    );
+  }
+
+  if (git.status === 'git-missing') {
+    return (
+      <span className="flex items-center gap-0.5 text-[10px] text-amber-500/70" title="Git is not installed">
+        <AlertTriangle className="size-2.5" />
+        no git
+      </span>
+    );
+  }
+
+  if (git.status === 'error') {
+    return (
+      <span
+        className="flex items-center gap-0.5 text-[10px] text-red-400/70"
+        title={git.errorMessage ?? 'Git error'}
+      >
+        <AlertTriangle className="size-2.5" />
+        error
+      </span>
+    );
+  }
+
+  const branchLabel = git.branch ?? git.head?.shortHash ?? 'HEAD';
+  const parts: string[] = [];
+  if (git.isDirty && git.changedFileCount) parts.push(`${git.changedFileCount} changed`);
+  if (git.ahead) parts.push(`↑${git.ahead}`);
+  if (git.behind) parts.push(`↓${git.behind}`);
+
+  return (
+    <span className="flex items-center gap-1 text-[10px] text-zinc-500" title={parts.join(' · ') || branchLabel}>
+      <GitBranch className="size-2.5 shrink-0" />
+      <span className="max-w-[80px] truncate">{branchLabel}</span>
+      {git.isDirty && <Circle className="size-1.5 shrink-0 fill-amber-500 text-amber-500" />}
+    </span>
+  );
 }
 
 /* ── Context menu item ─────────────────────────────────────── */
@@ -257,6 +309,7 @@ function ProjectGroup({
   onOpenMenu,
   onRenameSubmit,
   onRenameCancel,
+  onRefreshGitContext,
 }: {
   project: ProjectRecord;
   sessions: SessionRecord[];
@@ -267,7 +320,8 @@ function ProjectGroup({
   onOpenMenu: (sessionId: string, e: React.MouseEvent) => void;
   onRenameSubmit: (sessionId: string, title: string) => void;
   onRenameCancel: () => void;
-}) {
+  onRefreshGitContext?: (projectId: string) => void;
+}){
   const [expanded, setExpanded] = useState(true);
   const isScratchpad = isScratchpadProject(project);
 
@@ -309,7 +363,24 @@ function ProjectGroup({
         )}
         <span className="truncate">{project.name}</span>
 
+        {!isScratchpad && project.git && (
+          <GitContextBadge git={project.git} />
+        )}
+
         <div className="ml-auto flex items-center gap-1.5">
+          {!isScratchpad && onRefreshGitContext && (
+            <span
+              className="flex size-5 items-center justify-center rounded text-zinc-600 opacity-0 transition hover:bg-zinc-700 hover:text-zinc-300 group-hover:opacity-100"
+              onClick={(e) => {
+                e.stopPropagation();
+                onRefreshGitContext(project.id);
+              }}
+              role="button"
+              title="Refresh git status"
+            >
+              <RefreshCw className="size-3" />
+            </span>
+          )}
           {runningCount > 0 && (
             <span className="flex items-center gap-1 rounded-full bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-medium text-blue-400">
               <span className="size-1.5 rounded-full bg-blue-400 sidebar-pulse" />
@@ -362,6 +433,7 @@ export function Sidebar({
   onDuplicateSession,
   onSetSessionPinned,
   onSetSessionArchived,
+  onRefreshGitContext,
 }: SidebarProps) {
   const scratchpadProject = workspace.projects.find((project) => isScratchpadProject(project));
   const userProjects = workspace.projects.filter((project) => !isScratchpadProject(project));
@@ -570,6 +642,7 @@ export function Sidebar({
                     onOpenMenu={handleOpenMenu}
                     onRenameSubmit={handleRenameSubmit}
                     onRenameCancel={() => setRenamingSessionId(undefined)}
+                    onRefreshGitContext={onRefreshGitContext}
                     renamingSessionId={renamingSessionId}
                     patterns={workspace.patterns}
                     project={project}

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import appIconUrl from '../../../assets/icons/icon.png';
 import {
   AlertTriangle,
   Archive,
@@ -20,7 +21,6 @@ import {
   RefreshCw,
   Search,
   Settings,
-  Sparkles,
   Users,
   X,
   type LucideIcon,
@@ -495,9 +495,7 @@ export function Sidebar({
       {/* Header — extra top padding clears the title bar overlay zone */}
       <div className="drag-region flex items-center justify-between border-b border-[var(--color-border)] px-4 pb-3 pt-3">
         <div className="flex items-center gap-2.5">
-          <div className="relative flex size-8 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-[12px] font-bold text-white shadow-lg shadow-indigo-500/20">
-            <Sparkles className="size-4" />
-          </div>
+          <img alt="eryx" className="size-8 rounded-xl" src={appIconUrl} />
           <div>
             <span className="text-sm font-semibold text-zinc-100">eryx</span>
             <span className="ml-1.5 rounded bg-zinc-800 px-1 py-0.5 text-[9px] font-medium text-zinc-500">

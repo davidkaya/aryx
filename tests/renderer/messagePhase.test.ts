@@ -16,6 +16,7 @@ function createSession(
     updatedAt: '2026-03-23T00:00:00.000Z',
     status,
     messages,
+    runs: [],
   };
 }
 

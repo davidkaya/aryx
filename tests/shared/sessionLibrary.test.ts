@@ -59,6 +59,7 @@ function createSession(overrides?: Partial<SessionRecord>): SessionRecord {
         createdAt: '2026-03-23T00:00:00.000Z',
       },
     ],
+    runs: [],
     ...overrides,
   };
 }
@@ -148,6 +149,7 @@ describe('session library helpers', () => {
       updatedAt: '2026-03-23T00:07:00.000Z',
     });
     expect(session.messages[0]?.pending).toBe(false);
+    expect(session.runs).toEqual([]);
   });
 
   test('searches across session title, messages, projects, and patterns', () => {

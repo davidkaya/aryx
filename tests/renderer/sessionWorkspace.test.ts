@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 
 import { applySessionEventWorkspace } from '@renderer/lib/sessionWorkspace';
 import type { SessionEventRecord } from '@shared/domain/event';
+import type { SessionRunRecord } from '@shared/domain/runTimeline';
 import { createWorkspaceSettings } from '@shared/domain/tooling';
 import type { WorkspaceState } from '@shared/domain/workspace';
 
@@ -21,6 +22,7 @@ describe('session workspace helpers', () => {
           updatedAt: '2026-03-23T00:00:00.000Z',
           status: 'idle',
           messages: [],
+          runs: [],
         },
       ],
       selectedSessionId: 'session-1',
@@ -183,6 +185,47 @@ describe('session workspace helpers', () => {
       status: 'error',
       lastError: 'Boom',
     });
+  });
+
+  test('applies live run snapshots without waiting for a workspace refresh', () => {
+    const run: SessionRunRecord = {
+      id: 'run-1',
+      requestId: 'turn-1',
+      projectId: 'project-1',
+      projectPath: 'C:\\workspace\\alpha',
+      workspaceKind: 'project',
+      patternId: 'pattern-1',
+      patternName: 'Sequential Review',
+      patternMode: 'sequential',
+      triggerMessageId: 'msg-user-1',
+      startedAt: '2026-03-23T00:00:01.000Z',
+      status: 'running',
+      agents: [
+        {
+          agentId: 'agent-1',
+          agentName: 'Writer',
+          model: 'gpt-5.4',
+        },
+      ],
+      events: [
+        {
+          id: 'run-event-1',
+          kind: 'run-started',
+          occurredAt: '2026-03-23T00:00:01.000Z',
+          status: 'completed',
+          messageId: 'msg-user-1',
+        },
+      ],
+    };
+
+    const updated = applySessionEventWorkspace(createWorkspace(), {
+      sessionId: 'session-1',
+      kind: 'run-updated',
+      occurredAt: '2026-03-23T00:00:01.000Z',
+      run,
+    } satisfies SessionEventRecord);
+
+    expect(updated?.sessions[0].runs).toEqual([run]);
   });
 
   test('ignores events for unknown sessions', () => {

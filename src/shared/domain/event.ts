@@ -1,3 +1,5 @@
+import type { SessionRunRecord } from '@shared/domain/runTimeline';
+
 export type SessionActivityType = 'thinking' | 'tool-calling' | 'handoff' | 'completed';
 
 export type SessionEventKind =
@@ -5,6 +7,7 @@ export type SessionEventKind =
   | 'message-delta'
   | 'message-complete'
   | 'agent-activity'
+  | 'run-updated'
   | 'error';
 
 export interface SessionEventRecord {
@@ -19,6 +22,9 @@ export interface SessionEventRecord {
   activityType?: SessionActivityType;
   agentId?: string;
   agentName?: string;
+  sourceAgentId?: string;
+  sourceAgentName?: string;
   toolName?: string;
+  run?: SessionRunRecord;
   error?: string;
 }

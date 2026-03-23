@@ -152,6 +152,8 @@ export interface AgentActivityEvent {
   activityType: AgentActivityType;
   agentId?: string;
   agentName?: string;
+  sourceAgentId?: string;
+  sourceAgentName?: string;
   toolName?: string;
 }
 

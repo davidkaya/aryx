@@ -41,6 +41,15 @@ import {
   type SessionRecord,
 } from '@shared/domain/session';
 import {
+  appendRunActivityEvent,
+  completeSessionRunRecord,
+  createSessionRunRecord,
+  failSessionRunRecord,
+  upsertRunMessageEvent,
+  upsertSessionRunRecord,
+  type SessionRunRecord,
+} from '@shared/domain/runTimeline';
+import {
   createSessionToolingSelection,
   type LspProfileDefinition,
   type McpServerDefinition,
@@ -318,6 +327,7 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
         ? createScratchpadSessionConfig(normalizedPattern)
         : undefined,
       tooling: createSessionToolingSelection(),
+      runs: [],
     };
 
     workspace.sessions.unshift(session);
@@ -376,28 +386,41 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
       return;
     }
 
+    const requestId = createId('turn');
+    const workspaceKind = isScratchpadProject(project) ? 'scratchpad' : 'project';
+    const occurredAt = nowIso();
+    const userMessageId = createId('msg');
     session.messages.push({
-      id: createId('msg'),
+      id: userMessageId,
       role: 'user',
       authorName: 'You',
       content: trimmed,
-      createdAt: nowIso(),
+      createdAt: occurredAt,
     });
     session.title = resolveSessionTitle(session, effectivePattern, session.messages);
     session.status = 'running';
     session.lastError = undefined;
-    session.updatedAt = nowIso();
+    session.updatedAt = occurredAt;
+    session.runs = [
+      createSessionRunRecord({
+        requestId,
+        project,
+        workspaceKind,
+        pattern: effectivePattern,
+        triggerMessageId: userMessageId,
+        startedAt: occurredAt,
+      }),
+      ...session.runs,
+    ];
 
     await this.persistAndBroadcast(workspace);
     this.emitSessionEvent({
       sessionId: session.id,
       kind: 'status',
       status: 'running',
-      occurredAt: nowIso(),
+      occurredAt,
     });
 
-    const requestId = createId('turn');
-    const workspaceKind = isScratchpadProject(project) ? 'scratchpad' : 'project';
     try {
       const responseMessages = await this.sidecar.runTurn(
         {
@@ -411,26 +434,33 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
           tooling: this.buildRunTurnToolingConfig(workspace, project, session),
         },
         async (event) => {
-          await this.applyTurnDelta(workspace, session.id, event);
+          await this.applyTurnDelta(workspace, session.id, requestId, event);
         },
-        (event) => {
-          this.emitAgentActivity(event);
+        async (event) => {
+          await this.applyAgentActivity(workspace, session.id, requestId, event);
         },
       );
 
-      this.finalizeTurn(workspace, session.id, responseMessages);
+      this.finalizeTurn(workspace, session.id, requestId, responseMessages);
       await this.persistAndBroadcast(workspace);
     } catch (error) {
+      const failedAt = nowIso();
       session.status = 'error';
       session.lastError = error instanceof Error ? error.message : String(error);
-      session.updatedAt = nowIso();
+      session.updatedAt = failedAt;
+
+      const failedRun = this.updateSessionRun(session, requestId, (run) =>
+        failSessionRunRecord(run, failedAt, session.lastError ?? 'Unknown error.'));
 
       this.emitSessionEvent({
         sessionId: session.id,
         kind: 'error',
-        occurredAt: nowIso(),
+        occurredAt: failedAt,
         error: session.lastError,
       });
+      if (failedRun) {
+        this.emitRunUpdated(session.id, failedAt, failedRun);
+      }
 
       await this.persistAndBroadcast(workspace);
     }
@@ -607,18 +637,23 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
   private async applyTurnDelta(
     workspace: WorkspaceState,
     sessionId: string,
+    requestId: string,
     event: TurnDeltaEvent,
   ): Promise<void> {
     if (event.content === undefined && event.contentDelta === undefined) {
       return;
     }
 
+    const occurredAt = nowIso();
     const session = this.requireSession(workspace, sessionId);
     const existing = session.messages.find((message) => message.id === event.messageId);
+    const content =
+      existing && event.content === undefined
+        ? mergeStreamingText(existing.content, event.contentDelta)
+        : (event.content ?? event.contentDelta);
 
     if (existing) {
-      existing.content =
-        event.content ?? mergeStreamingText(existing.content, event.contentDelta);
+      existing.content = content;
       existing.pending = true;
       existing.authorName = event.authorName;
     } else {
@@ -626,34 +661,75 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
         id: event.messageId,
         role: 'assistant',
         authorName: event.authorName,
-        content: event.content ?? event.contentDelta,
-        createdAt: nowIso(),
+        content,
+        createdAt: occurredAt,
         pending: true,
       });
     }
 
-    session.updatedAt = nowIso();
+    const nextRun = this.updateSessionRun(session, requestId, (run) =>
+      upsertRunMessageEvent(run, {
+        messageId: event.messageId,
+        occurredAt,
+        authorName: event.authorName,
+        content,
+        status: 'running',
+      }));
+
+    session.updatedAt = occurredAt;
     await this.workspaceRepository.save(workspace);
 
     this.emitSessionEvent({
       sessionId,
       kind: 'message-delta',
-      occurredAt: nowIso(),
+      occurredAt,
       messageId: event.messageId,
       authorName: event.authorName,
       contentDelta: event.contentDelta,
       content: event.content,
     });
+    if (nextRun) {
+      this.emitRunUpdated(sessionId, occurredAt, nextRun);
+    }
   }
 
-  private emitAgentActivity(event: AgentActivityEvent): void {
+  private async applyAgentActivity(
+    workspace: WorkspaceState,
+    sessionId: string,
+    requestId: string,
+    event: AgentActivityEvent,
+  ): Promise<void> {
+    const occurredAt = nowIso();
+    const session = this.requireSession(workspace, sessionId);
+    const activityType = event.activityType;
+    let nextRun: SessionRunRecord | undefined;
+    if (activityType !== 'completed') {
+      nextRun = this.updateSessionRun(session, requestId, (run) =>
+        appendRunActivityEvent(run, {
+          activityType,
+          occurredAt,
+          agentId: event.agentId,
+          agentName: event.agentName,
+          sourceAgentId: event.sourceAgentId,
+          sourceAgentName: event.sourceAgentName,
+          toolName: event.toolName,
+        }));
+    }
+    if (nextRun) {
+      session.updatedAt = occurredAt;
+      await this.workspaceRepository.save(workspace);
+      this.emitRunUpdated(sessionId, occurredAt, nextRun);
+    }
+
     this.emitSessionEvent({
-      sessionId: event.sessionId,
+      sessionId,
       kind: 'agent-activity',
-      occurredAt: nowIso(),
+      occurredAt,
       activityType: event.activityType,
       agentId: event.agentId,
       agentName: event.agentName,
+      sourceAgentId: event.sourceAgentId,
+      sourceAgentName: event.sourceAgentName,
       toolName: event.toolName,
     });
   }
@@ -683,12 +759,18 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
     });
   }
 
-  private finalizeTurn(workspace: WorkspaceState, sessionId: string, messages: ChatMessageRecord[]): void {
+  private finalizeTurn(
+    workspace: WorkspaceState,
+    sessionId: string,
+    requestId: string,
+    messages: ChatMessageRecord[],
+  ): void {
     const session = this.requireSession(workspace, sessionId);
     const pattern = this.requirePattern(workspace, session.patternId);
     const incomingIds = new Set(messages.map((message) => message.id));
 
     for (const message of messages) {
+      const occurredAt = nowIso();
       const existing = session.messages.find((current) => current.id === message.id);
       if (existing) {
         existing.authorName = message.authorName;
@@ -698,14 +780,25 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
         session.messages.push({ ...message, pending: false });
       }
 
+      const nextRun = this.updateSessionRun(session, requestId, (run) =>
+        upsertRunMessageEvent(run, {
+          messageId: message.id,
+          occurredAt,
+          authorName: message.authorName,
+          content: message.content,
+          status: 'completed',
+        }));
       this.emitSessionEvent({
         sessionId,
         kind: 'message-complete',
-        occurredAt: nowIso(),
+        occurredAt,
         messageId: message.id,
         authorName: message.authorName,
         content: message.content,
       });
+      if (nextRun) {
+        this.emitRunUpdated(sessionId, occurredAt, nextRun);
+      }
 
       this.emitCompletedActivity(sessionId, pattern, message);
     }
@@ -716,15 +809,21 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
       }
     }
 
+    const completedAt = nowIso();
     session.status = 'idle';
     session.lastError = undefined;
-    session.updatedAt = nowIso();
+    session.updatedAt = completedAt;
+    const completedRun = this.updateSessionRun(session, requestId, (run) =>
+      completeSessionRunRecord(run, completedAt));
     this.emitSessionEvent({
       sessionId,
       kind: 'status',
-      occurredAt: nowIso(),
+      occurredAt: completedAt,
       status: 'idle',
     });
+    if (completedRun) {
+      this.emitRunUpdated(sessionId, completedAt, completedRun);
+    }
   }
 
   private async persistAndBroadcast(workspace: WorkspaceState): Promise<WorkspaceState> {
@@ -833,6 +932,34 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
       mcpServers,
       lspProfiles,
     };
+  }
+
+  private updateSessionRun(
+    session: SessionRecord,
+    requestId: string,
+    updater: (run: SessionRunRecord) => SessionRunRecord,
+  ): SessionRunRecord | undefined {
+    const run = session.runs.find((candidate) => candidate.requestId === requestId);
+    if (!run) {
+      return undefined;
+    }
+
+    const nextRun = updater(run);
+    if (nextRun === run) {
+      return undefined;
+    }
+
+    session.runs = upsertSessionRunRecord(session.runs, nextRun);
+    return nextRun;
+  }
+
+  private emitRunUpdated(sessionId: string, occurredAt: string, run: SessionRunRecord): void {
+    this.emitSessionEvent({
+      sessionId,
+      kind: 'run-updated',
+      occurredAt,
+      run,
+    });
   }
 
   private emitSessionEvent(event: SessionEventRecord): void {

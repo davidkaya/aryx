@@ -1,0 +1,171 @@
+import { describe, expect, test } from 'bun:test';
+
+import type { PatternDefinition } from '@shared/domain/pattern';
+import {
+  appendRunActivityEvent,
+  completeSessionRunRecord,
+  createSessionRunRecord,
+  normalizeSessionRunRecords,
+  upsertRunMessageEvent,
+} from '@shared/domain/runTimeline';
+import type { ProjectRecord } from '@shared/domain/project';
+
+function createPattern(): PatternDefinition {
+  return {
+    id: 'pattern-sequential',
+    name: 'Sequential Trio Review',
+    description: 'Sequential handoff review flow.',
+    mode: 'sequential',
+    availability: 'available',
+    maxIterations: 1,
+    agents: [
+      {
+        id: 'agent-writer',
+        name: 'Writer',
+        description: 'Writes the draft.',
+        instructions: 'Write.',
+        model: 'gpt-5.4',
+      },
+      {
+        id: 'agent-reviewer',
+        name: 'Reviewer',
+        description: 'Reviews the draft.',
+        instructions: 'Review.',
+        model: 'claude-sonnet-4.5',
+      },
+    ],
+    createdAt: '2026-03-23T00:00:00.000Z',
+    updatedAt: '2026-03-23T00:00:00.000Z',
+  };
+}
+
+function createProject(): ProjectRecord {
+  return {
+    id: 'project-1',
+    name: 'alpha',
+    path: 'C:\\workspace\\alpha',
+    addedAt: '2026-03-23T00:00:00.000Z',
+  };
+}
+
+describe('run timeline helpers', () => {
+  test('creates a persistent run record with agent lanes and a trigger event', () => {
+    const run = createSessionRunRecord({
+      requestId: 'turn-1',
+      project: createProject(),
+      workspaceKind: 'project',
+      pattern: createPattern(),
+      triggerMessageId: 'msg-user-1',
+      startedAt: '2026-03-23T00:00:01.000Z',
+    });
+
+    expect(run).toMatchObject({
+      requestId: 'turn-1',
+      projectId: 'project-1',
+      projectPath: 'C:\\workspace\\alpha',
+      patternId: 'pattern-sequential',
+      patternName: 'Sequential Trio Review',
+      patternMode: 'sequential',
+      triggerMessageId: 'msg-user-1',
+      status: 'running',
+    });
+    expect(run.agents).toEqual([
+      {
+        agentId: 'agent-writer',
+        agentName: 'Writer',
+        model: 'gpt-5.4',
+        reasoningEffort: undefined,
+      },
+      {
+        agentId: 'agent-reviewer',
+        agentName: 'Reviewer',
+        model: 'claude-sonnet-4.5',
+        reasoningEffort: undefined,
+      },
+    ]);
+    expect(run.events[0]).toMatchObject({
+      kind: 'run-started',
+      status: 'completed',
+      messageId: 'msg-user-1',
+    });
+  });
+
+  test('records grouped message steps and settles the run on completion', () => {
+    const baseRun = createSessionRunRecord({
+      requestId: 'turn-1',
+      project: createProject(),
+      workspaceKind: 'project',
+      pattern: createPattern(),
+      triggerMessageId: 'msg-user-1',
+      startedAt: '2026-03-23T00:00:01.000Z',
+    });
+
+    const streamingRun = upsertRunMessageEvent(baseRun, {
+      messageId: 'msg-assistant-1',
+      authorName: 'Writer',
+      content: 'Draft',
+      occurredAt: '2026-03-23T00:00:02.000Z',
+      status: 'running',
+    });
+
+    const completedRun = completeSessionRunRecord(
+      upsertRunMessageEvent(streamingRun, {
+        messageId: 'msg-assistant-1',
+        authorName: 'Writer',
+        content: 'Draft polished into the final answer.',
+        occurredAt: '2026-03-23T00:00:03.000Z',
+        status: 'completed',
+      }),
+      '2026-03-23T00:00:04.000Z',
+    );
+
+    const messageEvent = completedRun.events.find((event) => event.kind === 'message');
+    expect(messageEvent).toMatchObject({
+      messageId: 'msg-assistant-1',
+      agentId: 'agent-writer',
+      agentName: 'Writer',
+      content: 'Draft polished into the final answer.',
+      status: 'completed',
+      updatedAt: '2026-03-23T00:00:03.000Z',
+    });
+    expect(completedRun.status).toBe('completed');
+    expect(completedRun.completedAt).toBe('2026-03-23T00:00:04.000Z');
+    expect(completedRun.events.at(-1)).toMatchObject({
+      kind: 'run-completed',
+      status: 'completed',
+    });
+  });
+
+  test('captures handoffs with explicit source and target agents', () => {
+    const run = appendRunActivityEvent(
+      createSessionRunRecord({
+        requestId: 'turn-1',
+        project: createProject(),
+        workspaceKind: 'project',
+        pattern: createPattern(),
+        triggerMessageId: 'msg-user-1',
+        startedAt: '2026-03-23T00:00:01.000Z',
+      }),
+      {
+        activityType: 'handoff',
+        occurredAt: '2026-03-23T00:00:02.000Z',
+        sourceAgentId: 'agent-writer',
+        agentId: 'agent-reviewer',
+      },
+    );
+
+    expect(run.events.at(-1)).toMatchObject({
+      kind: 'handoff',
+      agentId: 'agent-writer',
+      agentName: 'Writer',
+      sourceAgentId: 'agent-writer',
+      sourceAgentName: 'Writer',
+      targetAgentId: 'agent-reviewer',
+      targetAgentName: 'Reviewer',
+    });
+  });
+
+  test('normalizes missing run collections to an empty array', () => {
+    expect(normalizeSessionRunRecords(undefined)).toEqual([]);
+  });
+});

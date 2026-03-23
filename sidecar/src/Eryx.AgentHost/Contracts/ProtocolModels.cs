@@ -182,6 +182,8 @@ public sealed class AgentActivityEventDto : SidecarEventDto
     public string ActivityType { get; init; } = string.Empty;
     public string? AgentId { get; init; }
     public string? AgentName { get; init; }
+    public string? SourceAgentId { get; init; }
+    public string? SourceAgentName { get; init; }
     public string? ToolName { get; init; }
 }
 

@@ -4,6 +4,7 @@ import {
   normalizeSessionToolingSelection,
   type SessionToolingSelection,
 } from '@shared/domain/tooling';
+import type { SessionRunRecord } from '@shared/domain/runTimeline';
 
 export type ChatRole = 'system' | 'user' | 'assistant';
 export type SessionStatus = 'idle' | 'running' | 'error';
@@ -38,6 +39,7 @@ export interface SessionRecord {
   lastError?: string;
   scratchpadConfig?: ScratchpadSessionConfig;
   tooling?: SessionToolingSelection;
+  runs: SessionRunRecord[];
 }
 
 export function resolveSessionTitle(

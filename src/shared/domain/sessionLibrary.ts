@@ -181,6 +181,7 @@ export function duplicateSessionRecord(
           enabledLspProfileIds: [...session.tooling.enabledLspProfileIds],
         }
       : undefined,
+    runs: [],
     messages: session.messages.map((message): ChatMessageRecord => ({
       ...message,
       pending: false,

@@ -51,6 +51,7 @@ function createSession(overrides?: Partial<SessionRecord>): SessionRecord {
     updatedAt: '2026-03-23T00:00:00.000Z',
     status: 'idle',
     messages: [],
+    runs: [],
     ...overrides,
   };
 }

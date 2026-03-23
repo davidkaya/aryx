@@ -1,4 +1,5 @@
 import type { SessionEventRecord } from '@shared/domain/event';
+import { upsertSessionRunRecord } from '@shared/domain/runTimeline';
 import type { ChatMessageRecord, SessionRecord } from '@shared/domain/session';
 import type { WorkspaceState } from '@shared/domain/workspace';
 import { mergeStreamingText } from '@shared/utils/streamingText';
@@ -40,6 +41,8 @@ function applySessionEvent(session: SessionRecord, event: SessionEventRecord): S
       return applyMessageDeltaEvent(session, event);
     case 'message-complete':
       return applyMessageCompleteEvent(session, event);
+    case 'run-updated':
+      return applyRunUpdatedEvent(session, event);
     default:
       return session;
   }
@@ -157,6 +160,26 @@ function applyMessageCompleteEvent(session: SessionRecord, event: SessionEventRe
   return {
     ...session,
     messages: nextMessages,
+    updatedAt: event.occurredAt,
+  };
+}
+
+function applyRunUpdatedEvent(session: SessionRecord, event: SessionEventRecord): SessionRecord {
+  if (!event.run) {
+    return session;
+  }
+
+  const nextRuns = upsertSessionRunRecord(session.runs, event.run);
+  if (
+    nextRuns.length === session.runs.length
+    && nextRuns.every((run, index) => run === session.runs[index])
+  ) {
+    return session;
+  }
+
+  return {
+    ...session,
+    runs: nextRuns,
     updatedAt: event.occurredAt,
   };
 }

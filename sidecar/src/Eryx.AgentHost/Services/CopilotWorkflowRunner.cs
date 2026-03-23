@@ -173,6 +173,7 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
         RunTurnCommandDto command,
         string activityType,
         AgentIdentity agent,
+        AgentIdentity? sourceAgent = null,
         string? toolName = null)
     {
         return new AgentActivityEventDto
@@ -183,6 +184,8 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
             ActivityType = activityType,
             AgentId = agent.AgentId,
             AgentName = agent.AgentName,
+            SourceAgentId = sourceAgent?.AgentId,
+            SourceAgentName = sourceAgent?.AgentName,
             ToolName = toolName,
         };
     }
@@ -197,7 +200,8 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
             return CreateActivityEvent(
                 command,
                 activityType: "handoff",
-                agent: handoffAgent);
+                agent: handoffAgent,
+                sourceAgent: activeAgent);
         }
 
         if (!activeAgent.HasValue || !TryGetToolName(requestInfo, out string toolName))

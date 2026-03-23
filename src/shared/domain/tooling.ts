@@ -126,6 +126,11 @@ export function validateLspProfileDefinition(profile: LspProfileDefinition): str
     return `LSP profile "${profile.name}" needs at least one file extension.`;
   }
 
+  if (requiresTypeScriptLanguageServerStdio(profile.command)
+    && !normalizeStringArray(profile.args).some((arg) => arg.toLowerCase() === '--stdio')) {
+    return `LSP profile "${profile.name}" needs the "--stdio" argument.`;
+  }
+
   return undefined;
 }
 
@@ -166,6 +171,18 @@ export function normalizeLspProfileDefinition(profile: LspProfileDefinition): Ls
 
 function normalizeFileExtensions(fileExtensions: string[]): string[] {
   return normalizeStringArray(fileExtensions).map((value) => (value.startsWith('.') ? value : `.${value}`));
+}
+
+function requiresTypeScriptLanguageServerStdio(command: string): boolean {
+  const executableName = command
+    .trim()
+    .split(/[\\/]/)
+    .at(-1)
+    ?.toLowerCase();
+
+  return executableName === 'typescript-language-server'
+    || executableName === 'typescript-language-server.cmd'
+    || executableName === 'typescript-language-server.exe';
 }
 
 function normalizeStringArray(values?: ReadonlyArray<string>): string[] {

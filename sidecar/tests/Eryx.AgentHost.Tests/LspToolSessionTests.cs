@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Eryx.AgentHost.Contracts;
 using Eryx.AgentHost.Services;
 
 namespace Eryx.AgentHost.Tests;
@@ -23,5 +24,33 @@ public sealed class LspToolSessionTests
             options);
 
         Assert.Contains("relativePath", json);
+    }
+
+    [Fact]
+    public void ResolveProcessArguments_AddsStdioForTypeScriptLanguageServer()
+    {
+        RunTurnLspProfileConfigDto profile = new()
+        {
+            Command = "typescript-language-server",
+            Args = [],
+        };
+
+        IReadOnlyList<string> args = LspToolSession.ResolveProcessArguments(profile);
+
+        Assert.Equal(["--stdio"], args);
+    }
+
+    [Fact]
+    public void ResolveProcessArguments_DoesNotDuplicateStdioWhenAlreadyPresent()
+    {
+        RunTurnLspProfileConfigDto profile = new()
+        {
+            Command = "typescript-language-server",
+            Args = ["--stdio"],
+        };
+
+        IReadOnlyList<string> args = LspToolSession.ResolveProcessArguments(profile);
+
+        Assert.Equal(["--stdio"], args);
     }
 }

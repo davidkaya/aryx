@@ -135,7 +135,23 @@ describe('tooling settings helpers', () => {
       validateLspProfileDefinition({
         ...profile,
         command: 'typescript-language-server',
+        args: ['--stdio'],
       }),
     ).toBe('LSP profile "TypeScript" needs at least one file extension.');
+  });
+
+  test('requires the stdio flag for the TypeScript language server profile', () => {
+    expect(
+      validateLspProfileDefinition({
+        id: 'lsp-ts',
+        name: 'Typescript LSP',
+        command: 'typescript-language-server',
+        args: [],
+        languageId: 'typescript',
+        fileExtensions: ['.ts', '.tsx'],
+        createdAt: TIMESTAMP,
+        updatedAt: TIMESTAMP,
+      }),
+    ).toBe('LSP profile "Typescript LSP" needs the "--stdio" argument.');
   });
 });

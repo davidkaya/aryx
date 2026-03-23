@@ -72,7 +72,7 @@ function createDraftLspProfile(): LspProfileDefinition {
     id: createId('lsp'),
     name: 'New LSP Profile',
     command: '',
-    args: [],
+    args: ['--stdio'],
     languageId: 'typescript',
     fileExtensions: ['.ts', '.tsx'],
     createdAt: timestamp,

@@ -25,6 +25,7 @@ internal sealed class LspToolSession : IAsyncDisposable
     private readonly SemaphoreSlim _writeLock = new(1, 1);
     private readonly SemaphoreSlim _documentLock = new(1, 1);
     private readonly HashSet<string> _openedDocumentUris = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentQueue<string> _stderrLines = new();
     private readonly Task _stdoutReaderTask;
     private readonly Task _stderrReaderTask;
     private int _nextRequestId;
@@ -97,7 +98,7 @@ internal sealed class LspToolSession : IAsyncDisposable
             CreateNoWindow = true,
         };
 
-        foreach (string arg in profile.Args)
+        foreach (string arg in ResolveProcessArguments(profile))
         {
             startInfo.ArgumentList.Add(arg);
         }
@@ -123,6 +124,19 @@ internal sealed class LspToolSession : IAsyncDisposable
         LspToolSession session = new(profile, projectPath, process);
         await session.InitializeAsync(cancellationToken).ConfigureAwait(false);
         return session;
+    }
+
+    internal static IReadOnlyList<string> ResolveProcessArguments(RunTurnLspProfileConfigDto profile)
+    {
+        List<string> args = profile.Args.ToList();
+
+        if (UsesTypeScriptLanguageServer(profile.Command)
+            && !args.Any(arg => string.Equals(arg, "--stdio", StringComparison.OrdinalIgnoreCase)))
+        {
+            args.Add("--stdio");
+        }
+
+        return args;
     }
 
     public async ValueTask DisposeAsync()
@@ -483,8 +497,7 @@ internal sealed class LspToolSession : IAsyncDisposable
         }
         finally
         {
-            FailPendingRequests(new InvalidOperationException(
-                $"LSP profile \"{_profile.Name}\" stopped before a pending request completed."));
+            FailPendingRequests(CreatePendingRequestInterruptedException());
         }
     }
 
@@ -502,6 +515,7 @@ internal sealed class LspToolSession : IAsyncDisposable
 
                 if (!string.IsNullOrWhiteSpace(line))
                 {
+                    RecordStderrLine(line);
                     Console.Error.WriteLine($"[eryx lsp:{_profile.Id}] {line}");
                 }
             }
@@ -602,6 +616,28 @@ internal sealed class LspToolSession : IAsyncDisposable
         _pending.Clear();
     }
 
+    private void RecordStderrLine(string line)
+    {
+        _stderrLines.Enqueue(line);
+        while (_stderrLines.Count > 8 && _stderrLines.TryDequeue(out _))
+        {
+        }
+    }
+
+    private InvalidOperationException CreatePendingRequestInterruptedException()
+    {
+        string message = $"LSP profile \"{_profile.Name}\" stopped before a pending request completed.";
+        string[] stderrLines = _stderrLines.ToArray();
+
+        if (stderrLines.Length == 0)
+        {
+            return new InvalidOperationException(message);
+        }
+
+        string detail = string.Join(" ", stderrLines.TakeLast(3));
+        return new InvalidOperationException($"{message} Last stderr: {detail}");
+    }
+
     private string ResolveProjectPath(string relativePath)
     {
         if (string.IsNullOrWhiteSpace(relativePath))
@@ -665,6 +701,14 @@ internal sealed class LspToolSession : IAsyncDisposable
     private static int NormalizePosition(int value)
     {
         return Math.Max(value - 1, 0);
+    }
+
+    private static bool UsesTypeScriptLanguageServer(string command)
+    {
+        string executableName = Path.GetFileName(command.Trim()).ToLowerInvariant();
+        return executableName is "typescript-language-server"
+            or "typescript-language-server.cmd"
+            or "typescript-language-server.exe";
     }
 
     private static string ToFileUri(string path)

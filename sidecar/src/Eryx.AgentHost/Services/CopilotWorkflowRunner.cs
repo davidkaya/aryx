@@ -119,6 +119,7 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
                 string messageId = update.Update.MessageId ?? $"{command.RequestId}-delta-{fallbackMessageIndex++}";
                 StreamingSegment segment = GetOrCreateSegment(segments, messageId, authorName);
                 segment.SetContent(StreamingTextMerger.Merge(segment.Content.ToString(), update.Update.Text));
+                segment.SetAuthorName(authorName);
 
                 await onDelta(new TurnDeltaEventDto
                 {
@@ -128,6 +129,7 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
                     MessageId = messageId,
                     AuthorName = authorName,
                     ContentDelta = update.Update.Text,
+                    Content = segment.Content.ToString(),
                 }).ConfigureAwait(false);
             }
             else if (evt is ExecutorCompletedEvent completed
@@ -477,7 +479,7 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
 
         public string MessageId { get; }
 
-        public string AuthorName { get; }
+        public string AuthorName { get; private set; }
 
         public StringBuilder Content { get; } = new();
 
@@ -485,6 +487,11 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
         {
             Content.Clear();
             Content.Append(value);
+        }
+
+        public void SetAuthorName(string value)
+        {
+            AuthorName = value;
         }
     }
 

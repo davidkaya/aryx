@@ -609,18 +609,24 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
     sessionId: string,
     event: TurnDeltaEvent,
   ): Promise<void> {
+    if (event.content === undefined && event.contentDelta === undefined) {
+      return;
+    }
+
     const session = this.requireSession(workspace, sessionId);
     const existing = session.messages.find((message) => message.id === event.messageId);
 
     if (existing) {
-      existing.content = mergeStreamingText(existing.content, event.contentDelta);
+      existing.content =
+        event.content ?? mergeStreamingText(existing.content, event.contentDelta);
       existing.pending = true;
+      existing.authorName = event.authorName;
     } else {
       session.messages.push({
         id: event.messageId,
         role: 'assistant',
         authorName: event.authorName,
-        content: event.contentDelta,
+        content: event.content ?? event.contentDelta,
         createdAt: nowIso(),
         pending: true,
       });
@@ -636,6 +642,7 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
       messageId: event.messageId,
       authorName: event.authorName,
       contentDelta: event.contentDelta,
+      content: event.content,
     });
   }
 
@@ -697,6 +704,7 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
         occurredAt: nowIso(),
         messageId: message.id,
         authorName: message.authorName,
+        content: message.content,
       });
 
       this.emitCompletedActivity(sessionId, pattern, message);

@@ -36,6 +36,7 @@ describe('session workspace helpers', () => {
       messageId: 'assistant-1',
       authorName: 'Architect',
       contentDelta: 'Hello',
+      content: 'Hello',
     } satisfies SessionEventRecord);
 
     expect(created?.sessions[0].messages).toEqual([
@@ -56,6 +57,7 @@ describe('session workspace helpers', () => {
       messageId: 'assistant-1',
       authorName: 'Architect',
       contentDelta: ' world',
+      content: 'Hello world',
     } satisfies SessionEventRecord);
 
     expect(appended?.sessions[0].messages[0]).toMatchObject({
@@ -73,6 +75,7 @@ describe('session workspace helpers', () => {
       messageId: 'assistant-1',
       authorName: 'Implementer',
       contentDelta: 'Done',
+      content: 'Done',
     } satisfies SessionEventRecord);
 
     const completed = applySessionEventWorkspace(workspace, {
@@ -81,6 +84,7 @@ describe('session workspace helpers', () => {
       occurredAt: '2026-03-23T00:00:02.000Z',
       messageId: 'assistant-1',
       authorName: 'Implementer',
+      content: 'Done',
     } satisfies SessionEventRecord);
 
     expect(completed?.sessions[0].messages[0]).toMatchObject({
@@ -98,6 +102,7 @@ describe('session workspace helpers', () => {
       messageId: 'assistant-1',
       authorName: 'Writer',
       contentDelta: 'How about',
+      content: 'How about',
     } satisfies SessionEventRecord);
 
     const second = applySessionEventWorkspace(first, {
@@ -107,6 +112,7 @@ describe('session workspace helpers', () => {
       messageId: 'assistant-1',
       authorName: 'Writer',
       contentDelta: 'The **Ashen Crown** feels',
+      content: 'How about The **Ashen Crown** feels',
     } satisfies SessionEventRecord);
 
     const third = applySessionEventWorkspace(second, {
@@ -116,12 +122,40 @@ describe('session workspace helpers', () => {
       messageId: 'assistant-1',
       authorName: 'Writer',
       contentDelta: 'classic and timeless.',
+      content: 'How about The **Ashen Crown** feels classic and timeless.',
     } satisfies SessionEventRecord);
 
     expect(third?.sessions[0].messages[0]).toMatchObject({
       authorName: 'Writer',
       content: 'How about The **Ashen Crown** feels classic and timeless.',
       pending: true,
+    });
+  });
+
+  test('applies final content from completion events without waiting for a workspace refresh', () => {
+    const workspace = applySessionEventWorkspace(createWorkspace(), {
+      sessionId: 'session-1',
+      kind: 'message-delta',
+      occurredAt: '2026-03-23T00:00:01.000Z',
+      messageId: 'assistant-1',
+      authorName: 'Reviewer',
+      contentDelta: 'Draft',
+      content: 'Draft',
+    } satisfies SessionEventRecord);
+
+    const completed = applySessionEventWorkspace(workspace, {
+      sessionId: 'session-1',
+      kind: 'message-complete',
+      occurredAt: '2026-03-23T00:00:02.000Z',
+      messageId: 'assistant-1',
+      authorName: 'Reviewer',
+      content: 'Draft polished into the final review.',
+    } satisfies SessionEventRecord);
+
+    expect(completed?.sessions[0].messages[0]).toMatchObject({
+      authorName: 'Reviewer',
+      content: 'Draft polished into the final review.',
+      pending: false,
     });
   });
 

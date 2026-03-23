@@ -133,6 +133,7 @@ export interface TurnDeltaEvent {
   messageId: string;
   authorName: string;
   contentDelta: string;
+  content?: string;
 }
 
 export interface TurnCompleteEvent {

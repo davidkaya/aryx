@@ -128,6 +128,7 @@ public sealed class SidecarProtocolHostTests
                     MessageId = "assistant-1",
                     AuthorName = "Primary",
                     ContentDelta = "Hello",
+                    Content = "Hello",
                 });
 
                 await onActivity(new AgentActivityEventDto
@@ -201,6 +202,7 @@ public sealed class SidecarProtocolHostTests
             {
                 Assert.Equal("turn-delta", deltaEvent.GetProperty("type").GetString());
                 Assert.Equal("Hello", deltaEvent.GetProperty("contentDelta").GetString());
+                Assert.Equal("Hello", deltaEvent.GetProperty("content").GetString());
             },
             toolEvent =>
             {

@@ -418,7 +418,13 @@ export function ChatPane({
                               : `rounded-xl border px-4 py-3 text-[14px] leading-relaxed text-zinc-200 ${assistantContainerClass}`
                           }
                         >
-                          <MarkdownContent content={message.content} />
+                          {!isUser && message.pending ? (
+                            <div className="whitespace-pre-wrap break-words text-[14px] leading-relaxed text-zinc-200">
+                              {message.content}
+                            </div>
+                          ) : (
+                            <MarkdownContent content={message.content} />
+                          )}
                           {message.pending && message.content && (
                             <span className="mt-1 inline-block h-4 w-[2px] animate-pulse rounded-sm bg-zinc-400" />
                           )}

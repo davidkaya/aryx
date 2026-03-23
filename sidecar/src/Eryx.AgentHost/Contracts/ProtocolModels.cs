@@ -167,6 +167,7 @@ public sealed class TurnDeltaEventDto : SidecarEventDto
     public string MessageId { get; init; } = string.Empty;
     public string AuthorName { get; init; } = string.Empty;
     public string ContentDelta { get; init; } = string.Empty;
+    public string? Content { get; init; }
 }
 
 public sealed class TurnCompleteEventDto : SidecarEventDto

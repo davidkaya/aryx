@@ -77,17 +77,18 @@ function applyErrorEvent(session: SessionRecord, event: SessionEventRecord): Ses
 }
 
 function applyMessageDeltaEvent(session: SessionRecord, event: SessionEventRecord): SessionRecord {
-  if (!event.messageId || event.contentDelta === undefined) {
+  if (!event.messageId || (event.content === undefined && event.contentDelta === undefined)) {
     return session;
   }
 
+  const resolvedContent = event.content ?? event.contentDelta ?? '';
   const messageIndex = session.messages.findIndex((message) => message.id === event.messageId);
   if (messageIndex >= 0) {
     const existing = session.messages[messageIndex];
     const nextMessage: ChatMessageRecord = {
       ...existing,
       authorName: event.authorName ?? existing.authorName,
-      content: mergeStreamingText(existing.content, event.contentDelta),
+      content: event.content ?? mergeStreamingText(existing.content, resolvedContent),
       pending: true,
     };
 
@@ -112,14 +113,14 @@ function applyMessageDeltaEvent(session: SessionRecord, event: SessionEventRecor
     ...session,
     messages: [
       ...session.messages,
-      {
-        id: event.messageId,
-        role: 'assistant',
-        authorName: event.authorName ?? 'assistant',
-        content: event.contentDelta,
-        createdAt: event.occurredAt,
-        pending: true,
-      },
+        {
+          id: event.messageId,
+          role: 'assistant',
+          authorName: event.authorName ?? 'assistant',
+          content: resolvedContent,
+          createdAt: event.occurredAt,
+          pending: true,
+        },
     ],
     updatedAt: event.occurredAt,
   };
@@ -139,10 +140,15 @@ function applyMessageCompleteEvent(session: SessionRecord, event: SessionEventRe
   const nextMessage: ChatMessageRecord = {
     ...existing,
     authorName: event.authorName ?? existing.authorName,
+    content: event.content ?? existing.content,
     pending: false,
   };
 
-  if (nextMessage.authorName === existing.authorName && !existing.pending) {
+  if (
+    nextMessage.authorName === existing.authorName
+    && nextMessage.content === existing.content
+    && !existing.pending
+  ) {
     return session;
   }
 

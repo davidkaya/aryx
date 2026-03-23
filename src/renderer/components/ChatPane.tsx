@@ -313,7 +313,7 @@ export function ChatPane({
   return (
     <div className="flex h-full flex-col">
       {/* Header — extra top padding clears the title bar overlay zone */}
-      <header className="border-b border-[var(--color-border)] px-6 pb-3 pt-12">
+      <header className="drag-region border-b border-[var(--color-border)] px-6 pb-3 pt-3">
         <div className="flex min-h-8 items-center justify-between">
           <div className="min-w-0">
             <h2 className="truncate text-[13px] font-semibold leading-tight text-zinc-100">{session.title}</h2>

@@ -178,9 +178,9 @@ export function SettingsPanel({
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-[var(--color-surface-0)]">
-      <div className="flex items-center gap-3 border-b border-[var(--color-border)] px-5 pb-3 pt-12">
+      <div className="drag-region flex items-center gap-3 border-b border-[var(--color-border)] px-5 pb-3 pt-3">
         <button
-          className="flex size-8 items-center justify-center rounded-lg text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-200"
+          className="no-drag flex size-8 items-center justify-center rounded-lg text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-200"
           onClick={onClose}
           type="button"
         >
@@ -727,10 +727,10 @@ function ToolingEditorShell({
 }) {
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between border-b border-[var(--color-border)] px-5 pb-3 pt-12">
+      <div className="drag-region flex items-center justify-between border-b border-[var(--color-border)] px-5 pb-3 pt-3">
         <div className="flex items-center gap-3">
           <button
-            className="flex size-8 items-center justify-center rounded-lg text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-200"
+            className="no-drag flex size-8 items-center justify-center rounded-lg text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-200"
             onClick={onBack}
             type="button"
           >
@@ -741,7 +741,7 @@ function ToolingEditorShell({
             <p className="text-[12px] text-zinc-500">{subtitle}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="no-drag flex items-center gap-2">
           {onDelete && (
             <button
               className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[13px] text-red-400 transition hover:bg-red-500/10"

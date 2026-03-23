@@ -190,7 +190,7 @@ export function ActivityPanel({
   return (
     <div className="flex h-full flex-col">
       {/* Header — top padding clears the title bar overlay zone */}
-      <div className="border-b border-[var(--color-border)] px-4 pb-3 pt-12">
+      <div className="drag-region border-b border-[var(--color-border)] px-4 pb-3 pt-3">
         <div className="flex min-h-8 items-center gap-2">
           <Activity className="size-4 text-zinc-500" />
           <span className="text-[12px] font-semibold uppercase tracking-[0.12em] text-zinc-400">

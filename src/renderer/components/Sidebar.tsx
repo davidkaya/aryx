@@ -493,7 +493,7 @@ export function Sidebar({
   return (
     <div className="flex h-full flex-col">
       {/* Header — extra top padding clears the title bar overlay zone */}
-      <div className="flex items-center justify-between border-b border-[var(--color-border)] px-4 pb-3 pt-12">
+      <div className="drag-region flex items-center justify-between border-b border-[var(--color-border)] px-4 pb-3 pt-3">
         <div className="flex items-center gap-2.5">
           <div className="relative flex size-8 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-[12px] font-bold text-white shadow-lg shadow-indigo-500/20">
             <Sparkles className="size-4" />
@@ -507,7 +507,7 @@ export function Sidebar({
         </div>
         <div className="flex items-center gap-1">
           <button
-            className="flex size-8 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-300"
+            className="no-drag flex size-8 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-300"
             onClick={onOpenSettings}
             title="Settings"
             type="button"

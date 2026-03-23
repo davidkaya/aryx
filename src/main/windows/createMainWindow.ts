@@ -21,7 +21,7 @@ export function createMainWindow(): BrowserWindow {
     titleBarOverlay: {
       color: '#09090b',
       symbolColor: '#a1a1aa',
-      height: 40,
+      height: 32,
     },
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),

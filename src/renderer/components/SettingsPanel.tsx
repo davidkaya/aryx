@@ -1,5 +1,5 @@
 import { useState, type HTMLAttributes, type ReactNode } from 'react';
-import { ChevronLeft, ChevronRight, Code, Cpu, Info, Plus, Server, Workflow } from 'lucide-react';
+import { AlertCircle, ChevronLeft, ChevronRight, Code, Cpu, Info, Plus, Server, Trash, Workflow } from 'lucide-react';
 
 import { CopilotStatusCard } from '@renderer/components/CopilotStatusCard';
 import { PatternEditor } from '@renderer/components/PatternEditor';
@@ -436,93 +436,108 @@ function McpServerEditor({
 
   return (
     <ToolingEditorShell
-      description="Configure a machine-wide MCP server. Sessions can opt into this server from the Activity panel."
       disableSave={Boolean(validationError)}
       error={validationError}
       onBack={onBack}
       onDelete={onDelete}
       onSave={onSave}
-      title="MCP Server"
+      subtitle="Machine-wide server definition"
+      title={server.name || 'Untitled MCP Server'}
     >
-      <div className="grid gap-4 md:grid-cols-2">
-        <FormField label="Name" required>
-          <TextInput
-            onChange={(value) => onChange(updateMcpServer(server, { name: value }))}
-            value={server.name}
-          />
-        </FormField>
-        <FormField label="Transport" required>
-          <SelectInput
-            onChange={(value) => onChange(changeMcpTransport(server, value as McpServerDefinition['transport']))}
-            options={[
-              { value: 'local', label: 'Local process' },
-              { value: 'http', label: 'HTTP' },
-              { value: 'sse', label: 'SSE' },
-            ]}
-            value={server.transport}
-          />
-        </FormField>
-      </div>
-
-      {server.transport === 'local' ? (
-        <div className="grid gap-4 md:grid-cols-2">
-          <FormField className="md:col-span-2" label="Command" required>
+      <section className="space-y-4">
+        <h4 className="text-[12px] font-semibold uppercase tracking-wider text-zinc-500">
+          General
+        </h4>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <FormField label="Name" required>
             <TextInput
-              onChange={(value) => onChange(updateMcpServer(server, { command: value }))}
-              placeholder="node"
-              value={server.command}
+              onChange={(value) => onChange(updateMcpServer(server, { name: value }))}
+              value={server.name}
             />
           </FormField>
-          <FormField className="md:col-span-2" label="Arguments">
-            <TextareaInput
-              onChange={(value) => onChange(updateMcpServer(server, { args: splitMultiline(value) }))}
-              placeholder="One argument per line"
-              rows={4}
-              value={joinMultiline(server.args)}
-            />
-          </FormField>
-          <FormField className="md:col-span-2" label="Working directory">
-            <TextInput
-              onChange={(value) => onChange(updateMcpServer(server, { cwd: value || undefined }))}
-              placeholder="Optional"
-              value={server.cwd ?? ''}
+          <FormField label="Transport" required>
+            <SelectInput
+              onChange={(value) => onChange(changeMcpTransport(server, value as McpServerDefinition['transport']))}
+              options={[
+                { value: 'local', label: 'Local process' },
+                { value: 'http', label: 'HTTP' },
+                { value: 'sse', label: 'SSE' },
+              ]}
+              value={server.transport}
             />
           </FormField>
         </div>
-      ) : (
-        <FormField label="Server URL" required>
-          <TextInput
-            onChange={(value) => onChange(updateMcpServer(server, { url: value }))}
-            placeholder="https://example.com/mcp"
-            value={server.url}
-          />
-        </FormField>
-      )}
+      </section>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <FormField label="Allowed tools">
-          <TextareaInput
-            onChange={(value) => onChange(updateMcpServer(server, { tools: splitTokens(value) }))}
-            placeholder="Use * for all tools, or list one tool per line"
-            rows={4}
-            value={joinMultiline(server.tools)}
-          />
-        </FormField>
-        <FormField label="Timeout (ms)">
-          <TextInput
-            inputMode="numeric"
-            onChange={(value) =>
-              onChange(
-                updateMcpServer(server, {
-                  timeoutMs: value.trim() ? Number(value) : undefined,
-                }),
-              )
-            }
-            placeholder="Optional"
-            value={server.timeoutMs?.toString() ?? ''}
-          />
-        </FormField>
-      </div>
+      <section className="space-y-4">
+        <h4 className="text-[12px] font-semibold uppercase tracking-wider text-zinc-500">
+          {server.transport === 'local' ? 'Process' : 'Endpoint'}
+        </h4>
+        {server.transport === 'local' ? (
+          <>
+            <FormField label="Command" required>
+              <TextInput
+                onChange={(value) => onChange(updateMcpServer(server, { command: value }))}
+                placeholder="node"
+                value={server.command}
+              />
+            </FormField>
+            <FormField label="Arguments">
+              <TextareaInput
+                onChange={(value) => onChange(updateMcpServer(server, { args: splitMultiline(value) }))}
+                placeholder="One argument per line"
+                rows={3}
+                value={joinMultiline(server.args)}
+              />
+            </FormField>
+            <FormField label="Working directory">
+              <TextInput
+                onChange={(value) => onChange(updateMcpServer(server, { cwd: value || undefined }))}
+                placeholder="Optional — defaults to project root"
+                value={server.cwd ?? ''}
+              />
+            </FormField>
+          </>
+        ) : (
+          <FormField label="Server URL" required>
+            <TextInput
+              onChange={(value) => onChange(updateMcpServer(server, { url: value }))}
+              placeholder="https://example.com/mcp"
+              value={server.url}
+            />
+          </FormField>
+        )}
+      </section>
+
+      <section className="space-y-4">
+        <h4 className="text-[12px] font-semibold uppercase tracking-wider text-zinc-500">
+          Advanced
+        </h4>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <FormField label="Allowed tools">
+            <TextareaInput
+              onChange={(value) => onChange(updateMcpServer(server, { tools: splitTokens(value) }))}
+              placeholder="* for all, or one per line"
+              rows={3}
+              value={joinMultiline(server.tools)}
+            />
+          </FormField>
+          <FormField label="Timeout (ms)">
+            <TextInput
+              inputMode="numeric"
+              onChange={(value) =>
+                onChange(
+                  updateMcpServer(server, {
+                    timeoutMs: value.trim() ? Number(value) : undefined,
+                  }),
+                )
+              }
+              placeholder="Optional"
+              value={server.timeoutMs?.toString() ?? ''}
+            />
+          </FormField>
+        </div>
+      </section>
 
       <InfoCallout>
         Keep secrets out of this form. Use commands or endpoints that authenticate through the OS or external tooling.
@@ -548,59 +563,72 @@ function LspProfileEditor({
 
   return (
     <ToolingEditorShell
-      description="Configure a machine-wide LSP command. Sessions can opt into this profile from the Activity panel."
       disableSave={Boolean(validationError)}
       error={validationError}
       onBack={onBack}
       onDelete={onDelete}
       onSave={onSave}
-      title="LSP Profile"
+      subtitle="Machine-wide language server definition"
+      title={profile.name || 'Untitled LSP Profile'}
     >
-      <div className="grid gap-4 md:grid-cols-2">
-        <FormField label="Name" required>
+      <section className="space-y-4">
+        <h4 className="text-[12px] font-semibold uppercase tracking-wider text-zinc-500">
+          General
+        </h4>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <FormField label="Name" required>
+            <TextInput
+              onChange={(value) => onChange(updateLspProfile(profile, { name: value }))}
+              value={profile.name}
+            />
+          </FormField>
+          <FormField label="Language ID" required>
+            <TextInput
+              onChange={(value) => onChange(updateLspProfile(profile, { languageId: value }))}
+              placeholder="typescript"
+              value={profile.languageId}
+            />
+          </FormField>
+        </div>
+      </section>
+
+      <section className="space-y-4">
+        <h4 className="text-[12px] font-semibold uppercase tracking-wider text-zinc-500">
+          Server
+        </h4>
+        <FormField label="Command" required>
           <TextInput
-            onChange={(value) => onChange(updateLspProfile(profile, { name: value }))}
-            value={profile.name}
+            onChange={(value) => onChange(updateLspProfile(profile, { command: value }))}
+            placeholder="typescript-language-server"
+            value={profile.command}
           />
         </FormField>
-        <FormField label="Language ID" required>
-          <TextInput
-            onChange={(value) => onChange(updateLspProfile(profile, { languageId: value }))}
-            placeholder="typescript"
-            value={profile.languageId}
-          />
-        </FormField>
-      </div>
-
-      <FormField label="Command" required>
-        <TextInput
-          onChange={(value) => onChange(updateLspProfile(profile, { command: value }))}
-          placeholder="typescript-language-server"
-          value={profile.command}
-        />
-      </FormField>
-
-      <div className="grid gap-4 md:grid-cols-2">
         <FormField label="Arguments">
           <TextareaInput
             onChange={(value) => onChange(updateLspProfile(profile, { args: splitMultiline(value) }))}
             placeholder="One argument per line"
-            rows={4}
+            rows={3}
             value={joinMultiline(profile.args)}
           />
         </FormField>
+      </section>
+
+      <section className="space-y-4">
+        <h4 className="text-[12px] font-semibold uppercase tracking-wider text-zinc-500">
+          File matching
+        </h4>
         <FormField label="File extensions" required>
           <TextareaInput
             onChange={(value) => onChange(updateLspProfile(profile, { fileExtensions: splitTokens(value) }))}
             placeholder={'.ts\n.tsx'}
-            rows={4}
+            rows={3}
             value={joinMultiline(profile.fileExtensions)}
           />
         </FormField>
-      </div>
+      </section>
 
       <InfoCallout>
-        Profiles are global definitions only. Project root resolution still comes from the active session's project.
+        Project root resolution comes from the active session's project, not from this definition.
       </InfoCallout>
     </ToolingEditorShell>
   );
@@ -680,7 +708,7 @@ function EmptyState({ children }: { children: ReactNode }) {
 
 function ToolingEditorShell({
   title,
-  description,
+  subtitle,
   error,
   disableSave,
   onBack,
@@ -689,7 +717,7 @@ function ToolingEditorShell({
   children,
 }: {
   title: string;
-  description: string;
+  subtitle: string;
   error?: string;
   disableSave: boolean;
   onBack: () => void;
@@ -699,7 +727,7 @@ function ToolingEditorShell({
 }) {
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between gap-3 border-b border-[var(--color-border)] px-5 pb-3 pt-12">
+      <div className="flex items-center justify-between border-b border-[var(--color-border)] px-5 pb-3 pt-12">
         <div className="flex items-center gap-3">
           <button
             className="flex size-8 items-center justify-center rounded-lg text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-200"
@@ -710,21 +738,22 @@ function ToolingEditorShell({
           </button>
           <div>
             <h2 className="text-sm font-semibold text-zinc-100">{title}</h2>
-            <p className="mt-0.5 text-[12px] text-zinc-500">{description}</p>
+            <p className="text-[12px] text-zinc-500">{subtitle}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
           {onDelete && (
             <button
-              className="rounded-lg border border-zinc-800 px-3 py-1.5 text-[13px] font-medium text-zinc-400 transition hover:border-red-500/30 hover:bg-red-500/10 hover:text-red-300"
+              className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[13px] text-red-400 transition hover:bg-red-500/10"
               onClick={() => void onDelete()}
               type="button"
             >
+              <Trash className="size-3.5" />
               Delete
             </button>
           )}
           <button
-            className="rounded-lg bg-indigo-600 px-3 py-1.5 text-[13px] font-semibold text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-lg bg-indigo-600 px-4 py-1.5 text-[13px] font-medium text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-40"
             disabled={disableSave}
             onClick={() => void onSave()}
             type="button"
@@ -734,10 +763,11 @@ function ToolingEditorShell({
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-2xl space-y-5 px-8 py-6">
+      <div className="flex-1 overflow-y-auto px-6 py-5">
+        <div className="mx-auto max-w-2xl space-y-8">
           {error && (
-            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-[12px] text-amber-200">
+            <div className="flex items-start gap-2 rounded-lg bg-amber-500/10 px-3 py-2 text-[13px] text-amber-300">
+              <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
               {error}
             </div>
           )}
@@ -751,19 +781,17 @@ function ToolingEditorShell({
 function FormField({
   label,
   required,
-  className,
   children,
 }: {
   label: string;
   required?: boolean;
-  className?: string;
   children: ReactNode;
 }) {
   return (
-    <label className={`block ${className ?? ''}`}>
-      <span className="mb-1.5 block text-[12px] font-medium text-zinc-300">
+    <label className="block">
+      <span className="mb-1.5 block text-[12px] font-medium text-zinc-400">
         {label}
-        {required && <span className="ml-1 text-amber-300">*</span>}
+        {required && <span className="ml-1 text-amber-400">*</span>}
       </span>
       {children}
     </label>
@@ -783,7 +811,7 @@ function TextInput({
 }) {
   return (
     <input
-      className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-[13px] text-zinc-100 outline-none transition placeholder:text-zinc-600 focus:border-indigo-500/50"
+      className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-[13px] text-zinc-100 outline-none transition placeholder:text-zinc-600 focus:border-indigo-500/50"
       inputMode={inputMode}
       onChange={(event) => onChange(event.target.value)}
       placeholder={placeholder}
@@ -805,7 +833,7 @@ function TextareaInput({
 }) {
   return (
     <textarea
-      className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-[13px] text-zinc-100 outline-none transition placeholder:text-zinc-600 focus:border-indigo-500/50"
+      className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-[13px] text-zinc-100 outline-none transition placeholder:text-zinc-600 focus:border-indigo-500/50"
       onChange={(event) => onChange(event.target.value)}
       placeholder={placeholder}
       rows={rows}
@@ -825,7 +853,7 @@ function SelectInput({
 }) {
   return (
     <select
-      className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-[13px] text-zinc-100 outline-none transition focus:border-indigo-500/50"
+      className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-[13px] text-zinc-100 outline-none transition focus:border-indigo-500/50"
       onChange={(event) => onChange(event.target.value)}
       value={value}
     >
@@ -840,7 +868,7 @@ function SelectInput({
 
 function InfoCallout({ children }: { children: ReactNode }) {
   return (
-    <div className="flex items-start gap-2.5 rounded-xl border border-zinc-800 bg-zinc-900/30 px-4 py-3 text-[12px] leading-relaxed text-zinc-500">
+    <div className="flex items-start gap-2.5 rounded-lg border border-zinc-800 bg-zinc-900/30 px-3 py-2.5 text-[12px] leading-relaxed text-zinc-500">
       <Info className="mt-0.5 size-3.5 shrink-0 text-zinc-600" />
       <span>{children}</span>
     </div>

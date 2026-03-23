@@ -4,6 +4,7 @@ import type { PatternDefinition } from '@shared/domain/pattern';
 import {
   applyScratchpadSessionConfig,
   createScratchpadSessionConfig,
+  resolveSessionToolingSelection,
   resolveSessionTitle,
   resolveScratchpadSessionConfig,
   type SessionRecord,
@@ -116,5 +117,28 @@ describe('session title helpers', () => {
         },
       ]),
     ).toBe('Release readiness review');
+  });
+});
+
+describe('session tooling helpers', () => {
+  test('normalizes missing or duplicated tooling selections into stable arrays', () => {
+    expect(resolveSessionToolingSelection(createSession())).toEqual({
+      enabledMcpServerIds: [],
+      enabledLspProfileIds: [],
+    });
+
+    expect(
+      resolveSessionToolingSelection(
+        createSession({
+          tooling: {
+            enabledMcpServerIds: ['mcp-git', ' mcp-git ', ''],
+            enabledLspProfileIds: ['ts', ' ts ', ''],
+          },
+        }),
+      ),
+    ).toEqual({
+      enabledMcpServerIds: ['mcp-git'],
+      enabledLspProfileIds: ['ts'],
+    });
   });
 });

@@ -41,6 +41,12 @@ Eryx supports several ways of working:
 - **Handoff** for agent-to-agent delegation
 - **Group chat** for collaborative multi-agent discussion
 
+### Add global MCPs and LSPs
+
+You can define MCP servers and LSP profiles once in **Settings**, then enable the ones you want for each project-backed session from the right-side **Activity** panel.
+
+This keeps machine-wide tooling reusable while still letting each session decide which external tools the agent can use.
+
 ### Watch runs as they happen
 
 You can follow agent activity while a session is running, which makes longer or more complex workflows easier to trust and understand.
@@ -57,6 +63,7 @@ To use Eryx comfortably, make sure you have:
 - **GitHub Copilot CLI** installed and available as `copilot`
 - an active **GitHub Copilot sign-in**
 - a local folder or git repository ready to connect if you want project-aware help
+- any MCP servers or language servers you want to use installed and reachable from your machine
 
 Eryx includes connection status in the app so you can quickly tell whether Copilot is ready before you start a session.
 
@@ -74,7 +81,10 @@ Eryx includes connection status in the app so you can quickly tell whether Copil
 4. **Pick a pattern**
    Use a simple single-agent setup to begin, or choose a saved multi-agent pattern when you want a more structured workflow.
 
-5. **Start working**
+5. **Configure optional tooling**
+   If you want MCP or LSP support, add the global definitions in settings and then enable the ones you want for the current session from the Activity panel.
+
+6. **Start working**
    Ask a question, describe a task, or explore a project. As the run progresses, you can watch the participating agents and keep the session for later.
 
 ## When Eryx feels most useful

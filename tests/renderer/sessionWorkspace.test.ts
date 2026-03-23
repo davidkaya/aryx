@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 
 import { applySessionEventWorkspace } from '@renderer/lib/sessionWorkspace';
 import type { SessionEventRecord } from '@shared/domain/event';
+import { createWorkspaceSettings } from '@shared/domain/tooling';
 import type { WorkspaceState } from '@shared/domain/workspace';
 
 describe('session workspace helpers', () => {
@@ -9,6 +10,7 @@ describe('session workspace helpers', () => {
     return {
       projects: [],
       patterns: [],
+      settings: createWorkspaceSettings(),
       sessions: [
         {
           id: 'session-1',

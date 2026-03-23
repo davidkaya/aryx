@@ -73,9 +73,46 @@ export interface RunTurnCommand {
   workspaceKind?: 'project' | 'scratchpad';
   pattern: PatternDefinition;
   messages: ChatMessageRecord[];
+  tooling?: RunTurnToolingConfig;
 }
 
 export type SidecarCommand = DescribeCapabilitiesCommand | ValidatePatternCommand | RunTurnCommand;
+
+export interface RunTurnLocalMcpServerConfig {
+  id: string;
+  name: string;
+  transport: 'local';
+  tools: string[];
+  timeoutMs?: number;
+  command: string;
+  args: string[];
+  cwd?: string;
+}
+
+export interface RunTurnRemoteMcpServerConfig {
+  id: string;
+  name: string;
+  transport: 'http' | 'sse';
+  tools: string[];
+  timeoutMs?: number;
+  url: string;
+}
+
+export type RunTurnMcpServerConfig = RunTurnLocalMcpServerConfig | RunTurnRemoteMcpServerConfig;
+
+export interface RunTurnLspProfileConfig {
+  id: string;
+  name: string;
+  command: string;
+  args: string[];
+  languageId: string;
+  fileExtensions: string[];
+}
+
+export interface RunTurnToolingConfig {
+  mcpServers: RunTurnMcpServerConfig[];
+  lspProfiles: RunTurnLspProfileConfig[];
+}
 
 export interface CapabilitiesEvent {
   type: 'capabilities';

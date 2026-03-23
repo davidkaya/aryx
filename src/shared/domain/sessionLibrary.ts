@@ -175,6 +175,12 @@ export function duplicateSessionRecord(
     isArchived: false,
     lastError: undefined,
     scratchpadConfig: session.scratchpadConfig ? { ...session.scratchpadConfig } : undefined,
+    tooling: session.tooling
+      ? {
+          enabledMcpServerIds: [...session.tooling.enabledMcpServerIds],
+          enabledLspProfileIds: [...session.tooling.enabledLspProfileIds],
+        }
+      : undefined,
     messages: session.messages.map((message): ChatMessageRecord => ({
       ...message,
       pending: false,

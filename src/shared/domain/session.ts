@@ -1,4 +1,9 @@
 import { buildSessionTitle, type PatternDefinition, type ReasoningEffort } from '@shared/domain/pattern';
+import {
+  createSessionToolingSelection,
+  normalizeSessionToolingSelection,
+  type SessionToolingSelection,
+} from '@shared/domain/tooling';
 
 export type ChatRole = 'system' | 'user' | 'assistant';
 export type SessionStatus = 'idle' | 'running' | 'error';
@@ -32,6 +37,7 @@ export interface SessionRecord {
   messages: ChatMessageRecord[];
   lastError?: string;
   scratchpadConfig?: ScratchpadSessionConfig;
+  tooling?: SessionToolingSelection;
 }
 
 export function resolveSessionTitle(
@@ -58,6 +64,12 @@ export function createScratchpadSessionConfig(
     model: primaryAgent.model,
     reasoningEffort: primaryAgent.reasoningEffort,
   };
+}
+
+export function resolveSessionToolingSelection(
+  session: Pick<SessionRecord, 'tooling'>,
+): SessionToolingSelection {
+  return normalizeSessionToolingSelection(session.tooling ?? createSessionToolingSelection());
 }
 
 export function resolveScratchpadSessionConfig(

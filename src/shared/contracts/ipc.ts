@@ -3,6 +3,11 @@ import type { PatternDefinition, ReasoningEffort } from '@shared/domain/pattern'
 import type { ProjectRecord } from '@shared/domain/project';
 import type { QuerySessionsInput, SessionQueryResult } from '@shared/domain/sessionLibrary';
 import type { SessionEventRecord } from '@shared/domain/event';
+import type {
+  LspProfileDefinition,
+  McpServerDefinition,
+  SessionToolingSelection,
+} from '@shared/domain/tooling';
 import type { WorkspaceState } from '@shared/domain/workspace';
 
 export interface CreateSessionInput {
@@ -49,6 +54,18 @@ export interface SetPatternFavoriteInput {
   isFavorite: boolean;
 }
 
+export interface SaveMcpServerInput {
+  server: McpServerDefinition;
+}
+
+export interface SaveLspProfileInput {
+  profile: LspProfileDefinition;
+}
+
+export interface UpdateSessionToolingInput extends SessionToolingSelection {
+  sessionId: string;
+}
+
 export interface ElectronApi {
   describeSidecarCapabilities(): Promise<SidecarCapabilities>;
   refreshSidecarCapabilities(): Promise<SidecarCapabilities>;
@@ -58,6 +75,11 @@ export interface ElectronApi {
   refreshProjectGitContext(projectId?: string): Promise<WorkspaceState>;
   savePattern(input: SavePatternInput): Promise<WorkspaceState>;
   deletePattern(patternId: string): Promise<WorkspaceState>;
+  saveMcpServer(input: SaveMcpServerInput): Promise<WorkspaceState>;
+  deleteMcpServer(serverId: string): Promise<WorkspaceState>;
+  saveLspProfile(input: SaveLspProfileInput): Promise<WorkspaceState>;
+  deleteLspProfile(profileId: string): Promise<WorkspaceState>;
+  updateSessionTooling(input: UpdateSessionToolingInput): Promise<WorkspaceState>;
   createSession(input: CreateSessionInput): Promise<WorkspaceState>;
   duplicateSession(input: DuplicateSessionInput): Promise<WorkspaceState>;
   renameSession(input: RenameSessionInput): Promise<WorkspaceState>;

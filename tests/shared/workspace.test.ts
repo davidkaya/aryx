@@ -8,6 +8,12 @@ describe('workspace seed', () => {
 
     expect(workspace.projects).toEqual([]);
     expect(workspace.sessions).toEqual([]);
+    expect(workspace.settings).toEqual({
+      tooling: {
+        mcpServers: [],
+        lspProfiles: [],
+      },
+    });
     expect(workspace.selectedProjectId).toBeUndefined();
     expect(workspace.selectedPatternId).toBeUndefined();
     expect(workspace.selectedSessionId).toBeUndefined();

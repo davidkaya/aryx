@@ -3,6 +3,7 @@ import { mkdir } from 'node:fs/promises';
 import { createBuiltinPatterns } from '@shared/domain/pattern';
 import type { PatternDefinition } from '@shared/domain/pattern';
 import { mergeScratchpadProject } from '@shared/domain/project';
+import { normalizeSessionToolingSelection, normalizeWorkspaceSettings } from '@shared/domain/tooling';
 import { createWorkspaceSeed, type WorkspaceState } from '@shared/domain/workspace';
 import { nowIso } from '@shared/utils/ids';
 
@@ -59,7 +60,11 @@ export class WorkspaceRepository {
       ...stored,
       patterns: mergePatterns(stored.patterns ?? []),
       projects,
-      sessions: stored.sessions ?? [],
+      sessions: (stored.sessions ?? []).map((session) => ({
+        ...session,
+        tooling: normalizeSessionToolingSelection(session.tooling),
+      })),
+      settings: normalizeWorkspaceSettings(stored.settings),
       selectedProjectId: projects.some((project) => project.id === stored.selectedProjectId)
         ? stored.selectedProjectId
         : projects[0]?.id,

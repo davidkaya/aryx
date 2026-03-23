@@ -507,6 +507,15 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
             List<AIAgent> agents = [];
             CopilotClientOptions clientOptions = CopilotCliPathResolver.CreateClientOptions();
             bool isScratchpad = string.Equals(command.WorkspaceKind, "scratchpad", StringComparison.OrdinalIgnoreCase);
+            SessionToolingBundle? toolingBundle = isScratchpad
+                ? null
+                : await SessionToolingBundle.CreateAsync(command.Tooling, command.ProjectPath, cancellationToken)
+                    .ConfigureAwait(false);
+
+            if (toolingBundle is not null)
+            {
+                disposables.Add(toolingBundle);
+            }
 
             foreach ((PatternAgentDefinitionDto definition, int agentIndex) in command.Pattern.Agents.Select((definition, index) => (definition, index)))
             {
@@ -529,6 +538,18 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
                 if (isScratchpad)
                 {
                     sessionConfig.AvailableTools = [];
+                }
+                else if (toolingBundle is not null)
+                {
+                    if (toolingBundle.McpServers.Count > 0)
+                    {
+                        sessionConfig.McpServers = toolingBundle.McpServers;
+                    }
+
+                    if (toolingBundle.Tools.Count > 0)
+                    {
+                        sessionConfig.Tools = toolingBundle.Tools.ToList();
+                    }
                 }
 
                 GitHubCopilotAgent agent = new(

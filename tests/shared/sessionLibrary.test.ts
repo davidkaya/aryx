@@ -4,6 +4,7 @@ import { querySessions, duplicateSessionRecord, renameSessionRecord } from '@sha
 import type { PatternDefinition } from '@shared/domain/pattern';
 import type { ProjectRecord } from '@shared/domain/project';
 import type { SessionRecord } from '@shared/domain/session';
+import { createWorkspaceSettings } from '@shared/domain/tooling';
 import type { WorkspaceState } from '@shared/domain/workspace';
 
 function createPattern(overrides?: Partial<PatternDefinition>): PatternDefinition {
@@ -66,6 +67,7 @@ function createWorkspace(overrides?: Partial<WorkspaceState>): WorkspaceState {
   return {
     projects: [createProject(), createProject({ id: 'project-scratchpad', name: 'Scratchpad', path: 'C:\\scratchpad' })],
     patterns: [createPattern(), createPattern({ id: 'pattern-single-chat', name: '1-on-1 Copilot Chat', mode: 'single' })],
+    settings: createWorkspaceSettings(),
     sessions: [
       createSession(),
       createSession({

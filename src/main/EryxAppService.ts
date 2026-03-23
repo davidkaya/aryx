@@ -5,6 +5,9 @@ import { dialog } from 'electron';
 
 import type {
   AgentActivityEvent,
+  RunTurnLspProfileConfig,
+  RunTurnMcpServerConfig,
+  RunTurnToolingConfig,
   SidecarCapabilities,
   TurnDeltaEvent,
 } from '@shared/contracts/sidecar';
@@ -31,11 +34,22 @@ import {
 import type { SessionEventRecord } from '@shared/domain/event';
 import {
   applyScratchpadSessionConfig,
+  resolveSessionToolingSelection,
   createScratchpadSessionConfig,
   resolveSessionTitle,
   type ChatMessageRecord,
   type SessionRecord,
 } from '@shared/domain/session';
+import {
+  createSessionToolingSelection,
+  type LspProfileDefinition,
+  type McpServerDefinition,
+  normalizeLspProfileDefinition,
+  normalizeMcpServerDefinition,
+  normalizeSessionToolingSelection,
+  validateLspProfileDefinition,
+  validateMcpServerDefinition,
+} from '@shared/domain/tooling';
 import type { WorkspaceState } from '@shared/domain/workspace';
 import { createId, nowIso } from '@shared/utils/ids';
 import { mergeStreamingText } from '@shared/utils/streamingText';
@@ -193,6 +207,96 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
     return this.persistAndBroadcast(workspace);
   }
 
+  async saveMcpServer(server: McpServerDefinition): Promise<WorkspaceState> {
+    const workspace = await this.loadWorkspace();
+    const existingIndex = workspace.settings.tooling.mcpServers.findIndex(
+      (current) => current.id === server.id,
+    );
+    const timestamp = nowIso();
+    const candidate = normalizeMcpServerDefinition({
+      ...server,
+      createdAt:
+        existingIndex >= 0
+          ? workspace.settings.tooling.mcpServers[existingIndex].createdAt
+          : timestamp,
+      updatedAt: timestamp,
+    });
+    const issue = validateMcpServerDefinition(candidate);
+    if (issue) {
+      throw new Error(issue);
+    }
+
+    if (existingIndex >= 0) {
+      workspace.settings.tooling.mcpServers[existingIndex] = candidate;
+    } else {
+      workspace.settings.tooling.mcpServers.push(candidate);
+    }
+
+    return this.persistAndBroadcast(workspace);
+  }
+
+  async deleteMcpServer(serverId: string): Promise<WorkspaceState> {
+    const workspace = await this.loadWorkspace();
+    workspace.settings.tooling.mcpServers = workspace.settings.tooling.mcpServers.filter(
+      (server) => server.id !== serverId,
+    );
+
+    for (const session of workspace.sessions) {
+      const selection = resolveSessionToolingSelection(session);
+      session.tooling = {
+        ...selection,
+        enabledMcpServerIds: selection.enabledMcpServerIds.filter((id) => id !== serverId),
+      };
+    }
+
+    return this.persistAndBroadcast(workspace);
+  }
+
+  async saveLspProfile(profile: LspProfileDefinition): Promise<WorkspaceState> {
+    const workspace = await this.loadWorkspace();
+    const existingIndex = workspace.settings.tooling.lspProfiles.findIndex(
+      (current) => current.id === profile.id,
+    );
+    const timestamp = nowIso();
+    const candidate = normalizeLspProfileDefinition({
+      ...profile,
+      createdAt:
+        existingIndex >= 0
+          ? workspace.settings.tooling.lspProfiles[existingIndex].createdAt
+          : timestamp,
+      updatedAt: timestamp,
+    });
+    const issue = validateLspProfileDefinition(candidate);
+    if (issue) {
+      throw new Error(issue);
+    }
+
+    if (existingIndex >= 0) {
+      workspace.settings.tooling.lspProfiles[existingIndex] = candidate;
+    } else {
+      workspace.settings.tooling.lspProfiles.push(candidate);
+    }
+
+    return this.persistAndBroadcast(workspace);
+  }
+
+  async deleteLspProfile(profileId: string): Promise<WorkspaceState> {
+    const workspace = await this.loadWorkspace();
+    workspace.settings.tooling.lspProfiles = workspace.settings.tooling.lspProfiles.filter(
+      (profile) => profile.id !== profileId,
+    );
+
+    for (const session of workspace.sessions) {
+      const selection = resolveSessionToolingSelection(session);
+      session.tooling = {
+        ...selection,
+        enabledLspProfileIds: selection.enabledLspProfileIds.filter((id) => id !== profileId),
+      };
+    }
+
+    return this.persistAndBroadcast(workspace);
+  }
+
   async createSession(projectId: string, patternId: string): Promise<WorkspaceState> {
     const workspace = await this.loadWorkspace();
     const project = this.requireProject(workspace, projectId);
@@ -213,6 +317,7 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
       scratchpadConfig: isScratchpadProject(project)
         ? createScratchpadSessionConfig(normalizedPattern)
         : undefined,
+      tooling: createSessionToolingSelection(),
     };
 
     workspace.sessions.unshift(session);
@@ -303,6 +408,7 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
           workspaceKind,
           pattern: effectivePattern,
           messages: session.messages,
+          tooling: this.buildRunTurnToolingConfig(workspace, project, session),
         },
         async (event) => {
           await this.applyTurnDelta(workspace, session.id, event);
@@ -363,6 +469,57 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
     };
     session.updatedAt = nowIso();
 
+    return this.persistAndBroadcast(workspace);
+  }
+
+  async updateSessionTooling(
+    sessionId: string,
+    enabledMcpServerIds: string[],
+    enabledLspProfileIds: string[],
+  ): Promise<WorkspaceState> {
+    const workspace = await this.loadWorkspace();
+    const session = this.requireSession(workspace, sessionId);
+    const project = this.requireProject(workspace, session.projectId);
+
+    if (session.status === 'running') {
+      throw new Error('Wait for the current response to finish before changing session tools.');
+    }
+
+    const selection = normalizeSessionToolingSelection({
+      enabledMcpServerIds,
+      enabledLspProfileIds,
+    });
+
+    if (
+      isScratchpadProject(project)
+      && (selection.enabledMcpServerIds.length > 0 || selection.enabledLspProfileIds.length > 0)
+    ) {
+      throw new Error('Scratchpad sessions do not support MCP or LSP tools.');
+    }
+
+    const knownMcpServerIds = new Set(
+      workspace.settings.tooling.mcpServers.map((server) => server.id),
+    );
+    const knownLspProfileIds = new Set(
+      workspace.settings.tooling.lspProfiles.map((profile) => profile.id),
+    );
+
+    const unknownMcpServerIds = selection.enabledMcpServerIds.filter(
+      (id) => !knownMcpServerIds.has(id),
+    );
+    if (unknownMcpServerIds.length > 0) {
+      throw new Error(`Unknown MCP server "${unknownMcpServerIds[0]}".`);
+    }
+
+    const unknownLspProfileIds = selection.enabledLspProfileIds.filter(
+      (id) => !knownLspProfileIds.has(id),
+    );
+    if (unknownLspProfileIds.length > 0) {
+      throw new Error(`Unknown LSP profile "${unknownLspProfileIds[0]}".`);
+    }
+
+    session.tooling = selection;
+    session.updatedAt = nowIso();
     return this.persistAndBroadcast(workspace);
   }
 
@@ -588,6 +745,86 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
 
     const modelCatalog = await this.loadAvailableModelCatalog();
     return normalizePatternModels(patternWithSessionConfig, modelCatalog);
+  }
+
+  private buildRunTurnToolingConfig(
+    workspace: WorkspaceState,
+    project: ProjectRecord,
+    session: SessionRecord,
+  ): RunTurnToolingConfig | undefined {
+    if (isScratchpadProject(project)) {
+      return undefined;
+    }
+
+    const selection = resolveSessionToolingSelection(session);
+    const mcpServersById = new Map<string, McpServerDefinition>(
+      workspace.settings.tooling.mcpServers.map((server) => [server.id, server]),
+    );
+    const lspProfilesById = new Map<string, LspProfileDefinition>(
+      workspace.settings.tooling.lspProfiles.map((profile) => [profile.id, profile]),
+    );
+
+    const mcpServers = selection.enabledMcpServerIds.flatMap((id): RunTurnMcpServerConfig[] => {
+      const server = mcpServersById.get(id);
+      if (!server) {
+        return [];
+      }
+
+      if (server.transport === 'local') {
+        return [
+          {
+            id: server.id,
+            name: server.name,
+            transport: 'local',
+            tools: [...server.tools],
+            timeoutMs: server.timeoutMs,
+            command: server.command,
+            args: [...server.args],
+            cwd: server.cwd,
+          },
+        ];
+      }
+
+      return [
+        {
+          id: server.id,
+          name: server.name,
+          transport: server.transport,
+          tools: [...server.tools],
+          timeoutMs: server.timeoutMs,
+          url: server.url,
+        },
+      ];
+    });
+
+    const lspProfiles = selection.enabledLspProfileIds.flatMap(
+      (id): RunTurnLspProfileConfig[] => {
+        const profile = lspProfilesById.get(id);
+        if (!profile) {
+          return [];
+        }
+
+        return [
+          {
+            id: profile.id,
+            name: profile.name,
+            command: profile.command,
+            args: [...profile.args],
+            languageId: profile.languageId,
+            fileExtensions: [...profile.fileExtensions],
+          },
+        ];
+      },
+    );
+
+    if (mcpServers.length === 0 && lspProfiles.length === 0) {
+      return undefined;
+    }
+
+    return {
+      mcpServers,
+      lspProfiles,
+    };
   }
 
   private emitSessionEvent(event: SessionEventRecord): void {

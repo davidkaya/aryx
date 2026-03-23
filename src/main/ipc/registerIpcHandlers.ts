@@ -5,11 +5,14 @@ import type {
   CreateSessionInput,
   DuplicateSessionInput,
   RenameSessionInput,
+  SaveLspProfileInput,
+  SaveMcpServerInput,
   SavePatternInput,
   SendSessionMessageInput,
   SetPatternFavoriteInput,
   SetSessionArchivedInput,
   SetSessionPinnedInput,
+  UpdateSessionToolingInput,
   UpdateScratchpadSessionConfigInput,
 } from '@shared/contracts/ipc';
 import type { QuerySessionsInput } from '@shared/domain/sessionLibrary';
@@ -29,6 +32,25 @@ export function registerIpcHandlers(window: BrowserWindow, service: EryxAppServi
   ipcMain.handle(ipcChannels.deletePattern, (_event, patternId: string) => service.deletePattern(patternId));
   ipcMain.handle(ipcChannels.setPatternFavorite, (_event, input: SetPatternFavoriteInput) =>
     service.setPatternFavorite(input.patternId, input.isFavorite),
+  );
+  ipcMain.handle(ipcChannels.saveMcpServer, (_event, input: SaveMcpServerInput) =>
+    service.saveMcpServer(input.server),
+  );
+  ipcMain.handle(ipcChannels.deleteMcpServer, (_event, serverId: string) =>
+    service.deleteMcpServer(serverId),
+  );
+  ipcMain.handle(ipcChannels.saveLspProfile, (_event, input: SaveLspProfileInput) =>
+    service.saveLspProfile(input.profile),
+  );
+  ipcMain.handle(ipcChannels.deleteLspProfile, (_event, profileId: string) =>
+    service.deleteLspProfile(profileId),
+  );
+  ipcMain.handle(ipcChannels.updateSessionTooling, (_event, input: UpdateSessionToolingInput) =>
+    service.updateSessionTooling(
+      input.sessionId,
+      input.enabledMcpServerIds,
+      input.enabledLspProfileIds,
+    ),
   );
   ipcMain.handle(ipcChannels.createSession, (_event, input: CreateSessionInput) =>
     service.createSession(input.projectId, input.patternId),

@@ -24,6 +24,7 @@ import {
 import type { PatternDefinition } from '@shared/domain/pattern';
 import { isScratchpadProject } from '@shared/domain/project';
 import { applyScratchpadSessionConfig } from '@shared/domain/session';
+import type { LspProfileDefinition, McpServerDefinition } from '@shared/domain/tooling';
 import type { WorkspaceState } from '@shared/domain/workspace';
 import { createId, nowIso } from '@shared/utils/ids';
 
@@ -46,6 +47,34 @@ function createDraftPattern(defaultModelId: string, defaultReasoningEffort: Patt
         reasoningEffort: defaultReasoningEffort,
       },
     ],
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+}
+
+function createDraftMcpServer(): McpServerDefinition {
+  const timestamp = nowIso();
+  return {
+    id: createId('mcp'),
+    name: 'New MCP Server',
+    transport: 'local',
+    command: '',
+    args: [],
+    tools: ['*'],
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+}
+
+function createDraftLspProfile(): LspProfileDefinition {
+  const timestamp = nowIso();
+  return {
+    id: createId('lsp'),
+    name: 'New LSP Profile',
+    command: '',
+    args: [],
+    languageId: 'typescript',
+    fileExtensions: ['.ts', '.tsx'],
     createdAt: timestamp,
     updatedAt: timestamp,
   };
@@ -195,7 +224,17 @@ export default function App() {
     detailPanel = (
       <ActivityPanel
         activity={activityForSession}
+        lspProfiles={workspace.settings.tooling.lspProfiles}
+        mcpServers={workspace.settings.tooling.mcpServers}
+        onUpdateSessionTooling={(selection) => {
+          void api.updateSessionTooling({
+            sessionId: selectedSession.id,
+            enabledMcpServerIds: selection.enabledMcpServerIds,
+            enabledLspProfileIds: selection.enabledLspProfileIds,
+          });
+        }}
         pattern={patternForSession}
+        projectIsScratchpad={isScratchpadProject(projectForSession)}
         session={selectedSession}
       />
     );
@@ -216,24 +255,39 @@ export default function App() {
         availableModels={availableModels}
         isRefreshingCapabilities={isRefreshingCapabilities}
         onClose={() => setShowSettings(false)}
-      onDeletePattern={async (id) => {
-        await api.deletePattern(id);
-      }}
-      onNewPattern={() => {
-        const defaultModel = availableModels[0] ?? findModel('gpt-5.4', availableModels) ?? findModel('gpt-5.4');
+        onDeleteLspProfile={async (id) => {
+          await api.deleteLspProfile(id);
+        }}
+        onDeleteMcpServer={async (id) => {
+          await api.deleteMcpServer(id);
+        }}
+        onDeletePattern={async (id) => {
+          await api.deletePattern(id);
+        }}
+        onNewLspProfile={createDraftLspProfile}
+        onNewMcpServer={createDraftMcpServer}
+        onNewPattern={() => {
+          const defaultModel = availableModels[0] ?? findModel('gpt-5.4', availableModels) ?? findModel('gpt-5.4');
 
         return createDraftPattern(
           defaultModel?.id ?? 'gpt-5.4',
           resolveReasoningEffort(defaultModel, 'high'),
         );
       }}
-      onRefreshCapabilities={refreshCapabilities}
-      onSavePattern={async (pattern) => {
-        await api.savePattern({ pattern });
-      }}
-      patterns={workspace.patterns}
-      sidecarCapabilities={sidecarCapabilities}
-    />
+        onRefreshCapabilities={refreshCapabilities}
+        onSaveLspProfile={async (profile) => {
+          await api.saveLspProfile({ profile });
+        }}
+        onSaveMcpServer={async (server) => {
+          await api.saveMcpServer({ server });
+        }}
+        onSavePattern={async (pattern) => {
+          await api.savePattern({ pattern });
+        }}
+        patterns={workspace.patterns}
+        sidecarCapabilities={sidecarCapabilities}
+        toolingSettings={workspace.settings.tooling}
+      />
   ) : null;
 
   return (

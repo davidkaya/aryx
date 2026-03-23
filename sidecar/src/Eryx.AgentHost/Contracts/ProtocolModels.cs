@@ -113,6 +113,36 @@ public sealed class RunTurnCommandDto : SidecarCommandEnvelope
     public string WorkspaceKind { get; init; } = "project";
     public PatternDefinitionDto Pattern { get; init; } = new();
     public IReadOnlyList<ChatMessageDto> Messages { get; init; } = [];
+    public RunTurnToolingConfigDto? Tooling { get; init; }
+}
+
+public sealed class RunTurnToolingConfigDto
+{
+    public IReadOnlyList<RunTurnMcpServerConfigDto> McpServers { get; init; } = [];
+    public IReadOnlyList<RunTurnLspProfileConfigDto> LspProfiles { get; init; } = [];
+}
+
+public sealed class RunTurnMcpServerConfigDto
+{
+    public string Id { get; init; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
+    public string Transport { get; init; } = "local";
+    public IReadOnlyList<string> Tools { get; init; } = [];
+    public int? TimeoutMs { get; init; }
+    public string? Command { get; init; }
+    public IReadOnlyList<string>? Args { get; init; }
+    public string? Cwd { get; init; }
+    public string? Url { get; init; }
+}
+
+public sealed class RunTurnLspProfileConfigDto
+{
+    public string Id { get; init; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
+    public string Command { get; init; } = string.Empty;
+    public IReadOnlyList<string> Args { get; init; } = [];
+    public string LanguageId { get; init; } = string.Empty;
+    public IReadOnlyList<string> FileExtensions { get; init; } = [];
 }
 
 public abstract class SidecarEventDto

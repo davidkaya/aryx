@@ -173,6 +173,15 @@ export default function App() {
     [workspace?.projects],
   );
 
+  const jumpToMessage = useCallback((messageId: string) => {
+    const element = document.querySelector(`[data-message-id="${CSS.escape(messageId)}"]`);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      element.classList.add('ring-1', 'ring-indigo-500/40', 'rounded-lg');
+      setTimeout(() => element.classList.remove('ring-1', 'ring-indigo-500/40', 'rounded-lg'), 1500);
+    }
+  }, []);
+
   // Loading state
   if (!workspace) {
     return (
@@ -191,15 +200,6 @@ export default function App() {
       setIsRefreshingCapabilities(false);
     }
   };
-
-  const jumpToMessage = useCallback((messageId: string) => {
-    const element = document.querySelector(`[data-message-id="${CSS.escape(messageId)}"]`);
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      element.classList.add('ring-1', 'ring-indigo-500/40', 'rounded-lg');
-      setTimeout(() => element.classList.remove('ring-1', 'ring-indigo-500/40', 'rounded-lg'), 1500);
-    }
-  }, []);
 
   // Determine main content
   let content: React.ReactNode;

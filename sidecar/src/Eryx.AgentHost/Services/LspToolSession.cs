@@ -4,6 +4,7 @@ using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 using Eryx.AgentHost.Contracts;
 using Microsoft.Extensions.AI;
 
@@ -11,11 +12,7 @@ namespace Eryx.AgentHost.Services;
 
 internal sealed class LspToolSession : IAsyncDisposable
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
-    {
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-        WriteIndented = true,
-    };
+    private static readonly JsonSerializerOptions JsonOptions = CreateJsonSerializerOptions();
 
     private readonly RunTurnLspProfileConfigDto _profile;
     private readonly string _projectPath;
@@ -70,6 +67,19 @@ internal sealed class LspToolSession : IAsyncDisposable
     }
 
     public IReadOnlyList<AIFunction> Tools { get; }
+
+    internal static JsonSerializerOptions CreateJsonSerializerOptions()
+    {
+        JsonSerializerOptions options = new(JsonSerializerDefaults.Web)
+        {
+            TypeInfoResolver = new DefaultJsonTypeInfoResolver(),
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+            WriteIndented = true,
+        };
+
+        options.MakeReadOnly();
+        return options;
+    }
 
     public static async Task<LspToolSession> StartAsync(
         RunTurnLspProfileConfigDto profile,

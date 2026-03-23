@@ -140,14 +140,15 @@ Kopaya should feel much smarter about the project it is attached to.
 | Priority | Initiative                       | Why it matters                                                                    | Likely layers                  |
 | -------- | -------------------------------- | --------------------------------------------------------------------------------- | ------------------------------ |
 | Highest  | Project context controls         | Users need to know what the agents can see and what is excluded.                  | Renderer, main, sidecar        |
-| High     | Git-aware context                | Branch, diff, dirty state, and commit context are essential for coding workflows. | Main, renderer                 |
+| High     | Git-aware context ✅              | Branch, diff, dirty state, and commit context are essential for coding workflows. | Main, renderer                 |
 | High     | Workspace indexing and summaries | Large projects need a fast, understandable overview before orchestration starts.  | Main, sidecar, persistence     |
 | High     | File pinning and working sets    | Users need to constrain attention to a selected set of files or folders.          | Renderer, persistence, sidecar |
 | Medium   | Project presets                  | Teams will want reusable project-level context, rules, and exclusion templates.   | Persistence, renderer          |
 
 ### Recommended features
 
-- [ ] show project metadata: repo name, branch, dirty state, languages, package managers, solution files
+- [x] show project metadata: repo name, branch, dirty state, ahead/behind, changed file count, head commit (backend `GitService` + sidebar `GitContextBadge` + chat header context)
+- [ ] show project metadata: languages, package managers, solution files
 - [ ] explicit include/exclude controls using gitignore-aware defaults plus manual overrides
 - [ ] working set support: "only reason about these files/folders"
 - [ ] project summary card: architecture snapshot, detected stack, test commands, important entry points

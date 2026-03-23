@@ -40,6 +40,7 @@ These instructions apply to any automated or semi-automated agent working in thi
 
 - Keep commits atomic. Each commit should represent one logical change and use a Conventional Commit message such as `feat:`, `fix:`, `refactor:`, `docs:`, `test:`, or `chore:`.
 - Treat tests as part of the implementation, not as follow-up work. Every fix, behavior change, and new feature must be covered by tests, and the relevant test suite must pass before the work is considered complete.
+- Always check whether `README.md` needs an update before handing work off. If the change affects user-facing behavior, workflows, prerequisites, installation, packaging, or product positioning, update the README in the same change.
 - Do not ship quick fixes, hacks, or "temporary" patches as final solutions. Take the time to understand the problem, plan the change, and implement a maintainable solution that fits the codebase cleanly.
 - Remove code that is no longer necessary before handing work off. If an experiment, workaround, hotfix, helper, or test path does not end up being part of the final correct solution, delete it rather than leaving dead or misleading code behind.
 - Apply the same quality bar to feature work. Think through scope, edge cases, integration points, and long-term maintainability before implementing.

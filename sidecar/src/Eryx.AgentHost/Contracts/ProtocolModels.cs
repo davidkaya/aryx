@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace Kopaya.AgentHost.Contracts;
+namespace Eryx.AgentHost.Contracts;
 
 public sealed class PatternAgentDefinitionDto
 {

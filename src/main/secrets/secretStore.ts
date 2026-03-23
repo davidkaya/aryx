@@ -1,6 +1,6 @@
 import keytar from 'keytar';
 
-const serviceName = 'kopaya';
+const serviceName = 'eryx';
 
 export class SecretStore {
   async get(account: string): Promise<string | null> {

@@ -1,14 +1,14 @@
 import { app, BrowserWindow } from 'electron';
 
 import { registerIpcHandlers } from '@main/ipc/registerIpcHandlers';
-import { KopayaAppService } from '@main/KopayaAppService';
+import { EryxAppService } from '@main/EryxAppService';
 import { createMainWindow } from '@main/windows/createMainWindow';
 
 let mainWindow: BrowserWindow | undefined;
-let appService: KopayaAppService | undefined;
+let appService: EryxAppService | undefined;
 
 async function bootstrap(): Promise<void> {
-  appService = new KopayaAppService();
+  appService = new EryxAppService();
 
   mainWindow = createMainWindow();
   registerIpcHandlers(mainWindow, appService);

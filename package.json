@@ -1,5 +1,5 @@
 {
-  "name": "kopaya",
+  "name": "eryx",
   "version": "1.0.0",
   "description": "Electron orchestrator for Copilot-powered agent workflows across multiple projects.",
   "private": true,
@@ -13,22 +13,22 @@
     "lsp:typescript": "typescript-language-server --stdio",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "bun run typecheck && bun test",
-    "sidecar:restore": "powershell -NoProfile -Command \"dotnet restore 'sidecar\\\\Kopaya.AgentHost.slnx'\"",
-    "sidecar:build": "powershell -NoProfile -Command \"dotnet build 'sidecar\\\\Kopaya.AgentHost.slnx'\"",
-    "sidecar:publish": "powershell -NoProfile -Command \"if (Test-Path 'dist-sidecar\\\\win-x64') { Remove-Item 'dist-sidecar\\\\win-x64' -Recurse -Force }; dotnet publish 'sidecar\\\\src\\\\Kopaya.AgentHost\\\\Kopaya.AgentHost.csproj' -c Release -r win-x64 --self-contained true -p:DebugType=None -p:DebugSymbols=false -o 'dist-sidecar\\\\win-x64'\"",
-    "sidecar:test": "powershell -NoProfile -Command \"dotnet test 'sidecar\\\\Kopaya.AgentHost.slnx'\""
+    "sidecar:restore": "powershell -NoProfile -Command \"dotnet restore 'sidecar\\\\Eryx.AgentHost.slnx'\"",
+    "sidecar:build": "powershell -NoProfile -Command \"dotnet build 'sidecar\\\\Eryx.AgentHost.slnx'\"",
+    "sidecar:publish": "powershell -NoProfile -Command \"if (Test-Path 'dist-sidecar\\\\win-x64') { Remove-Item 'dist-sidecar\\\\win-x64' -Recurse -Force }; dotnet publish 'sidecar\\\\src\\\\Eryx.AgentHost\\\\Eryx.AgentHost.csproj' -c Release -r win-x64 --self-contained true -p:DebugType=None -p:DebugSymbols=false -o 'dist-sidecar\\\\win-x64'\"",
+    "sidecar:test": "powershell -NoProfile -Command \"dotnet test 'sidecar\\\\Eryx.AgentHost.slnx'\""
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/davidkaya/kopaya.git"
+    "url": "git+https://github.com/davidkaya/eryx.git"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/davidkaya/kopaya/issues"
+    "url": "https://github.com/davidkaya/eryx/issues"
   },
-  "homepage": "https://github.com/davidkaya/kopaya#readme",
+  "homepage": "https://github.com/davidkaya/eryx#readme",
   "packageManager": "bun@1.3.6",
   "devDependencies": {
     "@tailwindcss/vite": "^4.2.2",

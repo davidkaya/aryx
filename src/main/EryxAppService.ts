@@ -54,7 +54,7 @@ function isBuiltinPattern(patternId: string): boolean {
   return patternId.startsWith('pattern-');
 }
 
-export class KopayaAppService extends EventEmitter<AppServiceEvents> {
+export class EryxAppService extends EventEmitter<AppServiceEvents> {
   private readonly workspaceRepository = new WorkspaceRepository();
   private readonly sidecar = new SidecarClient();
   private readonly secretStore = new SecretStore();
@@ -79,7 +79,7 @@ export class KopayaAppService extends EventEmitter<AppServiceEvents> {
     if (!this.didScheduleInitialProjectGitRefresh) {
       this.didScheduleInitialProjectGitRefresh = true;
       void this.refreshProjectGitContext().catch((error) => {
-        console.error('[kopaya git]', error);
+        console.error('[eryx git]', error);
       });
     }
 

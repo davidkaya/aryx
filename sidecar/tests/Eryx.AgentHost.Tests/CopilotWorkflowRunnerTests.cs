@@ -1,8 +1,8 @@
-using Kopaya.AgentHost.Contracts;
-using Kopaya.AgentHost.Services;
+using Eryx.AgentHost.Contracts;
+using Eryx.AgentHost.Services;
 using Microsoft.Extensions.AI;
 
-namespace Kopaya.AgentHost.Tests;
+namespace Eryx.AgentHost.Tests;
 
 public sealed class CopilotWorkflowRunnerTests
 {

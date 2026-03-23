@@ -21,7 +21,7 @@ export function WelcomePane({
         </div>
 
         <div>
-          <h1 className="text-xl font-semibold text-zinc-100">Welcome to kopaya</h1>
+          <h1 className="text-xl font-semibold text-zinc-100">Welcome to eryx</h1>
           <p className="mt-2 max-w-md text-sm leading-relaxed text-zinc-500">
             Start a scratchpad conversation for ad-hoc questions or connect a project to work with
             repo-aware Copilot agents.

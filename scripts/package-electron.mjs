@@ -4,7 +4,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { rcedit } from 'rcedit';
 
-const productName = 'Kopaya';
+const productName = 'Eryx';
 const sidecarRuntime = 'win-x64';
 const outputDirectoryName = 'win-unpacked';
 

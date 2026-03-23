@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Eryx.AgentHost/Eryx.AgentHost.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Eryx.AgentHost.Tests/Eryx.AgentHost.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -1,6 +1,6 @@
-using Kopaya.AgentHost.Contracts;
+using Eryx.AgentHost.Contracts;
 
-namespace Kopaya.AgentHost.Services;
+namespace Eryx.AgentHost.Services;
 
 public sealed class PatternValidator
 {

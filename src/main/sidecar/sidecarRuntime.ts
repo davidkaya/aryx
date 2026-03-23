@@ -18,7 +18,7 @@ function getPathModule(platform: NodeJS.Platform) {
 }
 
 function getBundledSidecarExecutableName(platform: NodeJS.Platform): string {
-  return platform === 'win32' ? 'Kopaya.AgentHost.exe' : 'Kopaya.AgentHost';
+  return platform === 'win32' ? 'Eryx.AgentHost.exe' : 'Eryx.AgentHost';
 }
 
 export function resolveSidecarProcess(context: SidecarRuntimeContext): ResolvedSidecarProcess {
@@ -39,7 +39,7 @@ export function resolveSidecarProcess(context: SidecarRuntimeContext): ResolvedS
     args: [
       'run',
       '--project',
-      pathModule.join(context.appPath, 'sidecar', 'src', 'Kopaya.AgentHost', 'Kopaya.AgentHost.csproj'),
+      pathModule.join(context.appPath, 'sidecar', 'src', 'Eryx.AgentHost', 'Eryx.AgentHost.csproj'),
       '--',
       '--stdio',
     ],

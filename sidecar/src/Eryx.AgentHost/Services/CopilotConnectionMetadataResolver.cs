@@ -2,9 +2,9 @@ using System.Diagnostics;
 using System.Text;
 using System.Text.RegularExpressions;
 using GitHub.Copilot.SDK;
-using Kopaya.AgentHost.Contracts;
+using Eryx.AgentHost.Contracts;
 
-namespace Kopaya.AgentHost.Services;
+namespace Eryx.AgentHost.Services;
 
 internal static partial class CopilotConnectionMetadataResolver
 {
@@ -156,7 +156,7 @@ internal static partial class CopilotConnectionMetadataResolver
         }
         catch (Exception exception)
         {
-            Console.Error.WriteLine($"[kopaya sidecar] Failed to inspect Copilot auth status: {exception.Message}");
+            Console.Error.WriteLine($"[eryx sidecar] Failed to inspect Copilot auth status: {exception.Message}");
             return null;
         }
     }

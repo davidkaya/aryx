@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace Kopaya.AgentHost.Services;
+namespace Eryx.AgentHost.Services;
 
 internal static partial class StreamingTextMerger
 {

@@ -1,33 +1,33 @@
-# Kopaya Roadmap
+# Eryx Roadmap
 
 Last updated: 2026-03-23
 
 ## Product direction
 
-Kopaya already has the foundation of a serious AI workstation: local projects, persistent sessions, reusable orchestration patterns, live streaming, per-agent activity, and a sidecar runtime that can evolve independently of the desktop app.
+Eryx already has the foundation of a serious AI workstation: local projects, persistent sessions, reusable orchestration patterns, live streaming, per-agent activity, and a sidecar runtime that can evolve independently of the desktop app.
 
-The next step should not be "add random AI features." It should be to turn Kopaya into the best control room for AI work on real projects:
+The next step should not be "add random AI features." It should be to turn Eryx into the best control room for AI work on real projects:
 
 - chat when the user wants speed
 - orchestrate when the user wants depth or quality
 - inspect when the user needs trust
 - automate when the user wants leverage
 
-Modern AI chat apps set a clear baseline for user expectations: projects, memory, attachments, branching, search, export, collaboration, and task automation. Kopaya should meet that baseline, then go further on orchestration, observability, and reproducibility.
+Modern AI chat apps set a clear baseline for user expectations: projects, memory, attachments, branching, search, export, collaboration, and task automation. Eryx should meet that baseline, then go further on orchestration, observability, and reproducibility.
 
 ## Current baseline
 
-Based on the current codebase, Kopaya already has:
+Based on the current codebase, Eryx already has:
 
 - [x] persistent local workspace state for projects, patterns, and sessions in `src/main/persistence/workspaceRepository.ts`
 - [x] built-in orchestration modes in `src/shared/domain/pattern.ts`: `single`, `sequential`, `concurrent`, `handoff`, `group-chat`, with `magentic` reserved for future support
 - [x] a dynamic model catalog with provider metadata and reasoning-effort support in `src/shared/domain/models.ts`
-- [x] scratchpad-specific in-chat model overrides in `src/main/KopayaAppService.ts`
-- [x] real-time turn streaming and agent activity events in `src/shared/contracts/sidecar.ts`, `src/shared/domain/event.ts`, and `sidecar/src/Kopaya.AgentHost/Services/CopilotWorkflowRunner.cs`
+- [x] scratchpad-specific in-chat model overrides in `src/main/EryxAppService.ts`
+- [x] real-time turn streaming and agent activity events in `src/shared/contracts/sidecar.ts`, `src/shared/domain/event.ts`, and `sidecar/src/Eryx.AgentHost/Services/CopilotWorkflowRunner.cs`
 - [x] a right-side activity panel that already surfaces per-agent state, model, and effort in `src/renderer/components/ActivityPanel.tsx`
 - [x] a pattern editor and settings flow in `src/renderer/components/SettingsPanel.tsx`
-- [x] Copilot CLI-backed runtime access via the system-installed `copilot` command, with Kopaya sanitizing inherited runtime env vars before spawning the sidecar
-- [x] refreshable Copilot connection diagnostics and settings UI for `ready`, `copilot-cli-missing`, `copilot-auth-required`, and `copilot-error` states in `src/renderer/components/CopilotStatusCard.tsx`, `src/renderer/components/SettingsPanel.tsx`, `src/main/KopayaAppService.ts`, and `sidecar/src/Kopaya.AgentHost/Services/SidecarProtocolHost.cs`
+- [x] Copilot CLI-backed runtime access via the system-installed `copilot` command, with Eryx sanitizing inherited runtime env vars before spawning the sidecar
+- [x] refreshable Copilot connection diagnostics and settings UI for `ready`, `copilot-cli-missing`, `copilot-auth-required`, and `copilot-error` states in `src/renderer/components/CopilotStatusCard.tsx`, `src/renderer/components/SettingsPanel.tsx`, `src/main/EryxAppService.ts`, and `sidecar/src/Eryx.AgentHost/Services/SidecarProtocolHost.cs`
 - [x] an OS secret store wrapper in `src/main/secrets/secretStore.ts` that can support future non-Copilot secrets and integrations
 
 That is a strong base. The biggest gaps are not around "can it run agents?" but around:
@@ -41,7 +41,7 @@ That is a strong base. The biggest gaps are not around "can it run agents?" but 
 ## Guiding principles
 
 1. Match core AI chat expectations first.
-   If Kopaya is missing search, attachments, export, branching, or memory controls, users will feel friction before they ever appreciate orchestration.
+   If Eryx is missing search, attachments, export, branching, or memory controls, users will feel friction before they ever appreciate orchestration.
 
 2. Make orchestration legible.
    Multi-agent systems are only valuable if users can see what happened, why it happened, and what each agent contributed.
@@ -53,7 +53,7 @@ That is a strong base. The biggest gaps are not around "can it run agents?" but 
    A useful orchestration product should let users compare runs, pin configurations, inspect versions, and understand why outcomes changed.
 
 5. Build around real project work.
-   Kopaya should feel strongest when attached to a codebase or working directory, not just as a generic chatbot.
+   Eryx should feel strongest when attached to a codebase or working directory, not just as a generic chatbot.
 
 ## Roadmap themes
 
@@ -87,11 +87,11 @@ Still worth adding:
 - [x] active GitHub account or organization context when available
 - [ ] clear model availability explanation when a model is unavailable
 - [ ] reconnect and troubleshooting actions beyond refresh
-- [ ] optional per-project or per-pattern account selection later if Kopaya supports multiple Copilot identities
+- [ ] optional per-project or per-pattern account selection later if Eryx supports multiple Copilot identities
 
-Because Kopaya currently appears to authenticate through the system-installed Copilot CLI rather than owning provider secrets directly, this should be treated as a connection/account-state UX problem first, not a raw credential-storage problem.
+Because Eryx currently appears to authenticate through the system-installed Copilot CLI rather than owning provider secrets directly, this should be treated as a connection/account-state UX problem first, not a raw credential-storage problem.
 
-If Kopaya later adds direct OpenAI, Anthropic, Google, MCP, or team-managed secrets, broader credential management becomes a separate roadmap item. The existing `src/main/secrets/secretStore.ts` gives the product a natural place to grow when that happens.
+If Eryx later adds direct OpenAI, Anthropic, Google, MCP, or team-managed secrets, broader credential management becomes a separate roadmap item. The existing `src/main/secrets/secretStore.ts` gives the product a natural place to grow when that happens.
 
 #### Conversation organization and search
 
@@ -135,7 +135,7 @@ The shared/backend query layer supports these filters, but the dedicated filter 
 
 ## 2. Project-aware coding improvements
 
-Kopaya should feel much smarter about the project it is attached to.
+Eryx should feel much smarter about the project it is attached to.
 
 | Priority | Initiative                       | Why it matters                                                                    | Likely layers                  |
 | -------- | -------------------------------- | --------------------------------------------------------------------------------- | ------------------------------ |
@@ -154,11 +154,11 @@ Kopaya should feel much smarter about the project it is attached to.
 - [ ] project summary card: architecture snapshot, detected stack, test commands, important entry points
 - [ ] saved session context packs, such as "frontend only", "API layer", or "build pipeline"
 
-This is where Kopaya can beat generic chat apps: not just talking about a project, but acting like a focused control surface for that project.
+This is where Eryx can beat generic chat apps: not just talking about a project, but acting like a focused control surface for that project.
 
 ## 3. Orchestration control plane
 
-This is the highest-leverage product area. If done well, it becomes Kopaya's signature advantage.
+This is the highest-leverage product area. If done well, it becomes Eryx's signature advantage.
 
 | Priority | Initiative                     | Why users need it                                                                        | Likely layers                  |
 | -------- | ------------------------------ | ---------------------------------------------------------------------------------------- | ------------------------------ |
@@ -224,7 +224,7 @@ This would be a major differentiator. Most chat apps show outputs; very few make
 
 ## 4. Advanced orchestration capabilities
 
-Once the control plane is solid, Kopaya should move from multi-agent chat to true workflow orchestration.
+Once the control plane is solid, Eryx should move from multi-agent chat to true workflow orchestration.
 
 | Priority | Initiative                        | Why it matters                                                                            | Likely layers                     |
 | -------- | --------------------------------- | ----------------------------------------------------------------------------------------- | --------------------------------- |
@@ -277,7 +277,7 @@ Examples:
 
 ### Memory layers
 
-Kopaya should eventually distinguish between:
+Eryx should eventually distinguish between:
 
 - [ ] session memory: just this thread
 - [ ] project memory: facts about a specific repository
@@ -321,7 +321,7 @@ Single-user desktop value is important, but long-term adoption will benefit from
 
 ## 6. Evaluation and continuous improvement
 
-If Kopaya is going to orchestrate important work, it needs a way to measure quality.
+If Eryx is going to orchestrate important work, it needs a way to measure quality.
 
 | Priority | Initiative                       | Why it matters                                                       | Likely layers                  |
 | -------- | -------------------------------- | -------------------------------------------------------------------- | ------------------------------ |
@@ -338,11 +338,11 @@ If Kopaya is going to orchestrate important work, it needs a way to measure qual
 - "Which prompts or projects frequently fail and why?"
 - "Should this workflow stay sequential or become concurrent?"
 
-This is where Kopaya can become an engineering tool, not just a conversation shell.
+This is where Eryx can become an engineering tool, not just a conversation shell.
 
-## 7. Signature bets that could make Kopaya stand out
+## 7. Signature bets that could make Eryx stand out
 
-These are the ideas with the best chance of making Kopaya feel distinct rather than merely competitive.
+These are the ideas with the best chance of making Eryx feel distinct rather than merely competitive.
 
 ### 1. Orchestration debugger
 
@@ -378,11 +378,11 @@ Instead of just comparing model outputs, compare:
 - [ ] high-effort vs medium-effort
 - [ ] guarded vs unguarded runs
 
-Kopaya should become the easiest place to answer, "which setup is actually better for this task?"
+Eryx should become the easiest place to answer, "which setup is actually better for this task?"
 
 ### 4. Human checkpoints as a first-class orchestration feature
 
-Most agent tools either automate too much or stop at chat. Kopaya can own the middle ground:
+Most agent tools either automate too much or stop at chat. Eryx can own the middle ground:
 
 - [ ] route to human review at key points
 - [ ] require approval before tool execution or publishing
@@ -473,7 +473,7 @@ These may still be valuable, but they are less urgent than the items above:
 
 ## Final takeaway
 
-Kopaya does not need to become "another AI chat app."
+Eryx does not need to become "another AI chat app."
 
 It should become:
 

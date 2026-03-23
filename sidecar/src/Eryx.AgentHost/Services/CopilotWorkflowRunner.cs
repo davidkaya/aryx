@@ -1,13 +1,13 @@
 using System.Text;
 using GitHub.Copilot.SDK;
-using Kopaya.AgentHost.Contracts;
+using Eryx.AgentHost.Contracts;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.GitHub.Copilot;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Agents.AI.Workflows.Specialized;
 using Microsoft.Extensions.AI;
 
-namespace Kopaya.AgentHost.Services;
+namespace Eryx.AgentHost.Services;
 
 public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
 {

@@ -1,6 +1,6 @@
-using Kopaya.AgentHost.Services;
+using Eryx.AgentHost.Services;
 
-namespace Kopaya.AgentHost.Tests;
+namespace Eryx.AgentHost.Tests;
 
 public sealed class CopilotCliPathResolverTests
 {

@@ -52,7 +52,7 @@ interface ProjectGitContext {
 Files:
 
 - `src/main/git/gitService.ts`
-- `src/main/KopayaAppService.ts`
+- `src/main/EryxAppService.ts`
 
 Behavior:
 

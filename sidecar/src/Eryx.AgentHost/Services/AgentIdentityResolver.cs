@@ -1,7 +1,7 @@
 using System.Text;
-using Kopaya.AgentHost.Contracts;
+using Eryx.AgentHost.Contracts;
 
-namespace Kopaya.AgentHost.Services;
+namespace Eryx.AgentHost.Services;
 
 internal readonly record struct AgentIdentity(string AgentId, string AgentName);
 

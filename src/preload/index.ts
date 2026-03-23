@@ -41,4 +41,4 @@ const api: ElectronApi = {
   },
 };
 
-contextBridge.exposeInMainWorld('kopayaApi', api);
+contextBridge.exposeInMainWorld('eryxApi', api);

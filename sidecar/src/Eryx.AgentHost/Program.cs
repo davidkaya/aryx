@@ -1,8 +1,8 @@
-using Kopaya.AgentHost.Services;
+using Eryx.AgentHost.Services;
 
 if (!args.Contains("--stdio", StringComparer.Ordinal))
 {
-    Console.Error.WriteLine("Kopaya.AgentHost expects the --stdio flag.");
+    Console.Error.WriteLine("Eryx.AgentHost expects the --stdio flag.");
     return;
 }
 

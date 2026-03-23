@@ -186,7 +186,7 @@ function ConnectionSection({
       <div className="mb-1">
         <h3 className="text-sm font-semibold text-zinc-200">GitHub Copilot</h3>
         <p className="mt-0.5 text-[12px] text-zinc-500">
-          Kopaya uses your installed GitHub Copilot CLI for AI capabilities
+          Eryx uses your installed GitHub Copilot CLI for AI capabilities
         </p>
       </div>
       <div className="mt-4 rounded-xl border border-[var(--color-border)] bg-zinc-900/30 p-4">

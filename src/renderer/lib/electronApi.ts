@@ -1,7 +1,7 @@
 export function getElectronApi() {
-  if (!window.kopayaApi) {
+  if (!window.eryxApi) {
     throw new Error('The Electron preload API is unavailable.');
   }
 
-  return window.kopayaApi;
+  return window.eryxApi;
 }

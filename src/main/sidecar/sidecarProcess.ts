@@ -98,7 +98,7 @@ export class SidecarClient {
 
     childProcess.stderr.setEncoding('utf8');
     childProcess.stderr.on('data', (chunk: string) => {
-      console.error('[kopaya sidecar]', chunk.trim());
+      console.error('[eryx sidecar]', chunk.trim());
     });
 
     childProcess.on('exit', (code) => {

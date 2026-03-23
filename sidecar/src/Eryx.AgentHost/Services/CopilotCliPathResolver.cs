@@ -1,7 +1,7 @@
 using System.Collections;
 using GitHub.Copilot.SDK;
 
-namespace Kopaya.AgentHost.Services;
+namespace Eryx.AgentHost.Services;
 
 internal static class CopilotCliPathResolver
 {
@@ -25,7 +25,7 @@ internal static class CopilotCliPathResolver
         if (string.IsNullOrWhiteSpace(cliPath))
         {
             throw new InvalidOperationException(
-                "Kopaya requires the system-installed 'copilot' command on PATH. Install the GitHub Copilot CLI and ensure it is available in the current environment.");
+                "Eryx requires the system-installed 'copilot' command on PATH. Install the GitHub Copilot CLI and ensure it is available in the current environment.");
         }
 
         CopilotCliLaunch launch = ResolveCliLaunch(

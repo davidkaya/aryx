@@ -14,9 +14,9 @@ import type {
 } from '@shared/contracts/ipc';
 import type { QuerySessionsInput } from '@shared/domain/sessionLibrary';
 
-import { KopayaAppService } from '@main/KopayaAppService';
+import { EryxAppService } from '@main/EryxAppService';
 
-export function registerIpcHandlers(window: BrowserWindow, service: KopayaAppService): void {
+export function registerIpcHandlers(window: BrowserWindow, service: EryxAppService): void {
   ipcMain.handle(ipcChannels.describeSidecarCapabilities, () => service.describeSidecarCapabilities());
   ipcMain.handle(ipcChannels.refreshSidecarCapabilities, () => service.refreshSidecarCapabilities());
   ipcMain.handle(ipcChannels.loadWorkspace, () => service.loadWorkspace());

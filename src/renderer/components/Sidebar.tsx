@@ -499,7 +499,7 @@ export function Sidebar({
             <Sparkles className="size-4" />
           </div>
           <div>
-            <span className="text-sm font-semibold text-zinc-100">kopaya</span>
+            <span className="text-sm font-semibold text-zinc-100">eryx</span>
             <span className="ml-1.5 rounded bg-zinc-800 px-1 py-0.5 text-[9px] font-medium text-zinc-500">
               BETA
             </span>

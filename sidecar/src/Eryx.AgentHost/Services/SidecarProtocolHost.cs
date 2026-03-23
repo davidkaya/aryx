@@ -2,9 +2,9 @@ using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using GitHub.Copilot.SDK;
-using Kopaya.AgentHost.Contracts;
+using Eryx.AgentHost.Contracts;
 
-namespace Kopaya.AgentHost.Services;
+namespace Eryx.AgentHost.Services;
 
 public sealed class SidecarProtocolHost
 {
@@ -189,7 +189,7 @@ public sealed class SidecarProtocolHost
         catch (Exception exception)
         {
             connection = CreateMissingCliDiagnostics(exception);
-            Console.Error.WriteLine($"[kopaya sidecar] {connection.Summary} {exception.Message}");
+            Console.Error.WriteLine($"[eryx sidecar] {connection.Summary} {exception.Message}");
 
             return new SidecarCapabilitiesDto
             {
@@ -224,7 +224,7 @@ public sealed class SidecarProtocolHost
         {
             cliVersion = await cliVersionTask.ConfigureAwait(false);
             connection = CreateFailureConnectionDiagnostics(cliContext.CliPath, exception, cliVersion, account);
-            Console.Error.WriteLine($"[kopaya sidecar] Failed to list available Copilot models: {exception.Message}");
+            Console.Error.WriteLine($"[eryx sidecar] Failed to list available Copilot models: {exception.Message}");
         }
 
         return new SidecarCapabilitiesDto
@@ -323,8 +323,8 @@ public sealed class SidecarProtocolHost
     {
         string status = ClassifyConnectionStatus(exception);
         string summary = status == "copilot-auth-required"
-            ? "GitHub Copilot requires authentication before Kopaya can load models."
-            : "GitHub Copilot was found, but Kopaya could not load its model list.";
+            ? "GitHub Copilot requires authentication before Eryx can load models."
+            : "GitHub Copilot was found, but Eryx could not load its model list.";
 
         return new SidecarConnectionDiagnosticsDto
         {

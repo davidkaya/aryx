@@ -7,8 +7,8 @@ describe('resolveSidecarProcess', () => {
     expect(
       resolveSidecarProcess({
         isPackaged: false,
-        appPath: 'C:\\workspace\\personal\\repositories\\kopaya',
-        resourcesPath: 'C:\\workspace\\personal\\repositories\\kopaya\\resources',
+        appPath: 'C:\\workspace\\personal\\repositories\\eryx',
+        resourcesPath: 'C:\\workspace\\personal\\repositories\\eryx\\resources',
         platform: 'win32',
       }),
     ).toEqual({
@@ -16,11 +16,11 @@ describe('resolveSidecarProcess', () => {
       args: [
         'run',
         '--project',
-        'C:\\workspace\\personal\\repositories\\kopaya\\sidecar\\src\\Kopaya.AgentHost\\Kopaya.AgentHost.csproj',
+        'C:\\workspace\\personal\\repositories\\eryx\\sidecar\\src\\Eryx.AgentHost\\Eryx.AgentHost.csproj',
         '--',
         '--stdio',
       ],
-      cwd: 'C:\\workspace\\personal\\repositories\\kopaya',
+      cwd: 'C:\\workspace\\personal\\repositories\\eryx',
     });
   });
 
@@ -28,14 +28,14 @@ describe('resolveSidecarProcess', () => {
     expect(
       resolveSidecarProcess({
         isPackaged: true,
-        appPath: 'C:\\workspace\\personal\\repositories\\kopaya\\release\\win-unpacked\\resources\\app',
-        resourcesPath: 'C:\\workspace\\personal\\repositories\\kopaya\\release\\win-unpacked\\resources',
+        appPath: 'C:\\workspace\\personal\\repositories\\eryx\\release\\win-unpacked\\resources\\app',
+        resourcesPath: 'C:\\workspace\\personal\\repositories\\eryx\\release\\win-unpacked\\resources',
         platform: 'win32',
       }),
     ).toEqual({
-      command: 'C:\\workspace\\personal\\repositories\\kopaya\\release\\win-unpacked\\resources\\sidecar\\Kopaya.AgentHost.exe',
+      command: 'C:\\workspace\\personal\\repositories\\eryx\\release\\win-unpacked\\resources\\sidecar\\Eryx.AgentHost.exe',
       args: ['--stdio'],
-      cwd: 'C:\\workspace\\personal\\repositories\\kopaya\\release\\win-unpacked\\resources\\sidecar',
+      cwd: 'C:\\workspace\\personal\\repositories\\eryx\\release\\win-unpacked\\resources\\sidecar',
     });
   });
 
@@ -43,14 +43,14 @@ describe('resolveSidecarProcess', () => {
     expect(
       resolveSidecarProcess({
         isPackaged: true,
-        appPath: '/Applications/Kopaya.app/Contents/Resources/app',
-        resourcesPath: '/Applications/Kopaya.app/Contents/Resources',
+        appPath: '/Applications/Eryx.app/Contents/Resources/app',
+        resourcesPath: '/Applications/Eryx.app/Contents/Resources',
         platform: 'darwin',
       }),
     ).toEqual({
-      command: '/Applications/Kopaya.app/Contents/Resources/sidecar/Kopaya.AgentHost',
+      command: '/Applications/Eryx.app/Contents/Resources/sidecar/Eryx.AgentHost',
       args: ['--stdio'],
-      cwd: '/Applications/Kopaya.app/Contents/Resources/sidecar',
+      cwd: '/Applications/Eryx.app/Contents/Resources/sidecar',
     });
   });
 });

@@ -36,10 +36,10 @@ Add a local folder when you want help that is grounded in your work. Eryx is des
 Eryx supports several ways of working:
 
 - **Single** for direct one-agent help
-- **Sequential** for step-by-step specialist workflows
-- **Concurrent** for parallel exploration
-- **Handoff** for agent-to-agent delegation
-- **Group chat** for collaborative multi-agent discussion
+- **Sequential** for pipeline-style work where each agent sees the full conversation and appends its contribution
+- **Concurrent** for parallel exploration where the final turn aggregates multiple independent responses
+- **Handoff** for agent-to-agent delegation, with the next user turn continuing when a specialist needs more input
+- **Group chat** for round-robin collaborative refinement across multiple agent turns
 
 ### Add global MCPs and LSPs
 

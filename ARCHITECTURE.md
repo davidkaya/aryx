@@ -92,10 +92,10 @@ sequenceDiagram
     M->>M: Create run record and mark session running
     M->>S: run-turn command
     S->>C: Execute workflow
-    C-->>S: Partial output / tool activity / handoffs
+    C-->>S: Partial output / tool activity / handoffs / input requests
     S-->>M: Stream deltas and activity events
     M-->>R: Push session events and workspace updates
-    C-->>S: Final messages
+    C-->>S: Final messages or turn boundary
     S-->>M: Completion or error
     M->>M: Finalize run and persist state
     M-->>R: Final workspace snapshot
@@ -133,6 +133,8 @@ Patterns describe how agents collaborate. The architecture supports:
 - concurrent responses
 - handoff flows
 - group chat style collaboration
+
+Their runtime semantics follow the Agent Framework orchestration model: sequential and group chat preserve a visible shared conversation, concurrent aggregates multiple independent responses into one turn, and handoff turns can end once the active agent has responded and is waiting for the next user input.
 
 Patterns are shared application data, not renderer-only configuration. That means the same pattern definition can drive validation, persistence, UI rendering, and sidecar execution.
 

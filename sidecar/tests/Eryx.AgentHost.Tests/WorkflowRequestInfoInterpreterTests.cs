@@ -109,6 +109,62 @@ public sealed class WorkflowRequestInfoInterpreterTests
         Assert.Empty(toolNamesByCallId);
     }
 
+    [Fact]
+    public void RequiresUserInputTurnBoundary_ReturnsTrueForUnhandledHandoffRequests()
+    {
+        RequestInfoEvent requestInfo = CreateRequestInfoEvent(new
+        {
+            Prompt = "Please provide more detail.",
+        });
+
+        bool requiresBoundary = WorkflowRequestInfoInterpreter.RequiresUserInputTurnBoundary(
+            CreateHandoffCommand(),
+            requestInfo);
+
+        Assert.True(requiresBoundary);
+    }
+
+    [Fact]
+    public void RequiresUserInputTurnBoundary_ReturnsFalseForExplicitHandoffs()
+    {
+        RequestInfoEvent requestInfo = CreateRequestInfoEvent(
+            CreateHandoffTarget("agent-handoff-ux", "UX Specialist"));
+
+        bool requiresBoundary = WorkflowRequestInfoInterpreter.RequiresUserInputTurnBoundary(
+            CreateHandoffCommand(),
+            requestInfo);
+
+        Assert.False(requiresBoundary);
+    }
+
+    [Fact]
+    public void RequiresUserInputTurnBoundary_ReturnsFalseForToolRequests()
+    {
+        RequestInfoEvent requestInfo = CreateRequestInfoEvent(
+            new FunctionCallContent("call-1", "view", new Dictionary<string, object?>()));
+
+        bool requiresBoundary = WorkflowRequestInfoInterpreter.RequiresUserInputTurnBoundary(
+            CreateHandoffCommand(),
+            requestInfo);
+
+        Assert.False(requiresBoundary);
+    }
+
+    [Fact]
+    public void RequiresUserInputTurnBoundary_ReturnsFalseOutsideHandoffMode()
+    {
+        RequestInfoEvent requestInfo = CreateRequestInfoEvent(new
+        {
+            Prompt = "Please provide more detail.",
+        });
+
+        bool requiresBoundary = WorkflowRequestInfoInterpreter.RequiresUserInputTurnBoundary(
+            CreateSingleAgentCommand(),
+            requestInfo);
+
+        Assert.False(requiresBoundary);
+    }
+
     private static RunTurnCommandDto CreateSingleAgentCommand()
     {
         return new RunTurnCommandDto

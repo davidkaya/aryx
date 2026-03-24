@@ -47,8 +47,12 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
 
         await foreach (WorkflowEvent evt in run.WatchStreamAsync(cancellationToken).ConfigureAwait(false))
         {
-            await HandleWorkflowEventAsync(command, evt, inputMessages, state, onDelta, onActivity)
+            bool shouldEndTurn = await HandleWorkflowEventAsync(command, evt, inputMessages, state, onDelta, onActivity)
                 .ConfigureAwait(false);
+            if (shouldEndTurn)
+            {
+                break;
+            }
         }
 
         return state.FinalizeCompletedMessages();
@@ -61,7 +65,7 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
         return _approvalCoordinator.ResolveApprovalAsync(command, cancellationToken);
     }
 
-    private static async Task HandleWorkflowEventAsync(
+    private static async Task<bool> HandleWorkflowEventAsync(
         RunTurnCommandDto command,
         WorkflowEvent evt,
         IReadOnlyList<ChatMessage> inputMessages,
@@ -76,7 +80,7 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
                 out AgentIdentity invokedAgent))
         {
             await state.EmitThinkingIfNeeded(invokedAgent, onActivity).ConfigureAwait(false);
-            return;
+            return false;
         }
 
         if (evt is RequestInfoEvent requestInfo)
@@ -89,18 +93,18 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
 
             if (activity is null)
             {
-                return;
+                return WorkflowRequestInfoInterpreter.RequiresUserInputTurnBoundary(command, requestInfo);
             }
 
             state.ApplyActivity(activity);
             await onActivity(activity).ConfigureAwait(false);
-            return;
+            return false;
         }
 
         if (evt is AgentResponseUpdateEvent update)
         {
             await HandleAgentResponseUpdateAsync(command, update, state, onDelta, onActivity).ConfigureAwait(false);
-            return;
+            return false;
         }
 
         if (evt is ExecutorCompletedEvent completed
@@ -111,7 +115,7 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
                 out AgentIdentity completedAgent))
         {
             state.ClearActiveAgentIfMatching(completedAgent);
-            return;
+            return false;
         }
 
         if (evt is WorkflowOutputEvent outputEvent)
@@ -119,6 +123,8 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
             List<ChatMessage> allMessages = outputEvent.As<List<ChatMessage>>() ?? [];
             state.UpdateCompletedMessages(allMessages, inputMessages);
         }
+
+        return false;
     }
 
     private static async Task HandleAgentResponseUpdateAsync(

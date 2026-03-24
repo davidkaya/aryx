@@ -90,7 +90,7 @@ export function createBuiltinPatterns(timestamp: string): PatternDefinition[] {
     {
       id: 'pattern-sequential-review',
       name: 'Sequential Trio Review',
-      description: 'Three Copilot-backed agents execute in order, refining the answer each step.',
+      description: 'Agents execute in order, each seeing the full conversation and appending to a shared transcript.',
       mode: 'sequential',
       availability: 'available',
       maxIterations: 1,
@@ -126,7 +126,7 @@ export function createBuiltinPatterns(timestamp: string): PatternDefinition[] {
     {
       id: 'pattern-concurrent-brainstorm',
       name: 'Concurrent Brainstorm',
-      description: 'Multiple agents respond in parallel for comparison or voting.',
+      description: 'Agents work independently in parallel and the final conversation aggregates every response.',
       mode: 'concurrent',
       availability: 'available',
       maxIterations: 1,
@@ -162,7 +162,7 @@ export function createBuiltinPatterns(timestamp: string): PatternDefinition[] {
     {
       id: 'pattern-handoff-support',
       name: 'Handoff Support Flow',
-      description: 'A triage agent routes the task to specialists and can reclaim control.',
+      description: 'A triage agent routes work to specialists, and the next user turn continues when more input is needed.',
       mode: 'handoff',
       availability: 'available',
       maxIterations: 4,
@@ -201,7 +201,7 @@ export function createBuiltinPatterns(timestamp: string): PatternDefinition[] {
     {
       id: 'pattern-group-chat',
       name: 'Collaborative Group Chat',
-      description: 'Two or more agents iterate together under a round-robin manager.',
+      description: 'Agents take turns under a round-robin manager, iteratively refining a shared conversation.',
       mode: 'group-chat',
       availability: 'available',
       maxIterations: 5,

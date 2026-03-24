@@ -52,6 +52,23 @@ internal static class WorkflowRequestInfoInterpreter
         };
     }
 
+    public static bool RequiresUserInputTurnBoundary(
+        RunTurnCommandDto command,
+        RequestInfoEvent requestInfo)
+    {
+        if (!string.Equals(command.Pattern.Mode, "handoff", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (TryGetHandoffTarget(command.Pattern, requestInfo, out _))
+        {
+            return false;
+        }
+
+        return !TryGetToolRequestInfo(requestInfo, out _, out _);
+    }
+
     private static bool TryGetHandoffTarget(
         PatternDefinitionDto pattern,
         RequestInfoEvent requestInfo,

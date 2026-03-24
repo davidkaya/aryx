@@ -157,6 +157,143 @@ public sealed class CopilotWorkflowRunnerTests
     }
 
     [Fact]
+    public void ProjectCompletedMessages_PreservesSequentialConversationHistory()
+    {
+        RunTurnCommandDto command = new()
+        {
+            RequestId = "turn-1",
+            SessionId = "session-1",
+            Pattern = new PatternDefinitionDto
+            {
+                Id = "pattern-sequential",
+                Name = "Sequential Trio Review",
+                Mode = "sequential",
+                Availability = "available",
+                Agents =
+                [
+                    CreateAgent(id: "agent-sequential-analyst", name: "Analyst"),
+                    CreateAgent(id: "agent-sequential-builder", name: "Builder"),
+                    CreateAgent(id: "agent-sequential-reviewer", name: "Reviewer"),
+                ],
+            },
+        };
+
+        IReadOnlyList<ChatMessageDto> messages = WorkflowTranscriptProjector.ProjectCompletedMessages(
+            command,
+            [
+                new ChatMessage(ChatRole.Assistant, "Plan the approach.") { AuthorName = "Analyst" },
+                new ChatMessage(ChatRole.Assistant, "Implement the change.") { AuthorName = "Builder" },
+                new ChatMessage(ChatRole.Assistant, "Review the implementation.") { AuthorName = "Reviewer" },
+            ],
+            []);
+
+        Assert.Collection(
+            messages,
+            analyst =>
+            {
+                Assert.Equal("Analyst", analyst.AuthorName);
+                Assert.Equal("Plan the approach.", analyst.Content);
+            },
+            builder =>
+            {
+                Assert.Equal("Builder", builder.AuthorName);
+                Assert.Equal("Implement the change.", builder.Content);
+            },
+            reviewer =>
+            {
+                Assert.Equal("Reviewer", reviewer.AuthorName);
+                Assert.Equal("Review the implementation.", reviewer.Content);
+            });
+    }
+
+    [Fact]
+    public void ProjectCompletedMessages_PreservesConcurrentAggregatedResponses()
+    {
+        RunTurnCommandDto command = new()
+        {
+            RequestId = "turn-1",
+            SessionId = "session-1",
+            Pattern = new PatternDefinitionDto
+            {
+                Id = "pattern-concurrent",
+                Name = "Concurrent Brainstorm",
+                Mode = "concurrent",
+                Availability = "available",
+                Agents =
+                [
+                    CreateAgent(id: "agent-concurrent-architect", name: "Architect"),
+                    CreateAgent(id: "agent-concurrent-product", name: "Product"),
+                    CreateAgent(id: "agent-concurrent-implementer", name: "Implementer"),
+                ],
+            },
+        };
+
+        IReadOnlyList<ChatMessageDto> messages = WorkflowTranscriptProjector.ProjectCompletedMessages(
+            command,
+            [
+                new ChatMessage(ChatRole.Assistant, "Architecture concerns.") { AuthorName = "Architect" },
+                new ChatMessage(ChatRole.Assistant, "Product trade-offs.") { AuthorName = "Product" },
+                new ChatMessage(ChatRole.Assistant, "Implementation details.") { AuthorName = "Implementer" },
+            ],
+            []);
+
+        Assert.Collection(
+            messages,
+            architect => Assert.Equal("Architect", architect.AuthorName),
+            product => Assert.Equal("Product", product.AuthorName),
+            implementer => Assert.Equal("Implementer", implementer.AuthorName));
+    }
+
+    [Fact]
+    public void ProjectCompletedMessages_PreservesGroupChatConversationHistory()
+    {
+        RunTurnCommandDto command = new()
+        {
+            RequestId = "turn-1",
+            SessionId = "session-1",
+            Pattern = new PatternDefinitionDto
+            {
+                Id = "pattern-group-chat",
+                Name = "Collaborative Group Chat",
+                Mode = "group-chat",
+                Availability = "available",
+                Agents =
+                [
+                    CreateAgent(id: "agent-group-writer", name: "Writer"),
+                    CreateAgent(id: "agent-group-reviewer", name: "Reviewer"),
+                ],
+            },
+        };
+
+        IReadOnlyList<ChatMessageDto> messages = WorkflowTranscriptProjector.ProjectCompletedMessages(
+            command,
+            [
+                new ChatMessage(ChatRole.Assistant, "Initial draft.") { AuthorName = "Writer" },
+                new ChatMessage(ChatRole.Assistant, "Needs clearer examples.") { AuthorName = "Reviewer" },
+                new ChatMessage(ChatRole.Assistant, "Revised draft with examples.") { AuthorName = "Writer" },
+            ],
+            []);
+
+        Assert.Collection(
+            messages,
+            writerDraft =>
+            {
+                Assert.Equal("Writer", writerDraft.AuthorName);
+                Assert.Equal("Initial draft.", writerDraft.Content);
+            },
+            reviewer =>
+            {
+                Assert.Equal("Reviewer", reviewer.AuthorName);
+                Assert.Equal("Needs clearer examples.", reviewer.Content);
+            },
+            writerRevision =>
+            {
+                Assert.Equal("Writer", writerRevision.AuthorName);
+                Assert.Equal("Revised draft with examples.", writerRevision.Content);
+            });
+    }
+
+    [Fact]
     public void ProjectCompletedMessages_UsesFallbackAgentForGenericAssistantOutput()
     {
         RunTurnCommandDto command = new()

@@ -38,6 +38,7 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
                 state.ToolNamesByCallId,
                 onApproval,
                 cancellationToken),
+            (agent, sessionEvent) => state.ObserveSessionEvent(agent, sessionEvent),
             cancellationToken);
         Workflow workflow = bundle.BuildWorkflow(command.Pattern);
         List<ChatMessage> inputMessages = command.Messages.Select(WorkflowTranscriptProjector.ToChatMessage).ToList();
@@ -136,7 +137,12 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
     {
         AgentIdentity? updateAgent = null;
         string authorName = update.ExecutorId;
-        if (AgentIdentityResolver.TryResolveObservedAgentIdentity(
+        if (state.TryResolveObservedAgentForMessage(update.Update.MessageId, out AgentIdentity observedMessageAgent))
+        {
+            updateAgent = observedMessageAgent;
+            authorName = observedMessageAgent.AgentName;
+        }
+        else if (AgentIdentityResolver.TryResolveObservedAgentIdentity(
             command.Pattern,
             update.ExecutorId,
             state.ActiveAgent,

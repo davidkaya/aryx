@@ -451,11 +451,59 @@ public sealed class CopilotWorkflowRunnerTests
                 Assert.Equal("A plus", first.Content);
             },
             second =>
+             {
+                 Assert.Equal("msg-2", second.MessageId);
+                 Assert.Equal("Implementer", second.AuthorName);
+                 Assert.Equal("B", second.Content);
+             });
+    }
+
+    [Fact]
+    public void ObserveSessionEvent_TracksObservedAgentByMessageId()
+    {
+        CopilotTurnExecutionState state = new(CreateHandoffCommand());
+        SessionEvent sessionEvent = SessionEvent.FromJson(
+            """
             {
-                Assert.Equal("msg-2", second.MessageId);
-                Assert.Equal("Implementer", second.AuthorName);
-                Assert.Equal("B", second.Content);
-            });
+              "type": "assistant.message_delta",
+              "data": {
+                "messageId": "msg-7",
+                "deltaContent": "Done."
+              },
+              "id": "11111111-1111-1111-1111-111111111111",
+              "timestamp": "2026-03-24T00:00:00Z"
+            }
+            """);
+
+        state.ObserveSessionEvent(CreateAgent("agent-handoff-ux", "UX Specialist"), sessionEvent);
+
+        Assert.True(state.TryResolveObservedAgentForMessage("msg-7", out AgentIdentity observedAgent));
+        Assert.Equal("agent-handoff-ux", observedAgent.AgentId);
+        Assert.Equal("UX Specialist", observedAgent.AgentName);
+        Assert.Equal("agent-handoff-ux", state.ActiveAgent?.AgentId);
+    }
+
+    [Fact]
+    public void ObserveSessionEvent_UsesReasoningDeltasToTrackActiveAgent()
+    {
+        CopilotTurnExecutionState state = new(CreateHandoffCommand());
+        SessionEvent sessionEvent = SessionEvent.FromJson(
+            """
+            {
+              "type": "assistant.reasoning_delta",
+              "data": {
+                "reasoningId": "reasoning-1",
+                "deltaContent": "Planning."
+              },
+              "id": "22222222-2222-2222-2222-222222222222",
+              "timestamp": "2026-03-24T00:00:00Z"
+            }
+            """);
+
+        state.ObserveSessionEvent(CreateAgent("agent-handoff-ux", "UX Specialist"), sessionEvent);
+
+        Assert.Equal("agent-handoff-ux", state.ActiveAgent?.AgentId);
+        Assert.Equal("UX Specialist", state.ActiveAgent?.AgentName);
     }
 
     [Fact]
@@ -767,6 +815,27 @@ public sealed class CopilotWorkflowRunnerTests
             Name = name,
             Model = "gpt-5.4",
             Instructions = "Help with the request.",
+        };
+    }
+
+    private static RunTurnCommandDto CreateHandoffCommand()
+    {
+        return new RunTurnCommandDto
+        {
+            RequestId = "turn-1",
+            SessionId = "session-1",
+            Pattern = new PatternDefinitionDto
+            {
+                Id = "pattern-handoff",
+                Name = "Handoff Flow",
+                Mode = "handoff",
+                Availability = "available",
+                Agents =
+                [
+                    CreateAgent("agent-handoff-triage", "Triage"),
+                    CreateAgent("agent-handoff-ux", "UX Specialist"),
+                ],
+            },
         };
     }
 

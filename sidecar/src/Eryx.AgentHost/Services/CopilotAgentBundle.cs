@@ -22,6 +22,7 @@ internal sealed class CopilotAgentBundle : IAsyncDisposable
     public static async Task<CopilotAgentBundle> CreateAsync(
         RunTurnCommandDto command,
         Func<PatternAgentDefinitionDto, PermissionRequest, PermissionInvocation, Task<PermissionRequestResult>> onPermissionRequest,
+        Action<PatternAgentDefinitionDto, SessionEvent>? onSessionEvent,
         CancellationToken cancellationToken)
     {
         List<IAsyncDisposable> disposables = [];
@@ -53,6 +54,7 @@ internal sealed class CopilotAgentBundle : IAsyncDisposable
                 },
                 WorkingDirectory = command.ProjectPath,
                 OnPermissionRequest = (request, invocation) => onPermissionRequest(definition, request, invocation),
+                OnEvent = evt => onSessionEvent?.Invoke(definition, evt),
                 Streaming = true,
             };
 

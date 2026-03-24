@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Eryx.AgentHost.Contracts;
+using GitHub.Copilot.SDK;
 using Microsoft.Extensions.AI;
 
 namespace Eryx.AgentHost.Services;
@@ -8,6 +9,7 @@ internal sealed class CopilotTurnExecutionState
 {
     private readonly RunTurnCommandDto _command;
     private readonly HashSet<string> _startedAgents = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, AgentIdentity> _observedAgentsByMessageId = new(StringComparer.Ordinal);
     private readonly StreamingTranscriptBuffer _transcriptBuffer = new();
     private int _fallbackMessageIndex;
 
@@ -54,6 +56,34 @@ internal sealed class CopilotTurnExecutionState
         }
     }
 
+    public void ObserveSessionEvent(PatternAgentDefinitionDto agentDefinition, SessionEvent sessionEvent)
+    {
+        AgentIdentity agent = AgentIdentityResolver.ResolveAgentIdentity(
+            _command.Pattern,
+            agentDefinition.Id,
+            agentDefinition.Name);
+
+        switch (sessionEvent)
+        {
+            case AssistantMessageDeltaEvent messageDelta when !string.IsNullOrWhiteSpace(messageDelta.Data?.MessageId):
+                RecordObservedAgentForMessage(agent, messageDelta.Data!.MessageId);
+                break;
+            case AssistantMessageEvent assistantMessage when !string.IsNullOrWhiteSpace(assistantMessage.Data?.MessageId):
+                RecordObservedAgentForMessage(agent, assistantMessage.Data!.MessageId);
+                break;
+            case AssistantReasoningDeltaEvent:
+                ActiveAgent = agent;
+                break;
+        }
+    }
+
+    public bool TryResolveObservedAgentForMessage(string? messageId, out AgentIdentity agent)
+    {
+        agent = default;
+        return !string.IsNullOrWhiteSpace(messageId)
+            && _observedAgentsByMessageId.TryGetValue(messageId, out agent);
+    }
+
     public string CreateMessageId(string? messageId)
     {
         return messageId ?? $"{_command.RequestId}-delta-{_fallbackMessageIndex++}";
@@ -74,6 +104,12 @@ internal sealed class CopilotTurnExecutionState
         {
             ActiveAgent = null;
         }
+    }
+
+    private void RecordObservedAgentForMessage(AgentIdentity agent, string messageId)
+    {
+        ActiveAgent = agent;
+        _observedAgentsByMessageId[messageId] = agent;
     }
 
     public void UpdateCompletedMessages(

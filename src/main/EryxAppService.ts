@@ -30,6 +30,9 @@ import {
   enqueuePendingApprovalState,
   listPendingApprovals,
   normalizeApprovalPolicy,
+  normalizeSessionApprovalSettings,
+  pruneApprovalPolicyTools,
+  pruneSessionApprovalSettings,
   resolvePendingApproval,
   type ApprovalDecision,
   type PendingApprovalMessageRecord,
@@ -45,6 +48,7 @@ import {
 } from '@shared/domain/sessionLibrary';
 import type { SessionEventRecord } from '@shared/domain/event';
 import {
+  applySessionApprovalSettings,
   applyScratchpadSessionConfig,
   resolveSessionToolingSelection,
   createScratchpadSessionConfig,
@@ -64,6 +68,7 @@ import {
 } from '@shared/domain/runTimeline';
 import {
   createSessionToolingSelection,
+  listApprovalToolNames,
   normalizeTheme,
   type AppearanceTheme,
   type LspProfileDefinition,
@@ -195,7 +200,10 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
 
   async savePattern(pattern: PatternDefinition): Promise<WorkspaceState> {
     const workspace = await this.loadWorkspace();
-    const issues = validatePatternDefinition(pattern).filter((issue) => issue.level === 'error');
+    const issues = validatePatternDefinition(
+      pattern,
+      this.listKnownApprovalToolNames(workspace),
+    ).filter((issue) => issue.level === 'error');
     if (issues.length > 0) {
       throw new Error(issues[0].message);
     }
@@ -273,6 +281,7 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
       workspace.settings.tooling.mcpServers.push(candidate);
     }
 
+    this.pruneUnavailableApprovalTools(workspace);
     return this.persistAndBroadcast(workspace);
   }
 
@@ -290,6 +299,7 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
       };
     }
 
+    this.pruneUnavailableApprovalTools(workspace);
     return this.persistAndBroadcast(workspace);
   }
 
@@ -318,6 +328,7 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
       workspace.settings.tooling.lspProfiles.push(candidate);
     }
 
+    this.pruneUnavailableApprovalTools(workspace);
     return this.persistAndBroadcast(workspace);
   }
 
@@ -335,6 +346,7 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
       };
     }
 
+    this.pruneUnavailableApprovalTools(workspace);
     return this.persistAndBroadcast(workspace);
   }
 
@@ -663,6 +675,41 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
     }
 
     session.tooling = selection;
+    session.updatedAt = nowIso();
+    return this.persistAndBroadcast(workspace);
+  }
+
+  async updateSessionApprovalSettings(
+    sessionId: string,
+    autoApprovedToolNames?: string[],
+  ): Promise<WorkspaceState> {
+    const workspace = await this.loadWorkspace();
+    const session = this.requireSession(workspace, sessionId);
+    const project = this.requireProject(workspace, session.projectId);
+
+    if (session.status === 'running') {
+      throw new Error('Wait for the current response to finish before changing session approval settings.');
+    }
+
+    const settings = normalizeSessionApprovalSettings(
+      autoApprovedToolNames === undefined ? undefined : { autoApprovedToolNames },
+    );
+
+    if (
+      isScratchpadProject(project)
+      && settings
+      && settings.autoApprovedToolNames.length > 0
+    ) {
+      throw new Error('Scratchpad sessions do not support tool auto-approval settings.');
+    }
+
+    const knownToolNames = new Set(this.listKnownApprovalToolNames(workspace));
+    const unknownToolName = settings?.autoApprovedToolNames.find((toolName) => !knownToolNames.has(toolName));
+    if (unknownToolName) {
+      throw new Error(`Unknown approval tool "${unknownToolName}".`);
+    }
+
+    session.approvalSettings = settings;
     session.updatedAt = nowIso();
     return this.persistAndBroadcast(workspace);
   }
@@ -1119,9 +1166,29 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
     const patternWithSessionConfig = isScratchpadProject(project)
       ? applyScratchpadSessionConfig(pattern, session)
       : pattern;
+    const patternWithApprovalSettings = applySessionApprovalSettings(patternWithSessionConfig, session);
 
     const modelCatalog = await this.loadAvailableModelCatalog();
-    return normalizePatternModels(patternWithSessionConfig, modelCatalog);
+    return normalizePatternModels(patternWithApprovalSettings, modelCatalog);
+  }
+
+  private listKnownApprovalToolNames(workspace: WorkspaceState): string[] {
+    return listApprovalToolNames(workspace.settings.tooling);
+  }
+
+  private pruneUnavailableApprovalTools(workspace: WorkspaceState): void {
+    const knownToolNames = this.listKnownApprovalToolNames(workspace);
+
+    for (const pattern of workspace.patterns) {
+      pattern.approvalPolicy = pruneApprovalPolicyTools(pattern.approvalPolicy, knownToolNames);
+    }
+
+    for (const session of workspace.sessions) {
+      session.approvalSettings = pruneSessionApprovalSettings(
+        session.approvalSettings,
+        knownToolNames,
+      );
+    }
   }
 
   private buildRunTurnToolingConfig(

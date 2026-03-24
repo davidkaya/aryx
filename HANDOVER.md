@@ -1,226 +1,256 @@
-# Approval checkpoints UX handover
+# Tool auto-approval backend handover
 
-## What changed in the backend
+## What changed
 
-Approval checkpoints are now **queued per session** instead of failing when a second approval request arrives before the first one is resolved.
+The backend now supports **tool-specific auto-approval defaults on patterns** plus **per-session overrides**.
 
-This fixes the previous backend limitation where multi-agent patterns such as `Sequential Trio Review` could throw:
+This builds on the existing approval-checkpoint system:
 
-```text
-Session "<id>" already has a pending approval.
-```
+- `final-response` approvals still work the same way
+- `tool-call` checkpoints still decide **whether a tool call needs approval at all**
+- the new feature decides **which known tools can be auto-approved instead of surfacing a manual approval**
 
-The queue is backend-only in this change. The current frontend can keep working because the active approval is still exposed through the existing `session.pendingApproval` field.
+The approval queue work from earlier is unchanged and still applies.
 
-## Queue semantics
+## Shared model
 
-- A session still exposes **one active approval** through `session.pendingApproval`.
-- Additional approvals waiting behind it are exposed through `session.pendingApprovalQueue`.
-- `session.pendingApprovalQueue` does **not** include the active approval.
-- Queue order is the order in which approvals were requested.
-- `resolveSessionApproval(...)` still resolves **only the active approval**.
-- When the active approval is resolved, the next queued approval automatically becomes the new `session.pendingApproval`.
-- If the run fails while approvals remain queued, the backend rejects and clears the remaining queued approvals.
-- If Eryx restarts while approvals are pending or queued, the backend rejects all of them and marks the session/run as errored.
+### Pattern-level defaults
 
-## Current shared model
-
-### Pattern approval policy
-
-This is unchanged from the earlier backend work:
+Pattern defaults now live on `pattern.approvalPolicy.autoApprovedToolNames`.
 
 ```ts
-type ApprovalCheckpointKind = 'tool-call' | 'final-response';
-
-interface ApprovalCheckpointRule {
-  kind: ApprovalCheckpointKind;
-  agentIds?: string[]; // omitted or empty = all agents
-}
-
 interface ApprovalPolicy {
   rules: ApprovalCheckpointRule[];
+  autoApprovedToolNames?: string[];
 }
 ```
-
-### Session approval state
-
-The active approval + queued approvals are now represented as:
-
-```ts
-interface PendingApprovalMessageRecord {
-  id: string;
-  authorName: string;
-  content: string;
-}
-
-interface PendingApprovalRecord {
-  id: string;
-  kind: 'tool-call' | 'final-response';
-  status: 'pending' | 'approved' | 'rejected';
-  requestedAt: string;
-  resolvedAt?: string;
-  agentId?: string;
-  agentName?: string;
-  toolName?: string;
-  permissionKind?: string;
-  title: string;
-  detail?: string;
-  messages?: PendingApprovalMessageRecord[];
-}
-```
-
-Attached to `SessionRecord` as:
-
-```ts
-pendingApproval?: PendingApprovalRecord;
-pendingApprovalQueue?: PendingApprovalRecord[];
-```
-
-Interpretation:
-
-- `pendingApproval` = the approval the user can act on **right now**
-- `pendingApprovalQueue` = additional pending approvals waiting behind it
-
-For `final-response`, `pendingApproval.messages` contains the unpublished assistant output preview.
-
-For `tool-call`, `messages` is usually absent and the useful context is `agentName`, `toolName`, and `permissionKind`.
-
-## IPC surface
-
-No new IPC was added for queueing.
-
-The renderer still resolves approvals through:
-
-```ts
-resolveSessionApproval({
-  sessionId: string;
-  approvalId: string;
-  decision: 'approved' | 'rejected';
-}): Promise<WorkspaceState>
-```
-
-Important behavior:
-
-- this resolves the **active** approval only
-- if the user somehow attempts to resolve a queued approval directly, the backend rejects it
-- after a successful resolution, the next queued approval may immediately become active in the returned workspace state
-
-## Timeline behavior
-
-The run timeline still uses `approval` events.
-
-Each approval request gets its own event keyed by `approvalId`.
-
-That means queued approvals now show up as multiple `approval` events in the same run when applicable. The active/queued distinction is in session state, not in the timeline event type.
-
-## Backend files changed for queue support
-
-- `src/shared/domain/approval.ts`
-  - added queue-state helpers and normalization
-- `src/shared/domain/session.ts`
-  - added `pendingApprovalQueue`
-- `src/shared/domain/sessionLibrary.ts`
-  - duplicated sessions now clear queued approvals too
-- `src/main/persistence/workspaceRepository.ts`
-  - normalizes legacy single-approval data into active + queue state
-- `src/main/EryxAppService.ts`
-  - enqueues approval requests instead of throwing
-  - advances the queue on resolution
-  - rejects all queued approvals on restart / failure cleanup
-
-## What the current frontend already does
-
-The current UI should remain functionally compatible because it already reads `session.pendingApproval` and renders a single active approval banner/card.
-
-That means:
-
-- users can still resolve approvals one at a time
-- the next queued approval should appear automatically after resolving the current one
-- no urgent UI fix is required just to keep the app working
-
-## Next UX steps for the frontend agent
-
-These are the next improvements the UX agent should make on top of the new backend queue.
-
-### 1. Show queue size next to the active approval
-
-Files to inspect:
-
-- `src/renderer/components/ChatPane.tsx`
-- `src/renderer/components/ActivityPanel.tsx`
-- `src/renderer/components/Sidebar.tsx`
-
-Recommended UX:
-
-- if `session.pendingApprovalQueue?.length > 0`, show a compact badge like:
-  - `1 queued`
-  - `2 queued`
-- keep the active approval clearly distinguished from queued approvals
-
-### 2. Clarify that the visible approval is only the active one
-
-In the active approval card/banner, add copy such as:
-
-- `Approval 1 of 3`
-- `Next approval will appear after this one is resolved`
-
-This will make automatic queue advancement feel intentional instead of surprising.
-
-### 3. Add an optional queued-approvals preview
-
-Files to inspect:
-
-- `src/renderer/components/ChatPane.tsx`
-- `src/renderer/components/ActivityPanel.tsx`
-
-Recommended UX:
-
-- an accordion or compact list for `session.pendingApprovalQueue`
-- each queued item can show:
-  - title
-  - kind
-  - agent name
-  - permission kind / tool name when available
 
 Important:
 
-- queued approvals are **read-only**
-- only the active `pendingApproval` should show Approve / Reject buttons
+- this list stores **runtime tool identifiers**, not display labels
+- it is independent from the `rules` list
+- a pattern may store tool auto-approval defaults even if `tool-call` checkpoints are currently disabled
 
-### 4. Handle queue transitions smoothly
+If `tool-call` approvals are not enabled for the relevant agent, the tool auto-approval list has no runtime effect.
 
-When the active approval is resolved and the next one becomes active:
+### Per-session override
 
-- avoid jarring layout jumps
-- keep scroll position stable
-- consider a subtle transition so the user understands the queue advanced
+Sessions now support an optional override object:
 
-### 5. Improve error copy for queued-approval edge cases
+```ts
+interface SessionApprovalSettings {
+  autoApprovedToolNames: string[];
+}
 
-Possible backend outcomes the UI should explain well:
+interface SessionRecord {
+  approvalSettings?: SessionApprovalSettings;
+}
+```
 
-- active approval was resolved, then the run failed before the queue fully drained
-- app restarted and the whole queue was rejected/interrupted
-- user tried to resolve an approval that is no longer active
+Semantics:
 
-Recommended UX:
+- `session.approvalSettings === undefined` → inherit the pattern defaults
+- `session.approvalSettings.autoApprovedToolNames = []` → explicit session override that auto-approves **nothing**
+- non-empty `autoApprovedToolNames` → explicit session override list
 
-- inline error or toast
-- refresh from returned workspace state
-- preserve visibility into which approval is now active
+Session overrides replace the pattern's tool auto-approval list for that session. They do **not** merge.
 
-### 6. Optionally surface queue state in the timeline
+## Runtime behavior
 
-The timeline already records all approval events, but the UI could add:
+The main process now applies session approval overrides before sending the pattern to the sidecar.
 
-- an “active” vs “queued” distinction when an approval event is still pending
-- badges or copy that explain multiple approval checkpoints exist in the same run
+That means the sidecar sees the **effective** approval policy for the session:
 
-This is optional because the core queue behavior is already represented in backend state.
+- pattern rules
+- pattern defaults when no session override exists
+- session override list when present
+
+Actual decision flow for a tool call is now:
+
+1. Is `tool-call` approval enabled for this agent by `approvalPolicy.rules`?
+2. If not, auto-approve as before.
+3. If yes, is the runtime `toolName` in the effective `autoApprovedToolNames` list?
+4. If yes, auto-approve without creating a pending approval.
+5. Otherwise, emit a normal approval request and pause for user action.
+
+Unknown or non-tool-specific permission requests still require manual approval when `tool-call` checkpoints are active.
+
+## Tool identity contract
+
+Use the shared helper in `src/shared/domain/tooling.ts`:
+
+```ts
+listApprovalToolDefinitions(workspace.settings.tooling)
+```
+
+This is the canonical source for UI rendering and validation.
+
+Each returned item includes:
+
+- `id` → the runtime tool identifier used by approvals
+- `label` → human-readable label for the UI
+- `kind` → `mcp`, `lsp`, or `mixed`
+- `providerIds`
+- `providerNames`
+
+Do **not** re-derive tool IDs in the renderer.
+
+### MCP tool IDs
+
+For MCP tools, the runtime ID is the raw tool name from `server.tools`.
+
+Example:
+
+```ts
+{
+  id: "git.status",
+  label: "git.status",
+  kind: "mcp"
+}
+```
+
+### LSP tool IDs
+
+For LSP tools, the runtime ID is derived from the profile ID and operation name.
+
+Current operations:
+
+- `workspace_symbols`
+- `document_symbols`
+- `definition`
+- `hover`
+- `references`
+
+Example for profile ID `ts`:
+
+- `lsp_ts_workspace_symbols`
+- `lsp_ts_document_symbols`
+- `lsp_ts_definition`
+- `lsp_ts_hover`
+- `lsp_ts_references`
+
+Again: the renderer should consume the helper output instead of rebuilding these strings manually.
+
+## New IPC
+
+Renderer access is now available through:
+
+```ts
+updateSessionApprovalSettings({
+  sessionId: string;
+  autoApprovedToolNames?: string[];
+}): Promise<WorkspaceState>
+```
+
+Semantics:
+
+- omit `autoApprovedToolNames` to clear the override and inherit the pattern defaults
+- pass `[]` to keep an explicit session override with no auto-approved tools
+- pass a populated array to set an explicit session override list
+
+The existing `savePattern(...)` path is still used for pattern defaults.
+
+## Validation and repair rules
+
+The backend now enforces and maintains tool references consistently:
+
+- saving a pattern rejects unknown `autoApprovedToolNames`
+- updating session approval settings rejects unknown tool IDs
+- scratchpad sessions reject non-empty session tool auto-approval overrides
+- workspace load prunes stale tool IDs from patterns and sessions
+- saving or deleting MCP/LSP definitions also prunes stale tool IDs from patterns and sessions
+
+This is intentional: stored approval defaults should only reference tools that still exist.
+
+## Approval request payload changes
+
+When the sidecar can identify the specific tool, `approval-requested` events now include `toolName`.
+
+Tool-call approval titles/details are also more specific when the tool is known.
+
+Examples:
+
+- title: `Approve lsp_ts_hover`
+- detail: `Primary requested custom tool permission for tool "lsp_ts_hover" in Copilot session ...`
+
+Existing UI can keep working without changes, but the UX agent can now surface better tool context.
+
+## Files changed
+
+- `src/shared/domain/approval.ts`
+  - pattern defaults, session override model, effective-policy helpers, pruning/validation helpers
+- `src/shared/domain/tooling.ts`
+  - canonical `listApprovalToolDefinitions(...)` helper
+- `src/shared/domain/session.ts`
+  - session approval settings + effective pattern merge helper
+- `src/main/EryxAppService.ts`
+  - pattern validation, session override IPC handler, tooling cleanup, effective-pattern merge
+- `src/main/persistence/workspaceRepository.ts`
+  - load-time normalization + pruning for stale tool IDs
+- `src/shared/contracts/ipc.ts`
+- `src/shared/contracts/channels.ts`
+- `src\preload\index.ts`
+- `src\main\ipc\registerIpcHandlers.ts`
+- `sidecar/src/Eryx.AgentHost/Contracts/ProtocolModels.cs`
+- `sidecar/src/Eryx.AgentHost/Services/CopilotWorkflowRunner.cs`
+  - tool-name extraction from permission requests
+  - tool-specific auto-approval decision
+
+## UX work for the frontend agent
+
+### 1. Pattern editor: default tool auto-approval
+
+In `PatternEditor`, add a section that renders `listApprovalToolDefinitions(workspace.settings.tooling)`.
+
+Recommended behavior:
+
+- show every available approval tool with a toggle
+- write the selected tool IDs to `pattern.approvalPolicy.autoApprovedToolNames`
+- keep this separate from the existing `tool-call` / `final-response` checkpoint toggles
+- if there are no tools, show an empty state instead of an interactive list
+
+### 2. Activity panel: per-session override
+
+In the right-side Activity panel, add a per-session auto-approval section for tools.
+
+Recommended behavior:
+
+- base the list on `listApprovalToolDefinitions(workspace.settings.tooling)`
+- show the current **effective** state
+- distinguish inherited vs overridden state in the UI
+- allow resetting the session to inherit the pattern defaults
+- call `updateSessionApprovalSettings(...)` when the user changes the override
+
+Suggested UX:
+
+- `Inheriting pattern defaults` badge/state when `session.approvalSettings` is `undefined`
+- `Custom for this session` badge/state when the override object exists
+- `Reset to pattern` action that calls `updateSessionApprovalSettings({ sessionId })`
+
+### 3. Disable while running
+
+Match the current tools behavior:
+
+- disable the per-session override controls while `session.status === 'running'`
+- scratchpad sessions should show a non-interactive explanation because tool auto-approval does not apply there
+
+### 4. Surface tool context in approval UI
+
+Optional but recommended:
+
+- show `approval.toolName` in the active approval banner / queued approval list when present
+- this is now available for tool-specific approval requests
+
+### 5. Avoid ID duplication logic in the renderer
+
+Important:
+
+- do not manually rebuild LSP tool IDs in UI code
+- use the shared helper output and persist the `id` values from it
 
 ## Validation commands
 
-Backend queue changes should be validated with:
+Backend changes were validated with:
 
 - `bun run typecheck`
 - `bun test`

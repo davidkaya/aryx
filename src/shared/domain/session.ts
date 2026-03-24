@@ -4,7 +4,12 @@ import {
   normalizeSessionToolingSelection,
   type SessionToolingSelection,
 } from '@shared/domain/tooling';
-import type { PendingApprovalRecord } from '@shared/domain/approval';
+import {
+  normalizeSessionApprovalSettings,
+  resolveEffectiveApprovalPolicy,
+  type PendingApprovalRecord,
+  type SessionApprovalSettings,
+} from '@shared/domain/approval';
 import type { SessionRunRecord } from '@shared/domain/runTimeline';
 
 export type ChatRole = 'system' | 'user' | 'assistant';
@@ -40,6 +45,7 @@ export interface SessionRecord {
   lastError?: string;
   scratchpadConfig?: ScratchpadSessionConfig;
   tooling?: SessionToolingSelection;
+  approvalSettings?: SessionApprovalSettings;
   pendingApproval?: PendingApprovalRecord;
   pendingApprovalQueue?: PendingApprovalRecord[];
   runs: SessionRunRecord[];
@@ -75,6 +81,12 @@ export function resolveSessionToolingSelection(
   session: Pick<SessionRecord, 'tooling'>,
 ): SessionToolingSelection {
   return normalizeSessionToolingSelection(session.tooling ?? createSessionToolingSelection());
+}
+
+export function resolveSessionApprovalSettings(
+  session: Pick<SessionRecord, 'approvalSettings'>,
+): SessionApprovalSettings | undefined {
+  return normalizeSessionApprovalSettings(session.approvalSettings);
 }
 
 export function resolveScratchpadSessionConfig(
@@ -113,5 +125,19 @@ export function applyScratchpadSessionConfig(
       },
       ...pattern.agents.slice(1),
     ],
+  };
+}
+
+export function applySessionApprovalSettings(
+  pattern: PatternDefinition,
+  session: Pick<SessionRecord, 'approvalSettings'>,
+): PatternDefinition {
+  if (session.approvalSettings === undefined) {
+    return pattern;
+  }
+
+  return {
+    ...pattern,
+    approvalPolicy: resolveEffectiveApprovalPolicy(pattern.approvalPolicy, session.approvalSettings),
   };
 }

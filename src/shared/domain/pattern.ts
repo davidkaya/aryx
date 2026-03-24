@@ -258,7 +258,10 @@ export function createBuiltinPatterns(timestamp: string): PatternDefinition[] {
   ];
 }
 
-export function validatePatternDefinition(pattern: PatternDefinition): PatternValidationIssue[] {
+export function validatePatternDefinition(
+  pattern: PatternDefinition,
+  knownToolNames?: readonly string[],
+): PatternValidationIssue[] {
   const issues: PatternValidationIssue[] = [];
 
   if (!pattern.name.trim()) {
@@ -324,6 +327,7 @@ export function validatePatternDefinition(pattern: PatternDefinition): PatternVa
   for (const message of validateApprovalPolicy(
     normalizeApprovalPolicy(pattern.approvalPolicy),
     pattern.agents.map((agent) => agent.id),
+    knownToolNames,
   )) {
     issues.push({
       level: 'error',

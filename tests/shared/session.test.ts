@@ -2,8 +2,10 @@ import { describe, expect, test } from 'bun:test';
 
 import type { PatternDefinition } from '@shared/domain/pattern';
 import {
+  applySessionApprovalSettings,
   applyScratchpadSessionConfig,
   createScratchpadSessionConfig,
+  resolveSessionApprovalSettings,
   resolveSessionToolingSelection,
   resolveSessionTitle,
   resolveScratchpadSessionConfig,
@@ -140,6 +142,33 @@ describe('session tooling helpers', () => {
     ).toEqual({
       enabledMcpServerIds: ['mcp-git'],
       enabledLspProfileIds: ['ts'],
+    });
+  });
+});
+
+describe('session approval helpers', () => {
+  test('normalizes session approval overrides and applies them over pattern defaults', () => {
+    const pattern = {
+      ...createPattern(),
+      approvalPolicy: {
+        rules: [{ kind: 'tool-call' as const }],
+        autoApprovedToolNames: ['git.status'],
+      },
+    };
+
+    expect(resolveSessionApprovalSettings(createSession())).toBeUndefined();
+    expect(
+      applySessionApprovalSettings(
+        pattern,
+        createSession({
+          approvalSettings: {
+            autoApprovedToolNames: ['git.diff', ' git.diff '],
+          },
+        }),
+      ).approvalPolicy,
+    ).toEqual({
+      rules: [{ kind: 'tool-call' }],
+      autoApprovedToolNames: ['git.diff'],
     });
   });
 });

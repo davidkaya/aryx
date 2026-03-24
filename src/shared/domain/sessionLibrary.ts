@@ -181,6 +181,11 @@ export function duplicateSessionRecord(
           enabledLspProfileIds: [...session.tooling.enabledLspProfileIds],
         }
       : undefined,
+    approvalSettings: session.approvalSettings
+      ? {
+          autoApprovedToolNames: [...session.approvalSettings.autoApprovedToolNames],
+        }
+      : undefined,
     pendingApproval: undefined,
     pendingApprovalQueue: undefined,
     runs: [],

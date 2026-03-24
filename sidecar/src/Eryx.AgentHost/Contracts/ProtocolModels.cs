@@ -30,6 +30,7 @@ public sealed class PatternDefinitionDto
 public sealed class ApprovalPolicyDto
 {
     public IReadOnlyList<ApprovalCheckpointRuleDto> Rules { get; init; } = [];
+    public IReadOnlyList<string> AutoApprovedToolNames { get; init; } = [];
 }
 
 public sealed class ApprovalCheckpointRuleDto

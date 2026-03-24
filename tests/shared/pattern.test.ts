@@ -125,4 +125,24 @@ describe('pattern validation', () => {
       'Approval checkpoint "tool-call" references unknown agent "agent-missing".',
     );
   });
+
+  test('approval policy rejects unknown auto-approved tool references when tool names are provided', () => {
+    const singlePattern = createBuiltinPatterns(BUILTIN_TIMESTAMP).find(
+      (pattern) => pattern.mode === 'single',
+    );
+
+    expect(singlePattern).toBeDefined();
+
+    const issues = validatePatternDefinition({
+      ...singlePattern!,
+      approvalPolicy: {
+        rules: [{ kind: 'tool-call' }],
+        autoApprovedToolNames: ['git.status', 'unknown.tool'],
+      },
+    }, ['git.status']);
+
+    expect(issues.find((issue) => issue.field === 'approvalPolicy')?.message).toBe(
+      'Approval auto-approve references unknown tool "unknown.tool".',
+    );
+  });
 });

@@ -13,6 +13,7 @@ import type {
   SetPatternFavoriteInput,
   SetSessionArchivedInput,
   SetSessionPinnedInput,
+  UpdateSessionApprovalSettingsInput,
   UpdateSessionToolingInput,
   UpdateScratchpadSessionConfigInput,
 } from '@shared/contracts/ipc';
@@ -59,6 +60,11 @@ export function registerIpcHandlers(window: BrowserWindow, service: EryxAppServi
       input.enabledMcpServerIds,
       input.enabledLspProfileIds,
     ),
+  );
+  ipcMain.handle(
+    ipcChannels.updateSessionApprovalSettings,
+    (_event, input: UpdateSessionApprovalSettingsInput) =>
+      service.updateSessionApprovalSettings(input.sessionId, input.autoApprovedToolNames),
   );
   ipcMain.handle(ipcChannels.createSession, (_event, input: CreateSessionInput) =>
     service.createSession(input.projectId, input.patternId),

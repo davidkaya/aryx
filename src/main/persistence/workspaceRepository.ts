@@ -4,10 +4,17 @@ import { createBuiltinPatterns } from '@shared/domain/pattern';
 import type { PatternDefinition } from '@shared/domain/pattern';
 import { mergeScratchpadProject } from '@shared/domain/project';
 import { normalizeSessionRunRecords } from '@shared/domain/runTimeline';
-import { normalizeSessionToolingSelection, normalizeWorkspaceSettings } from '@shared/domain/tooling';
+import {
+  listApprovalToolNames,
+  normalizeSessionToolingSelection,
+  normalizeWorkspaceSettings,
+} from '@shared/domain/tooling';
 import {
   normalizeApprovalPolicy,
   normalizePendingApprovalState,
+  normalizeSessionApprovalSettings,
+  pruneApprovalPolicyTools,
+  pruneSessionApprovalSettings,
 } from '@shared/domain/approval';
 import { createWorkspaceSeed, type WorkspaceState } from '@shared/domain/workspace';
 import { nowIso } from '@shared/utils/ids';
@@ -60,24 +67,33 @@ export class WorkspaceRepository {
     }
 
     const projects = mergeScratchpadProject(stored.projects ?? [], this.scratchpadPath);
+    const settings = normalizeWorkspaceSettings(stored.settings);
+    const knownToolNames = listApprovalToolNames(settings.tooling);
 
     const workspace: WorkspaceState = {
       ...stored,
       patterns: mergePatterns(stored.patterns ?? []).map((pattern) => ({
         ...pattern,
-        approvalPolicy: normalizeApprovalPolicy(pattern.approvalPolicy),
+        approvalPolicy: pruneApprovalPolicyTools(
+          normalizeApprovalPolicy(pattern.approvalPolicy),
+          knownToolNames,
+        ),
       })),
       projects,
       sessions: (stored.sessions ?? []).map((session) => ({
         ...session,
         runs: normalizeSessionRunRecords(session.runs),
         tooling: normalizeSessionToolingSelection(session.tooling),
+        approvalSettings: pruneSessionApprovalSettings(
+          normalizeSessionApprovalSettings(session.approvalSettings),
+          knownToolNames,
+        ),
         ...normalizePendingApprovalState({
           pendingApproval: session.pendingApproval,
           pendingApprovalQueue: session.pendingApprovalQueue,
         }),
       })),
-      settings: normalizeWorkspaceSettings(stored.settings),
+      settings,
       selectedProjectId: projects.some((project) => project.id === stored.selectedProjectId)
         ? stored.selectedProjectId
         : projects[0]?.id,

@@ -19,6 +19,8 @@ const api: ElectronApi = {
   saveLspProfile: (input) => ipcRenderer.invoke(ipcChannels.saveLspProfile, input),
   deleteLspProfile: (profileId) => ipcRenderer.invoke(ipcChannels.deleteLspProfile, profileId),
   updateSessionTooling: (input) => ipcRenderer.invoke(ipcChannels.updateSessionTooling, input),
+  updateSessionApprovalSettings: (input) =>
+    ipcRenderer.invoke(ipcChannels.updateSessionApprovalSettings, input),
   createSession: (input) => ipcRenderer.invoke(ipcChannels.createSession, input),
   duplicateSession: (input) => ipcRenderer.invoke(ipcChannels.duplicateSession, input),
   renameSession: (input) => ipcRenderer.invoke(ipcChannels.renameSession, input),

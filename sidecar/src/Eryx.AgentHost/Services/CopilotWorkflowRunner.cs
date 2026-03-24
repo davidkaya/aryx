@@ -242,7 +242,9 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
         Func<ApprovalRequestedEventDto, Task> onApproval,
         CancellationToken cancellationToken)
     {
-        if (!RequiresApproval(command.Pattern.ApprovalPolicy, "tool-call", agent.Id))
+        TryGetApprovalToolName(request, out string? toolName);
+
+        if (!RequiresToolCallApproval(command.Pattern.ApprovalPolicy, agent.Id, toolName))
         {
             return new PermissionRequestResult
             {
@@ -266,7 +268,7 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
 
         try
         {
-            await onApproval(BuildPermissionApprovalEvent(command, agent, request, invocation, approvalId))
+            await onApproval(BuildPermissionApprovalEvent(command, agent, request, invocation, approvalId, toolName))
                 .ConfigureAwait(false);
 
             using CancellationTokenRegistration registration = cancellationToken.Register(
@@ -383,12 +385,13 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
         return false;
     }
 
-    private static ApprovalRequestedEventDto BuildPermissionApprovalEvent(
+    internal static ApprovalRequestedEventDto BuildPermissionApprovalEvent(
         RunTurnCommandDto command,
         PatternAgentDefinitionDto agent,
         PermissionRequest request,
         PermissionInvocation invocation,
-        string approvalId)
+        string approvalId,
+        string? toolName)
     {
         string permissionKind = string.IsNullOrWhiteSpace(request.Kind)
             ? "tool access"
@@ -397,6 +400,19 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
         string? sessionId = string.IsNullOrWhiteSpace(invocation.SessionId)
             ? null
             : invocation.SessionId.Trim();
+        string? normalizedToolName = string.IsNullOrWhiteSpace(toolName)
+            ? null
+            : toolName.Trim();
+        string title = normalizedToolName is null
+            ? $"Approve {permissionKind}"
+            : $"Approve {normalizedToolName}";
+        string detail = normalizedToolName is null
+            ? sessionId is null
+                ? $"{agentName} requested {permissionKind} permission."
+                : $"{agentName} requested {permissionKind} permission for Copilot session {sessionId}."
+            : sessionId is null
+                ? $"{agentName} requested {permissionKind} permission for tool \"{normalizedToolName}\"."
+                : $"{agentName} requested {permissionKind} permission for tool \"{normalizedToolName}\" in Copilot session {sessionId}.";
 
         return new ApprovalRequestedEventDto
         {
@@ -407,44 +423,69 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
             ApprovalKind = "tool-call",
             AgentId = string.IsNullOrWhiteSpace(agent.Id) ? null : agent.Id,
             AgentName = string.IsNullOrWhiteSpace(agentName) ? null : agentName,
+            ToolName = normalizedToolName,
             PermissionKind = permissionKind,
-            Title = $"Approve {permissionKind}",
-            Detail = sessionId is null
-                ? $"{agentName} requested {permissionKind} permission."
-                : $"{agentName} requested {permissionKind} permission for Copilot session {sessionId}.",
+            Title = title,
+            Detail = detail,
         };
     }
 
-    private static bool RequiresApproval(
+    internal static bool RequiresToolCallApproval(
         ApprovalPolicyDto? approvalPolicy,
-        string checkpointKind,
-        string agentId)
+        string agentId,
+        string? toolName)
     {
         if (approvalPolicy?.Rules is null || approvalPolicy.Rules.Count == 0)
         {
             return false;
         }
 
+        bool matchesCheckpoint = false;
         foreach (ApprovalCheckpointRuleDto rule in approvalPolicy.Rules)
         {
-            if (!string.Equals(rule.Kind, checkpointKind, StringComparison.OrdinalIgnoreCase))
+            if (!string.Equals(rule.Kind, "tool-call", StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }
 
             if (rule.AgentIds.Count == 0)
             {
-                return true;
+                matchesCheckpoint = true;
+                break;
             }
 
             if (rule.AgentIds.Any(candidate =>
                     string.Equals(candidate, agentId, StringComparison.OrdinalIgnoreCase)))
             {
-                return true;
+                matchesCheckpoint = true;
+                break;
             }
         }
 
-        return false;
+        if (!matchesCheckpoint)
+        {
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(toolName))
+        {
+            return true;
+        }
+
+        return !approvalPolicy.AutoApprovedToolNames.Any(candidate =>
+            string.Equals(candidate, toolName, StringComparison.OrdinalIgnoreCase));
+    }
+
+    internal static bool TryGetApprovalToolName(PermissionRequest request, out string? toolName)
+    {
+        toolName = request switch
+        {
+            PermissionRequestMcp mcp when !string.IsNullOrWhiteSpace(mcp.ToolName) => mcp.ToolName.Trim(),
+            PermissionRequestCustomTool customTool when !string.IsNullOrWhiteSpace(customTool.ToolName) => customTool.ToolName.Trim(),
+            _ => null,
+        };
+
+        return !string.IsNullOrWhiteSpace(toolName);
     }
 
     private static string CreateApprovalRequestId()

@@ -74,6 +74,11 @@ export interface UpdateSessionToolingInput extends SessionToolingSelection {
   sessionId: string;
 }
 
+export interface UpdateSessionApprovalSettingsInput {
+  sessionId: string;
+  autoApprovedToolNames?: string[];
+}
+
 export interface ElectronApi {
   describeSidecarCapabilities(): Promise<SidecarCapabilities>;
   refreshSidecarCapabilities(): Promise<SidecarCapabilities>;
@@ -88,6 +93,7 @@ export interface ElectronApi {
   saveLspProfile(input: SaveLspProfileInput): Promise<WorkspaceState>;
   deleteLspProfile(profileId: string): Promise<WorkspaceState>;
   updateSessionTooling(input: UpdateSessionToolingInput): Promise<WorkspaceState>;
+  updateSessionApprovalSettings(input: UpdateSessionApprovalSettingsInput): Promise<WorkspaceState>;
   createSession(input: CreateSessionInput): Promise<WorkspaceState>;
   duplicateSession(input: DuplicateSessionInput): Promise<WorkspaceState>;
   renameSession(input: RenameSessionInput): Promise<WorkspaceState>;

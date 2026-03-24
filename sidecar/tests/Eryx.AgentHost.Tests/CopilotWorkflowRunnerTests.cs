@@ -1,5 +1,6 @@
 using Eryx.AgentHost.Contracts;
 using Eryx.AgentHost.Services;
+using GitHub.Copilot.SDK;
 using Microsoft.Extensions.AI;
 
 namespace Eryx.AgentHost.Tests;
@@ -231,6 +232,100 @@ public sealed class CopilotWorkflowRunnerTests
         ChatMessageDto message = Assert.Single(messages);
         Assert.Equal("UX Specialist", message.AuthorName);
         Assert.Equal("Real content", message.Content);
+    }
+
+    [Fact]
+    public void RequiresToolCallApproval_HonorsAutoApprovedToolNames()
+    {
+        ApprovalPolicyDto policy = new()
+        {
+            Rules =
+            [
+                new ApprovalCheckpointRuleDto
+                {
+                    Kind = "tool-call",
+                    AgentIds = ["agent-1"],
+                },
+            ],
+            AutoApprovedToolNames = ["lsp_ts_hover"],
+        };
+
+        Assert.False(CopilotWorkflowRunner.RequiresToolCallApproval(policy, "agent-1", "lsp_ts_hover"));
+        Assert.True(CopilotWorkflowRunner.RequiresToolCallApproval(policy, "agent-1", "lsp_ts_definition"));
+        Assert.True(CopilotWorkflowRunner.RequiresToolCallApproval(policy, "agent-1", null));
+        Assert.False(CopilotWorkflowRunner.RequiresToolCallApproval(policy, "agent-2", "lsp_ts_definition"));
+    }
+
+    [Fact]
+    public void TryGetApprovalToolName_ReadsMcpAndCustomToolRequests()
+    {
+        Assert.True(
+            CopilotWorkflowRunner.TryGetApprovalToolName(
+                new PermissionRequestMcp
+                {
+                    Kind = "mcp",
+                    ServerName = "Git MCP",
+                    ToolName = "git.status",
+                    ToolTitle = "Git Status",
+                    ReadOnly = true,
+                },
+                out string? mcpToolName));
+        Assert.Equal("git.status", mcpToolName);
+
+        Assert.True(
+            CopilotWorkflowRunner.TryGetApprovalToolName(
+                new PermissionRequestCustomTool
+                {
+                    Kind = "custom tool",
+                    ToolName = "lsp_ts_hover",
+                    ToolDescription = "Hover information",
+                },
+                out string? customToolName));
+        Assert.Equal("lsp_ts_hover", customToolName);
+
+        Assert.False(
+            CopilotWorkflowRunner.TryGetApprovalToolName(
+                new PermissionRequestShell
+                {
+                    Kind = "shell",
+                    FullCommandText = "git status",
+                    Intention = "Inspect repository state",
+                    Commands = [],
+                    PossiblePaths = [],
+                    PossibleUrls = [],
+                    HasWriteFileRedirection = false,
+                    CanOfferSessionApproval = false,
+                },
+                out string? shellToolName));
+        Assert.Null(shellToolName);
+    }
+
+    [Fact]
+    public void BuildPermissionApprovalEvent_IncludesToolContextWhenKnown()
+    {
+        ApprovalRequestedEventDto approvalEvent = CopilotWorkflowRunner.BuildPermissionApprovalEvent(
+            new RunTurnCommandDto
+            {
+                RequestId = "turn-1",
+                SessionId = "session-1",
+            },
+            CreateAgent("agent-1", "Primary"),
+            new PermissionRequestCustomTool
+            {
+                Kind = "custom tool",
+                ToolName = "lsp_ts_hover",
+                ToolDescription = "Hover information",
+            },
+            new PermissionInvocation
+            {
+                SessionId = "copilot-session-1",
+            },
+            "approval-1",
+            "lsp_ts_hover");
+
+        Assert.Equal("lsp_ts_hover", approvalEvent.ToolName);
+        Assert.Equal("Approve lsp_ts_hover", approvalEvent.Title);
+        Assert.Contains("tool \"lsp_ts_hover\"", approvalEvent.Detail);
     }
 
     private static PatternAgentDefinitionDto CreateAgent(string id, string name)

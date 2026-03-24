@@ -14,6 +14,7 @@ export const ipcChannels = {
   saveLspProfile: 'tooling:lsp:save',
   deleteLspProfile: 'tooling:lsp:delete',
   updateSessionTooling: 'sessions:update-tooling',
+  updateSessionApprovalSettings: 'sessions:update-approval-settings',
   createSession: 'sessions:create',
   duplicateSession: 'sessions:duplicate',
   renameSession: 'sessions:rename',

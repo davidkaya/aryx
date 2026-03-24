@@ -52,6 +52,24 @@ export interface SessionToolingSelection {
   enabledLspProfileIds: string[];
 }
 
+export type ApprovalToolKind = 'mcp' | 'lsp' | 'mixed';
+
+export interface ApprovalToolDefinition {
+  id: string;
+  label: string;
+  kind: ApprovalToolKind;
+  providerIds: string[];
+  providerNames: string[];
+}
+
+const lspApprovalOperations = [
+  { suffix: 'workspace_symbols', label: 'Workspace symbols' },
+  { suffix: 'document_symbols', label: 'Document symbols' },
+  { suffix: 'definition', label: 'Definition' },
+  { suffix: 'hover', label: 'Hover' },
+  { suffix: 'references', label: 'References' },
+] as const;
+
 export function createWorkspaceSettings(): WorkspaceSettings {
   return {
     theme: 'dark',
@@ -92,6 +110,44 @@ export function normalizeSessionToolingSelection(
     enabledMcpServerIds: normalizeStringArray(selection?.enabledMcpServerIds),
     enabledLspProfileIds: normalizeStringArray(selection?.enabledLspProfileIds),
   };
+}
+
+export function listApprovalToolDefinitions(
+  tooling: WorkspaceToolingSettings,
+): ApprovalToolDefinition[] {
+  const toolsById = new Map<string, ApprovalToolDefinition>();
+
+  for (const server of tooling.mcpServers) {
+    for (const toolName of normalizeStringArray(server.tools)) {
+      registerApprovalTool(toolsById, {
+        id: toolName,
+        label: toolName,
+        kind: 'mcp',
+        providerId: server.id,
+        providerName: server.name,
+      });
+    }
+  }
+
+  for (const profile of tooling.lspProfiles) {
+    const toolPrefix = buildLspApprovalToolPrefix(profile.id);
+    for (const operation of lspApprovalOperations) {
+      registerApprovalTool(toolsById, {
+        id: `${toolPrefix}_${operation.suffix}`,
+        label: `${profile.name} · ${operation.label}`,
+        kind: 'lsp',
+        providerId: profile.id,
+        providerName: profile.name,
+      });
+    }
+  }
+
+  return [...toolsById.values()].sort((left, right) =>
+    left.label.localeCompare(right.label) || left.id.localeCompare(right.id));
+}
+
+export function listApprovalToolNames(tooling: WorkspaceToolingSettings): string[] {
+  return listApprovalToolDefinitions(tooling).map((tool) => tool.id);
 }
 
 export function validateMcpServerDefinition(server: McpServerDefinition): string | undefined {
@@ -194,6 +250,58 @@ function requiresTypeScriptLanguageServerStdio(command: string): boolean {
   return executableName === 'typescript-language-server'
     || executableName === 'typescript-language-server.cmd'
     || executableName === 'typescript-language-server.exe';
+}
+
+function buildLspApprovalToolPrefix(value: string): string {
+  let prefix = '';
+  for (const char of value) {
+    if (/[a-z0-9]/i.test(char)) {
+      prefix += char.toLowerCase();
+      continue;
+    }
+
+    if (!prefix || prefix.endsWith('_')) {
+      continue;
+    }
+
+    prefix += '_';
+  }
+
+  const normalized = prefix.replace(/^_+|_+$/g, '');
+  return normalized ? `lsp_${normalized}` : 'lsp';
+}
+
+function registerApprovalTool(
+  toolsById: Map<string, ApprovalToolDefinition>,
+  tool: {
+    id: string;
+    label: string;
+    kind: Exclude<ApprovalToolKind, 'mixed'>;
+    providerId: string;
+    providerName: string;
+  },
+): void {
+  const existing = toolsById.get(tool.id);
+  if (!existing) {
+    toolsById.set(tool.id, {
+      id: tool.id,
+      label: tool.label,
+      kind: tool.kind,
+      providerIds: [tool.providerId],
+      providerNames: [tool.providerName],
+    });
+    return;
+  }
+
+  if (!existing.providerIds.includes(tool.providerId)) {
+    existing.providerIds.push(tool.providerId);
+  }
+  if (!existing.providerNames.includes(tool.providerName)) {
+    existing.providerNames.push(tool.providerName);
+  }
+  if (existing.kind !== tool.kind) {
+    existing.kind = 'mixed';
+  }
 }
 
 function normalizeStringArray(values?: ReadonlyArray<string>): string[] {

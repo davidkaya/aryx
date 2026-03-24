@@ -9,6 +9,11 @@ export interface ApprovalCheckpointRule {
 
 export interface ApprovalPolicy {
   rules: ApprovalCheckpointRule[];
+  autoApprovedToolNames?: string[];
+}
+
+export interface SessionApprovalSettings {
+  autoApprovedToolNames: string[];
 }
 
 export interface PendingApprovalMessageRecord {
@@ -53,6 +58,7 @@ export function normalizeApprovalPolicy(policy?: Partial<ApprovalPolicy>): Appro
   const rules = Array.isArray(policy?.rules) ? policy.rules : [];
   const selectedAgents = new Map<ApprovalCheckpointKind, Set<string>>();
   const appliesToAllAgents = new Set<ApprovalCheckpointKind>();
+  const autoApprovedToolNames = normalizeStringArray(policy?.autoApprovedToolNames);
 
   for (const rule of rules) {
     if (!isApprovalCheckpointKind(rule?.kind)) {
@@ -90,24 +96,53 @@ export function normalizeApprovalPolicy(policy?: Partial<ApprovalPolicy>): Appro
     return [{ kind, agentIds }];
   });
 
-  return normalizedRules.length > 0 ? { rules: normalizedRules } : undefined;
+  if (normalizedRules.length === 0 && autoApprovedToolNames.length === 0) {
+    return undefined;
+  }
+
+  return {
+    rules: normalizedRules,
+    autoApprovedToolNames: autoApprovedToolNames.length > 0 ? autoApprovedToolNames : undefined,
+  };
+}
+
+export function normalizeSessionApprovalSettings(
+  settings?: Partial<SessionApprovalSettings>,
+): SessionApprovalSettings | undefined {
+  if (settings == null) {
+    return undefined;
+  }
+
+  return {
+    autoApprovedToolNames: normalizeStringArray(settings.autoApprovedToolNames),
+  };
 }
 
 export function validateApprovalPolicy(
   policy: ApprovalPolicy | undefined,
   knownAgentIds: readonly string[],
+  knownToolNames?: readonly string[],
 ): string[] {
   if (!policy) {
     return [];
   }
 
   const knownAgents = new Set(normalizeStringArray(knownAgentIds));
+  const knownTools = knownToolNames ? new Set(normalizeStringArray(knownToolNames)) : undefined;
   const issues: string[] = [];
 
   for (const rule of policy.rules) {
     for (const agentId of rule.agentIds ?? []) {
       if (!knownAgents.has(agentId)) {
         issues.push(`Approval checkpoint "${rule.kind}" references unknown agent "${agentId}".`);
+      }
+    }
+  }
+
+  if (knownTools) {
+    for (const toolName of policy.autoApprovedToolNames ?? []) {
+      if (!knownTools.has(toolName)) {
+        issues.push(`Approval auto-approve references unknown tool "${toolName}".`);
       }
     }
   }
@@ -135,6 +170,81 @@ export function approvalPolicyRequiresCheckpoint(
   }
 
   return rule.agentIds.includes(normalizedAgentId);
+}
+
+export function approvalPolicyAutoApprovesTool(
+  policy: ApprovalPolicy | undefined,
+  toolName?: string,
+): boolean {
+  const normalizedToolName = normalizeOptionalString(toolName);
+  if (!normalizedToolName) {
+    return false;
+  }
+
+  return policy?.autoApprovedToolNames?.includes(normalizedToolName) ?? false;
+}
+
+export function approvalPolicyRequiresToolCallApproval(
+  policy: ApprovalPolicy | undefined,
+  agentId?: string,
+  toolName?: string,
+): boolean {
+  if (!approvalPolicyRequiresCheckpoint(policy, 'tool-call', agentId)) {
+    return false;
+  }
+
+  return !approvalPolicyAutoApprovesTool(policy, toolName);
+}
+
+export function resolveEffectiveApprovalPolicy(
+  policy: ApprovalPolicy | undefined,
+  sessionSettings?: Partial<SessionApprovalSettings>,
+): ApprovalPolicy | undefined {
+  if (sessionSettings === undefined) {
+    return normalizeApprovalPolicy(policy);
+  }
+
+  const normalizedPolicy = normalizeApprovalPolicy(policy);
+  const normalizedSessionSettings = normalizeSessionApprovalSettings(sessionSettings);
+  return normalizeApprovalPolicy({
+    rules: normalizedPolicy?.rules ?? [],
+    autoApprovedToolNames: normalizedSessionSettings?.autoApprovedToolNames,
+  });
+}
+
+export function pruneApprovalPolicyTools(
+  policy: ApprovalPolicy | undefined,
+  knownToolNames: readonly string[],
+): ApprovalPolicy | undefined {
+  const normalizedPolicy = normalizeApprovalPolicy(policy);
+  if (!normalizedPolicy) {
+    return undefined;
+  }
+
+  return normalizeApprovalPolicy({
+    ...normalizedPolicy,
+    autoApprovedToolNames: filterKnownToolNames(
+      normalizedPolicy.autoApprovedToolNames,
+      knownToolNames,
+    ),
+  });
+}
+
+export function pruneSessionApprovalSettings(
+  settings: SessionApprovalSettings | undefined,
+  knownToolNames: readonly string[],
+): SessionApprovalSettings | undefined {
+  const normalizedSettings = normalizeSessionApprovalSettings(settings);
+  if (normalizedSettings === undefined) {
+    return undefined;
+  }
+
+  return {
+    autoApprovedToolNames: filterKnownToolNames(
+      normalizedSettings.autoApprovedToolNames,
+      knownToolNames,
+    ),
+  };
 }
 
 export function normalizePendingApproval(
@@ -282,4 +392,12 @@ function normalizeStringArray(values?: ReadonlyArray<string>): string[] {
   }
 
   return [...new Set(values.map((value) => value.trim()).filter((value) => value.length > 0))];
+}
+
+function filterKnownToolNames(
+  toolNames: readonly string[] | undefined,
+  knownToolNames: readonly string[],
+): string[] {
+  const knownTools = new Set(normalizeStringArray(knownToolNames));
+  return normalizeStringArray(toolNames).filter((toolName) => knownTools.has(toolName));
 }

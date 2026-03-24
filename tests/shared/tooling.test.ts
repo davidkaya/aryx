@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 
 import {
+  listApprovalToolDefinitions,
   normalizeWorkspaceSettings,
   validateLspProfileDefinition,
   validateMcpServerDefinition,
@@ -154,5 +155,59 @@ describe('tooling settings helpers', () => {
         updatedAt: TIMESTAMP,
       }),
     ).toBe('LSP profile "Typescript LSP" needs the "--stdio" argument.');
+  });
+
+  test('lists approval tools from MCP and LSP definitions using runtime tool identifiers', () => {
+    const tools = listApprovalToolDefinitions({
+      mcpServers: [
+        {
+          id: 'mcp-git',
+          name: 'Git MCP',
+          transport: 'local',
+          command: 'node',
+          args: ['server.js'],
+          tools: ['git.status', 'git.diff'],
+          createdAt: TIMESTAMP,
+          updatedAt: TIMESTAMP,
+        },
+        {
+          id: 'mcp-extra',
+          name: 'Extra MCP',
+          transport: 'local',
+          command: 'node',
+          args: ['extra.js'],
+          tools: ['git.status'],
+          createdAt: TIMESTAMP,
+          updatedAt: TIMESTAMP,
+        },
+      ],
+      lspProfiles: [
+        {
+          id: 'ts',
+          name: 'TypeScript',
+          command: 'typescript-language-server',
+          args: ['--stdio'],
+          languageId: 'typescript',
+          fileExtensions: ['.ts', '.tsx'],
+          createdAt: TIMESTAMP,
+          updatedAt: TIMESTAMP,
+        },
+      ],
+    });
+
+    expect(tools).toContainEqual({
+      id: 'git.status',
+      label: 'git.status',
+      kind: 'mcp',
+      providerIds: ['mcp-git', 'mcp-extra'],
+      providerNames: ['Git MCP', 'Extra MCP'],
+    });
+    expect(tools).toContainEqual({
+      id: 'lsp_ts_hover',
+      label: 'TypeScript · Hover',
+      kind: 'lsp',
+      providerIds: ['ts'],
+      providerNames: ['TypeScript'],
+    });
   });
 });

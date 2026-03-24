@@ -122,6 +122,9 @@ describe('session library helpers', () => {
         isPinned: true,
         isArchived: true,
         lastError: 'sidecar crashed',
+        approvalSettings: {
+          autoApprovedToolNames: ['git.status'],
+        },
         pendingApproval: {
           id: 'approval-1',
           kind: 'tool-call',
@@ -165,6 +168,9 @@ describe('session library helpers', () => {
       updatedAt: '2026-03-23T00:07:00.000Z',
     });
     expect(session.messages[0]?.pending).toBe(false);
+    expect(session.approvalSettings).toEqual({
+      autoApprovedToolNames: ['git.status'],
+    });
     expect(session.pendingApproval).toBeUndefined();
     expect(session.pendingApprovalQueue).toBeUndefined();
     expect(session.runs).toEqual([]);

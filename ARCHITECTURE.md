@@ -176,6 +176,7 @@ Typical examples:
 - send message
 - update theme
 - toggle session tooling
+- update session approval overrides
 
 The renderer does not reach into Electron or the filesystem directly. It talks through a constrained API surface.
 
@@ -246,7 +247,8 @@ This is a good example of a cross-cutting concern that spans multiple layers wit
 Tooling is deliberately split into two levels:
 
 - **global definitions** for MCP servers and LSP profiles
-- **per-session enablement** for which tools are active in a given run
+- **pattern defaults** for which known tools can bypass manual approval
+- **per-session overrides** for both tool enablement and tool auto-approval
 
 This lets the application treat tooling as reusable workspace capability while still preserving session-level control and safety.
 

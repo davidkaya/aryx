@@ -47,6 +47,8 @@ You can define MCP servers and LSP profiles once in **Settings**, then enable th
 
 This keeps machine-wide tooling reusable while still letting each session decide which external tools the agent can use.
 
+Patterns can also store default auto-approval for known MCP and LSP tools, and each session can override those defaults from the Activity panel before a run starts.
+
 ### Watch runs as they happen
 
 You can follow agent activity while a session is running, which makes longer or more complex workflows easier to trust and understand.
@@ -82,7 +84,7 @@ Eryx includes connection status in the app so you can quickly tell whether Copil
    Use a simple single-agent setup to begin, or choose a saved multi-agent pattern when you want a more structured workflow.
 
 5. **Configure optional tooling**
-   If you want MCP or LSP support, add the global definitions in settings and then enable the ones you want for the current session from the Activity panel.
+   If you want MCP or LSP support, add the global definitions in settings and then enable the ones you want for the current session from the Activity panel. You can also set pattern-level tool auto-approval defaults and override them per session.
 
 6. **Start working**
    Ask a question, describe a task, or explore a project. As the run progresses, you can watch the participating agents and keep the session for later.

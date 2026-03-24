@@ -1,28 +1,33 @@
 import { describe, expect, test } from 'bun:test';
 
 import {
+  approvalPolicyRequiresToolCallApproval,
+  approvalPolicyRequiresCheckpoint,
+  normalizeApprovalPolicy,
+  normalizePendingApproval,
+  normalizePendingApprovalState,
+  normalizeSessionApprovalSettings,
   dequeuePendingApprovalState,
   enqueuePendingApprovalState,
   listPendingApprovals,
-  approvalPolicyRequiresCheckpoint,
-  normalizePendingApprovalState,
-  normalizeApprovalPolicy,
-  normalizePendingApproval,
+  resolveEffectiveApprovalPolicy,
 } from '@shared/domain/approval';
 
 describe('approval helpers', () => {
-  test('normalizes duplicate checkpoint rules into stable agent-scoped policy entries', () => {
+  test('normalizes duplicate checkpoint rules and auto-approved tools into stable policy entries', () => {
     expect(normalizeApprovalPolicy({
       rules: [
         { kind: 'tool-call', agentIds: ['agent-1', ' agent-1 ', 'agent-2'] },
         { kind: 'tool-call', agentIds: ['agent-2', 'agent-3'] },
         { kind: 'final-response', agentIds: [] },
       ],
+      autoApprovedToolNames: [' git.status ', 'git.status', 'lsp_ts_hover'],
     })).toEqual({
       rules: [
         { kind: 'tool-call', agentIds: ['agent-1', 'agent-2', 'agent-3'] },
         { kind: 'final-response' },
       ],
+      autoApprovedToolNames: ['git.status', 'lsp_ts_hover'],
     });
   });
 
@@ -32,11 +37,42 @@ describe('approval helpers', () => {
         { kind: 'tool-call', agentIds: ['agent-1'] },
         { kind: 'final-response', agentIds: [] },
       ],
+      autoApprovedToolNames: ['git.status'],
     });
 
     expect(approvalPolicyRequiresCheckpoint(policy, 'tool-call', 'agent-1')).toBe(true);
     expect(approvalPolicyRequiresCheckpoint(policy, 'tool-call', 'agent-2')).toBe(false);
     expect(approvalPolicyRequiresCheckpoint(policy, 'final-response', 'agent-2')).toBe(true);
+    expect(approvalPolicyRequiresToolCallApproval(policy, 'agent-1', 'git.status')).toBe(false);
+    expect(approvalPolicyRequiresToolCallApproval(policy, 'agent-1', 'git.diff')).toBe(true);
+    expect(approvalPolicyRequiresToolCallApproval(policy, 'agent-2', 'git.diff')).toBe(false);
+  });
+
+  test('resolves session approval settings over pattern auto-approval defaults', () => {
+    expect(resolveEffectiveApprovalPolicy(
+      {
+        rules: [{ kind: 'tool-call' }],
+        autoApprovedToolNames: ['git.status'],
+      },
+      normalizeSessionApprovalSettings({
+        autoApprovedToolNames: ['git.diff'],
+      }),
+    )).toEqual({
+      rules: [{ kind: 'tool-call' }],
+      autoApprovedToolNames: ['git.diff'],
+    });
+
+    expect(resolveEffectiveApprovalPolicy(
+      {
+        rules: [{ kind: 'tool-call' }],
+        autoApprovedToolNames: ['git.status'],
+      },
+      normalizeSessionApprovalSettings({
+        autoApprovedToolNames: [],
+      }),
+    )).toEqual({
+      rules: [{ kind: 'tool-call' }],
+    });
   });
 
   test('normalizes pending approvals with optional message previews', () => {

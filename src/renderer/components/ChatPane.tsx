@@ -1,5 +1,5 @@
-import { type KeyboardEvent, useEffect, useRef, useState } from 'react';
-import { AlertCircle, ArrowUp, Bot, Check, ChevronDown, Circle, GitBranch, Loader2, ShieldAlert, ShieldCheck, Sparkles, User, X } from 'lucide-react';
+import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { AlertCircle, ArrowUp, Bot, Check, ChevronDown, Circle, GitBranch, Loader2, RotateCcw, Server, ShieldAlert, ShieldCheck, Sparkles, User, X } from 'lucide-react';
 
 import { MarkdownContent } from '@renderer/components/MarkdownContent';
 import { getAssistantMessagePhase } from '@renderer/lib/messagePhase';
@@ -15,7 +15,17 @@ import {
 } from '@shared/domain/models';
 import { reasoningEffortOptions, type PatternDefinition, type ReasoningEffort } from '@shared/domain/pattern';
 import { isScratchpadProject, type ProjectRecord } from '@shared/domain/project';
-import type { SessionRecord } from '@shared/domain/session';
+import { resolveSessionToolingSelection, type SessionRecord } from '@shared/domain/session';
+import {
+  listApprovalToolDefinitions,
+  type ApprovalToolDefinition,
+  type ApprovalToolKind,
+  type LspProfileDefinition,
+  type McpServerDefinition,
+  type RuntimeToolDefinition,
+  type SessionToolingSelection,
+  type WorkspaceToolingSettings,
+} from '@shared/domain/tooling';
 
 function ThinkingDots() {
   return (
@@ -222,6 +232,269 @@ function InlineThinkingPill({
   );
 }
 
+/* ── Inline tools pill with popover ─────────────────────────── */
+
+function InlineToolsPill({
+  mcpServers,
+  lspProfiles,
+  selection,
+  disabled,
+  onToggle,
+}: {
+  mcpServers: ReadonlyArray<McpServerDefinition>;
+  lspProfiles: ReadonlyArray<LspProfileDefinition>;
+  selection: SessionToolingSelection;
+  disabled: boolean;
+  onToggle: (selection: SessionToolingSelection) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [open]);
+
+  const enabledCount = selection.enabledMcpServerIds.length + selection.enabledLspProfileIds.length;
+  const totalCount = mcpServers.length + lspProfiles.length;
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[12px] font-medium transition ${
+          open
+            ? 'border-indigo-500/40 bg-indigo-500/10 text-indigo-300'
+            : 'border-zinc-700/60 bg-zinc-800/40 text-zinc-400 hover:border-zinc-600 hover:text-zinc-300'
+        } disabled:cursor-not-allowed disabled:opacity-50`}
+        disabled={disabled}
+        onClick={() => setOpen(!open)}
+        type="button"
+      >
+        <Server className="size-3" />
+        <span>{enabledCount}/{totalCount} tools</span>
+        <ChevronDown className={`size-3 transition ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {open && !disabled && (
+        <div className="absolute bottom-full left-0 z-40 mb-1.5 w-64 overflow-y-auto rounded-lg border border-zinc-700 bg-zinc-900 py-1 shadow-2xl">
+          {mcpServers.length > 0 && (
+            <div>
+              <div className="px-3 pb-1 pt-2 text-[9px] font-semibold uppercase tracking-wider text-zinc-600">
+                MCP Servers
+              </div>
+              {mcpServers.map((server) => (
+                <PopoverToggleRow
+                  detail={server.transport === 'local' ? server.command : server.url}
+                  enabled={selection.enabledMcpServerIds.includes(server.id)}
+                  key={server.id}
+                  label={server.name}
+                  onToggle={() =>
+                    onToggle({
+                      ...selection,
+                      enabledMcpServerIds: toggleInArray(selection.enabledMcpServerIds, server.id),
+                    })
+                  }
+                />
+              ))}
+            </div>
+          )}
+          {lspProfiles.length > 0 && (
+            <div>
+              <div className="px-3 pb-1 pt-2 text-[9px] font-semibold uppercase tracking-wider text-zinc-600">
+                Language Servers
+              </div>
+              {lspProfiles.map((profile) => (
+                <PopoverToggleRow
+                  detail={profile.command}
+                  enabled={selection.enabledLspProfileIds.includes(profile.id)}
+                  key={profile.id}
+                  label={profile.name}
+                  onToggle={() =>
+                    onToggle({
+                      ...selection,
+                      enabledLspProfileIds: toggleInArray(selection.enabledLspProfileIds, profile.id),
+                    })
+                  }
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Inline auto-approval pill with popover ────────────────── */
+
+const approvalKindOrder: ApprovalToolKind[] = ['builtin', 'mcp', 'lsp', 'mixed'];
+const approvalKindLabels: Record<ApprovalToolKind, string> = {
+  builtin: 'Built-in',
+  mcp: 'MCP Servers',
+  lsp: 'Language Servers',
+  mixed: 'Other',
+};
+
+function InlineApprovalPill({
+  approvalTools,
+  effectiveAutoApproved,
+  isOverridden,
+  disabled,
+  onUpdate,
+}: {
+  approvalTools: ApprovalToolDefinition[];
+  effectiveAutoApproved: Set<string>;
+  isOverridden: boolean;
+  disabled: boolean;
+  onUpdate: (settings: { autoApprovedToolNames?: string[] }) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [open]);
+
+  function toggleTool(toolId: string) {
+    const next = new Set(effectiveAutoApproved);
+    if (next.has(toolId)) {
+      next.delete(toolId);
+    } else {
+      next.add(toolId);
+    }
+    onUpdate({ autoApprovedToolNames: [...next] });
+  }
+
+  const groups = approvalKindOrder
+    .map((kind) => ({ kind, tools: approvalTools.filter((t) => t.kind === kind) }))
+    .filter((g) => g.tools.length > 0);
+  const showHeaders = groups.length > 1;
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[12px] font-medium transition ${
+          open
+            ? 'border-indigo-500/40 bg-indigo-500/10 text-indigo-300'
+            : isOverridden
+              ? 'border-amber-500/30 bg-amber-500/5 text-amber-400 hover:border-amber-500/50'
+              : 'border-zinc-700/60 bg-zinc-800/40 text-zinc-400 hover:border-zinc-600 hover:text-zinc-300'
+        } disabled:cursor-not-allowed disabled:opacity-50`}
+        disabled={disabled}
+        onClick={() => setOpen(!open)}
+        type="button"
+      >
+        <ShieldCheck className="size-3" />
+        <span>{effectiveAutoApproved.size}/{approvalTools.length} auto-approved</span>
+        <ChevronDown className={`size-3 transition ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {open && !disabled && (
+        <div className="absolute bottom-full left-0 z-40 mb-1.5 max-h-80 w-72 overflow-y-auto rounded-lg border border-zinc-700 bg-zinc-900 shadow-2xl">
+          {/* Override state + reset */}
+          <div className="flex items-center gap-2 border-b border-zinc-800 px-3 py-2">
+            <span className={`rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider ${
+              isOverridden
+                ? 'bg-amber-500/15 text-amber-400'
+                : 'bg-zinc-800 text-zinc-500'
+            }`}>
+              {isOverridden ? 'Session override' : 'Pattern defaults'}
+            </span>
+            {isOverridden && (
+              <button
+                className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-medium text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-300"
+                onClick={() => onUpdate({})}
+                type="button"
+              >
+                <RotateCcw className="size-2.5" />
+                Reset
+              </button>
+            )}
+          </div>
+
+          {/* Tool list grouped by kind */}
+          <div className="py-1">
+            {groups.map((group, i) => (
+              <div key={group.kind}>
+                {showHeaders && (
+                  <div className={`px-3 pb-1 ${i > 0 ? 'pt-2' : 'pt-1'} text-[9px] font-semibold uppercase tracking-wider text-zinc-600`}>
+                    {approvalKindLabels[group.kind]}
+                  </div>
+                )}
+                {group.tools.map((tool) => {
+                  const detail = tool.description || (tool.providerNames.length > 0 ? tool.providerNames.join(', ') : undefined);
+                  return (
+                    <PopoverToggleRow
+                      detail={detail}
+                      enabled={effectiveAutoApproved.has(tool.id)}
+                      key={tool.id}
+                      label={tool.label}
+                      onToggle={() => toggleTool(tool.id)}
+                    />
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Shared popover toggle row + helpers ───────────────────── */
+
+function PopoverToggleRow({
+  label,
+  detail,
+  enabled,
+  onToggle,
+}: {
+  label: string;
+  detail?: string;
+  enabled: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      className="flex w-full items-center gap-2 px-3 py-1.5 text-left transition hover:bg-zinc-800"
+      onClick={onToggle}
+      type="button"
+    >
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-[12px] font-medium text-zinc-300">{label}</div>
+        {detail && <div className="truncate text-[10px] text-zinc-600">{detail}</div>}
+      </div>
+      <span
+        className={`relative inline-flex h-[14px] w-[24px] shrink-0 items-center rounded-full transition-colors ${
+          enabled ? 'bg-indigo-500' : 'bg-zinc-700'
+        }`}
+      >
+        <span
+          className={`inline-block size-[10px] rounded-full bg-white shadow-sm transition-transform ${
+            enabled ? 'translate-x-[12px]' : 'translate-x-[2px]'
+          }`}
+        />
+      </span>
+    </button>
+  );
+}
+
+function toggleInArray(current: string[], id: string): string[] {
+  return current.includes(id)
+    ? current.filter((currentId) => currentId !== id)
+    : [...current, id];
+}
+
 /* ── Approval banner ────────────────────────────────────────── */
 
 function ApprovalBanner({
@@ -378,12 +651,16 @@ interface ChatPaneProps {
   pattern: PatternDefinition;
   session: SessionRecord;
   availableModels: ReadonlyArray<ModelDefinition>;
+  toolingSettings: WorkspaceToolingSettings;
+  runtimeTools?: ReadonlyArray<RuntimeToolDefinition>;
   onSend: (content: string) => Promise<void>;
   onResolveApproval?: (approvalId: string, decision: ApprovalDecision) => Promise<unknown>;
   onUpdateScratchpadConfig?: (config: {
     model: string;
     reasoningEffort?: ReasoningEffort;
   }) => Promise<unknown>;
+  onUpdateSessionTooling?: (selection: SessionToolingSelection) => void;
+  onUpdateSessionApprovalSettings?: (settings: { autoApprovedToolNames?: string[] }) => void;
 }
 
 export function ChatPane({
@@ -391,9 +668,13 @@ export function ChatPane({
   pattern,
   session,
   availableModels,
+  toolingSettings,
+  runtimeTools,
   onSend,
   onResolveApproval,
   onUpdateScratchpadConfig,
+  onUpdateSessionTooling,
+  onUpdateSessionApprovalSettings,
 }: ChatPaneProps) {
   const [input, setInput] = useState('');
   const [configError, setConfigError] = useState<string>();
@@ -413,6 +694,25 @@ export function ChatPane({
   const supportedEfforts = getSupportedReasoningEfforts(selectedModel);
   const scratchpadReasoningEffort = resolveReasoningEffort(selectedModel, primaryAgent?.reasoningEffort);
   const isComposerDisabled = isSessionBusy || isUpdatingScratchpadConfig;
+
+  const toolSelection = useMemo(() => resolveSessionToolingSelection(session), [session]);
+  const mcpServers = toolingSettings.mcpServers;
+  const lspProfiles = toolingSettings.lspProfiles;
+  const hasConfigurableTools = mcpServers.length > 0 || lspProfiles.length > 0;
+  const hasToolCallApproval = pattern.approvalPolicy?.rules.some((r) => r.kind === 'tool-call') ?? false;
+  const approvalTools = useMemo(
+    () => listApprovalToolDefinitions(toolingSettings, runtimeTools),
+    [runtimeTools, toolingSettings],
+  );
+  const isApprovalOverridden = session.approvalSettings !== undefined;
+  const effectiveAutoApproved = useMemo(
+    () => new Set(
+      isApprovalOverridden
+        ? session.approvalSettings!.autoApprovedToolNames
+        : pattern.approvalPolicy?.autoApprovedToolNames ?? [],
+    ),
+    [isApprovalOverridden, session.approvalSettings, pattern.approvalPolicy],
+  );
 
   useEffect(() => {
     transcriptRef.current?.scrollTo({
@@ -693,6 +993,30 @@ export function ChatPane({
               />
               {isUpdatingScratchpadConfig && (
                 <Loader2 className="size-3 animate-spin text-zinc-500" />
+              )}
+            </div>
+          )}
+
+          {/* Session config pills — tool & approval controls */}
+          {!isScratchpad && (hasConfigurableTools || hasToolCallApproval) && (
+            <div className="mb-2 flex items-center gap-2">
+              {hasConfigurableTools && onUpdateSessionTooling && (
+                <InlineToolsPill
+                  disabled={isComposerDisabled}
+                  lspProfiles={lspProfiles}
+                  mcpServers={mcpServers}
+                  onToggle={onUpdateSessionTooling}
+                  selection={toolSelection}
+                />
+              )}
+              {hasToolCallApproval && onUpdateSessionApprovalSettings && approvalTools.length > 0 && (
+                <InlineApprovalPill
+                  approvalTools={approvalTools}
+                  disabled={isComposerDisabled}
+                  effectiveAutoApproved={effectiveAutoApproved}
+                  isOverridden={isApprovalOverridden}
+                  onUpdate={onUpdateSessionApprovalSettings}
+                />
               )}
             </div>
           )}

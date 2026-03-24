@@ -263,35 +263,32 @@ export default function App() {
               reasoningEffort: config.reasoningEffort,
             })
           }
+          onUpdateSessionTooling={(selection) => {
+            void api.updateSessionTooling({
+              sessionId: selectedSession.id,
+              enabledMcpServerIds: selection.enabledMcpServerIds,
+              enabledLspProfileIds: selection.enabledLspProfileIds,
+            });
+          }}
+          onUpdateSessionApprovalSettings={(settings) => {
+            void api.updateSessionApprovalSettings({
+              sessionId: selectedSession.id,
+              autoApprovedToolNames: settings.autoApprovedToolNames,
+            });
+          }}
           availableModels={availableModels}
           pattern={patternForSession}
           project={projectForSession}
+          runtimeTools={sidecarCapabilities?.runtimeTools}
           session={selectedSession}
+          toolingSettings={workspace.settings.tooling}
         />
     );
     detailPanel = (
       <ActivityPanel
         activity={activityForSession}
-        lspProfiles={workspace.settings.tooling.lspProfiles}
-        mcpServers={workspace.settings.tooling.mcpServers}
-        toolingSettings={workspace.settings.tooling}
-        runtimeTools={sidecarCapabilities?.runtimeTools}
         onJumpToMessage={jumpToMessage}
-        onUpdateSessionTooling={(selection) => {
-          void api.updateSessionTooling({
-            sessionId: selectedSession.id,
-            enabledMcpServerIds: selection.enabledMcpServerIds,
-            enabledLspProfileIds: selection.enabledLspProfileIds,
-          });
-        }}
-        onUpdateSessionApprovalSettings={(settings) => {
-          void api.updateSessionApprovalSettings({
-            sessionId: selectedSession.id,
-            autoApprovedToolNames: settings.autoApprovedToolNames,
-          });
-        }}
         pattern={patternForSession}
-        projectIsScratchpad={isScratchpadProject(projectForSession)}
         session={selectedSession}
       />
     );

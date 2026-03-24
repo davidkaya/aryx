@@ -21,21 +21,21 @@ export function NewSessionModal({
   onCreate,
   onTogglePatternFavorite,
 }: NewSessionModalProps) {
-  const [projectId, setProjectId] = useState(defaultProjectId ?? projects[0]?.id ?? '');
+  const userProjects = useMemo(
+    () => projects.filter((p) => !isScratchpadProject(p)),
+    [projects],
+  );
+  const [projectId, setProjectId] = useState(defaultProjectId ?? userProjects[0]?.id ?? '');
   const availablePatterns = useMemo(
     () =>
       patterns
-        .filter(
-          (pattern) =>
-            pattern.availability !== 'unavailable'
-            && (!isScratchpadProject(projectId) || pattern.mode === 'single'),
-        )
+        .filter((pattern) => pattern.availability !== 'unavailable')
         .sort((a, b) => {
           if (a.isFavorite && !b.isFavorite) return -1;
           if (!a.isFavorite && b.isFavorite) return 1;
           return 0;
         }),
-    [patterns, projectId],
+    [patterns],
   );
   const [patternId, setPatternId] = useState(availablePatterns[0]?.id ?? '');
 
@@ -71,18 +71,12 @@ export function NewSessionModal({
               onChange={(e) => setProjectId(e.target.value)}
               value={projectId}
             >
-              {projects.map((p) => (
+              {userProjects.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
                 </option>
               ))}
             </select>
-            {isScratchpadProject(projectId) && (
-              <p className="text-[12px] leading-relaxed text-zinc-600">
-                Scratchpad is a projectless 1-on-1 chat for ad-hoc questions. It should behave like
-                pure Q&A rather than repo automation.
-              </p>
-            )}
           </label>
 
           <label className="block space-y-1.5">
@@ -125,11 +119,6 @@ export function NewSessionModal({
             {patternId && (
               <p className="text-[12px] text-zinc-600">
                 {availablePatterns.find((p) => p.id === patternId)?.description}
-              </p>
-            )}
-            {isScratchpadProject(projectId) && (
-              <p className="text-[12px] leading-relaxed text-zinc-700">
-                Scratchpad supports single-agent chat patterns only.
               </p>
             )}
           </label>

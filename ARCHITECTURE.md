@@ -1,287 +1,327 @@
 # Architecture
 
-## Overview
+## What this system is
 
-Eryx is a desktop Electron application for Copilot-powered work across a scratchpad and project-backed sessions. The codebase is intentionally split into five major layers:
+Eryx is a desktop workspace for Copilot-powered development work. It combines a persistent session model, project-aware context, reusable multi-agent orchestration patterns, optional external tooling, and live run visibility inside a single Electron application.
 
-- an Electron **main process** that owns native integration, persistence, git inspection, and sidecar lifecycle
-- a React **renderer** that owns the user interface
-- a **preload bridge** that exposes a typed IPC API to the renderer under context isolation
-- a shared TypeScript **domain/contracts** layer used on both sides of the Electron boundary
-- a .NET **sidecar** process that talks to GitHub Copilot and Microsoft Agent Framework over stdio
+At a high level, the architecture is built around one core idea:
 
-This split keeps the UI process unprivileged while concentrating filesystem, process, and workflow orchestration in the main process and sidecar.
+> keep the UI safe and responsive, keep application state centralized, and keep AI execution isolated in its own runtime.
 
-Key entry points:
+That produces a system with clear boundaries:
 
-- `src/main/index.ts:11-42`
-- `src/main/windows/createMainWindow.ts:6-46`
-- `src/preload/index.ts:6-50`
-- `src/renderer/App.tsx:83-153`
-- `sidecar/src/Eryx.AgentHost/Program.cs:1-10`
+- the **renderer** owns presentation and user interaction
+- the **Electron main process** owns state mutation, persistence, OS integration, and process management
+- the **sidecar** owns Copilot-backed execution and orchestration
+- **shared contracts and domain models** keep all boundaries typed and explicit
 
-## High-level runtime topology
+## Design goals
 
-```text
-Renderer (React + Tailwind)
-  |
-  | window.eryxApi
-  v
-Preload bridge
-  |
-  | ipcRenderer.invoke / ipcMain.handle
-  v
-Electron main process
-  - EryxAppService
-  - WorkspaceRepository
-  - GitService
-  - SidecarClient
-  |
-  | JSON lines over stdio
-  v
-.NET sidecar (Eryx.AgentHost)
-  - SidecarProtocolHost
-  - CopilotWorkflowRunner
-  |
-  v
-GitHub Copilot CLI + Microsoft Agent Framework
+The current architecture optimizes for:
+
+- **safe desktop boundaries** between UI code and privileged capabilities
+- **persistent workspaces** rather than disposable chat threads
+- **project-aware execution** with repository context and optional tooling
+- **observable AI runs** with streamed output, activity, and history
+- **extensible orchestration** so patterns, models, and tool integrations can evolve without collapsing boundaries
+
+## System context
+
+```mermaid
+flowchart LR
+    User[User]
+    Renderer[Renderer UI<br/>React + Tailwind]
+    Preload[Preload bridge]
+    Main[Electron main process]
+    Workspace[Workspace storage<br/>JSON + scratchpad files]
+    Git[Local git repositories]
+    Sidecar[.NET sidecar]
+    Copilot[GitHub Copilot CLI<br/>+ agent runtime]
+    OS[Native windowing<br/>and desktop integration]
+
+    User --> Renderer
+    Renderer <--> Preload
+    Preload <--> Main
+    Main <--> Workspace
+    Main <--> Git
+    Main <--> Sidecar
+    Sidecar <--> Copilot
+    Main <--> OS
 ```
 
-## Source layout
+## Runtime boundaries
 
-### Main process
+| Boundary | Owns | Does not own | Communicates through |
+| --- | --- | --- | --- |
+| Renderer | Screens, interaction, local view composition, theme application | Filesystem, process spawning, raw Electron access, Copilot runtime | Typed preload API and pushed events |
+| Preload | Narrow bridge between browser context and Electron IPC | Business logic, persistence, orchestration | `ipcRenderer` / `ipcMain` |
+| Main process | Workspace mutation, persistence, git inspection, session lifecycle, native window state, sidecar lifecycle | UI rendering, LLM orchestration internals | IPC, filesystem, git CLI, stdio with sidecar |
+| Sidecar | Capability discovery, pattern validation, run execution, streaming deltas and activity | UI, workspace persistence, Electron APIs | Line-delimited JSON over stdio |
+| External systems | Git data, Copilot account/model access, OS window chrome | Application state and UI behavior | Controlled adapters owned by main or sidecar |
 
-- `src/main/index.ts` boots the app, creates the main window, registers IPC handlers, and applies the persisted title-bar theme (`src/main/index.ts:11-24`).
-- `src/main/windows/createMainWindow.ts` creates the `BrowserWindow` with `contextIsolation: true`, `nodeIntegration: false`, a hidden native title bar, and an Electron title bar overlay (`src/main/windows/createMainWindow.ts:9-30`).
-- `src/main/ipc/registerIpcHandlers.ts` maps renderer IPC calls onto `EryxAppService` methods and forwards service events back to the renderer (`src/main/ipc/registerIpcHandlers.ts:24-97`).
-- `src/main/EryxAppService.ts` is the main application service. It owns workspace mutation, session lifecycle, tool selection, sidecar orchestration, and event emission (`src/main/EryxAppService.ts:82-117`, `src/main/EryxAppService.ts:317-474`, `src/main/EryxAppService.ts:837-943`).
-- `src/main/persistence/` contains JSON-backed workspace persistence and app-specific paths (`src/main/persistence/appPaths.ts:4-10`, `src/main/persistence/jsonStore.ts:4-20`, `src/main/persistence/workspaceRepository.ts:38-86`).
-- `src/main/git/gitService.ts` derives repository status, branch, upstream, ahead/behind counts, dirty state, and latest commit metadata for attached projects (`src/main/git/gitService.ts:172-250`).
-- `src/main/sidecar/` resolves, spawns, and communicates with the .NET sidecar while sanitizing the child-process environment (`src/main/sidecar/sidecarProcess.ts:35-232`, `src/main/sidecar/sidecarRuntime.ts:24-48`, `src/main/sidecar/sidecarEnvironment.ts:1-17`).
+This split is the most important architectural feature in the app. It is what keeps the system understandable as more capabilities are added.
 
-### Renderer
+## High-level runtime model
 
-- `src/renderer/App.tsx` is the top-level React composition root. It loads workspace state and sidecar capabilities, subscribes to workspace/session events, applies the theme, and composes `Sidebar`, `ChatPane`, `ActivityPanel`, `WelcomePane`, `SettingsPanel`, and `NewSessionModal` (`src/renderer/App.tsx:83-153`, `src/renderer/App.tsx:240-390`).
-- The UI is built from focused components under `src/renderer/components/`, with the right-side `ActivityPanel` exposing per-agent activity, run timeline, and per-session tooling toggles (`src/renderer/components/ActivityPanel.tsx:158-311`).
-- `src/renderer/lib/sessionActivity.ts` maintains ephemeral activity state keyed by session, separate from persisted workspace JSON (`src/renderer/lib/sessionActivity.ts:20-143`).
-- `src/renderer/styles.css` defines the global visual tokens and light/dark theme switching via CSS custom properties (`src/renderer/styles.css:1-80`).
+Eryx runs as a multi-process desktop application:
 
-### Shared domain and contracts
+1. The **renderer** displays the workspace and captures user intent.
+2. The **preload bridge** exposes a small, typed API into the browser context.
+3. The **main process** validates and mutates application state, persists it, and manages native integrations.
+4. The **sidecar** executes Copilot-backed turns and streams structured execution events back.
 
-- `src/shared/domain/workspace.ts` defines the persisted workspace aggregate (`src/shared/domain/workspace.ts:8-28`).
-- `src/shared/domain/project.ts` defines project records and guarantees a synthetic scratchpad project with a stable ID (`src/shared/domain/project.ts:34-76`).
-- `src/shared/domain/session.ts` defines session records, scratchpad-specific config, and session-title resolution (`src/shared/domain/session.ts:27-114`).
-- `src/shared/domain/pattern.ts` defines orchestration patterns and seeds built-in modes such as `single`, `sequential`, `concurrent`, `handoff`, `group-chat`, and a reserved `magentic` mode (`src/shared/domain/pattern.ts:62-253`).
-- `src/shared/domain/tooling.ts` defines global tooling settings, per-session tooling selection, and persisted appearance theme settings (`src/shared/domain/tooling.ts:38-95`).
-- `src/shared/domain/runTimeline.ts` defines persisted per-run history and the event model used to render execution timelines (`src/shared/domain/runTimeline.ts:222-454`).
-- `src/shared/contracts/ipc.ts` defines the typed renderer API exposed through preload (`src/shared/contracts/ipc.ts:14-99`).
-- `src/shared/contracts/sidecar.ts` defines the stdio protocol between Electron and the sidecar, including commands, streamed delta events, activity events, and tooling payloads (`src/shared/contracts/sidecar.ts:4-178`).
+The sidecar is intentionally separate from the Electron main process so that AI runtime concerns stay isolated from UI and persistence concerns.
 
-### Sidecar
+## Main user flow
 
-- `sidecar/src/Eryx.AgentHost/Program.cs` is the .NET entrypoint and requires `--stdio` (`sidecar/src/Eryx.AgentHost/Program.cs:1-10`).
-- `sidecar/src/Eryx.AgentHost/Services/SidecarProtocolHost.cs` implements the line-delimited JSON protocol. It handles `describe-capabilities`, `validate-pattern`, and `run-turn`, and serializes success/error events back to Electron (`sidecar/src/Eryx.AgentHost/Services/SidecarProtocolHost.cs:24-175`).
-- `sidecar/src/Eryx.AgentHost/Services/CopilotWorkflowRunner.cs` validates patterns, builds a workflow from the incoming pattern, streams message deltas and agent activity, and returns completed assistant messages (`sidecar/src/Eryx.AgentHost/Services/CopilotWorkflowRunner.cs:31-170`).
+The most important end-to-end interaction is sending a message in a session.
 
-## Main process architecture
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant R as Renderer
+    participant P as Preload
+    participant M as Main process
+    participant S as Sidecar
+    participant C as Copilot runtime
 
-`EryxAppService` is the central application service and the main process entry point for business logic. It owns:
+    U->>R: Send message
+    R->>P: Invoke typed API
+    P->>M: IPC request
+    M->>M: Append user message
+    M->>M: Create run record and mark session running
+    M->>S: run-turn command
+    S->>C: Execute workflow
+    C-->>S: Partial output / tool activity / handoffs
+    S-->>M: Stream deltas and activity events
+    M-->>R: Push session events and workspace updates
+    C-->>S: Final messages
+    S-->>M: Completion or error
+    M->>M: Finalize run and persist state
+    M-->>R: Final workspace snapshot
+```
 
-- workspace loading and caching (`src/main/EryxAppService.ts:99-112`)
-- project addition and git-context refresh scheduling (`src/main/EryxAppService.ts:104-109`, `src/main/EryxAppService.ts:119-170`, `src/main/EryxAppService.ts:569-581`)
-- pattern, settings, and tooling mutations (`src/main/EryxAppService.ts:198-314`, `src/main/EryxAppService.ts:477-562`)
-- session creation, duplication, selection, pin/archive state, and title updates (`src/main/EryxAppService.ts:317-382`, `src/main/EryxAppService.ts:584-601`)
-- run execution and streamed sidecar integration (`src/main/EryxAppService.ts:385-474`)
-- persistence and UI fan-out through `workspace-updated` and `session-event` emissions (`src/main/EryxAppService.ts:837-840`)
+This flow is important because it shows that Eryx is not architected as a simple "send prompt, get string" application. It treats execution as a structured, observable process.
 
-This is the main "application boundary" inside Electron: IPC is intentionally thin, and the service concentrates cross-cutting logic instead of scattering it across handlers or renderer components.
+## Application state model
 
-## Persistence model
+The durable state of the app is a **workspace**. The workspace contains:
 
-Persistent application state is stored as a single JSON document:
+- connected projects
+- orchestration patterns
+- sessions
+- settings
+- run history
 
-- workspace file path: `app.getPath('userData')/workspace.json` (`src/main/persistence/appPaths.ts:4-6`)
-- scratchpad directory path: `app.getPath('userData')/scratchpad` (`src/main/persistence/appPaths.ts:8-10`)
-
-`WorkspaceRepository.load()` normalizes and repairs persisted state on every load:
-
-- creates the scratchpad directory if needed
-- seeds the workspace if no JSON exists yet
-- ensures the scratchpad project is always present
-- re-merges built-in patterns so shipped defaults stay current
-- normalizes run records, session tooling, and workspace settings
-- writes the normalized result back to disk (`src/main/persistence/workspaceRepository.ts:42-77`)
-
-There is no separate database. The workspace JSON is the durable source of truth for projects, sessions, patterns, settings, and run history.
-
-## Session and workflow model
+This gives Eryx a persistent operating model rather than a transient chat model.
 
 ### Projects
 
-Projects are either:
+Projects are the container for context. There are two kinds:
 
-- the synthetic scratchpad project with ID `project-scratchpad`
-- user-added folders with optional git metadata (`src/shared/domain/project.ts:34-76`)
+- a special **scratchpad** project for lightweight work
+- normal **project-backed** entries pointing at local folders
 
-The scratchpad is treated as a first-class project so the UI can share the same session model across scratchpad and project-backed work.
+The scratchpad is modeled inside the same workspace system instead of as a separate subsystem. That keeps the UI and session model consistent while still allowing special rules for scratchpad behavior.
 
 ### Patterns
 
-Patterns describe how agents collaborate. Built-in modes currently include:
+Patterns describe how agents collaborate. The architecture supports:
 
-- `single`
-- `sequential`
-- `concurrent`
-- `handoff`
-- `group-chat`
-- `magentic` (reserved/unavailable in the current .NET runtime) (`src/shared/domain/pattern.ts:62-253`)
+- one-agent conversations
+- sequential workflows
+- concurrent responses
+- handoff flows
+- group chat style collaboration
 
-Patterns are shared data, not renderer-only configuration, which lets the same definition drive UI, validation, persistence, and sidecar execution.
+Patterns are shared application data, not renderer-only configuration. That means the same pattern definition can drive validation, persistence, UI rendering, and sidecar execution.
 
 ### Sessions
 
-A `SessionRecord` stores:
+A session is the working unit of the product. It binds together:
 
-- the selected project and pattern
-- messages and status
-- optional scratchpad model overrides
-- per-session tool selection
-- persisted run history (`src/shared/domain/session.ts:27-43`)
+- a project
+- a pattern
+- a message history
+- status and errors
+- optional per-session tool selection
+- persisted run history
 
-Scratchpad sessions can override the primary agent model and reasoning effort, but they cannot enable MCP or LSP tools (`src/main/EryxAppService.ts:477-510`, `src/main/EryxAppService.ts:513-561`).
+This is how Eryx keeps "ongoing work" first class. Sessions can survive restarts, can be organized, and can accumulate operational history over time.
 
-### Run timeline
+### Runs
 
-Every user turn creates a persisted run record before execution starts. That record captures:
+Each user turn becomes a **run**. A run is more than the final assistant output; it also tracks:
 
-- the triggering user message
-- pattern mode and participating agents
-- timestamped events such as thinking, tool calls, handoffs, message progress, completion, and failure (`src/shared/domain/runTimeline.ts:222-454`)
+- when execution started and ended
+- which agents participated
+- which activity happened during the turn
+- partial streaming output
+- success or failure
 
-This allows the UI to show both an activity summary and a historical run timeline instead of only rendering the final assistant text.
+That run model is what enables the activity panel and historical timeline instead of forcing the user to infer execution from message text alone.
 
-## Renderer architecture
+## Communication model
 
-`App.tsx` is the renderer root and behaves like a thin stateful shell around the shared domain model:
+Eryx uses two main communication links:
 
-- loads workspace state and sidecar capabilities on mount (`src/renderer/App.tsx:94-109`)
-- subscribes to `workspace-updated` and `session-event` streams (`src/renderer/App.tsx:111-132`)
-- applies the effective theme to the document root (`src/renderer/App.tsx:134-153`)
-- routes the current state into the main surfaces:
-  - `Sidebar` for projects/sessions
-  - `ChatPane` for the active conversation
-  - `ActivityPanel` for run activity and tooling
-  - `WelcomePane` when no session is selected
-  - `SettingsPanel` and `NewSessionModal` as overlays (`src/renderer/App.tsx:240-390`)
+### 1. Renderer <-> main process
 
-The renderer does not own persistence. It reacts to snapshots from the main process and sends intents back through the typed preload API.
+This is a typed IPC boundary used for user intent and workspace updates.
 
-## IPC boundary
+Typical examples:
 
-The Electron boundary is intentionally explicit:
+- load workspace
+- create session
+- send message
+- update theme
+- toggle session tooling
 
-- `createMainWindow()` enables `contextIsolation` and disables `nodeIntegration` (`src/main/windows/createMainWindow.ts:26-30`)
-- the preload script exposes a limited `window.eryxApi` surface (`src/preload/index.ts:6-50`)
-- the contract for that surface lives in `src/shared/contracts/ipc.ts:14-99`
-- the main process handles those calls in `src/main/ipc/registerIpcHandlers.ts:24-97`
+The renderer does not reach into Electron or the filesystem directly. It talks through a constrained API surface.
 
-That keeps the renderer decoupled from Electron internals and makes IPC shape changes visible in one shared contract file.
+### 2. Main process <-> sidecar
 
-## Sidecar integration
+This is a structured stdio protocol used for:
 
-The main process talks to the sidecar through `SidecarClient`:
+- capability discovery
+- pattern validation
+- run execution
+- streaming partial output
+- streaming agent activity
 
-- it resolves the runtime differently for dev and packaged modes (`src/main/sidecar/sidecarRuntime.ts:24-48`)
-- it spawns the sidecar with a sanitized environment that strips Bun, Copilot, Electron, Node, and npm-prefixed variables (`src/main/sidecar/sidecarEnvironment.ts:1-17`)
-- it sends JSON commands and reads newline-delimited JSON events from stdout (`src/main/sidecar/sidecarProcess.ts:117-232`)
+This protocol boundary keeps the AI execution runtime replaceable and prevents the Electron main process from becoming overloaded with workflow-specific behavior.
 
-The sidecar protocol supports three command types:
+## Security model
 
-- `describe-capabilities`
-- `validate-pattern`
-- `run-turn` (`src/shared/contracts/sidecar.ts:57-79`)
+Security in this system is mostly about **desktop trust boundaries**.
 
-For `run-turn`, the sidecar streams:
+### Renderer isolation
 
-- `turn-delta` events for partial assistant text
-- `agent-activity` events for thinking, tool calls, and handoffs
-- `turn-complete` when the turn is finished (`src/shared/contracts/sidecar.ts:129-178`)
+The renderer is treated as an unprivileged browser environment:
 
-`EryxAppService.sendSessionMessage()` is the integration point that turns a user message into a run:
+- Node integration is disabled
+- context isolation is enabled
+- privileged capabilities are only exposed through preload
 
-1. append the user message to the session
-2. mark the session as running
-3. create a run record
-4. persist and broadcast the updated workspace
-5. invoke `sidecar.runTurn(...)`
-6. apply streamed deltas and activity events as they arrive
-7. finalize or fail the run and persist again (`src/main/EryxAppService.ts:385-474`)
+That reduces accidental coupling and limits how much of the desktop environment UI code can touch directly.
 
-## Tooling model
+### Narrow preload surface
 
-Tooling is split into two levels:
+The preload layer acts as a small gateway rather than a second application layer. It exposes only the operations the UI actually needs.
 
-- **global definitions** in workspace settings for MCP servers and LSP profiles (`src/shared/domain/tooling.ts:38-48`)
-- **per-session enablement** through selected MCP/LSP IDs (`src/shared/domain/tooling.ts:50-95`)
+This keeps the bridge auditable and avoids leaking broad Electron capabilities into the renderer.
 
-The renderer exposes those toggles in the `ActivityPanel`, but the main process is responsible for validating selections and resolving them into concrete `run-turn` tooling payloads (`src/renderer/components/ActivityPanel.tsx:249-305`, `src/main/EryxAppService.ts:865-943`).
+### Sidecar process isolation
 
-This gives the app reusable machine-wide tooling definitions while preserving session-level control over which tools are active.
+Copilot execution lives in a separate process rather than inside the renderer or directly inside the UI layer of the main process.
 
-## Theme and window chrome
+That separation helps with:
 
-Theme is persisted in workspace settings as `dark`, `light`, or `system` (`src/shared/domain/tooling.ts:43-86`).
+- containment of runtime failures
+- clearer ownership of AI workflow code
+- cleaner protocol boundaries
+- future evolution of the execution runtime
 
-Theme application is split across processes:
+### Sanitized execution environment
 
-- the renderer sets `data-theme` on the document root and follows OS preference changes for the `system` option (`src/renderer/App.tsx:134-153`)
-- `src/renderer/styles.css` remaps semantic and Tailwind-backed color tokens for light mode (`src/renderer/styles.css:1-80`)
-- the main process updates Electron's title bar overlay colors so native window controls stay visually aligned (`src/main/windows/titleBarTheme.ts:20-38`, `src/main/ipc/registerIpcHandlers.ts:38-42`)
+When the main process launches the sidecar, it sanitizes the environment before passing control across the process boundary. This reduces leakage of host/runtime-specific variables into the AI execution environment.
 
-## Activity and git context
+### External link handling
 
-Two pieces of operational state complement the core chat history:
+Links opened from the renderer are handed off to the operating system instead of creating arbitrary in-app browser windows. This keeps external navigation outside the app's main trust boundary.
 
-- **agent activity**, which is ephemeral renderer-side state derived from streamed session events (`src/renderer/lib/sessionActivity.ts:20-143`)
-- **project git context**, which is durable project metadata refreshed from the local git CLI (`src/main/git/gitService.ts:172-250`, `src/main/EryxAppService.ts:569-581`)
+## Cross-cutting concerns
 
-This combination lets Eryx show both live execution status and repository awareness without overloading the chat transcript itself.
+### Theme and window chrome
 
-## Build, test, package, and release architecture
+Theme is not only a renderer concern. It crosses both the web UI and native desktop shell:
 
-### Local scripts
+- the renderer applies the selected appearance to the application surface
+- the main process keeps native title-bar chrome aligned with the active theme
 
-The repository uses Bun as the task runner (`package.json:7-19`):
+This is a good example of a cross-cutting concern that spans multiple layers without collapsing them together.
 
-- `bun run test` runs TypeScript type-checking and Bun tests
-- `bun run sidecar:test` runs .NET sidecar tests
-- `bun run build` builds the Electron app and the .NET sidecar
-- `bun run package` builds the current platform release bundle
+### Tooling integration
 
-### Packaging
+Tooling is deliberately split into two levels:
 
-Packaging is script-driven rather than delegated to a generic Electron packager:
+- **global definitions** for MCP servers and LSP profiles
+- **per-session enablement** for which tools are active in a given run
 
-- `scripts/releaseTarget.ts` resolves platform- and arch-specific release metadata (`scripts/releaseTarget.ts:7-84`)
-- `scripts/publish-sidecar.ts` publishes a self-contained .NET sidecar for the current runtime identifier (`scripts/publish-sidecar.ts:32-65`)
-- `scripts/package-electron.ts` assembles the release directory by copying Electron runtime files, built renderer/main assets, runtime dependencies, and the published sidecar, then applies platform-specific metadata like icons and bundle names (`scripts/package-electron.ts:33-240`)
+This lets the application treat tooling as reusable workspace capability while still preserving session-level control and safety.
 
-### CI and releases
+### Project awareness
 
-`.github/workflows/release.yml` defines the pipeline:
+Project-backed sessions can carry repository context such as branch and dirty state, while scratchpad sessions stay lightweight. This keeps the architecture grounded in real codebases without forcing every conversation to be project-heavy.
 
-- validate on push and pull request across Windows, macOS, and Linux
-- create a GitHub release on tag pushes
-- package each platform in parallel and upload the archives directly to the release (`.github/workflows/release.yml:15-154`)
+### Execution observability
 
-## Architectural principles in practice
+The architecture treats execution as observable by design:
 
-The current codebase consistently leans on a few patterns:
+- partial output is streamed
+- agent activity is surfaced
+- runs are persisted as timeline history
+- failures are represented explicitly
 
-- keep renderer code focused on presentation and user intent
-- keep persistence and mutation logic in the main process service layer
-- use shared domain/contracts as the canonical model across boundaries
-- isolate Copilot and orchestration runtime concerns in the sidecar
-- make session execution observable through streamed events and persisted run history
+This improves trust and debuggability, especially for multi-agent workflows.
 
-When adding features, prefer extending those boundaries rather than bypassing them.
+## Persistence and repair
+
+Workspace persistence is intentionally simple: the app stores a durable workspace document and repairs or normalizes it when loading.
+
+That gives the system:
+
+- stable persisted state
+- forward-compatible normalization
+- a simple recovery model
+- predictable behavior across restarts
+
+## Desktop-native behavior
+
+The main process owns desktop concerns such as:
+
+- native window creation
+- title bar behavior
+- background process management
+- filesystem access
+- project folder selection
+
+This keeps those concerns out of the renderer while still letting the UI feel native.
+
+## Build and release architecture
+
+Eryx ships as an Electron application bundled together with a self-contained .NET sidecar.
+
+The build pipeline is organized around three layers:
+
+- building the Electron renderer and main process assets
+- publishing the sidecar for the target runtime
+- assembling a platform-specific release bundle
+
+Release automation validates the app across Windows, macOS, and Linux, and tag-based releases publish platform bundles directly to GitHub Releases.
+
+This packaging model matches the runtime architecture: one desktop shell plus one dedicated AI execution process.
+
+## Why this architecture works well
+
+This architecture fits the product because it gives Eryx:
+
+- a clear privilege split between UI and native capabilities
+- a stable, persistent workspace model
+- project-aware but optional repository grounding
+- a sidecar that can evolve independently of the Electron shell
+- room for richer orchestration without overloading the renderer
+- visible execution state for user trust
+
+In short, the system is architected as a **desktop control room for persistent AI-assisted work**, not as a thin chat wrapper around a model call.
+
+## How to think about future changes
+
+When extending the system, the safest mental model is:
+
+- if it is **presentation or interaction**, it belongs in the renderer
+- if it is **state mutation, persistence, desktop integration, or process management**, it belongs in the main process
+- if it is **Copilot execution, orchestration, or streamed run behavior**, it belongs in the sidecar
+- if it crosses boundaries, it should move through **shared contracts** rather than ad hoc coupling
+
+Keeping those rules intact is what will let the codebase scale without losing clarity.

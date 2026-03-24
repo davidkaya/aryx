@@ -51,6 +51,7 @@ These instructions apply to any automated or semi-automated agent working in thi
 
 - Use Bun for dependency management and script execution.
 - Prefer repository-local tooling over global machine state whenever possible.
+- For upstream behavior analysis, local source clones are available at `..\agent-framework` and `..\copilot-sdk`. Prefer inspecting those repositories directly when validating Agent Framework or Copilot SDK semantics instead of guessing from memory.
 - Keep changes focused and reviewable. Avoid mixing unrelated concerns into a single change.
 - Always commit completed repository changes before handing work off. If unrelated pre-existing changes are present in the worktree, stop and ask the user how to proceed before creating the commit.
 - Do not mark work as done until both the implementation and its verification are complete.

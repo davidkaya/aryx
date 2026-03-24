@@ -96,7 +96,7 @@ export function toCanvasNodes(
       },
       draggable: true,
       selectable: true,
-      deletable: false,
+      deletable: node.kind === 'agent',
     };
   });
 }

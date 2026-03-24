@@ -231,7 +231,7 @@ export function PatternEditor({
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
-      <div className="drag-region flex items-center justify-between border-b border-[var(--color-border)] px-5 pb-3 pt-3">
+      <div className="drag-region flex items-center justify-between border-b border-[var(--color-border)] pb-3 pl-5 pr-36 pt-3">
         <div className="flex items-center gap-3">
           <button
             className="no-drag flex size-8 items-center justify-center rounded-lg text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-200"
@@ -320,6 +320,7 @@ export function PatternEditor({
               pattern={pattern}
               availableModels={availableModels}
               onGraphChange={emitGraphChange}
+              onAgentRemove={removeAgent}
               onNodeSelect={setSelectedNodeId}
               selectedNodeId={selectedNodeId}
             />

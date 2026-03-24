@@ -39,6 +39,7 @@ interface PatternGraphCanvasProps {
   pattern: PatternDefinition;
   availableModels?: ReadonlyArray<ModelDefinition>;
   onGraphChange: (graph: PatternGraph) => void;
+  onAgentRemove: (agentId: string) => void;
   onNodeSelect: (nodeId: string | null) => void;
   selectedNodeId: string | null;
 }
@@ -47,6 +48,7 @@ function PatternGraphCanvasInner({
   pattern,
   availableModels,
   onGraphChange,
+  onAgentRemove,
   onNodeSelect,
   selectedNodeId,
 }: PatternGraphCanvasProps) {
@@ -69,12 +71,28 @@ function PatternGraphCanvasInner({
 
   const handleNodesChange: OnNodesChange<Node<GraphNodeData>> = useCallback(
     (changes) => {
-      onNodesChange(changes);
+      // Intercept node removals and route agent deletions through the
+      // authoritative removal path (which also removes from pattern.agents).
+      const removals = changes.filter((c) => c.type === 'remove');
+      const nonRemovals = changes.filter((c) => c.type !== 'remove');
 
-      const hasDragStart = changes.some(
+      for (const removal of removals) {
+        if (removal.type === 'remove') {
+          const graphNode = graph.nodes.find((n) => n.id === removal.id);
+          if (graphNode?.kind === 'agent' && graphNode.agentId) {
+            onAgentRemove(graphNode.agentId);
+          }
+        }
+      }
+
+      if (nonRemovals.length > 0) {
+        onNodesChange(nonRemovals);
+      }
+
+      const hasDragStart = nonRemovals.some(
         (c) => c.type === 'position' && 'dragging' in c && c.dragging,
       );
-      const hasDragStop = changes.some(
+      const hasDragStop = nonRemovals.some(
         (c) => c.type === 'position' && !('dragging' in c && c.dragging),
       );
 
@@ -91,7 +109,7 @@ function PatternGraphCanvasInner({
         });
       }
     },
-    [onNodesChange, pattern, onGraphChange, setNodes],
+    [onNodesChange, pattern, graph, onGraphChange, onAgentRemove, setNodes],
   );
 
   const handleEdgesChange: OnEdgesChange = useCallback(

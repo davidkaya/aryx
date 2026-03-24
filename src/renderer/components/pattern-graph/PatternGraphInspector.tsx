@@ -184,7 +184,7 @@ function AgentNodeInspector({
         value={agent.name}
       />
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="space-y-3">
         <ModelSelect
           models={availableModels}
           onChange={(value) => {

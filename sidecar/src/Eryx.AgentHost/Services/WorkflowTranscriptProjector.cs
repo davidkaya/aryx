@@ -30,14 +30,20 @@ internal static class WorkflowTranscriptProjector
         AgentIdentity? fallbackAgent = null)
     {
         List<ChatMessageDto> mapped = [];
-        int segmentIndex = 0;
         int fallbackOutputIndex = 0;
         string createdAt = DateTimeOffset.UtcNow.ToString("O");
+        List<(string MessageId, string AuthorName, string Content)> remainingSegments = segments.ToList();
+        List<ChatMessage> assistantMessages = newMessages.Where(message => message.Role != ChatRole.User).ToList();
 
-        foreach (ChatMessage message in newMessages.Where(message => message.Role != ChatRole.User))
+        for (int messageIndex = 0; messageIndex < assistantMessages.Count; messageIndex++)
         {
-            (string MessageId, string AuthorName, string Content)? segment =
-                segmentIndex < segments.Count ? segments[segmentIndex] : null;
+            ChatMessage message = assistantMessages[messageIndex];
+            (string MessageId, string AuthorName, string Content)? segment = TryMatchSegment(
+                message,
+                remainingSegments,
+                assistantMessages.Count - messageIndex,
+                command.Pattern,
+                fallbackAgent);
             string content = message.Text ?? segment?.Content ?? string.Empty;
             if (string.IsNullOrWhiteSpace(content))
             {
@@ -46,7 +52,7 @@ internal static class WorkflowTranscriptProjector
 
             if (segment.HasValue)
             {
-                segmentIndex++;
+                remainingSegments.Remove(segment.Value);
             }
 
             fallbackOutputIndex++;
@@ -78,6 +84,51 @@ internal static class WorkflowTranscriptProjector
         }
 
         return mapped;
+    }
+
+    private static (string MessageId, string AuthorName, string Content)? TryMatchSegment(
+        ChatMessage message,
+        IReadOnlyList<(string MessageId, string AuthorName, string Content)> remainingSegments,
+        int remainingMessageCount,
+        PatternDefinitionDto pattern,
+        AgentIdentity? fallbackAgent)
+    {
+        if (remainingSegments.Count == 0)
+        {
+            return null;
+        }
+
+        string? messageText = string.IsNullOrWhiteSpace(message.Text) ? null : message.Text;
+        if (messageText is not null)
+        {
+            string resolvedAuthorName = ResolveProjectedAuthorName(
+                pattern,
+                message.AuthorName,
+                fallbackIdentifier: null,
+                fallbackAgent);
+
+            (string MessageId, string AuthorName, string Content)? authorMatchedSegment = remainingSegments.FirstOrDefault(
+                segment => string.Equals(segment.Content, messageText, StringComparison.Ordinal)
+                    && string.Equals(
+                        AgentIdentityResolver.ResolveDisplayAuthorName(pattern, segment.AuthorName),
+                        resolvedAuthorName,
+                        StringComparison.Ordinal));
+            if (authorMatchedSegment.HasValue)
+            {
+                return authorMatchedSegment.Value;
+            }
+
+            (string MessageId, string AuthorName, string Content)? contentMatchedSegment = remainingSegments.FirstOrDefault(
+                segment => string.Equals(segment.Content, messageText, StringComparison.Ordinal));
+            if (contentMatchedSegment.HasValue)
+            {
+                return contentMatchedSegment.Value;
+            }
+        }
+
+        return remainingSegments.Count == remainingMessageCount
+            ? remainingSegments[0]
+            : null;
     }
 
     public static List<ChatMessage> SelectNewOutputMessages(

@@ -56,7 +56,7 @@ internal sealed class CopilotAgentBundle : IAsyncDisposable
                 Streaming = true,
             };
 
-            if (ShouldDisableSessionTools(command.Pattern, definition, command.WorkspaceKind))
+            if (isScratchpad)
             {
                 sessionConfig.AvailableTools = [];
             }
@@ -88,25 +88,6 @@ internal sealed class CopilotAgentBundle : IAsyncDisposable
         CopilotAgentBundle bundle = new(agents);
         bundle._disposables.AddRange(disposables);
         return bundle;
-    }
-
-    internal static bool ShouldDisableSessionTools(
-        PatternDefinitionDto pattern,
-        PatternAgentDefinitionDto definition,
-        string workspaceKind)
-    {
-        if (string.Equals(workspaceKind, "scratchpad", StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        if (!string.Equals(pattern.Mode, "handoff", StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        PatternHandoffTopology topology = PatternGraphResolver.ResolveHandoff(pattern);
-        return string.Equals(definition.Id, topology.EntryAgentId, StringComparison.OrdinalIgnoreCase);
     }
 
     public Workflow BuildWorkflow(PatternDefinitionDto pattern)

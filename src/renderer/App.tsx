@@ -24,7 +24,7 @@ import {
 import type { PatternDefinition } from '@shared/domain/pattern';
 import { isScratchpadProject, SCRATCHPAD_PROJECT_ID } from '@shared/domain/project';
 import { applyScratchpadSessionConfig } from '@shared/domain/session';
-import type { LspProfileDefinition, McpServerDefinition } from '@shared/domain/tooling';
+import type { AppearanceTheme, LspProfileDefinition, McpServerDefinition } from '@shared/domain/tooling';
 import type { WorkspaceState } from '@shared/domain/workspace';
 import { createId, nowIso } from '@shared/utils/ids';
 
@@ -130,6 +130,27 @@ export default function App() {
       offSessionEvent();
     };
   }, [api]);
+
+  // Apply theme to the document root
+  const themeSetting: AppearanceTheme = workspace?.settings.theme ?? 'dark';
+  useEffect(() => {
+    function resolveEffective(pref: AppearanceTheme): 'dark' | 'light' {
+      if (pref === 'dark' || pref === 'light') return pref;
+      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+
+    const apply = () => {
+      document.documentElement.dataset.theme = resolveEffective(themeSetting);
+    };
+
+    apply();
+
+    if (themeSetting === 'system') {
+      const mq = window.matchMedia('(prefers-color-scheme: dark)');
+      mq.addEventListener('change', apply);
+      return () => mq.removeEventListener('change', apply);
+    }
+  }, [themeSetting]);
 
   // Derived state
   const selectedSession = useMemo(
@@ -309,8 +330,10 @@ export default function App() {
         onSavePattern={async (pattern) => {
           await api.savePattern({ pattern });
         }}
+        onSetTheme={(theme) => void api.setTheme(theme)}
         patterns={workspace.patterns}
         sidecarCapabilities={sidecarCapabilities}
+        theme={workspace.settings.theme}
         toolingSettings={workspace.settings.tooling}
       />
   ) : null;

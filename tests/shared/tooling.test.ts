@@ -53,6 +53,7 @@ describe('tooling settings helpers', () => {
     });
 
     expect(workspaceSettings).toEqual({
+      theme: 'dark',
       tooling: {
         mcpServers: [
           {

@@ -51,6 +51,8 @@ import {
 } from '@shared/domain/runTimeline';
 import {
   createSessionToolingSelection,
+  normalizeTheme,
+  type AppearanceTheme,
   type LspProfileDefinition,
   type McpServerDefinition,
   normalizeLspProfileDefinition,
@@ -198,6 +200,12 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
     const pattern = this.requirePattern(workspace, patternId);
     pattern.isFavorite = isFavorite;
     pattern.updatedAt = nowIso();
+    return this.persistAndBroadcast(workspace);
+  }
+
+  async setTheme(theme: AppearanceTheme): Promise<WorkspaceState> {
+    const workspace = await this.loadWorkspace();
+    workspace.settings.theme = normalizeTheme(theme);
     return this.persistAndBroadcast(workspace);
   }
 

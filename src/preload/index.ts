@@ -13,6 +13,7 @@ const api: ElectronApi = {
   savePattern: (input) => ipcRenderer.invoke(ipcChannels.savePattern, input),
   deletePattern: (patternId) => ipcRenderer.invoke(ipcChannels.deletePattern, patternId),
   setPatternFavorite: (input) => ipcRenderer.invoke(ipcChannels.setPatternFavorite, input),
+  setTheme: (theme) => ipcRenderer.invoke(ipcChannels.setTheme, theme),
   saveMcpServer: (input) => ipcRenderer.invoke(ipcChannels.saveMcpServer, input),
   deleteMcpServer: (serverId) => ipcRenderer.invoke(ipcChannels.deleteMcpServer, serverId),
   saveLspProfile: (input) => ipcRenderer.invoke(ipcChannels.saveLspProfile, input),

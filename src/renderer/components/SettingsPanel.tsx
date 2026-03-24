@@ -1,5 +1,5 @@
 import { useState, type HTMLAttributes, type ReactNode } from 'react';
-import { AlertCircle, ChevronLeft, ChevronRight, Code, Cpu, Info, Plus, Server, Trash, Workflow } from 'lucide-react';
+import { AlertCircle, ChevronLeft, ChevronRight, Code, Cpu, Info, Palette, Plus, Server, Trash, Workflow } from 'lucide-react';
 
 import { CopilotStatusCard } from '@renderer/components/CopilotStatusCard';
 import { PatternEditor } from '@renderer/components/PatternEditor';
@@ -9,6 +9,7 @@ import type { PatternDefinition } from '@shared/domain/pattern';
 import {
   normalizeLspProfileDefinition,
   normalizeMcpServerDefinition,
+  type AppearanceTheme,
   type LspProfileDefinition,
   type McpServerDefinition,
   type WorkspaceToolingSettings,
@@ -21,6 +22,7 @@ interface SettingsPanelProps {
   availableModels: ReadonlyArray<ModelDefinition>;
   patterns: PatternDefinition[];
   sidecarCapabilities?: SidecarCapabilities;
+  theme: AppearanceTheme;
   toolingSettings: WorkspaceToolingSettings;
   isRefreshingCapabilities: boolean;
   onRefreshCapabilities: () => void;
@@ -34,9 +36,10 @@ interface SettingsPanelProps {
   onSaveLspProfile: (profile: LspProfileDefinition) => Promise<void>;
   onDeleteLspProfile: (profileId: string) => Promise<void>;
   onNewLspProfile: () => LspProfileDefinition;
+  onSetTheme: (theme: AppearanceTheme) => void;
 }
 
-type SettingsSection = 'connection' | 'patterns' | 'mcp-servers' | 'lsp-profiles';
+type SettingsSection = 'appearance' | 'connection' | 'patterns' | 'mcp-servers' | 'lsp-profiles';
 
 interface NavItem {
   id: SettingsSection;
@@ -50,6 +53,12 @@ interface NavGroup {
 }
 
 const navGroups: NavGroup[] = [
+  {
+    label: 'General',
+    items: [
+      { id: 'appearance', label: 'Appearance', icon: <Palette className="size-3.5" /> },
+    ],
+  },
   {
     label: 'AI Provider',
     items: [
@@ -80,6 +89,7 @@ export function SettingsPanel({
   availableModels,
   patterns,
   sidecarCapabilities,
+  theme,
   toolingSettings,
   isRefreshingCapabilities,
   onRefreshCapabilities,
@@ -93,8 +103,9 @@ export function SettingsPanel({
   onSaveLspProfile,
   onDeleteLspProfile,
   onNewLspProfile,
+  onSetTheme,
 }: SettingsPanelProps) {
-  const [activeSection, setActiveSection] = useState<SettingsSection>('connection');
+  const [activeSection, setActiveSection] = useState<SettingsSection>('appearance');
   const [editingPattern, setEditingPattern] = useState<PatternDefinition | null>(null);
   const [editingMcpServer, setEditingMcpServer] = useState<McpServerDefinition | null>(null);
   const [editingLspProfile, setEditingLspProfile] = useState<LspProfileDefinition | null>(null);
@@ -224,6 +235,9 @@ export function SettingsPanel({
 
         <div className="flex-1 overflow-y-auto">
           <div className="mx-auto max-w-2xl px-8 py-6">
+            {activeSection === 'appearance' && (
+              <AppearanceSection theme={theme} onSetTheme={onSetTheme} />
+            )}
             {activeSection === 'connection' && (
               <ConnectionSection
                 connection={sidecarCapabilities?.connection}
@@ -255,6 +269,63 @@ export function SettingsPanel({
             )}
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+const themeOptions: { value: AppearanceTheme; label: string; description: string }[] = [
+  { value: 'dark', label: 'Dark', description: 'Dark background with light text' },
+  { value: 'light', label: 'Light', description: 'Light background with dark text' },
+  { value: 'system', label: 'System', description: 'Follow your operating system setting' },
+];
+
+function AppearanceSection({
+  theme,
+  onSetTheme,
+}: {
+  theme: AppearanceTheme;
+  onSetTheme: (theme: AppearanceTheme) => void;
+}) {
+  return (
+    <div>
+      <div className="mb-1">
+        <h3 className="text-[13px] font-semibold text-zinc-200">Appearance</h3>
+        <p className="mt-0.5 text-[12px] text-zinc-500">
+          Choose how Eryx looks on your device
+        </p>
+      </div>
+
+      <div className="mt-5 space-y-1.5">
+        {themeOptions.map((option) => {
+          const isSelected = option.value === theme;
+          return (
+            <button
+              className={`flex w-full items-center gap-3 rounded-lg border px-4 py-3 text-left transition ${
+                isSelected
+                  ? 'border-indigo-500/50 bg-indigo-500/10'
+                  : 'border-[var(--color-border)] hover:border-zinc-600 hover:bg-zinc-800/40'
+              }`}
+              key={option.value}
+              onClick={() => onSetTheme(option.value)}
+              type="button"
+            >
+              <div
+                className={`flex size-4 shrink-0 items-center justify-center rounded-full border-2 transition ${
+                  isSelected ? 'border-indigo-500' : 'border-zinc-600'
+                }`}
+              >
+                {isSelected && <div className="size-2 rounded-full bg-indigo-500" />}
+              </div>
+              <div>
+                <span className={`text-[13px] font-medium ${isSelected ? 'text-zinc-100' : 'text-zinc-300'}`}>
+                  {option.label}
+                </span>
+                <p className="text-[12px] text-zinc-500">{option.description}</p>
+              </div>
+            </button>
+          );
+        })}
       </div>
     </div>
   );

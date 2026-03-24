@@ -40,7 +40,10 @@ export interface WorkspaceToolingSettings {
   lspProfiles: LspProfileDefinition[];
 }
 
+export type AppearanceTheme = 'dark' | 'light' | 'system';
+
 export interface WorkspaceSettings {
+  theme: AppearanceTheme;
   tooling: WorkspaceToolingSettings;
 }
 
@@ -51,6 +54,7 @@ export interface SessionToolingSelection {
 
 export function createWorkspaceSettings(): WorkspaceSettings {
   return {
+    theme: 'dark',
     tooling: {
       mcpServers: [],
       lspProfiles: [],
@@ -65,8 +69,15 @@ export function createSessionToolingSelection(): SessionToolingSelection {
   };
 }
 
+const validThemes: ReadonlySet<string> = new Set<AppearanceTheme>(['dark', 'light', 'system']);
+
+export function normalizeTheme(value?: string): AppearanceTheme {
+  return validThemes.has(value ?? '') ? (value as AppearanceTheme) : 'dark';
+}
+
 export function normalizeWorkspaceSettings(settings?: Partial<WorkspaceSettings>): WorkspaceSettings {
   return {
+    theme: normalizeTheme(settings?.theme),
     tooling: {
       mcpServers: (settings?.tooling?.mcpServers ?? []).map(normalizeMcpServerDefinition),
       lspProfiles: (settings?.tooling?.lspProfiles ?? []).map(normalizeLspProfileDefinition),

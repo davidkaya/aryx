@@ -26,6 +26,39 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* ── Light mode colour overrides ────────────────────────────── */
+
+[data-theme="light"] {
+  color-scheme: light;
+
+  /* Remap semantic surface tokens */
+  --color-surface-0: #ffffff;
+  --color-surface-1: #f4f4f5;
+  --color-surface-2: #e4e4e7;
+  --color-surface-3: #d4d4d8;
+  --color-border: #e4e4e7;
+  --color-border-subtle: #f0f0f2;
+  --color-accent-muted: rgba(99, 102, 241, 0.10);
+
+  /* Swap zinc scale: dark values become light equivalents.
+     Tailwind v4 exposes these as --color-zinc-{step}. */
+  --color-zinc-50: #18181b;
+  --color-zinc-100: #27272a;
+  --color-zinc-200: #3f3f46;
+  --color-zinc-300: #52525b;
+  --color-zinc-400: #71717a;
+  --color-zinc-500: #71717a;
+  --color-zinc-600: #a1a1aa;
+  --color-zinc-700: #d4d4d8;
+  --color-zinc-800: #e4e4e7;
+  --color-zinc-900: #f4f4f5;
+  --color-zinc-950: #ffffff;
+
+  /* Keep black/white correct for light mode */
+  --color-black: #000000;
+  --color-white: #ffffff;
+}
+
 body {
   margin: 0;
   min-height: 100vh;
@@ -53,12 +86,16 @@ textarea {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #3f3f46;
+  background: var(--color-surface-3);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #52525b;
+  background: var(--scrollbar-hover, #52525b);
+}
+
+[data-theme="light"] {
+  --scrollbar-hover: #a1a1aa;
 }
 
 /* Window drag regions for custom title bar */
@@ -134,7 +171,7 @@ textarea {
 .markdown-content h5,
 .markdown-content h6 {
   font-weight: 600;
-  color: #e4e4e7;
+  color: var(--color-zinc-200);
   margin-top: 1.25em;
   margin-bottom: 0.5em;
   line-height: 1.4;
@@ -170,9 +207,9 @@ textarea {
 }
 
 .markdown-content blockquote {
-  border-left: 3px solid #3f3f46;
+  border-left: 3px solid var(--color-surface-3);
   padding-left: 1em;
-  color: #a1a1aa;
+  color: var(--color-zinc-400);
   margin-top: 0.75em;
   margin-bottom: 0.75em;
 }
@@ -187,26 +224,26 @@ textarea {
 
 .markdown-content th,
 .markdown-content td {
-  border: 1px solid #27272a;
+  border: 1px solid var(--color-border);
   padding: 0.5em 0.75em;
   text-align: left;
 }
 
 .markdown-content th {
-  background: #18181b;
+  background: var(--color-surface-1);
   font-weight: 600;
-  color: #d4d4d8;
+  color: var(--color-zinc-300);
 }
 
 .markdown-content hr {
   border: none;
-  border-top: 1px solid #27272a;
+  border-top: 1px solid var(--color-border);
   margin: 1.5em 0;
 }
 
 .markdown-content strong {
   font-weight: 600;
-  color: #e4e4e7;
+  color: var(--color-zinc-200);
 }
 
 .markdown-content em {

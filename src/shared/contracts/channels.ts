@@ -8,6 +8,7 @@ export const ipcChannels = {
   savePattern: 'patterns:save',
   deletePattern: 'patterns:delete',
   setPatternFavorite: 'patterns:set-favorite',
+  setTheme: 'settings:set-theme',
   saveMcpServer: 'tooling:mcp:save',
   deleteMcpServer: 'tooling:mcp:delete',
   saveLspProfile: 'tooling:lsp:save',

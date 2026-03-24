@@ -7,6 +7,7 @@ import type {
   LspProfileDefinition,
   McpServerDefinition,
   SessionToolingSelection,
+  AppearanceTheme,
 } from '@shared/domain/tooling';
 import type { WorkspaceState } from '@shared/domain/workspace';
 
@@ -92,6 +93,7 @@ export interface ElectronApi {
   selectPattern(patternId?: string): Promise<WorkspaceState>;
   selectSession(sessionId?: string): Promise<WorkspaceState>;
   setPatternFavorite(input: SetPatternFavoriteInput): Promise<WorkspaceState>;
+  setTheme(theme: AppearanceTheme): Promise<WorkspaceState>;
   onWorkspaceUpdated(listener: (workspace: WorkspaceState) => void): () => void;
   onSessionEvent(listener: (event: SessionEventRecord) => void): () => void;
 }

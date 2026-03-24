@@ -16,6 +16,7 @@ import type {
   UpdateScratchpadSessionConfigInput,
 } from '@shared/contracts/ipc';
 import type { QuerySessionsInput } from '@shared/domain/sessionLibrary';
+import type { AppearanceTheme } from '@shared/domain/tooling';
 
 import { EryxAppService } from '@main/EryxAppService';
 
@@ -32,6 +33,9 @@ export function registerIpcHandlers(window: BrowserWindow, service: EryxAppServi
   ipcMain.handle(ipcChannels.deletePattern, (_event, patternId: string) => service.deletePattern(patternId));
   ipcMain.handle(ipcChannels.setPatternFavorite, (_event, input: SetPatternFavoriteInput) =>
     service.setPatternFavorite(input.patternId, input.isFavorite),
+  );
+  ipcMain.handle(ipcChannels.setTheme, (_event, theme: AppearanceTheme) =>
+    service.setTheme(theme),
   );
   ipcMain.handle(ipcChannels.saveMcpServer, (_event, input: SaveMcpServerInput) =>
     service.saveMcpServer(input.server),

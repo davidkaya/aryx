@@ -9,6 +9,7 @@ describe('workspace seed', () => {
     expect(workspace.projects).toEqual([]);
     expect(workspace.sessions).toEqual([]);
     expect(workspace.settings).toEqual({
+      theme: 'dark',
       tooling: {
         mcpServers: [],
         lspProfiles: [],

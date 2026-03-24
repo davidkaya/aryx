@@ -23,7 +23,7 @@ import type {
   SessionToolingSelection,
   WorkspaceToolingSettings,
 } from '@shared/domain/tooling';
-import { listApprovalToolDefinitions, type ApprovalToolDefinition } from '@shared/domain/tooling';
+import { listApprovalToolDefinitions, type ApprovalToolDefinition, type ApprovalToolKind } from '@shared/domain/tooling';
 import type { SessionApprovalSettings } from '@shared/domain/approval';
 import { ProviderIcon } from './ProviderIcons';
 
@@ -211,6 +211,7 @@ export function ActivityPanel({
   const approvalDisabled = isBusy || projectIsScratchpad;
   const accent = modeAccent[pattern.mode] ?? modeAccent.single;
   const hasTools = mcpServers.length > 0 || lspProfiles.length > 0;
+  const hasToolCallApproval = pattern.approvalPolicy?.rules.some((r) => r.kind === 'tool-call') ?? false;
 
   return (
     <div className="flex h-full flex-col">
@@ -281,7 +282,7 @@ export function ActivityPanel({
         </div>
 
         {/* ── Tools section ────────────────────────────────── */}
-        <div>
+        <div className="mb-4">
           <SectionHeader>
             <Server className="size-3" />
             <span>Tools</span>
@@ -341,75 +342,71 @@ export function ActivityPanel({
         </div>
 
         {/* ── Auto-approval overrides section ──────────────── */}
-        <div className="mb-4">
-          <SectionHeader>
-            <ShieldCheck className="size-3" />
-            <span>Auto-Approval</span>
-            {approvalDisabled && (
-              <span className="ml-auto text-[9px] font-medium normal-case tracking-normal text-zinc-600">
-                {projectIsScratchpad ? 'Scratchpad' : 'Running'}
+        {hasToolCallApproval && !projectIsScratchpad && (
+          <div className="mb-4">
+            <SectionHeader>
+              <ShieldCheck className="size-3" />
+              <span>Auto-Approval</span>
+              <span className="rounded-full bg-zinc-800 px-1.5 py-0.5 text-[9px] tabular-nums text-zinc-500">
+                {effectiveAutoApproved.size}/{approvalTools.length}
               </span>
-            )}
-          </SectionHeader>
+              {approvalDisabled && (
+                <span className="ml-auto text-[9px] font-medium normal-case tracking-normal text-zinc-600">
+                  Running
+                </span>
+              )}
+            </SectionHeader>
 
-          <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 px-3 py-2.5">
-            {projectIsScratchpad ? (
-              <p className="text-[11px] leading-relaxed text-zinc-600">
-                Tool auto-approval does not apply to scratchpad sessions.
-              </p>
-            ) : approvalTools.length === 0 ? (
-              <p className="text-[11px] leading-relaxed text-zinc-600">
-                No approval-capable runtime tools are currently available.
-              </p>
-            ) : (
-              <>
-                {/* Override state badge + reset action */}
-                <div className="mb-2 flex items-center gap-2">
-                  <span className={`rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider ${
-                    isOverridden
-                      ? 'bg-amber-500/15 text-amber-400'
-                      : 'bg-zinc-800 text-zinc-500'
-                  }`}>
-                    {isOverridden ? 'Custom for this session' : 'Inheriting pattern defaults'}
-                  </span>
-                  {isOverridden && (
-                    <button
-                      className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-medium text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-300 disabled:cursor-not-allowed disabled:opacity-50"
-                      disabled={approvalDisabled}
-                      onClick={() => onUpdateSessionApprovalSettings({})}
-                      type="button"
-                    >
-                      <RotateCcw className="size-2.5" />
-                      Reset to pattern
-                    </button>
-                  )}
-                </div>
+            <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 px-3 py-2.5">
+              {approvalTools.length === 0 ? (
+                <p className="text-[11px] leading-relaxed text-zinc-600">
+                  No tools available yet. Connect MCP servers or wait for runtime capabilities to load.
+                </p>
+              ) : (
+                <>
+                  {/* Override state badge + reset action */}
+                  <div className="mb-2 flex items-center gap-2">
+                    <span className={`rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider ${
+                      isOverridden
+                        ? 'bg-amber-500/15 text-amber-400'
+                        : 'bg-zinc-800 text-zinc-500'
+                    }`}>
+                      {isOverridden ? 'Session override' : 'Using pattern defaults'}
+                    </span>
+                    {isOverridden && (
+                      <button
+                        className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-medium text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-300 disabled:cursor-not-allowed disabled:opacity-50"
+                        disabled={approvalDisabled}
+                        onClick={() => onUpdateSessionApprovalSettings({})}
+                        type="button"
+                      >
+                        <RotateCcw className="size-2.5" />
+                        Reset
+                      </button>
+                    )}
+                  </div>
 
-                <div className="space-y-0.5">
-                  {approvalTools.map((tool) => (
-                    <ApprovalOverrideRow
-                      disabled={approvalDisabled}
-                      enabled={effectiveAutoApproved.has(tool.id)}
-                      key={tool.id}
-                      onToggle={() => {
-                        const next = new Set(effectiveAutoApproved);
-                        if (next.has(tool.id)) {
-                          next.delete(tool.id);
-                        } else {
-                          next.add(tool.id);
-                        }
-                        onUpdateSessionApprovalSettings({
-                          autoApprovedToolNames: [...next],
-                        });
-                      }}
-                      tool={tool}
-                    />
-                  ))}
-                </div>
-              </>
-            )}
+                  <ApprovalOverrideGroupedList
+                    approvalDisabled={approvalDisabled}
+                    effectiveAutoApproved={effectiveAutoApproved}
+                    onToggle={(toolId) => {
+                      const next = new Set(effectiveAutoApproved);
+                      if (next.has(toolId)) {
+                        next.delete(toolId);
+                      } else {
+                        next.add(toolId);
+                      }
+                      onUpdateSessionApprovalSettings({
+                        autoApprovedToolNames: [...next],
+                      });
+                    }}
+                    tools={approvalTools}
+                  />
+                </>
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
@@ -473,6 +470,56 @@ function toggleId(current: string[], id: string): string[] {
     : [...current, id];
 }
 
+/* ── Approval override grouped list ─────────────────────────── */
+
+const approvalKindOrder: ApprovalToolKind[] = ['builtin', 'mcp', 'lsp', 'mixed'];
+const approvalKindLabels: Record<ApprovalToolKind, string> = {
+  builtin: 'Built-in',
+  mcp: 'MCP Servers',
+  lsp: 'Language Servers',
+  mixed: 'Other',
+};
+
+function ApprovalOverrideGroupedList({
+  tools,
+  effectiveAutoApproved,
+  approvalDisabled,
+  onToggle,
+}: {
+  tools: ApprovalToolDefinition[];
+  effectiveAutoApproved: Set<string>;
+  approvalDisabled: boolean;
+  onToggle: (toolId: string) => void;
+}) {
+  const groups = approvalKindOrder
+    .map((kind) => ({ kind, tools: tools.filter((t) => t.kind === kind) }))
+    .filter((g) => g.tools.length > 0);
+  const showHeaders = groups.length > 1;
+
+  return (
+    <div>
+      {groups.map((group, i) => (
+        <div key={group.kind}>
+          {showHeaders && (
+            <div className={`text-[9px] font-semibold uppercase tracking-wider text-zinc-600 ${i > 0 ? 'mt-2' : ''} mb-1`}>
+              {approvalKindLabels[group.kind]}
+            </div>
+          )}
+          {group.tools.map((tool) => (
+            <ApprovalOverrideRow
+              disabled={approvalDisabled}
+              enabled={effectiveAutoApproved.has(tool.id)}
+              key={tool.id}
+              onToggle={() => onToggle(tool.id)}
+              tool={tool}
+            />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function ApprovalOverrideRow({
   tool,
   enabled,
@@ -484,13 +531,7 @@ function ApprovalOverrideRow({
   disabled: boolean;
   onToggle: () => void;
 }) {
-  const kindBadge = tool.kind === 'builtin'
-    ? 'Built-in'
-    : tool.kind === 'lsp'
-      ? 'LSP'
-      : tool.kind === 'mcp'
-        ? 'MCP'
-        : 'Mixed';
+  const detail = tool.description || (tool.providerNames.length > 0 ? tool.providerNames.join(', ') : undefined);
   return (
     <button
       className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition ${
@@ -500,19 +541,9 @@ function ApprovalOverrideRow({
       onClick={onToggle}
       type="button"
     >
-      <ShieldCheck className={`size-3 shrink-0 ${enabled ? 'text-indigo-400' : 'text-zinc-600'}`} />
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1.5">
-          <span className="truncate text-[12px] font-medium text-zinc-300">{tool.label}</span>
-          <span className="shrink-0 rounded-full bg-zinc-800 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wider text-zinc-500">
-            {kindBadge}
-          </span>
-        </div>
-        {(tool.description || tool.providerNames.length > 0) && (
-          <div className="truncate text-[10px] text-zinc-600">
-            {tool.description ?? tool.providerNames.join(', ')}
-          </div>
-        )}
+        <span className="truncate text-[12px] font-medium text-zinc-300">{tool.label}</span>
+        {detail && <div className="truncate text-[10px] text-zinc-600">{detail}</div>}
       </div>
       <ToggleSwitch enabled={enabled} />
     </button>

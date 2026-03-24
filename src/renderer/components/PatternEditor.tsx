@@ -32,6 +32,7 @@ import {
 import {
   listApprovalToolDefinitions,
   type ApprovalToolDefinition,
+  type ApprovalToolKind,
   type RuntimeToolDefinition,
   type WorkspaceToolingSettings,
 } from '@shared/domain/tooling';
@@ -557,36 +558,33 @@ export function PatternEditor({
             </div>
           </section>
 
-          {/* Tool auto-approval defaults */}
-          <section className="space-y-4">
-            <h4 className="text-[12px] font-semibold uppercase tracking-wider text-zinc-500">
-              Tool Auto-Approval Defaults
-            </h4>
+          {/* Tool auto-approval defaults — only relevant when tool-call approval is on */}
+          {isCheckpointEnabled('tool-call') && (
+            <section className="space-y-4">
+              <h4 className="text-[12px] font-semibold uppercase tracking-wider text-zinc-500">
+                Tool Auto-Approval Defaults
+              </h4>
 
-            <p className="text-[11px] leading-relaxed text-zinc-600">
-              When tool-call approval is enabled, these tools will be auto-approved without manual review.
-              Sessions can override these defaults from the Activity panel.
-            </p>
+              <p className="text-[11px] leading-relaxed text-zinc-600">
+                Tools marked as auto-approved will skip manual review.
+                Sessions can override these defaults from the Activity panel.
+              </p>
 
-            <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 py-3">
-              {approvalTools.length === 0 ? (
-                <p className="py-2 text-center text-[11px] text-zinc-600">
-                  No approval-capable runtime tools are currently available.
-                </p>
-              ) : (
-                <div className="space-y-0.5">
-                  {approvalTools.map((tool) => (
-                    <ToolApprovalToggleRow
-                      enabled={autoApprovedSet.has(tool.id)}
-                      key={tool.id}
-                      onToggle={() => toggleToolAutoApproval(tool.id)}
-                      tool={tool}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          </section>
+              <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 py-3">
+                {approvalTools.length === 0 ? (
+                  <p className="py-2 text-center text-[11px] text-zinc-600">
+                    No tools available yet. Connect MCP servers or wait for runtime capabilities to load.
+                  </p>
+                ) : (
+                  <ToolApprovalGroupedList
+                    autoApprovedSet={autoApprovedSet}
+                    onToggle={toggleToolAutoApproval}
+                    tools={approvalTools}
+                  />
+                )}
+              </div>
+            </section>
+          )}
         </div>
       </div>
     </div>
@@ -595,21 +593,19 @@ export function PatternEditor({
 
 /* ── Toggle switch ─────────────────────────────────────────── */
 
-function ToggleSwitch({ enabled, onToggle }: { enabled: boolean; onToggle: () => void }) {
+function ToggleSwitch({ enabled }: { enabled: boolean }) {
   return (
-    <button
+    <span
       className={`relative inline-flex h-[18px] w-[32px] shrink-0 items-center rounded-full transition-colors ${
         enabled ? 'bg-indigo-500' : 'bg-zinc-700'
       }`}
-      onClick={onToggle}
-      type="button"
     >
       <span
         className={`inline-block size-[14px] rounded-full bg-white shadow-sm transition-transform ${
           enabled ? 'translate-x-[16px]' : 'translate-x-[2px]'
         }`}
       />
-    </button>
+    </span>
   );
 }
 
@@ -646,14 +642,14 @@ function ApprovalCheckpointRow({
 
   return (
     <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
-      <div className="flex items-center gap-3">
+      <button className="flex w-full items-center gap-3 text-left" onClick={() => onToggle(!enabled)} type="button">
         <ShieldCheck className={`size-4 shrink-0 ${enabled ? 'text-indigo-400' : 'text-zinc-600'}`} />
         <div className="min-w-0 flex-1">
           <span className="text-[12px] font-medium text-zinc-200">{label}</span>
           <p className="text-[11px] text-zinc-500">{description}</p>
         </div>
-        <ToggleSwitch enabled={enabled} onToggle={() => onToggle(!enabled)} />
-      </div>
+        <ToggleSwitch enabled={enabled} />
+      </button>
 
       {/* Agent scope selector */}
       {enabled && agents.length > 1 && (
@@ -711,7 +707,52 @@ function ApprovalCheckpointRow({
   );
 }
 
-/* ── Tool auto-approval toggle row ─────────────────────────── */
+/* ── Tool auto-approval grouped list ───────────────────────── */
+
+const approvalKindOrder: ApprovalToolKind[] = ['builtin', 'mcp', 'lsp', 'mixed'];
+const approvalKindLabels: Record<ApprovalToolKind, string> = {
+  builtin: 'Built-in',
+  mcp: 'MCP Servers',
+  lsp: 'Language Servers',
+  mixed: 'Other',
+};
+
+function ToolApprovalGroupedList({
+  tools,
+  autoApprovedSet,
+  onToggle,
+}: {
+  tools: ApprovalToolDefinition[];
+  autoApprovedSet: Set<string>;
+  onToggle: (toolId: string) => void;
+}) {
+  const groups = approvalKindOrder
+    .map((kind) => ({ kind, tools: tools.filter((t) => t.kind === kind) }))
+    .filter((g) => g.tools.length > 0);
+  const showHeaders = groups.length > 1;
+
+  return (
+    <div>
+      {groups.map((group, i) => (
+        <div key={group.kind}>
+          {showHeaders && (
+            <div className={`text-[9px] font-semibold uppercase tracking-wider text-zinc-600 ${i > 0 ? 'mt-3' : ''} mb-1`}>
+              {approvalKindLabels[group.kind]}
+            </div>
+          )}
+          {group.tools.map((tool) => (
+            <ToolApprovalToggleRow
+              enabled={autoApprovedSet.has(tool.id)}
+              key={tool.id}
+              onToggle={() => onToggle(tool.id)}
+              tool={tool}
+            />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function ToolApprovalToggleRow({
   tool,
@@ -722,13 +763,7 @@ function ToolApprovalToggleRow({
   enabled: boolean;
   onToggle: () => void;
 }) {
-  const kindBadge = tool.kind === 'builtin'
-    ? 'Built-in'
-    : tool.kind === 'lsp'
-      ? 'LSP'
-      : tool.kind === 'mcp'
-        ? 'MCP'
-        : 'Mixed';
+  const detail = tool.description || (tool.providerNames.length > 0 ? tool.providerNames.join(', ') : undefined);
   return (
     <button
       className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition hover:bg-zinc-800/60"
@@ -736,19 +771,10 @@ function ToolApprovalToggleRow({
       type="button"
     >
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="truncate text-[12px] font-medium text-zinc-300">{tool.label}</span>
-          <span className="shrink-0 rounded-full bg-zinc-800 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wider text-zinc-500">
-            {kindBadge}
-          </span>
-        </div>
-        {(tool.description || tool.providerNames.length > 0) && (
-          <div className="truncate text-[10px] text-zinc-600">
-            {tool.description ?? tool.providerNames.join(', ')}
-          </div>
-        )}
+        <span className="truncate text-[12px] font-medium text-zinc-300">{tool.label}</span>
+        {detail && <div className="truncate text-[10px] text-zinc-600">{detail}</div>}
       </div>
-      <ToggleSwitch enabled={enabled} onToggle={onToggle} />
+      <ToggleSwitch enabled={enabled} />
     </button>
   );
 }

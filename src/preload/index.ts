@@ -25,6 +25,7 @@ const api: ElectronApi = {
   setSessionPinned: (input) => ipcRenderer.invoke(ipcChannels.setSessionPinned, input),
   setSessionArchived: (input) => ipcRenderer.invoke(ipcChannels.setSessionArchived, input),
   sendSessionMessage: (input) => ipcRenderer.invoke(ipcChannels.sendSessionMessage, input),
+  resolveSessionApproval: (input) => ipcRenderer.invoke(ipcChannels.resolveSessionApproval, input),
   updateScratchpadSessionConfig: (input) =>
     ipcRenderer.invoke(ipcChannels.updateScratchpadSessionConfig, input),
   querySessions: (input) => ipcRenderer.invoke(ipcChannels.querySessions, input),

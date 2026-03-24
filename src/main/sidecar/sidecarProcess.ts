@@ -3,13 +3,15 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 
 import type {
   AgentActivityEvent,
-  SidecarCapabilities,
+  ApprovalRequestedEvent,
   SidecarCommand,
+  SidecarCapabilities,
   SidecarEvent,
   TurnDeltaEvent,
   ValidatePatternCommand,
   RunTurnCommand,
 } from '@shared/contracts/sidecar';
+import type { ApprovalDecision } from '@shared/domain/approval';
 import type { ChatMessageRecord } from '@shared/domain/session';
 import { createSidecarEnvironment } from '@main/sidecar/sidecarEnvironment';
 import {
@@ -28,6 +30,11 @@ type PendingCommand =
   | {
       kind: 'validate-pattern';
       resolve: (issues: ValidatePatternCommand['pattern'] extends never ? never : unknown) => void;
+      reject: (error: Error) => void;
+    }
+  | {
+      kind: 'resolve-approval';
+      resolve: () => void;
       reject: (error: Error) => void;
     }
   | RunTurnPendingCommand;
@@ -58,8 +65,18 @@ export class SidecarClient {
     command: RunTurnCommand,
     onDelta: (event: TurnDeltaEvent) => void | Promise<void>,
     onActivity: (event: AgentActivityEvent) => void | Promise<void>,
+    onApproval: (event: ApprovalRequestedEvent) => void | Promise<void>,
   ): Promise<ChatMessageRecord[]> {
-    return this.dispatch<ChatMessageRecord[]>(command, onDelta, onActivity);
+    return this.dispatch<ChatMessageRecord[]>(command, onDelta, onActivity, onApproval);
+  }
+
+  async resolveApproval(approvalId: string, decision: ApprovalDecision): Promise<void> {
+    return this.dispatch<void>({
+      type: 'resolve-approval',
+      requestId: `approval-${Date.now()}`,
+      approvalId,
+      decision,
+    });
   }
 
   async dispose(): Promise<void> {
@@ -118,6 +135,7 @@ export class SidecarClient {
     command: SidecarCommand,
     onDelta?: (event: TurnDeltaEvent) => void | Promise<void>,
     onActivity?: (event: AgentActivityEvent) => void | Promise<void>,
+    onApproval?: (event: ApprovalRequestedEvent) => void | Promise<void>,
   ): Promise<TResult> {
     const process = await this.ensureProcess();
 
@@ -129,12 +147,19 @@ export class SidecarClient {
           reject,
           onDelta: onDelta ?? (() => undefined),
           onActivity: onActivity ?? (() => undefined),
+          onApproval: onApproval ?? (() => undefined),
           errored: false,
         });
       } else if (command.type === 'validate-pattern') {
         this.pending.set(command.requestId, {
           kind: 'validate-pattern',
           resolve: resolve as (issues: unknown) => void,
+          reject,
+        });
+      } else if (command.type === 'resolve-approval') {
+        this.pending.set(command.requestId, {
+          kind: 'resolve-approval',
+          resolve: resolve as () => void,
           reject,
         });
       } else {
@@ -193,6 +218,11 @@ export class SidecarClient {
           this.invokeRunTurnHandler(event.requestId, pending, () => pending.onActivity(event));
         }
         return;
+      case 'approval-requested':
+        if (pending.kind === 'run-turn' && shouldHandleRunTurnEvent(pending)) {
+          this.invokeRunTurnHandler(event.requestId, pending, () => pending.onApproval(event));
+        }
+        return;
       case 'turn-complete':
         if (pending.kind === 'run-turn') {
           if (shouldHandleRunTurnEvent(pending)) {
@@ -210,7 +240,10 @@ export class SidecarClient {
         this.pending.delete(event.requestId);
         return;
       case 'command-complete':
-        if (pending.kind !== 'run-turn' || pending.errored) {
+        if (pending.kind === 'resolve-approval') {
+          pending.resolve();
+          this.pending.delete(event.requestId);
+        } else if (pending.kind !== 'run-turn' || pending.errored) {
           this.pending.delete(event.requestId);
         }
         return;

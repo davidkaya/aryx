@@ -1,3 +1,4 @@
+import type { ApprovalDecision } from '@shared/domain/approval';
 import type { SidecarCapabilities } from '@shared/contracts/sidecar';
 import type { PatternDefinition, ReasoningEffort } from '@shared/domain/pattern';
 import type { ProjectRecord } from '@shared/domain/project';
@@ -23,6 +24,12 @@ export interface SavePatternInput {
 export interface SendSessionMessageInput {
   sessionId: string;
   content: string;
+}
+
+export interface ResolveSessionApprovalInput {
+  sessionId: string;
+  approvalId: string;
+  decision: ApprovalDecision;
 }
 
 export interface UpdateScratchpadSessionConfigInput {
@@ -87,6 +94,7 @@ export interface ElectronApi {
   setSessionPinned(input: SetSessionPinnedInput): Promise<WorkspaceState>;
   setSessionArchived(input: SetSessionArchivedInput): Promise<WorkspaceState>;
   sendSessionMessage(input: SendSessionMessageInput): Promise<void>;
+  resolveSessionApproval(input: ResolveSessionApprovalInput): Promise<WorkspaceState>;
   updateScratchpadSessionConfig(input: UpdateScratchpadSessionConfigInput): Promise<WorkspaceState>;
   querySessions(input: QuerySessionsInput): Promise<SessionQueryResult[]>;
   selectProject(projectId?: string): Promise<WorkspaceState>;

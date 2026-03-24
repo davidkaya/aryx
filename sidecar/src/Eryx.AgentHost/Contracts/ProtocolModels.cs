@@ -21,9 +21,21 @@ public sealed class PatternDefinitionDto
     public string Availability { get; init; } = "available";
     public string? UnavailabilityReason { get; init; }
     public int MaxIterations { get; init; }
+    public ApprovalPolicyDto? ApprovalPolicy { get; init; }
     public IReadOnlyList<PatternAgentDefinitionDto> Agents { get; init; } = [];
     public string CreatedAt { get; init; } = string.Empty;
     public string UpdatedAt { get; init; } = string.Empty;
+}
+
+public sealed class ApprovalPolicyDto
+{
+    public IReadOnlyList<ApprovalCheckpointRuleDto> Rules { get; init; } = [];
+}
+
+public sealed class ApprovalCheckpointRuleDto
+{
+    public string Kind { get; init; } = string.Empty;
+    public IReadOnlyList<string> AgentIds { get; init; } = [];
 }
 
 public sealed class ChatMessageDto
@@ -116,6 +128,12 @@ public sealed class RunTurnCommandDto : SidecarCommandEnvelope
     public RunTurnToolingConfigDto? Tooling { get; init; }
 }
 
+public sealed class ResolveApprovalCommandDto : SidecarCommandEnvelope
+{
+    public string ApprovalId { get; init; } = string.Empty;
+    public string Decision { get; init; } = string.Empty;
+}
+
 public sealed class RunTurnToolingConfigDto
 {
     public IReadOnlyList<RunTurnMcpServerConfigDto> McpServers { get; init; } = [];
@@ -185,6 +203,19 @@ public sealed class AgentActivityEventDto : SidecarEventDto
     public string? SourceAgentId { get; init; }
     public string? SourceAgentName { get; init; }
     public string? ToolName { get; init; }
+}
+
+public sealed class ApprovalRequestedEventDto : SidecarEventDto
+{
+    public string SessionId { get; init; } = string.Empty;
+    public string ApprovalId { get; init; } = string.Empty;
+    public string ApprovalKind { get; init; } = string.Empty;
+    public string? AgentId { get; init; }
+    public string? AgentName { get; init; }
+    public string? ToolName { get; init; }
+    public string? PermissionKind { get; init; }
+    public string Title { get; init; } = string.Empty;
+    public string? Detail { get; init; }
 }
 
 public sealed class CommandErrorEventDto : SidecarEventDto

@@ -5,6 +5,10 @@ import type { PatternDefinition } from '@shared/domain/pattern';
 import { mergeScratchpadProject } from '@shared/domain/project';
 import { normalizeSessionRunRecords } from '@shared/domain/runTimeline';
 import { normalizeSessionToolingSelection, normalizeWorkspaceSettings } from '@shared/domain/tooling';
+import {
+  normalizeApprovalPolicy,
+  normalizePendingApproval,
+} from '@shared/domain/approval';
 import { createWorkspaceSeed, type WorkspaceState } from '@shared/domain/workspace';
 import { nowIso } from '@shared/utils/ids';
 
@@ -59,12 +63,16 @@ export class WorkspaceRepository {
 
     const workspace: WorkspaceState = {
       ...stored,
-      patterns: mergePatterns(stored.patterns ?? []),
+      patterns: mergePatterns(stored.patterns ?? []).map((pattern) => ({
+        ...pattern,
+        approvalPolicy: normalizeApprovalPolicy(pattern.approvalPolicy),
+      })),
       projects,
       sessions: (stored.sessions ?? []).map((session) => ({
         ...session,
         runs: normalizeSessionRunRecords(session.runs),
         tooling: normalizeSessionToolingSelection(session.tooling),
+        pendingApproval: normalizePendingApproval(session.pendingApproval),
       })),
       settings: normalizeWorkspaceSettings(stored.settings),
       selectedProjectId: projects.some((project) => project.id === stored.selectedProjectId)

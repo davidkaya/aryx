@@ -1,3 +1,8 @@
+import type {
+  ApprovalCheckpointKind,
+  ApprovalDecision,
+  PendingApprovalRecord,
+} from '@shared/domain/approval';
 import type { PatternDefinition, ReasoningEffort } from '@shared/domain/pattern';
 import type { ProjectRecord } from '@shared/domain/project';
 import { createId } from '@shared/utils/ids';
@@ -9,6 +14,7 @@ export type RunTimelineEventKind =
   | 'thinking'
   | 'handoff'
   | 'tool-call'
+  | 'approval'
   | 'message'
   | 'run-completed'
   | 'run-failed';
@@ -34,6 +40,12 @@ export interface RunTimelineEventRecord {
   targetAgentId?: string;
   targetAgentName?: string;
   toolName?: string;
+  approvalId?: string;
+  approvalKind?: ApprovalCheckpointKind;
+  approvalTitle?: string;
+  approvalDetail?: string;
+  permissionKind?: string;
+  decision?: ApprovalDecision;
   messageId?: string;
   content?: string;
   error?: string;
@@ -84,6 +96,17 @@ export interface UpsertRunMessageEventInput {
   error?: string;
 }
 
+function approvalStatusToRunStatus(status: PendingApprovalRecord['status']): RunTimelineEventStatus {
+  switch (status) {
+    case 'approved':
+      return 'completed';
+    case 'rejected':
+      return 'error';
+    default:
+      return 'running';
+  }
+}
+
 function normalizeOptionalString(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
   return trimmed ? trimmed : undefined;
@@ -129,6 +152,12 @@ function normalizeRunTimelineEvent(
     targetAgentId: normalizeOptionalString(event.targetAgentId),
     targetAgentName: normalizeOptionalString(event.targetAgentName),
     toolName: normalizeOptionalString(event.toolName),
+    approvalId: normalizeOptionalString(event.approvalId),
+    approvalKind: event.approvalKind,
+    approvalTitle: normalizeOptionalString(event.approvalTitle),
+    approvalDetail: normalizeOptionalString(event.approvalDetail),
+    permissionKind: normalizeOptionalString(event.permissionKind),
+    decision: event.decision,
     messageId: normalizeOptionalString(event.messageId),
     content: event.content,
     error: normalizeOptionalString(event.error),
@@ -315,6 +344,60 @@ export function upsertSessionRunRecord(
   const nextRuns = runs.slice();
   nextRuns[runIndex] = nextRun;
   return nextRuns;
+}
+
+export function upsertRunApprovalEvent(
+  run: SessionRunRecord,
+  approval: PendingApprovalRecord,
+): SessionRunRecord {
+  const existingIndex = run.events.findIndex(
+    (event) => event.kind === 'approval' && event.approvalId === approval.id,
+  );
+  const nextStatus = approvalStatusToRunStatus(approval.status);
+  const nextEvent: RunTimelineEventRecord = {
+    id: existingIndex >= 0 ? run.events[existingIndex].id : createId('run-event'),
+    kind: 'approval',
+    occurredAt:
+      existingIndex >= 0 ? run.events[existingIndex].occurredAt : approval.requestedAt,
+    updatedAt: approval.status === 'pending' ? undefined : approval.resolvedAt,
+    status: nextStatus,
+    agentId: normalizeOptionalString(approval.agentId),
+    agentName: normalizeOptionalString(approval.agentName),
+    toolName: normalizeOptionalString(approval.toolName),
+    approvalId: approval.id,
+    approvalKind: approval.kind,
+    approvalTitle: approval.title,
+    approvalDetail: normalizeOptionalString(approval.detail),
+    permissionKind: normalizeOptionalString(approval.permissionKind),
+    decision: approval.status === 'pending' ? undefined : approval.status,
+  };
+
+  if (existingIndex < 0) {
+    return appendRunTimelineEvent(run, nextEvent);
+  }
+
+  const existingEvent = run.events[existingIndex];
+  if (
+    existingEvent.updatedAt === nextEvent.updatedAt
+    && existingEvent.status === nextEvent.status
+    && existingEvent.agentId === nextEvent.agentId
+    && existingEvent.agentName === nextEvent.agentName
+    && existingEvent.toolName === nextEvent.toolName
+    && existingEvent.approvalKind === nextEvent.approvalKind
+    && existingEvent.approvalTitle === nextEvent.approvalTitle
+    && existingEvent.approvalDetail === nextEvent.approvalDetail
+    && existingEvent.permissionKind === nextEvent.permissionKind
+    && existingEvent.decision === nextEvent.decision
+  ) {
+    return run;
+  }
+
+  const nextEvents = run.events.slice();
+  nextEvents[existingIndex] = nextEvent;
+  return {
+    ...run,
+    events: nextEvents,
+  };
 }
 
 export function appendRunActivityEvent(

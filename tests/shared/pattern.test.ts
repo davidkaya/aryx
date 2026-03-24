@@ -101,4 +101,28 @@ describe('pattern validation', () => {
     expect(groupChat?.agents[1].instructions).toContain('specific improvements');
     expect(groupChat?.agents[1].instructions).toContain('instead of restarting the conversation');
   });
+
+  test('approval policy rejects unknown agent references', () => {
+    const singlePattern = createBuiltinPatterns(BUILTIN_TIMESTAMP).find(
+      (pattern) => pattern.mode === 'single',
+    );
+
+    expect(singlePattern).toBeDefined();
+
+    const issues = validatePatternDefinition({
+      ...singlePattern!,
+      approvalPolicy: {
+        rules: [
+          {
+            kind: 'tool-call',
+            agentIds: ['agent-missing'],
+          },
+        ],
+      },
+    });
+
+    expect(issues.find((issue) => issue.field === 'approvalPolicy')?.message).toBe(
+      'Approval checkpoint "tool-call" references unknown agent "agent-missing".',
+    );
+  });
 });

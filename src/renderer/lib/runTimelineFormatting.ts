@@ -78,6 +78,14 @@ export function formatEventLabel(event: RunTimelineEventRecord): string {
       return event.toolName
         ? `${event.agentName ?? 'Agent'} used ${event.toolName}`
         : `${event.agentName ?? 'Agent'} tool call`;
+    case 'approval':
+      if (event.status === 'completed') {
+        return event.approvalTitle ? `${event.approvalTitle} approved` : 'Approval granted';
+      }
+      if (event.status === 'error') {
+        return event.approvalTitle ? `${event.approvalTitle} rejected` : 'Approval rejected';
+      }
+      return event.approvalTitle ?? 'Approval requested';
     case 'message':
       return event.agentName ?? 'Response';
     case 'run-completed':
@@ -132,9 +140,10 @@ const eventKindOrder: Record<RunTimelineEventKind, number> = {
   'thinking': 1,
   'handoff': 2,
   'tool-call': 3,
-  'message': 4,
-  'run-completed': 5,
-  'run-failed': 5,
+  'approval': 4,
+  'message': 5,
+  'run-completed': 6,
+  'run-failed': 6,
 };
 
 export function isTerminalEvent(kind: RunTimelineEventKind): boolean {

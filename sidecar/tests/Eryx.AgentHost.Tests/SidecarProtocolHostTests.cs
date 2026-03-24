@@ -108,7 +108,7 @@ public sealed class SidecarProtocolHostTests
     {
         SidecarProtocolHost host = new(
             new PatternValidator(),
-            new FakeWorkflowRunner(async (command, onDelta, onActivity, cancellationToken) =>
+            new FakeWorkflowRunner(async (command, onDelta, onActivity, onApproval, cancellationToken) =>
             {
                 await onActivity(new AgentActivityEventDto
                 {
@@ -224,6 +224,102 @@ public sealed class SidecarProtocolHostTests
                 Assert.Equal("command-complete", commandCompleteEvent.GetProperty("type").GetString());
                 Assert.Equal("turn-1", commandCompleteEvent.GetProperty("requestId").GetString());
             });
+    }
+
+    [Fact]
+    public async Task RunTurnCommand_ReturnsApprovalEvents()
+    {
+        SidecarProtocolHost host = new(
+            new PatternValidator(),
+            new FakeWorkflowRunner(async (command, onDelta, onActivity, onApproval, cancellationToken) =>
+            {
+                await onApproval(new ApprovalRequestedEventDto
+                {
+                    Type = "approval-requested",
+                    RequestId = command.RequestId,
+                    SessionId = command.SessionId,
+                    ApprovalId = "approval-1",
+                    ApprovalKind = "tool-call",
+                    AgentId = "agent-1",
+                    AgentName = "Primary",
+                    PermissionKind = "tool access",
+                    Title = "Approve tool access",
+                });
+
+                return [];
+            }));
+
+        IReadOnlyList<JsonElement> events = await RunHostAsync(
+            new RunTurnCommandDto
+            {
+                Type = "run-turn",
+                RequestId = "turn-approval",
+                SessionId = "session-1",
+                ProjectPath = "C:\\workspace\\project",
+                Pattern = new PatternDefinitionDto
+                {
+                    Id = "pattern-1",
+                    Name = "Single Agent",
+                    Mode = "single",
+                    Availability = "available",
+                    Agents =
+                    [
+                        CreateAgent(name: "Primary"),
+                    ],
+                },
+            },
+            host);
+
+        Assert.Collection(
+            events,
+            approvalEvent =>
+            {
+                Assert.Equal("approval-requested", approvalEvent.GetProperty("type").GetString());
+                Assert.Equal("turn-approval", approvalEvent.GetProperty("requestId").GetString());
+                Assert.Equal("approval-1", approvalEvent.GetProperty("approvalId").GetString());
+                Assert.Equal("tool-call", approvalEvent.GetProperty("approvalKind").GetString());
+                Assert.Equal("Approve tool access", approvalEvent.GetProperty("title").GetString());
+            },
+            completionEvent =>
+            {
+                Assert.Equal("turn-complete", completionEvent.GetProperty("type").GetString());
+            },
+            commandCompleteEvent =>
+            {
+                Assert.Equal("command-complete", commandCompleteEvent.GetProperty("type").GetString());
+                Assert.Equal("turn-approval", commandCompleteEvent.GetProperty("requestId").GetString());
+            });
+    }
+
+    [Fact]
+    public async Task ResolveApprovalCommand_DelegatesToWorkflowRunnerAndCompletes()
+    {
+        ResolveApprovalCommandDto? captured = null;
+        SidecarProtocolHost host = new(
+            new PatternValidator(),
+            new FakeWorkflowRunner(
+                handler: async (command, onDelta, onActivity, onApproval, cancellationToken) => [],
+                resolveApprovalHandler: (command, cancellationToken) =>
+                {
+                    captured = command;
+                    return Task.CompletedTask;
+                }));
+
+        IReadOnlyList<JsonElement> events = await RunHostAsync(
+            new ResolveApprovalCommandDto
+            {
+                Type = "resolve-approval",
+                RequestId = "approval-command-1",
+                ApprovalId = "approval-1",
+                Decision = "approved",
+            },
+            host);
+
+        JsonElement completionEvent = Assert.Single(events);
+        Assert.Equal("command-complete", completionEvent.GetProperty("type").GetString());
+        Assert.Equal("approval-command-1", completionEvent.GetProperty("requestId").GetString());
+        Assert.Equal("approval-1", captured?.ApprovalId);
+        Assert.Equal("approved", captured?.Decision);
     }
 
     [Fact]
@@ -371,27 +467,40 @@ public sealed class SidecarProtocolHostTests
             RunTurnCommandDto,
             Func<TurnDeltaEventDto, Task>,
             Func<AgentActivityEventDto, Task>,
+            Func<ApprovalRequestedEventDto, Task>,
             CancellationToken,
             Task<IReadOnlyList<ChatMessageDto>>> _handler;
+        private readonly Func<ResolveApprovalCommandDto, CancellationToken, Task> _resolveApprovalHandler;
 
         public FakeWorkflowRunner(
             Func<
                 RunTurnCommandDto,
                 Func<TurnDeltaEventDto, Task>,
                 Func<AgentActivityEventDto, Task>,
+                Func<ApprovalRequestedEventDto, Task>,
                 CancellationToken,
-                Task<IReadOnlyList<ChatMessageDto>>> handler)
+                Task<IReadOnlyList<ChatMessageDto>>> handler,
+            Func<ResolveApprovalCommandDto, CancellationToken, Task>? resolveApprovalHandler = null)
         {
             _handler = handler;
+            _resolveApprovalHandler = resolveApprovalHandler ?? ((_, _) => Task.CompletedTask);
         }
 
         public Task<IReadOnlyList<ChatMessageDto>> RunTurnAsync(
             RunTurnCommandDto command,
             Func<TurnDeltaEventDto, Task> onDelta,
             Func<AgentActivityEventDto, Task> onActivity,
+            Func<ApprovalRequestedEventDto, Task> onApproval,
             CancellationToken cancellationToken)
         {
-            return _handler(command, onDelta, onActivity, cancellationToken);
+            return _handler(command, onDelta, onActivity, onApproval, cancellationToken);
+        }
+
+        public Task ResolveApprovalAsync(
+            ResolveApprovalCommandDto command,
+            CancellationToken cancellationToken)
+        {
+            return _resolveApprovalHandler(command, cancellationToken);
         }
     }
 }

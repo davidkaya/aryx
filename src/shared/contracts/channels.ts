@@ -20,6 +20,7 @@ export const ipcChannels = {
   setSessionPinned: 'sessions:set-pinned',
   setSessionArchived: 'sessions:set-archived',
   sendSessionMessage: 'sessions:send-message',
+  resolveSessionApproval: 'sessions:resolve-approval',
   querySessions: 'sessions:query',
   updateScratchpadSessionConfig: 'sessions:update-scratchpad-config',
   selectProject: 'selection:project',

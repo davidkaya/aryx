@@ -15,6 +15,7 @@ describe('run turn pending helpers', () => {
       reject: (error) => rejected.push(error),
       onDelta: () => undefined,
       onActivity: () => undefined,
+      onApproval: () => undefined,
       errored: false,
     };
 
@@ -36,6 +37,7 @@ describe('run turn pending helpers', () => {
       reject: () => undefined,
       onDelta: () => undefined,
       onActivity: () => undefined,
+      onApproval: () => undefined,
       errored: false,
     };
 

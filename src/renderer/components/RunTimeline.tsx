@@ -59,6 +59,8 @@ function EventIcon({ kind, status }: { kind: RunTimelineEventRecord['kind']; sta
       return <ArrowRight className={`${base} text-amber-400`} />;
     case 'tool-call':
       return <Wrench className={`${base} text-violet-400`} />;
+    case 'approval':
+      return <AlertTriangle className={`${base} ${status === 'running' ? 'text-amber-400 animate-pulse' : status === 'error' ? 'text-red-400' : 'text-emerald-400'}`} />;
     case 'message':
       return <MessageSquare className={`${base} ${status === 'running' ? 'text-blue-400 animate-pulse' : status === 'error' ? 'text-red-400' : 'text-emerald-400'}`} />;
     case 'run-completed':

@@ -1,4 +1,9 @@
 import type { ChatMessageRecord } from '@shared/domain/session';
+import {
+  normalizeApprovalPolicy,
+  type ApprovalPolicy,
+  validateApprovalPolicy,
+} from '@shared/domain/approval';
 
 export type OrchestrationMode =
   | 'single'
@@ -36,6 +41,7 @@ export interface PatternDefinition {
   availability: PatternAvailability;
   unavailabilityReason?: string;
   maxIterations: number;
+  approvalPolicy?: ApprovalPolicy;
   agents: PatternAgentDefinition[];
   createdAt: string;
   updatedAt: string;
@@ -313,6 +319,17 @@ export function validatePatternDefinition(pattern: PatternDefinition): PatternVa
         message: `Agent "${agent.name || agent.id}" requires a model identifier.`,
       });
     }
+  }
+
+  for (const message of validateApprovalPolicy(
+    normalizeApprovalPolicy(pattern.approvalPolicy),
+    pattern.agents.map((agent) => agent.id),
+  )) {
+    issues.push({
+      level: 'error',
+      field: 'approvalPolicy',
+      message,
+    });
   }
 
   return issues;

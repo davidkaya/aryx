@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text;
 using GitHub.Copilot.SDK;
 using Eryx.AgentHost.Contracts;
@@ -22,6 +23,7 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
     private static readonly Type? ImageGenerationToolCallContentType = LoadType(
         "Microsoft.Extensions.AI.ImageGenerationToolCallContent, Microsoft.Extensions.AI.Abstractions");
     private readonly PatternValidator _patternValidator;
+    private readonly ConcurrentDictionary<string, PendingApprovalRequest> _pendingApprovals = new(StringComparer.Ordinal);
 
     public CopilotWorkflowRunner(PatternValidator patternValidator)
     {
@@ -32,6 +34,7 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
         RunTurnCommandDto command,
         Func<TurnDeltaEventDto, Task> onDelta,
         Func<AgentActivityEventDto, Task> onActivity,
+        Func<ApprovalRequestedEventDto, Task> onApproval,
         CancellationToken cancellationToken)
     {
         PatternValidationIssueDto? validationError = _patternValidator.Validate(command.Pattern).FirstOrDefault();
@@ -40,7 +43,16 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
             throw new InvalidOperationException(validationError.Message);
         }
 
-        await using AgentBundle bundle = await AgentBundle.CreateAsync(command, cancellationToken);
+        await using AgentBundle bundle = await AgentBundle.CreateAsync(
+            command,
+            (agent, request, invocation) => RequestApprovalAsync(
+                command,
+                agent,
+                request,
+                invocation,
+                onApproval,
+                cancellationToken),
+            cancellationToken);
         Workflow workflow = bundle.BuildWorkflow(command.Pattern);
         List<ChatMessage> inputMessages = command.Messages.Select(ToChatMessage).ToList();
 
@@ -169,6 +181,38 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
         return completedMessages;
     }
 
+    public Task ResolveApprovalAsync(
+        ResolveApprovalCommandDto command,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+
+        if (string.IsNullOrWhiteSpace(command.ApprovalId))
+        {
+            throw new InvalidOperationException("Approval ID is required.");
+        }
+
+        if (!_pendingApprovals.TryGetValue(command.ApprovalId, out PendingApprovalRequest? pending))
+        {
+            throw new InvalidOperationException($"Approval \"{command.ApprovalId}\" is not pending.");
+        }
+
+        PermissionRequestResultKind decision = command.Decision.Trim().ToLowerInvariant() switch
+        {
+            "approved" => PermissionRequestResultKind.Approved,
+            "rejected" => PermissionRequestResultKind.DeniedInteractivelyByUser,
+            _ => throw new InvalidOperationException(
+                $"Unsupported approval decision \"{command.Decision}\"."),
+        };
+
+        if (!pending.Decision.TrySetResult(decision))
+        {
+            throw new InvalidOperationException($"Approval \"{command.ApprovalId}\" is no longer pending.");
+        }
+
+        return Task.CompletedTask;
+    }
+
     private static AgentActivityEventDto CreateActivityEvent(
         RunTurnCommandDto command,
         string activityType,
@@ -188,6 +232,61 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
             SourceAgentName = sourceAgent?.AgentName,
             ToolName = toolName,
         };
+    }
+
+    private async Task<PermissionRequestResult> RequestApprovalAsync(
+        RunTurnCommandDto command,
+        PatternAgentDefinitionDto agent,
+        PermissionRequest request,
+        PermissionInvocation invocation,
+        Func<ApprovalRequestedEventDto, Task> onApproval,
+        CancellationToken cancellationToken)
+    {
+        if (!RequiresApproval(command.Pattern.ApprovalPolicy, "tool-call", agent.Id))
+        {
+            return new PermissionRequestResult
+            {
+                Kind = PermissionRequestResultKind.Approved,
+            };
+        }
+
+        string approvalId = CreateApprovalRequestId();
+        TaskCompletionSource<PermissionRequestResultKind> decisionSource =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        PendingApprovalRequest pending = new(
+            command.RequestId,
+            command.SessionId,
+            approvalId,
+            decisionSource);
+
+        if (!_pendingApprovals.TryAdd(approvalId, pending))
+        {
+            throw new InvalidOperationException($"Approval \"{approvalId}\" is already pending.");
+        }
+
+        try
+        {
+            await onApproval(BuildPermissionApprovalEvent(command, agent, request, invocation, approvalId))
+                .ConfigureAwait(false);
+
+            using CancellationTokenRegistration registration = cancellationToken.Register(
+                static state =>
+                {
+                    ((TaskCompletionSource<PermissionRequestResultKind>)state!)
+                        .TrySetCanceled();
+                },
+                decisionSource);
+
+            PermissionRequestResultKind decision = await decisionSource.Task.ConfigureAwait(false);
+            return new PermissionRequestResult
+            {
+                Kind = decision,
+            };
+        }
+        finally
+        {
+            _pendingApprovals.TryRemove(approvalId, out _);
+        }
     }
 
     private static AgentActivityEventDto? TryCreateActivityFromRequest(
@@ -282,6 +381,75 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
 
         toolName = string.Empty;
         return false;
+    }
+
+    private static ApprovalRequestedEventDto BuildPermissionApprovalEvent(
+        RunTurnCommandDto command,
+        PatternAgentDefinitionDto agent,
+        PermissionRequest request,
+        PermissionInvocation invocation,
+        string approvalId)
+    {
+        string permissionKind = string.IsNullOrWhiteSpace(request.Kind)
+            ? "tool access"
+            : request.Kind.Trim();
+        string agentName = string.IsNullOrWhiteSpace(agent.Name) ? agent.Id : agent.Name;
+        string? sessionId = string.IsNullOrWhiteSpace(invocation.SessionId)
+            ? null
+            : invocation.SessionId.Trim();
+
+        return new ApprovalRequestedEventDto
+        {
+            Type = "approval-requested",
+            RequestId = command.RequestId,
+            SessionId = command.SessionId,
+            ApprovalId = approvalId,
+            ApprovalKind = "tool-call",
+            AgentId = string.IsNullOrWhiteSpace(agent.Id) ? null : agent.Id,
+            AgentName = string.IsNullOrWhiteSpace(agentName) ? null : agentName,
+            PermissionKind = permissionKind,
+            Title = $"Approve {permissionKind}",
+            Detail = sessionId is null
+                ? $"{agentName} requested {permissionKind} permission."
+                : $"{agentName} requested {permissionKind} permission for Copilot session {sessionId}.",
+        };
+    }
+
+    private static bool RequiresApproval(
+        ApprovalPolicyDto? approvalPolicy,
+        string checkpointKind,
+        string agentId)
+    {
+        if (approvalPolicy?.Rules is null || approvalPolicy.Rules.Count == 0)
+        {
+            return false;
+        }
+
+        foreach (ApprovalCheckpointRuleDto rule in approvalPolicy.Rules)
+        {
+            if (!string.Equals(rule.Kind, checkpointKind, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (rule.AgentIds.Count == 0)
+            {
+                return true;
+            }
+
+            if (rule.AgentIds.Any(candidate =>
+                    string.Equals(candidate, agentId, StringComparison.OrdinalIgnoreCase)))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static string CreateApprovalRequestId()
+    {
+        return $"approval-{Guid.NewGuid():N}";
     }
 
     private static Type? LoadType(string assemblyQualifiedName)
@@ -512,6 +680,7 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
 
         public static async Task<AgentBundle> CreateAsync(
             RunTurnCommandDto command,
+            Func<PatternAgentDefinitionDto, PermissionRequest, PermissionInvocation, Task<PermissionRequestResult>> onPermissionRequest,
             CancellationToken cancellationToken)
         {
             List<IAsyncDisposable> disposables = [];
@@ -542,7 +711,7 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
                         Content = AgentInstructionComposer.Compose(command.Pattern, definition, agentIndex, command.WorkspaceKind),
                     },
                     WorkingDirectory = command.ProjectPath,
-                    OnPermissionRequest = ApprovePermissionAsync,
+                    OnPermissionRequest = (request, invocation) => onPermissionRequest(definition, request, invocation),
                     Streaming = true,
                 };
 
@@ -649,14 +818,11 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
                 .Build();
         }
 
-        private static Task<PermissionRequestResult> ApprovePermissionAsync(
-            PermissionRequest request,
-            PermissionInvocation invocation)
-        {
-            return Task.FromResult(new PermissionRequestResult
-            {
-                Kind = PermissionRequestResultKind.Approved,
-            });
-        }
     }
+
+    private sealed record PendingApprovalRequest(
+        string RequestId,
+        string SessionId,
+        string ApprovalId,
+        TaskCompletionSource<PermissionRequestResultKind> Decision);
 }

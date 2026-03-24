@@ -127,6 +127,7 @@ public sealed class SidecarProtocolHost
                         runTurnCommand,
                         delta => WriteAsync(output, delta, cancellationToken),
                         activity => WriteAsync(output, activity, cancellationToken),
+                        approval => WriteAsync(output, approval, cancellationToken),
                         cancellationToken).ConfigureAwait(false);
 
                     await WriteAsync(output, new TurnCompleteEventDto
@@ -136,6 +137,15 @@ public sealed class SidecarProtocolHost
                         SessionId = runTurnCommand.SessionId,
                         Messages = messages,
                     }, cancellationToken).ConfigureAwait(false);
+                    break;
+
+                case "resolve-approval":
+                    ResolveApprovalCommandDto resolveApprovalCommand =
+                        JsonSerializer.Deserialize<ResolveApprovalCommandDto>(rawCommand, _jsonOptions)
+                        ?? throw new InvalidOperationException("Could not deserialize resolve-approval command.");
+
+                    await _workflowRunner.ResolveApprovalAsync(resolveApprovalCommand, cancellationToken)
+                        .ConfigureAwait(false);
                     break;
 
                 default:

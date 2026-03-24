@@ -8,5 +8,10 @@ public interface ITurnWorkflowRunner
         RunTurnCommandDto command,
         Func<TurnDeltaEventDto, Task> onDelta,
         Func<AgentActivityEventDto, Task> onActivity,
+        Func<ApprovalRequestedEventDto, Task> onApproval,
+        CancellationToken cancellationToken);
+
+    Task ResolveApprovalAsync(
+        ResolveApprovalCommandDto command,
         CancellationToken cancellationToken);
 }

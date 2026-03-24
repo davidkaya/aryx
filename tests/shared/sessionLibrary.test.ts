@@ -122,6 +122,13 @@ describe('session library helpers', () => {
         isPinned: true,
         isArchived: true,
         lastError: 'sidecar crashed',
+        pendingApproval: {
+          id: 'approval-1',
+          kind: 'tool-call',
+          status: 'pending',
+          requestedAt: '2026-03-23T00:01:00.000Z',
+          title: 'Approve tool access',
+        },
         messages: [
           {
             id: 'msg-1',
@@ -149,6 +156,7 @@ describe('session library helpers', () => {
       updatedAt: '2026-03-23T00:07:00.000Z',
     });
     expect(session.messages[0]?.pending).toBe(false);
+    expect(session.pendingApproval).toBeUndefined();
     expect(session.runs).toEqual([]);
   });
 

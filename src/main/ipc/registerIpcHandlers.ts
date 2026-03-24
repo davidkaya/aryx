@@ -5,6 +5,7 @@ import type {
   CreateSessionInput,
   DuplicateSessionInput,
   RenameSessionInput,
+  ResolveSessionApprovalInput,
   SaveLspProfileInput,
   SaveMcpServerInput,
   SavePatternInput,
@@ -76,6 +77,9 @@ export function registerIpcHandlers(window: BrowserWindow, service: EryxAppServi
   );
   ipcMain.handle(ipcChannels.sendSessionMessage, (_event, input: SendSessionMessageInput) =>
     service.sendSessionMessage(input.sessionId, input.content),
+  );
+  ipcMain.handle(ipcChannels.resolveSessionApproval, (_event, input: ResolveSessionApprovalInput) =>
+    service.resolveSessionApproval(input.sessionId, input.approvalId, input.decision),
   );
   ipcMain.handle(
     ipcChannels.updateScratchpadSessionConfig,

@@ -6,9 +6,11 @@ import {
   completeSessionRunRecord,
   createSessionRunRecord,
   normalizeSessionRunRecords,
+  upsertRunApprovalEvent,
   upsertRunMessageEvent,
 } from '@shared/domain/runTimeline';
 import type { ProjectRecord } from '@shared/domain/project';
+import type { PendingApprovalRecord } from '@shared/domain/approval';
 
 function createPattern(): PatternDefinition {
   return {
@@ -167,5 +169,45 @@ describe('run timeline helpers', () => {
 
   test('normalizes missing run collections to an empty array', () => {
     expect(normalizeSessionRunRecords(undefined)).toEqual([]);
+  });
+
+  test('tracks approval checkpoints as a single timeline event that can be resolved later', () => {
+    const baseRun = createSessionRunRecord({
+      requestId: 'turn-1',
+      project: createProject(),
+      workspaceKind: 'project',
+      pattern: createPattern(),
+      triggerMessageId: 'msg-user-1',
+      startedAt: '2026-03-23T00:00:01.000Z',
+    });
+
+    const pendingApproval: PendingApprovalRecord = {
+      id: 'approval-1',
+      kind: 'tool-call',
+      status: 'pending',
+      requestedAt: '2026-03-23T00:00:02.000Z',
+      agentId: 'agent-writer',
+      agentName: 'Writer',
+      title: 'Approve tool access',
+      permissionKind: 'tool access',
+    };
+
+    const pendingRun = upsertRunApprovalEvent(baseRun, pendingApproval);
+    const resolvedRun = upsertRunApprovalEvent(pendingRun, {
+      ...pendingApproval,
+      status: 'approved',
+      resolvedAt: '2026-03-23T00:00:03.000Z',
+    });
+
+    const approvalEvent = resolvedRun.events.find((event) => event.kind === 'approval');
+    expect(approvalEvent).toMatchObject({
+      approvalId: 'approval-1',
+      approvalKind: 'tool-call',
+      approvalTitle: 'Approve tool access',
+      permissionKind: 'tool access',
+      status: 'completed',
+      decision: 'approved',
+      updatedAt: '2026-03-23T00:00:03.000Z',
+    });
   });
 });

@@ -1,4 +1,5 @@
 import type { PatternDefinition, PatternValidationIssue, ReasoningEffort } from '@shared/domain/pattern';
+import type { ApprovalCheckpointKind, ApprovalDecision } from '@shared/domain/approval';
 import type { ChatMessageRecord } from '@shared/domain/session';
 
 export interface SidecarModeCapability {
@@ -76,7 +77,18 @@ export interface RunTurnCommand {
   tooling?: RunTurnToolingConfig;
 }
 
-export type SidecarCommand = DescribeCapabilitiesCommand | ValidatePatternCommand | RunTurnCommand;
+export interface ResolveApprovalCommand {
+  type: 'resolve-approval';
+  requestId: string;
+  approvalId: string;
+  decision: ApprovalDecision;
+}
+
+export type SidecarCommand =
+  | DescribeCapabilitiesCommand
+  | ValidatePatternCommand
+  | RunTurnCommand
+  | ResolveApprovalCommand;
 
 export interface RunTurnLocalMcpServerConfig {
   id: string;
@@ -157,6 +169,20 @@ export interface AgentActivityEvent {
   toolName?: string;
 }
 
+export interface ApprovalRequestedEvent {
+  type: 'approval-requested';
+  requestId: string;
+  sessionId: string;
+  approvalId: string;
+  approvalKind: ApprovalCheckpointKind;
+  agentId?: string;
+  agentName?: string;
+  toolName?: string;
+  permissionKind?: string;
+  title: string;
+  detail?: string;
+}
+
 export interface CommandErrorEvent {
   type: 'command-error';
   requestId: string;
@@ -174,5 +200,6 @@ export type SidecarEvent =
   | TurnDeltaEvent
   | TurnCompleteEvent
   | AgentActivityEvent
+  | ApprovalRequestedEvent
   | CommandErrorEvent
   | CommandCompleteEvent;

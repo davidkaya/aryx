@@ -4,6 +4,7 @@ import {
   normalizeSessionToolingSelection,
   type SessionToolingSelection,
 } from '@shared/domain/tooling';
+import type { PendingApprovalRecord } from '@shared/domain/approval';
 import type { SessionRunRecord } from '@shared/domain/runTimeline';
 
 export type ChatRole = 'system' | 'user' | 'assistant';
@@ -39,6 +40,7 @@ export interface SessionRecord {
   lastError?: string;
   scratchpadConfig?: ScratchpadSessionConfig;
   tooling?: SessionToolingSelection;
+  pendingApproval?: PendingApprovalRecord;
   runs: SessionRunRecord[];
 }
 

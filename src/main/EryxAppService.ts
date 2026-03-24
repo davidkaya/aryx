@@ -5,6 +5,7 @@ import { dialog } from 'electron';
 
 import type {
   AgentActivityEvent,
+  ApprovalRequestedEvent,
   RunTurnLspProfileConfig,
   RunTurnMcpServerConfig,
   RunTurnToolingConfig,
@@ -23,6 +24,14 @@ import {
   type ReasoningEffort,
   validatePatternDefinition,
 } from '@shared/domain/pattern';
+import {
+  approvalPolicyRequiresCheckpoint,
+  normalizeApprovalPolicy,
+  resolvePendingApproval,
+  type ApprovalDecision,
+  type PendingApprovalMessageRecord,
+  type PendingApprovalRecord,
+} from '@shared/domain/approval';
 import { isScratchpadProject, type ProjectRecord } from '@shared/domain/project';
 import {
   duplicateSessionRecord,
@@ -45,6 +54,7 @@ import {
   completeSessionRunRecord,
   createSessionRunRecord,
   failSessionRunRecord,
+  upsertRunApprovalEvent,
   upsertRunMessageEvent,
   upsertSessionRunRecord,
   type SessionRunRecord,
@@ -75,6 +85,12 @@ type AppServiceEvents = {
   'session-event': [SessionEventRecord];
 };
 
+type PendingApprovalHandle = {
+  sessionId: string;
+  requestId: string;
+  resolve: (decision: ApprovalDecision) => void | Promise<void>;
+};
+
 function isBuiltinPattern(patternId: string): boolean {
   return patternId.startsWith('pattern-');
 }
@@ -84,6 +100,7 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
   private readonly sidecar = new SidecarClient();
   private readonly secretStore = new SecretStore();
   private readonly gitService = new GitService();
+  private readonly pendingApprovalHandles = new Map<string, PendingApprovalHandle>();
   private workspace?: WorkspaceState;
   private sidecarCapabilities?: SidecarCapabilities;
   private didScheduleInitialProjectGitRefresh = false;
@@ -99,6 +116,9 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
   async loadWorkspace(): Promise<WorkspaceState> {
     if (!this.workspace) {
       this.workspace = await this.workspaceRepository.load();
+      if (this.failInterruptedPendingApprovals(this.workspace)) {
+        await this.workspaceRepository.save(this.workspace);
+      }
     }
 
     if (!this.didScheduleInitialProjectGitRefresh) {
@@ -180,6 +200,7 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
     const existingIndex = workspace.patterns.findIndex((current) => current.id === pattern.id);
     const candidate: PatternDefinition = {
       ...pattern,
+      approvalPolicy: normalizeApprovalPolicy(pattern.approvalPolicy),
       isFavorite: pattern.isFavorite ?? workspace.patterns[existingIndex]?.isFavorite,
       createdAt: existingIndex >= 0 ? workspace.patterns[existingIndex].createdAt : nowIso(),
       updatedAt: nowIso(),
@@ -385,6 +406,9 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
   async sendSessionMessage(sessionId: string, content: string): Promise<void> {
     const workspace = await this.loadWorkspace();
     const session = this.requireSession(workspace, sessionId);
+    if (session.status === 'running') {
+      throw new Error('Wait for the current response or approval checkpoint to finish before sending another message.');
+    }
     const project = this.requireProject(workspace, session.projectId);
     const pattern = this.requirePattern(workspace, session.patternId);
     const effectivePattern = await this.buildEffectivePattern(project, pattern, session);
@@ -447,8 +471,13 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
         async (event) => {
           await this.applyAgentActivity(workspace, session.id, requestId, event);
         },
+        async (event) => {
+          await this.handleApprovalRequested(workspace, session.id, requestId, event, (decision) =>
+            this.sidecar.resolveApproval(event.approvalId, decision));
+        },
       );
 
+      await this.awaitFinalResponseApproval(workspace, session.id, requestId, effectivePattern, responseMessages);
       this.finalizeTurn(workspace, session.id, requestId, responseMessages);
       await this.persistAndBroadcast(workspace);
     } catch (error) {
@@ -472,6 +501,66 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
 
       await this.persistAndBroadcast(workspace);
     }
+  }
+
+  async resolveSessionApproval(
+    sessionId: string,
+    approvalId: string,
+    decision: ApprovalDecision,
+  ): Promise<WorkspaceState> {
+    const workspace = await this.loadWorkspace();
+    const session = this.requireSession(workspace, sessionId);
+    const approval = session.pendingApproval;
+    if (!approval || approval.id !== approvalId) {
+      throw new Error(`Approval "${approvalId}" is not pending for session "${sessionId}".`);
+    }
+
+    const handle = this.pendingApprovalHandles.get(approvalId);
+    if (!handle || handle.sessionId !== sessionId) {
+      throw new Error(`Approval "${approvalId}" is no longer active. Restart the run and try again.`);
+    }
+
+    const resolvedAt = nowIso();
+    const resolvedApproval = resolvePendingApproval(approval, decision, resolvedAt);
+    session.pendingApproval = undefined;
+    session.updatedAt = resolvedAt;
+
+    const updatedRun = this.updateSessionRun(session, handle.requestId, (run) =>
+      upsertRunApprovalEvent(run, resolvedApproval));
+
+    const result = await this.persistAndBroadcast(workspace);
+    if (updatedRun) {
+      this.emitRunUpdated(sessionId, resolvedAt, updatedRun);
+    }
+
+    this.pendingApprovalHandles.delete(approvalId);
+
+    try {
+      await Promise.resolve(handle.resolve(decision));
+    } catch (error) {
+      const failedAt = nowIso();
+      session.status = 'error';
+      session.lastError = error instanceof Error ? error.message : String(error);
+      session.updatedAt = failedAt;
+
+      const failedRun = this.updateSessionRun(session, handle.requestId, (run) =>
+        failSessionRunRecord(run, failedAt, session.lastError ?? 'Unknown error.'));
+
+      this.emitSessionEvent({
+        sessionId,
+        kind: 'error',
+        occurredAt: failedAt,
+        error: session.lastError,
+      });
+      if (failedRun) {
+        this.emitRunUpdated(sessionId, failedAt, failedRun);
+      }
+
+      await this.persistAndBroadcast(workspace);
+      throw error;
+    }
+
+    return result;
   }
 
   async updateScratchpadSessionConfig(
@@ -834,6 +923,131 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
     }
   }
 
+  private async handleApprovalRequested(
+    workspace: WorkspaceState,
+    sessionId: string,
+    requestId: string,
+    approval: ApprovalRequestedEvent | PendingApprovalRecord,
+    resolve: (decision: ApprovalDecision) => void | Promise<void>,
+  ): Promise<void> {
+    const session = this.requireSession(workspace, sessionId);
+    if (session.pendingApproval) {
+      throw new Error(`Session "${sessionId}" already has a pending approval.`);
+    }
+
+    const pendingApproval =
+      'type' in approval ? this.createPendingApprovalFromSidecarEvent(approval) : approval;
+
+    session.pendingApproval = pendingApproval;
+    session.updatedAt = pendingApproval.requestedAt;
+
+    const updatedRun = this.updateSessionRun(session, requestId, (run) =>
+      upsertRunApprovalEvent(run, pendingApproval));
+
+    this.pendingApprovalHandles.set(pendingApproval.id, {
+      sessionId,
+      requestId,
+      resolve,
+    });
+
+    await this.persistAndBroadcast(workspace);
+    if (updatedRun) {
+      this.emitRunUpdated(sessionId, pendingApproval.requestedAt, updatedRun);
+    }
+  }
+
+  private createPendingApprovalFromSidecarEvent(event: ApprovalRequestedEvent): PendingApprovalRecord {
+    return {
+      id: event.approvalId,
+      kind: event.approvalKind,
+      status: 'pending',
+      requestedAt: nowIso(),
+      agentId: event.agentId,
+      agentName: event.agentName,
+      toolName: event.toolName,
+      permissionKind: event.permissionKind,
+      title: event.title,
+      detail: event.detail,
+    };
+  }
+
+  private async awaitFinalResponseApproval(
+    workspace: WorkspaceState,
+    sessionId: string,
+    requestId: string,
+    pattern: PatternDefinition,
+    messages: ChatMessageRecord[],
+  ): Promise<void> {
+    const pendingApproval = this.buildFinalResponseApproval(pattern, messages);
+    if (!pendingApproval) {
+      return;
+    }
+
+    let resolveDecision: ((decision: ApprovalDecision) => void) | undefined;
+    const decisionPromise = new Promise<ApprovalDecision>((resolve) => {
+      resolveDecision = resolve;
+    });
+
+    await this.handleApprovalRequested(
+      workspace,
+      sessionId,
+      requestId,
+      pendingApproval,
+      (decision) => {
+        resolveDecision?.(decision);
+      },
+    );
+
+    const decision = await decisionPromise;
+    if (decision === 'rejected') {
+      throw new Error('Final response approval was rejected.');
+    }
+  }
+
+  private buildFinalResponseApproval(
+    pattern: PatternDefinition,
+    messages: ChatMessageRecord[],
+  ): PendingApprovalRecord | undefined {
+    const assistantMessages = messages.filter((message) => message.role === 'assistant');
+    if (assistantMessages.length === 0) {
+      return undefined;
+    }
+
+    const previewMessages: PendingApprovalMessageRecord[] = assistantMessages.map((message) => ({
+      id: message.id,
+      authorName: message.authorName,
+      content: message.content,
+    }));
+
+    for (let index = assistantMessages.length - 1; index >= 0; index -= 1) {
+      const message = assistantMessages[index];
+      if (!message) {
+        continue;
+      }
+
+      const agent = pattern.agents.find((candidate) =>
+        candidate.id === message.authorName || candidate.name === message.authorName);
+      if (!approvalPolicyRequiresCheckpoint(pattern.approvalPolicy, 'final-response', agent?.id)) {
+        continue;
+      }
+
+      const agentName = agent?.name ?? message.authorName;
+      return {
+        id: createId('approval'),
+        kind: 'final-response',
+        status: 'pending',
+        requestedAt: nowIso(),
+        agentId: agent?.id,
+        agentName,
+        title: agentName ? `Approve final response from ${agentName}` : 'Approve final response',
+        detail: 'Review the pending assistant response before it is added to the session transcript.',
+        messages: previewMessages,
+      };
+    }
+
+    return undefined;
+  }
+
   private async persistAndBroadcast(workspace: WorkspaceState): Promise<WorkspaceState> {
     await this.workspaceRepository.save(workspace);
     this.emit('workspace-updated', workspace);
@@ -972,6 +1186,51 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
 
   private emitSessionEvent(event: SessionEventRecord): void {
     this.emit('session-event', event);
+  }
+
+  private failInterruptedPendingApprovals(workspace: WorkspaceState): boolean {
+    let changed = false;
+
+    for (const session of workspace.sessions) {
+      const pendingApproval = session.pendingApproval;
+      if (!pendingApproval) {
+        continue;
+      }
+
+      changed = true;
+      const failedAt = nowIso();
+      const error = 'Pending approval was interrupted because Eryx restarted before a decision was recorded.';
+      const requestId = this.findApprovalRequestId(session, pendingApproval.id);
+      const rejectedApproval = resolvePendingApproval(pendingApproval, 'rejected', failedAt, error);
+
+      session.pendingApproval = undefined;
+      session.status = 'error';
+      session.lastError = error;
+      session.updatedAt = failedAt;
+
+      if (!requestId) {
+        continue;
+      }
+
+      this.updateSessionRun(session, requestId, (run) =>
+        failSessionRunRecord(
+          upsertRunApprovalEvent(run, rejectedApproval),
+          failedAt,
+          error,
+        ));
+    }
+
+    return changed;
+  }
+
+  private findApprovalRequestId(session: SessionRecord, approvalId: string): string | undefined {
+    const matchingRun = session.runs.find((run) =>
+      run.events.some((event) => event.kind === 'approval' && event.approvalId === approvalId));
+    if (matchingRun) {
+      return matchingRun.requestId;
+    }
+
+    return session.runs.find((run) => run.status === 'running')?.requestId;
   }
 
   private async loadSidecarCapabilities(forceRefresh = false): Promise<SidecarCapabilities> {

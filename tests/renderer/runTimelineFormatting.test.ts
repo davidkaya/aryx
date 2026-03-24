@@ -66,6 +66,16 @@ describe('run timeline formatting', () => {
       agentName: 'Writer',
       toolName: 'file_search',
     }))).toBe('Writer used file_search');
+    expect(formatEventLabel(createEvent({
+      kind: 'approval',
+      status: 'running',
+      approvalTitle: 'Approve tool access',
+    }))).toBe('Approve tool access');
+    expect(formatEventLabel(createEvent({
+      kind: 'approval',
+      status: 'completed',
+      approvalTitle: 'Approve final response',
+    }))).toBe('Approve final response approved');
     expect(formatEventLabel(createEvent({ kind: 'message', agentName: 'Reviewer' }))).toBe('Reviewer');
     expect(formatEventLabel(createEvent({ kind: 'run-completed' }))).toBe('Completed');
     expect(formatEventLabel(createEvent({ kind: 'run-failed' }))).toBe('Failed');

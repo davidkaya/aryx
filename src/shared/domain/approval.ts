@@ -32,6 +32,11 @@ export interface PendingApprovalRecord {
   messages?: PendingApprovalMessageRecord[];
 }
 
+export interface PendingApprovalState {
+  pendingApproval?: PendingApprovalRecord;
+  pendingApprovalQueue?: PendingApprovalRecord[];
+}
+
 const approvalCheckpointKinds: ApprovalCheckpointKind[] = ['tool-call', 'final-response'];
 const approvalCheckpointKindSet = new Set<ApprovalCheckpointKind>(approvalCheckpointKinds);
 const approvalStatusSet = new Set<ApprovalStatus>(['pending', 'approved', 'rejected']);
@@ -174,6 +179,58 @@ export function resolvePendingApproval(
   };
 }
 
+export function listPendingApprovals(
+  state: Partial<PendingApprovalState>,
+): PendingApprovalRecord[] {
+  const pendingApprovals: PendingApprovalRecord[] = [];
+  const seenApprovalIds = new Set<string>();
+
+  function appendApproval(approval?: Partial<PendingApprovalRecord>) {
+    const normalized = normalizePendingApproval(approval);
+    if (!normalized || normalized.status !== 'pending' || seenApprovalIds.has(normalized.id)) {
+      return;
+    }
+
+    seenApprovalIds.add(normalized.id);
+    pendingApprovals.push(normalized);
+  }
+
+  appendApproval(state.pendingApproval);
+  for (const queuedApproval of state.pendingApprovalQueue ?? []) {
+    appendApproval(queuedApproval);
+  }
+
+  return pendingApprovals;
+}
+
+export function normalizePendingApprovalState(
+  state: Partial<PendingApprovalState>,
+): PendingApprovalState {
+  return splitPendingApprovalState(listPendingApprovals(state));
+}
+
+export function enqueuePendingApprovalState(
+  state: Partial<PendingApprovalState>,
+  approval: PendingApprovalRecord,
+): PendingApprovalState {
+  return normalizePendingApprovalState({
+    pendingApproval: state.pendingApproval,
+    pendingApprovalQueue: [
+      ...(state.pendingApprovalQueue ?? []),
+      approval,
+    ],
+  });
+}
+
+export function dequeuePendingApprovalState(
+  state: Partial<PendingApprovalState>,
+  approvalId: string,
+): PendingApprovalState {
+  return splitPendingApprovalState(
+    listPendingApprovals(state).filter((approval) => approval.id !== approvalId),
+  );
+}
+
 function normalizePendingApprovalMessages(
   messages?: ReadonlyArray<Partial<PendingApprovalMessageRecord>>,
 ): PendingApprovalMessageRecord[] | undefined {
@@ -196,6 +253,22 @@ function normalizePendingApprovalMessages(
   });
 
   return normalized.length > 0 ? normalized : undefined;
+}
+
+function splitPendingApprovalState(
+  approvals: readonly PendingApprovalRecord[],
+): PendingApprovalState {
+  if (approvals.length === 0) {
+    return {
+      pendingApproval: undefined,
+      pendingApprovalQueue: undefined,
+    };
+  }
+
+  return {
+    pendingApproval: approvals[0],
+    pendingApprovalQueue: approvals.length > 1 ? approvals.slice(1) : undefined,
+  };
 }
 
 function normalizeOptionalString(value: string | undefined): string | undefined {

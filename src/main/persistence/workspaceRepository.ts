@@ -7,7 +7,7 @@ import { normalizeSessionRunRecords } from '@shared/domain/runTimeline';
 import { normalizeSessionToolingSelection, normalizeWorkspaceSettings } from '@shared/domain/tooling';
 import {
   normalizeApprovalPolicy,
-  normalizePendingApproval,
+  normalizePendingApprovalState,
 } from '@shared/domain/approval';
 import { createWorkspaceSeed, type WorkspaceState } from '@shared/domain/workspace';
 import { nowIso } from '@shared/utils/ids';
@@ -72,7 +72,10 @@ export class WorkspaceRepository {
         ...session,
         runs: normalizeSessionRunRecords(session.runs),
         tooling: normalizeSessionToolingSelection(session.tooling),
-        pendingApproval: normalizePendingApproval(session.pendingApproval),
+        ...normalizePendingApprovalState({
+          pendingApproval: session.pendingApproval,
+          pendingApprovalQueue: session.pendingApprovalQueue,
+        }),
       })),
       settings: normalizeWorkspaceSettings(stored.settings),
       selectedProjectId: projects.some((project) => project.id === stored.selectedProjectId)

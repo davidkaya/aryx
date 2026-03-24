@@ -129,6 +129,15 @@ describe('session library helpers', () => {
           requestedAt: '2026-03-23T00:01:00.000Z',
           title: 'Approve tool access',
         },
+        pendingApprovalQueue: [
+          {
+            id: 'approval-2',
+            kind: 'final-response',
+            status: 'pending',
+            requestedAt: '2026-03-23T00:02:00.000Z',
+            title: 'Approve final response',
+          },
+        ],
         messages: [
           {
             id: 'msg-1',
@@ -157,6 +166,7 @@ describe('session library helpers', () => {
     });
     expect(session.messages[0]?.pending).toBe(false);
     expect(session.pendingApproval).toBeUndefined();
+    expect(session.pendingApprovalQueue).toBeUndefined();
     expect(session.runs).toEqual([]);
   });
 

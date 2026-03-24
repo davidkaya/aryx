@@ -41,6 +41,7 @@ export interface SessionRecord {
   scratchpadConfig?: ScratchpadSessionConfig;
   tooling?: SessionToolingSelection;
   pendingApproval?: PendingApprovalRecord;
+  pendingApprovalQueue?: PendingApprovalRecord[];
   runs: SessionRunRecord[];
 }
 

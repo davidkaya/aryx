@@ -182,6 +182,7 @@ export function duplicateSessionRecord(
         }
       : undefined,
     pendingApproval: undefined,
+    pendingApprovalQueue: undefined,
     runs: [],
     messages: session.messages.map((message): ChatMessageRecord => ({
       ...message,

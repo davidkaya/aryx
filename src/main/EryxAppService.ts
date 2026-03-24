@@ -26,6 +26,9 @@ import {
 } from '@shared/domain/pattern';
 import {
   approvalPolicyRequiresCheckpoint,
+  dequeuePendingApprovalState,
+  enqueuePendingApprovalState,
+  listPendingApprovals,
   normalizeApprovalPolicy,
   resolvePendingApproval,
   type ApprovalDecision,
@@ -512,6 +515,15 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
     const session = this.requireSession(workspace, sessionId);
     const approval = session.pendingApproval;
     if (!approval || approval.id !== approvalId) {
+      const queuedApproval = session.pendingApprovalQueue?.some((candidate) => candidate.id === approvalId);
+      if (queuedApproval) {
+        throw new Error(
+          approval
+            ? `Approval "${approvalId}" is queued behind "${approval.id}" for session "${sessionId}". Resolve the active approval first.`
+            : `Approval "${approvalId}" is queued but not active for session "${sessionId}".`,
+        );
+      }
+
       throw new Error(`Approval "${approvalId}" is not pending for session "${sessionId}".`);
     }
 
@@ -522,7 +534,7 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
 
     const resolvedAt = nowIso();
     const resolvedApproval = resolvePendingApproval(approval, decision, resolvedAt);
-    session.pendingApproval = undefined;
+    this.setSessionPendingApprovalState(session, dequeuePendingApprovalState(session, approvalId));
     session.updatedAt = resolvedAt;
 
     const updatedRun = this.updateSessionRun(session, handle.requestId, (run) =>
@@ -539,6 +551,11 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
       await Promise.resolve(handle.resolve(decision));
     } catch (error) {
       const failedAt = nowIso();
+      this.rejectPendingApprovals(
+        session,
+        failedAt,
+        'Queued approval was cancelled because the run failed before it could resume.',
+      );
       session.status = 'error';
       session.lastError = error instanceof Error ? error.message : String(error);
       session.updatedAt = failedAt;
@@ -931,14 +948,10 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
     resolve: (decision: ApprovalDecision) => void | Promise<void>,
   ): Promise<void> {
     const session = this.requireSession(workspace, sessionId);
-    if (session.pendingApproval) {
-      throw new Error(`Session "${sessionId}" already has a pending approval.`);
-    }
-
     const pendingApproval =
       'type' in approval ? this.createPendingApprovalFromSidecarEvent(approval) : approval;
 
-    session.pendingApproval = pendingApproval;
+    this.setSessionPendingApprovalState(session, enqueuePendingApprovalState(session, pendingApproval));
     session.updatedAt = pendingApproval.requestedAt;
 
     const updatedRun = this.updateSessionRun(session, requestId, (run) =>
@@ -969,6 +982,41 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
       title: event.title,
       detail: event.detail,
     };
+  }
+
+  private setSessionPendingApprovalState(
+    session: SessionRecord,
+    state: {
+      pendingApproval?: PendingApprovalRecord;
+      pendingApprovalQueue?: PendingApprovalRecord[];
+    },
+  ): void {
+    session.pendingApproval = state.pendingApproval;
+    session.pendingApprovalQueue = state.pendingApprovalQueue;
+  }
+
+  private rejectPendingApprovals(
+    session: SessionRecord,
+    failedAt: string,
+    error: string,
+  ): string[] {
+    const requestIds = new Set<string>();
+
+    for (const pendingApproval of listPendingApprovals(session)) {
+      const requestId = this.findApprovalRequestId(session, pendingApproval.id);
+      const rejectedApproval = resolvePendingApproval(pendingApproval, 'rejected', failedAt, error);
+
+      if (requestId) {
+        requestIds.add(requestId);
+        this.updateSessionRun(session, requestId, (run) =>
+          upsertRunApprovalEvent(run, rejectedApproval));
+      }
+
+      this.pendingApprovalHandles.delete(pendingApproval.id);
+    }
+
+    this.setSessionPendingApprovalState(session, {});
+    return [...requestIds];
   }
 
   private async awaitFinalResponseApproval(
@@ -1192,32 +1240,30 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
     let changed = false;
 
     for (const session of workspace.sessions) {
-      const pendingApproval = session.pendingApproval;
-      if (!pendingApproval) {
+      const pendingApprovals = listPendingApprovals(session);
+      if (pendingApprovals.length === 0) {
         continue;
       }
 
       changed = true;
       const failedAt = nowIso();
       const error = 'Pending approval was interrupted because Eryx restarted before a decision was recorded.';
-      const requestId = this.findApprovalRequestId(session, pendingApproval.id);
-      const rejectedApproval = resolvePendingApproval(pendingApproval, 'rejected', failedAt, error);
-
-      session.pendingApproval = undefined;
+      const requestIds = this.rejectPendingApprovals(session, failedAt, error);
       session.status = 'error';
       session.lastError = error;
       session.updatedAt = failedAt;
 
-      if (!requestId) {
-        continue;
+      if (requestIds.length === 0) {
+        const fallbackRequestId = session.runs.find((run) => run.status === 'running')?.requestId;
+        if (fallbackRequestId) {
+          requestIds.push(fallbackRequestId);
+        }
       }
 
-      this.updateSessionRun(session, requestId, (run) =>
-        failSessionRunRecord(
-          upsertRunApprovalEvent(run, rejectedApproval),
-          failedAt,
-          error,
-        ));
+      for (const requestId of requestIds) {
+        this.updateSessionRun(session, requestId, (run) =>
+          failSessionRunRecord(run, failedAt, error));
+      }
     }
 
     return changed;

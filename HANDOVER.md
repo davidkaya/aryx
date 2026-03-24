@@ -1,43 +1,40 @@
-# Approval checkpoints frontend handover
+# Approval checkpoints UX handover
 
-## What is implemented in the backend
+## What changed in the backend
 
-The backend now supports approval checkpoints in two places:
+Approval checkpoints are now **queued per session** instead of failing when a second approval request arrives before the first one is resolved.
 
-1. `tool-call`
-2. `final-response`
+This fixes the previous backend limitation where multi-agent patterns such as `Sequential Trio Review` could throw:
 
-`tool-call` approvals are enforced inside the .NET sidecar through the Copilot permission callback.
+```text
+Session "<id>" already has a pending approval.
+```
 
-`final-response` approvals are enforced in the Electron main process after the sidecar finishes generating assistant messages but before those messages are published into the session transcript.
+The queue is backend-only in this change. The current frontend can keep working because the active approval is still exposed through the existing `session.pendingApproval` field.
 
-The roadmap item **"pause before handing off outside the original working set"** is **not implemented** in this change. There is still no working-set model in the backend that can support that rule correctly.
+## Queue semantics
 
-## Important behavioral semantics
+- A session still exposes **one active approval** through `session.pendingApproval`.
+- Additional approvals waiting behind it are exposed through `session.pendingApprovalQueue`.
+- `session.pendingApprovalQueue` does **not** include the active approval.
+- Queue order is the order in which approvals were requested.
+- `resolveSessionApproval(...)` still resolves **only the active approval**.
+- When the active approval is resolved, the next queued approval automatically becomes the new `session.pendingApproval`.
+- If the run fails while approvals remain queued, the backend rejects and clears the remaining queued approvals.
+- If Eryx restarts while approvals are pending or queued, the backend rejects all of them and marks the session/run as errored.
 
-- A session **stays** `status: 'running'` while waiting for approval.
-- The backend exposes the paused state through `session.pendingApproval`.
-- The frontend should treat `session.pendingApproval` as "awaiting approval" even though `session.status` is still `running`.
-- Resolving an approval clears `session.pendingApproval`.
-- Approving a checkpoint resumes the run.
-- Rejecting a `final-response` checkpoint causes the run to fail with an explicit error after the backend resumes the waiting flow.
-- Rejecting a `tool-call` checkpoint sends a denial back to the Copilot runtime. The eventual run outcome depends on the runtime response, but it should be treated as a rejected risky action.
-- If Eryx restarts while an approval is pending, the backend marks that session as errored and converts the pending approval into a rejected/interrupted run event.
-
-## New shared model shapes
+## Current shared model
 
 ### Pattern approval policy
 
-File: `src/shared/domain/approval.ts`
-
-Patterns can now carry an optional `approvalPolicy`:
+This is unchanged from the earlier backend work:
 
 ```ts
 type ApprovalCheckpointKind = 'tool-call' | 'final-response';
 
 interface ApprovalCheckpointRule {
   kind: ApprovalCheckpointKind;
-  agentIds?: string[]; // omitted or empty = all agents in the pattern
+  agentIds?: string[]; // omitted or empty = all agents
 }
 
 interface ApprovalPolicy {
@@ -45,19 +42,9 @@ interface ApprovalPolicy {
 }
 ```
 
-This is attached to `PatternDefinition` as:
+### Session approval state
 
-```ts
-approvalPolicy?: ApprovalPolicy;
-```
-
-Backend validation already rejects agent IDs that do not exist in the pattern.
-
-### Session pending approval
-
-File: `src/shared/domain/approval.ts`
-
-Sessions can now expose a single active pending approval:
+The active approval + queued approvals are now represented as:
 
 ```ts
 interface PendingApprovalMessageRecord {
@@ -82,56 +69,27 @@ interface PendingApprovalRecord {
 }
 ```
 
-This is attached to `SessionRecord` as:
+Attached to `SessionRecord` as:
 
 ```ts
 pendingApproval?: PendingApprovalRecord;
-```
-
-For `final-response`, `pendingApproval.messages` contains the unpublished assistant output that the reviewer should inspect before publication.
-
-For `tool-call`, `pendingApproval.messages` is typically absent.
-
-### Run timeline event
-
-File: `src/shared/domain/runTimeline.ts`
-
-There is a new run timeline event kind:
-
-```ts
-kind: 'approval'
-```
-
-The event is updated in place over time rather than creating separate requested/approved/rejected entries.
-
-Relevant fields:
-
-```ts
-approvalId?: string;
-approvalKind?: 'tool-call' | 'final-response';
-approvalTitle?: string;
-approvalDetail?: string;
-permissionKind?: string;
-decision?: 'approved' | 'rejected';
-status: 'running' | 'completed' | 'error';
+pendingApprovalQueue?: PendingApprovalRecord[];
 ```
 
 Interpretation:
 
-- `status: 'running'` => approval requested and still pending
-- `status: 'completed'` + `decision: 'approved'` => approval granted
-- `status: 'error'` + `decision: 'rejected'` => approval rejected
+- `pendingApproval` = the approval the user can act on **right now**
+- `pendingApprovalQueue` = additional pending approvals waiting behind it
 
-## New IPC surface
+For `final-response`, `pendingApproval.messages` contains the unpublished assistant output preview.
 
-Files:
+For `tool-call`, `messages` is usually absent and the useful context is `agentName`, `toolName`, and `permissionKind`.
 
-- `src/shared/contracts/ipc.ts`
-- `src/shared/contracts/channels.ts`
-- `src/preload/index.ts`
-- `src/main/ipc/registerIpcHandlers.ts`
+## IPC surface
 
-New preload/API call:
+No new IPC was added for queueing.
+
+The renderer still resolves approvals through:
 
 ```ts
 resolveSessionApproval({
@@ -141,166 +99,130 @@ resolveSessionApproval({
 }): Promise<WorkspaceState>
 ```
 
-This is the frontend action to approve or reject the active checkpoint.
+Important behavior:
 
-## Internal sidecar protocol additions
+- this resolves the **active** approval only
+- if the user somehow attempts to resolve a queued approval directly, the backend rejects it
+- after a successful resolution, the next queued approval may immediately become active in the returned workspace state
 
-These are backend-only, but useful context for debugging:
+## Timeline behavior
 
-Files:
+The run timeline still uses `approval` events.
 
-- `src/shared/contracts/sidecar.ts`
-- `sidecar/src/Eryx.AgentHost/Contracts/ProtocolModels.cs`
-- `sidecar/src/Eryx.AgentHost/Services/SidecarProtocolHost.cs`
-- `sidecar/src/Eryx.AgentHost/Services/CopilotWorkflowRunner.cs`
+Each approval request gets its own event keyed by `approvalId`.
 
-New sidecar event:
+That means queued approvals now show up as multiple `approval` events in the same run when applicable. The active/queued distinction is in session state, not in the timeline event type.
 
-```ts
-type: 'approval-requested'
-```
-
-New sidecar command:
-
-```ts
-type: 'resolve-approval'
-```
-
-The Electron main process already handles this handshake. The frontend should not talk to the sidecar directly.
-
-## Files that already understand approval data
-
-Backend and shared code:
+## Backend files changed for queue support
 
 - `src/shared/domain/approval.ts`
-- `src/shared/domain/pattern.ts`
+  - added queue-state helpers and normalization
 - `src/shared/domain/session.ts`
-- `src/shared/domain/runTimeline.ts`
+  - added `pendingApprovalQueue`
+- `src/shared/domain/sessionLibrary.ts`
+  - duplicated sessions now clear queued approvals too
+- `src/main/persistence/workspaceRepository.ts`
+  - normalizes legacy single-approval data into active + queue state
 - `src/main/EryxAppService.ts`
-- `src/main/sidecar/sidecarProcess.ts`
+  - enqueues approval requests instead of throwing
+  - advances the queue on resolution
+  - rejects all queued approvals on restart / failure cleanup
 
-Minimal renderer compile-support only:
+## What the current frontend already does
 
-- `src/renderer/lib/runTimelineFormatting.ts`
-- `src/renderer/components/RunTimeline.tsx`
+The current UI should remain functionally compatible because it already reads `session.pendingApproval` and renders a single active approval banner/card.
 
-Those renderer changes are intentionally minimal. They only keep the current app build/typecheck working with the new timeline event kind.
+That means:
 
-## Frontend work still needed
+- users can still resolve approvals one at a time
+- the next queued approval should appear automatically after resolving the current one
+- no urgent UI fix is required just to keep the app working
 
-### 1. Pattern editor support for approval policy
+## Next UX steps for the frontend agent
 
-Files to inspect:
+These are the next improvements the UX agent should make on top of the new backend queue.
 
-- `src/renderer/components/PatternEditor.tsx`
-- `src/renderer/App.tsx`
-
-Needed UI:
-
-- Allow enabling `tool-call` approvals.
-- Allow enabling `final-response` approvals.
-- Allow scoping each checkpoint to:
-  - all agents
-  - selected agents
-
-Recommended representation:
-
-- one section named "Approval checkpoints"
-- one row per checkpoint kind
-- a toggle
-- an "all agents / selected agents" selector
-- multi-select agent chips when scoped
-
-### 2. Pending approval UI in chat/session surfaces
+### 1. Show queue size next to the active approval
 
 Files to inspect:
 
 - `src/renderer/components/ChatPane.tsx`
 - `src/renderer/components/ActivityPanel.tsx`
 - `src/renderer/components/Sidebar.tsx`
-- `src/renderer/lib/sessionWorkspace.ts`
-
-Needed behavior:
-
-- Show a visible checkpoint card/banner whenever `session.pendingApproval` exists.
-- Present:
-  - title
-  - detail
-  - agent name
-  - permission kind (for tool-call)
-  - preview messages (for final-response)
-- Add **Approve** and **Reject** actions that call `api.resolveSessionApproval(...)`.
-
-### 3. Final-response review UI
-
-Use `session.pendingApproval.messages` when `kind === 'final-response'`.
 
 Recommended UX:
 
-- Render the candidate assistant messages exactly as they would appear in chat.
-- Make it clear they are pending publication, not yet committed to transcript history.
-- On approval, let the backend publish them.
-- On rejection, expect the run to fail and show an error state after the backend resumes the blocked flow.
+- if `session.pendingApprovalQueue?.length > 0`, show a compact badge like:
+  - `1 queued`
+  - `2 queued`
+- keep the active approval clearly distinguished from queued approvals
 
-### 4. Run timeline UI
+### 2. Clarify that the visible approval is only the active one
 
-Files to inspect:
+In the active approval card/banner, add copy such as:
 
-- `src/renderer/components/RunTimeline.tsx`
-- `src/renderer/lib/runTimelineFormatting.ts`
+- `Approval 1 of 3`
+- `Next approval will appear after this one is resolved`
 
-Needed improvements:
+This will make automatic queue advancement feel intentional instead of surprising.
 
-- Add a dedicated approval event treatment instead of the current minimal fallback.
-- Show distinct visuals for:
-  - requested
-  - approved
-  - rejected
-- Include checkpoint kind and detail text.
-- Include message preview affordances for final-response if desired.
-
-### 5. Session activity / status treatment
+### 3. Add an optional queued-approvals preview
 
 Files to inspect:
 
-- `src/renderer/lib/sessionActivity.ts`
-- `src/renderer/components/ActivityPanel.tsx`
 - `src/renderer/components/ChatPane.tsx`
-
-Important rule:
-
-- Do **not** rely on `session.status` alone to decide whether the session is actively streaming versus blocked on approval.
-- Use `session.pendingApproval` as the signal for "paused awaiting human action."
-
-### 6. Error / stale checkpoint handling
-
-The frontend should handle two backend-produced edge cases cleanly:
-
-1. `resolveSessionApproval(...)` can fail if the approval is no longer active.
-2. A pending approval can disappear on reload because the backend converted it into an interrupted error after restart.
+- `src/renderer/components/ActivityPanel.tsx`
 
 Recommended UX:
 
-- show a toast or inline error if approval resolution fails
-- refresh from workspace state afterward
-- show the session error banner when the run has been interrupted
+- an accordion or compact list for `session.pendingApprovalQueue`
+- each queued item can show:
+  - title
+  - kind
+  - agent name
+  - permission kind / tool name when available
 
-## Suggested frontend implementation order
+Important:
 
-1. Add read-only pending approval banner/card in `ChatPane`.
-2. Wire approve/reject buttons to `resolveSessionApproval`.
-3. Render final-response preview from `pendingApproval.messages`.
-4. Add timeline rendering for `approval` events.
-5. Add pattern editor controls for configuring `approvalPolicy`.
-6. Refine sidebar/activity badges for "awaiting approval" state.
+- queued approvals are **read-only**
+- only the active `pendingApproval` should show Approve / Reject buttons
+
+### 4. Handle queue transitions smoothly
+
+When the active approval is resolved and the next one becomes active:
+
+- avoid jarring layout jumps
+- keep scroll position stable
+- consider a subtle transition so the user understands the queue advanced
+
+### 5. Improve error copy for queued-approval edge cases
+
+Possible backend outcomes the UI should explain well:
+
+- active approval was resolved, then the run failed before the queue fully drained
+- app restarted and the whole queue was rejected/interrupted
+- user tried to resolve an approval that is no longer active
+
+Recommended UX:
+
+- inline error or toast
+- refresh from returned workspace state
+- preserve visibility into which approval is now active
+
+### 6. Optionally surface queue state in the timeline
+
+The timeline already records all approval events, but the UI could add:
+
+- an “active” vs “queued” distinction when an approval event is still pending
+- badges or copy that explain multiple approval checkpoints exist in the same run
+
+This is optional because the core queue behavior is already represented in backend state.
 
 ## Validation commands
 
-Backend changes already pass:
+Backend queue changes should be validated with:
 
 - `bun run typecheck`
 - `bun test`
 - `bun run sidecar:test`
 - `bun run build`
-
-After the frontend agent finishes, rerun the same four commands.

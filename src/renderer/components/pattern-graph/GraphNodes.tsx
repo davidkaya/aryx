@@ -1,14 +1,15 @@
 import { memo } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
-import { CircleUser, Bot, Shuffle, Layers, Radio } from 'lucide-react';
+import { CircleUser, Shuffle, Layers, Radio, Bot } from 'lucide-react';
 
 import type { GraphNodeData } from '@renderer/lib/patternGraph';
 import type { PatternGraphNodeKind } from '@shared/domain/pattern';
+import { ProviderIcon } from '@renderer/components/ProviderIcons';
 
 const kindIcons: Record<PatternGraphNodeKind, typeof CircleUser> = {
   'user-input': CircleUser,
   'user-output': CircleUser,
-  agent: Bot,
+  agent: Bot, // fallback when no provider is resolved
   distributor: Shuffle,
   collector: Layers,
   orchestrator: Radio,
@@ -24,9 +25,16 @@ const kindColors: Record<PatternGraphNodeKind, { bg: string; border: string; tex
 };
 
 function GraphNodeContent({ data, selected }: { data: GraphNodeData; selected: boolean }) {
-  const Icon = kindIcons[data.kind] ?? Bot;
   const colors = kindColors[data.kind] ?? kindColors.agent;
   const isAgent = data.kind === 'agent';
+
+  const renderIcon = () => {
+    if (isAgent && data.provider) {
+      return <ProviderIcon provider={data.provider} className="size-4 shrink-0" />;
+    }
+    const FallbackIcon = kindIcons[data.kind] ?? Bot;
+    return <FallbackIcon className={`size-4 shrink-0 ${colors.text}`} />;
+  };
 
   return (
     <div
@@ -34,13 +42,13 @@ function GraphNodeContent({ data, selected }: { data: GraphNodeData; selected: b
         colors.bg
       } ${selected ? 'ring-2 ring-indigo-500/50' : ''} ${colors.border}`}
     >
-      <Icon className={`size-4 shrink-0 ${colors.text}`} />
+      {renderIcon()}
       <div className="min-w-0 flex-1">
         <div className={`truncate text-[12px] font-semibold ${colors.text}`}>
           {data.label}
         </div>
-        {isAgent && typeof data.order === 'number' && (
-          <div className="text-[10px] text-zinc-500">#{data.order + 1}</div>
+        {isAgent && data.modelLabel && (
+          <div className="truncate text-[10px] text-zinc-500">{data.modelLabel}</div>
         )}
       </div>
       {data.readOnly && (

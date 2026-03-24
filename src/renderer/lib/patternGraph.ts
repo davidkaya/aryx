@@ -1,4 +1,4 @@
-import type { Node, Edge, Connection } from '@xyflow/react';
+import { MarkerType, type Node, type Edge, type Connection } from '@xyflow/react';
 
 import type {
   OrchestrationMode,
@@ -10,6 +10,8 @@ import type {
   PatternGraphNodeKind,
 } from '@shared/domain/pattern';
 import { resolvePatternGraph } from '@shared/domain/pattern';
+import type { ModelProvider } from '@shared/domain/models';
+import { inferProvider, findModel, type ModelDefinition } from '@shared/domain/models';
 
 /* ── Canvas node data ──────────────────────────────────────── */
 
@@ -19,6 +21,10 @@ export interface GraphNodeData extends Record<string, unknown> {
   agentId?: string;
   order?: number;
   readOnly: boolean;
+  /** AI provider inferred from the agent's model (agent nodes only). */
+  provider?: ModelProvider;
+  /** Short display name for the agent's model (agent nodes only). */
+  modelLabel?: string;
 }
 
 /* ── View-model projection ─────────────────────────────────── */
@@ -57,22 +63,42 @@ function resolveNodeType(kind: PatternGraphNodeKind): string {
   }
 }
 
-export function toCanvasNodes(graph: PatternGraph, agents: PatternAgentDefinition[]): Node<GraphNodeData>[] {
-  return graph.nodes.map((node) => ({
-    id: node.id,
-    type: resolveNodeType(node.kind),
-    position: { x: node.position.x, y: node.position.y },
-    data: {
-      label: resolveNodeLabel(node, agents),
-      kind: node.kind,
-      agentId: node.agentId,
-      order: node.order,
-      readOnly: isSystemNode(node.kind),
-    },
-    draggable: true,
-    selectable: true,
-    deletable: false,
-  }));
+export function toCanvasNodes(
+  graph: PatternGraph,
+  agents: PatternAgentDefinition[],
+  models?: ReadonlyArray<ModelDefinition>,
+): Node<GraphNodeData>[] {
+  return graph.nodes.map((node) => {
+    let provider: ModelProvider | undefined;
+    let modelLabel: string | undefined;
+
+    if (node.kind === 'agent' && node.agentId) {
+      const agent = agents.find((a) => a.id === node.agentId);
+      if (agent?.model) {
+        provider = inferProvider(agent.model);
+        const modelDef = models ? findModel(agent.model, models) : undefined;
+        modelLabel = modelDef?.name ?? agent.model;
+      }
+    }
+
+    return {
+      id: node.id,
+      type: resolveNodeType(node.kind),
+      position: { x: node.position.x, y: node.position.y },
+      data: {
+        label: resolveNodeLabel(node, agents),
+        kind: node.kind,
+        agentId: node.agentId,
+        order: node.order,
+        readOnly: isSystemNode(node.kind),
+        provider,
+        modelLabel,
+      },
+      draggable: true,
+      selectable: true,
+      deletable: false,
+    };
+  });
 }
 
 /** Determines whether user-created edges can be deleted in this mode. */
@@ -97,6 +123,8 @@ export function toCanvasEdges(graph: PatternGraph, mode: OrchestrationMode): Edg
     type: 'smoothstep',
     animated: mode === 'handoff',
     deletable: isEdgeDeletable(edge, mode, graph),
+    markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16, color: '#52525b' },
+    style: { stroke: '#52525b', strokeWidth: 1.5 },
   }));
 }
 

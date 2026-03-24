@@ -318,6 +318,7 @@ export function PatternEditor({
           <div className="min-h-[300px] flex-1 px-5 py-3">
             <PatternGraphCanvas
               pattern={pattern}
+              availableModels={availableModels}
               onGraphChange={emitGraphChange}
               onNodeSelect={setSelectedNodeId}
               selectedNodeId={selectedNodeId}

@@ -3,6 +3,7 @@ import {
   ReactFlow,
   Background,
   BackgroundVariant,
+  MarkerType,
   useNodesState,
   useEdgesState,
   type Node,
@@ -15,6 +16,7 @@ import '@xyflow/react/dist/style.css';
 
 import type { OrchestrationMode, PatternDefinition, PatternGraph } from '@shared/domain/pattern';
 import { resolvePatternGraph } from '@shared/domain/pattern';
+import type { ModelDefinition } from '@shared/domain/models';
 import {
   addHandoffEdge,
   fromCanvasPositions,
@@ -30,6 +32,7 @@ import { graphNodeTypes } from './GraphNodes';
 
 interface PatternGraphCanvasProps {
   pattern: PatternDefinition;
+  availableModels?: ReadonlyArray<ModelDefinition>;
   onGraphChange: (graph: PatternGraph) => void;
   onNodeSelect: (nodeId: string | null) => void;
   selectedNodeId: string | null;
@@ -37,6 +40,7 @@ interface PatternGraphCanvasProps {
 
 export function PatternGraphCanvas({
   pattern,
+  availableModels,
   onGraphChange,
   onNodeSelect,
   selectedNodeId,
@@ -45,7 +49,7 @@ export function PatternGraphCanvas({
   const draggingRef = useRef(false);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(
-    toCanvasNodes(graph, pattern.agents),
+    toCanvasNodes(graph, pattern.agents, availableModels),
   );
   const [edges, setEdges, onEdgesChange] = useEdgesState(
     toCanvasEdges(graph, pattern.mode),
@@ -53,9 +57,9 @@ export function PatternGraphCanvas({
 
   // Sync canvas when pattern changes externally
   useEffect(() => {
-    setNodes(toCanvasNodes(graph, pattern.agents));
+    setNodes(toCanvasNodes(graph, pattern.agents, availableModels));
     setEdges(toCanvasEdges(graph, pattern.mode));
-  }, [graph, pattern.agents, pattern.mode, setNodes, setEdges]);
+  }, [graph, pattern.agents, pattern.mode, availableModels, setNodes, setEdges]);
 
   const handleNodesChange: OnNodesChange<Node<GraphNodeData>> = useCallback(
     (changes) => {
@@ -162,6 +166,7 @@ export function PatternGraphCanvas({
         defaultEdgeOptions={{
           type: 'smoothstep',
           style: { stroke: '#52525b', strokeWidth: 1.5 },
+          markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16, color: '#52525b' },
         }}
         connectionLineStyle={{ stroke: '#6366f1', strokeWidth: 1.5 }}
         deleteKeyCode="Delete"

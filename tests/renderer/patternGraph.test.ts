@@ -258,4 +258,46 @@ describe('edge deletion rules', () => {
     expect(inputNode!.type).toBe('userInputNode');
     expect(outputNode!.type).toBe('userOutputNode');
   });
+
+  test('edges have directional arrow markers', () => {
+    const pattern = findPattern('sequential');
+    const graph = resolvePatternGraph(pattern);
+    const edges = toCanvasEdges(graph, pattern.mode);
+
+    expect(edges.length).toBeGreaterThan(0);
+    for (const edge of edges) {
+      expect(edge.markerEnd).toBeDefined();
+      expect((edge.markerEnd as { type: string }).type).toBe('arrowclosed');
+    }
+  });
+
+  test('agent nodes include provider and model label when models catalog is provided', () => {
+    const { modelCatalog } = require('@shared/domain/models');
+    const pattern = findPattern('sequential');
+    const graph = resolvePatternGraph(pattern);
+    const nodes = toCanvasNodes(graph, pattern.agents, modelCatalog);
+
+    const agentNodes = nodes.filter((n) => n.data.kind === 'agent');
+    expect(agentNodes.length).toBeGreaterThan(0);
+
+    for (const node of agentNodes) {
+      expect(node.data.provider).toBeDefined();
+      expect(node.data.modelLabel).toBeDefined();
+      expect(node.data.modelLabel!.length).toBeGreaterThan(0);
+    }
+  });
+
+  test('agent nodes infer provider from model id without models catalog', () => {
+    const pattern = findPattern('sequential');
+    const graph = resolvePatternGraph(pattern);
+    const nodes = toCanvasNodes(graph, pattern.agents);
+
+    const agentNodes = nodes.filter((n) => n.data.kind === 'agent');
+    for (const node of agentNodes) {
+      // Provider should still be inferred from model id prefix
+      expect(node.data.provider).toBeDefined();
+      // Without catalog, modelLabel falls back to the raw model id
+      expect(node.data.modelLabel).toBeDefined();
+    }
+  });
 });

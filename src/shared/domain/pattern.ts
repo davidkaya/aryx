@@ -427,7 +427,7 @@ export function createBuiltinPatterns(timestamp: string): PatternDefinition[] {
           name: 'Triage',
           description: 'Routes the request to the right specialist.',
           instructions:
-            'You triage requests and must hand them off to the most appropriate specialist. Do not do the specialist work yourself once the right owner is clear.',
+            'You triage requests and must hand them off to the most appropriate specialist. For any substantive task, hand off before inspecting files, calling tools, or drafting the implementation yourself. Do not claim that you delegated unless you actually executed the handoff.',
           model: defaultModels.gpt54,
           reasoningEffort: 'medium',
         },

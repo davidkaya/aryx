@@ -91,7 +91,8 @@ describe('pattern validation', () => {
     const handoff = createBuiltinPatterns(BUILTIN_TIMESTAMP).find((pattern) => pattern.mode === 'handoff');
 
     expect(handoff).toBeDefined();
-    expect(handoff?.agents[0].instructions).toContain('Do not do the specialist work yourself');
+    expect(handoff?.agents[0].instructions).toContain('hand off before inspecting files');
+    expect(handoff?.agents[0].instructions).toContain('Do not claim that you delegated');
     expect(handoff?.agents[1].instructions).toContain('own the substantive answer');
     expect(handoff?.agents[2].instructions).toContain('own the substantive answer');
   });

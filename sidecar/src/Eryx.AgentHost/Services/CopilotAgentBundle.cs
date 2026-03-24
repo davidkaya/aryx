@@ -136,10 +136,17 @@ internal sealed class CopilotAgentBundle : IAsyncDisposable
                 continue;
             }
 
+            string handoffReason = string.Equals(
+                route.TargetAgentId,
+                topology.EntryAgentId,
+                StringComparison.Ordinal)
+                ? HandoffWorkflowGuidance.CreateReturnReason(targetDefinition)
+                : HandoffWorkflowGuidance.CreateForwardReason(targetDefinition);
+
             builder = builder.WithHandoff(
                 sourceAgent,
                 targetAgent,
-                HandoffWorkflowGuidance.CreateForwardReason(targetDefinition));
+                handoffReason);
         }
 
         return builder.Build();

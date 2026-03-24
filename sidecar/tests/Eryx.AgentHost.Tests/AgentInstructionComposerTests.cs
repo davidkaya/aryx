@@ -71,7 +71,9 @@ public sealed class AgentInstructionComposerTests
         string instructions = AgentInstructionComposer.Compose(pattern, triage, agentIndex: 0);
 
         Assert.Contains("routing gate", instructions, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("Do not perform the specialist", instructions, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Do not inspect files", instructions, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("actual handoff", instructions, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Do not claim that you handed work off", instructions, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

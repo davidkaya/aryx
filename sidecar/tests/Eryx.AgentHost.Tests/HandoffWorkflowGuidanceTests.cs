@@ -12,6 +12,7 @@ public sealed class HandoffWorkflowGuidanceTests
 
         Assert.Contains("explicit handoffs", instructions, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Do not claim that you delegated", instructions, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Do not narrate a handoff", instructions, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Specialists should complete the substantive work", instructions, StringComparison.OrdinalIgnoreCase);
     }
 

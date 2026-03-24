@@ -11,6 +11,8 @@ internal static class HandoffWorkflowGuidance
                If another agent should do the substantive work, perform an actual handoff instead of answering as though the handoff already happened.
                Do not claim that you delegated unless you actually executed the handoff.
                The triage agent should route to the best specialist promptly once ownership is clear.
+               In a specialist workflow, the triage agent should hand off before inspecting files, calling tools, or drafting the substantive implementation.
+               Do not narrate a handoff in plain text without executing the handoff itself.
                Specialists should complete the substantive work after handoff and only hand control back when the task needs re-routing, broader coordination, or is outside their specialty.
                """;
     }

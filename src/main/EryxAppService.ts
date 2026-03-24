@@ -103,6 +103,16 @@ function isBuiltinPattern(patternId: string): boolean {
   return patternId.startsWith('pattern-');
 }
 
+function equalStringArrays(left?: readonly string[], right?: readonly string[]): boolean {
+  const normalizedLeft = left ?? [];
+  const normalizedRight = right ?? [];
+  if (normalizedLeft.length !== normalizedRight.length) {
+    return false;
+  }
+
+  return normalizedLeft.every((value, index) => value === normalizedRight[index]);
+}
+
 export class EryxAppService extends EventEmitter<AppServiceEvents> {
   private readonly workspaceRepository = new WorkspaceRepository();
   private readonly sidecar = new SidecarClient();
@@ -124,7 +134,8 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
   async loadWorkspace(): Promise<WorkspaceState> {
     if (!this.workspace) {
       this.workspace = await this.workspaceRepository.load();
-      if (this.failInterruptedPendingApprovals(this.workspace)) {
+      const didPruneApprovalTools = await this.pruneUnavailableApprovalTools(this.workspace);
+      if (didPruneApprovalTools || this.failInterruptedPendingApprovals(this.workspace)) {
         await this.workspaceRepository.save(this.workspace);
       }
     }
@@ -200,9 +211,10 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
 
   async savePattern(pattern: PatternDefinition): Promise<WorkspaceState> {
     const workspace = await this.loadWorkspace();
+    const knownApprovalToolNames = await this.listKnownApprovalToolNames(workspace);
     const issues = validatePatternDefinition(
       pattern,
-      this.listKnownApprovalToolNames(workspace),
+      knownApprovalToolNames,
     ).filter((issue) => issue.level === 'error');
     if (issues.length > 0) {
       throw new Error(issues[0].message);
@@ -281,7 +293,7 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
       workspace.settings.tooling.mcpServers.push(candidate);
     }
 
-    this.pruneUnavailableApprovalTools(workspace);
+    await this.pruneUnavailableApprovalTools(workspace);
     return this.persistAndBroadcast(workspace);
   }
 
@@ -299,7 +311,7 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
       };
     }
 
-    this.pruneUnavailableApprovalTools(workspace);
+    await this.pruneUnavailableApprovalTools(workspace);
     return this.persistAndBroadcast(workspace);
   }
 
@@ -328,7 +340,7 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
       workspace.settings.tooling.lspProfiles.push(candidate);
     }
 
-    this.pruneUnavailableApprovalTools(workspace);
+    await this.pruneUnavailableApprovalTools(workspace);
     return this.persistAndBroadcast(workspace);
   }
 
@@ -346,7 +358,7 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
       };
     }
 
-    this.pruneUnavailableApprovalTools(workspace);
+    await this.pruneUnavailableApprovalTools(workspace);
     return this.persistAndBroadcast(workspace);
   }
 
@@ -703,7 +715,7 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
       throw new Error('Scratchpad sessions do not support tool auto-approval settings.');
     }
 
-    const knownToolNames = new Set(this.listKnownApprovalToolNames(workspace));
+    const knownToolNames = new Set(await this.listKnownApprovalToolNames(workspace));
     const unknownToolName = settings?.autoApprovedToolNames.find((toolName) => !knownToolNames.has(toolName));
     if (unknownToolName) {
       throw new Error(`Unknown approval tool "${unknownToolName}".`);
@@ -1172,23 +1184,42 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
     return normalizePatternModels(patternWithApprovalSettings, modelCatalog);
   }
 
-  private listKnownApprovalToolNames(workspace: WorkspaceState): string[] {
-    return listApprovalToolNames(workspace.settings.tooling);
+  private async listKnownApprovalToolNames(workspace: WorkspaceState): Promise<string[]> {
+    const capabilities = await this.loadSidecarCapabilities();
+    const runtimeTools = capabilities.runtimeTools.length > 0 ? capabilities.runtimeTools : undefined;
+    return listApprovalToolNames(workspace.settings.tooling, runtimeTools);
   }
 
-  private pruneUnavailableApprovalTools(workspace: WorkspaceState): void {
-    const knownToolNames = this.listKnownApprovalToolNames(workspace);
+  private async pruneUnavailableApprovalTools(workspace: WorkspaceState): Promise<boolean> {
+    const knownToolNames = await this.listKnownApprovalToolNames(workspace);
+    let changed = false;
 
     for (const pattern of workspace.patterns) {
-      pattern.approvalPolicy = pruneApprovalPolicyTools(pattern.approvalPolicy, knownToolNames);
+      const nextPolicy = pruneApprovalPolicyTools(pattern.approvalPolicy, knownToolNames);
+      if (!equalStringArrays(
+        pattern.approvalPolicy?.autoApprovedToolNames,
+        nextPolicy?.autoApprovedToolNames,
+      )) {
+        pattern.approvalPolicy = nextPolicy;
+        changed = true;
+      }
     }
 
     for (const session of workspace.sessions) {
-      session.approvalSettings = pruneSessionApprovalSettings(
+      const nextSettings = pruneSessionApprovalSettings(
         session.approvalSettings,
         knownToolNames,
       );
+      if (!equalStringArrays(
+        session.approvalSettings?.autoApprovedToolNames,
+        nextSettings?.autoApprovedToolNames,
+      )) {
+        session.approvalSettings = nextSettings;
+        changed = true;
+      }
     }
+
+    return changed;
   }
 
   private buildRunTurnToolingConfig(

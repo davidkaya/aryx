@@ -52,7 +52,13 @@ export interface SessionToolingSelection {
   enabledLspProfileIds: string[];
 }
 
-export type ApprovalToolKind = 'mcp' | 'lsp' | 'mixed';
+export type ApprovalToolKind = 'builtin' | 'mcp' | 'lsp' | 'mixed';
+
+export interface RuntimeToolDefinition {
+  id: string;
+  label: string;
+  description?: string;
+}
 
 export interface ApprovalToolDefinition {
   id: string;
@@ -60,6 +66,7 @@ export interface ApprovalToolDefinition {
   kind: ApprovalToolKind;
   providerIds: string[];
   providerNames: string[];
+  description?: string;
 }
 
 const lspApprovalOperations = [
@@ -69,6 +76,17 @@ const lspApprovalOperations = [
   { suffix: 'hover', label: 'Hover' },
   { suffix: 'references', label: 'References' },
 ] as const;
+
+// Fallback runtime tools used before sidecar capabilities are loaded or when the
+// CLI cannot report its built-in tool catalog dynamically.
+const fallbackRuntimeApprovalTools: ReadonlyArray<RuntimeToolDefinition> = [
+  { id: 'glob', label: 'glob', description: 'Match files by glob pattern.' },
+  { id: 'lsp', label: 'lsp', description: 'Query configured language servers.' },
+  { id: 'rg', label: 'rg', description: 'Search file contents with ripgrep.' },
+  { id: 'view', label: 'view', description: 'Read files and list directories.' },
+  { id: 'web_fetch', label: 'web_fetch', description: 'Fetch content from a URL.' },
+  { id: 'web_search', label: 'web_search', description: 'Search the web for current information.' },
+];
 
 export function createWorkspaceSettings(): WorkspaceSettings {
   return {
@@ -114,8 +132,21 @@ export function normalizeSessionToolingSelection(
 
 export function listApprovalToolDefinitions(
   tooling: WorkspaceToolingSettings,
+  runtimeTools: ReadonlyArray<RuntimeToolDefinition> = fallbackRuntimeApprovalTools,
 ): ApprovalToolDefinition[] {
   const toolsById = new Map<string, ApprovalToolDefinition>();
+  const runtimeApprovalTools = runtimeTools.length > 0 ? runtimeTools : fallbackRuntimeApprovalTools;
+
+  for (const tool of runtimeApprovalTools) {
+    registerApprovalTool(toolsById, {
+      id: tool.id,
+      label: tool.label,
+      description: tool.description,
+      kind: 'builtin',
+      providerId: `builtin:${tool.id}`,
+      providerName: 'Built-in',
+    });
+  }
 
   for (const server of tooling.mcpServers) {
     for (const toolName of normalizeStringArray(server.tools)) {
@@ -146,8 +177,11 @@ export function listApprovalToolDefinitions(
     left.label.localeCompare(right.label) || left.id.localeCompare(right.id));
 }
 
-export function listApprovalToolNames(tooling: WorkspaceToolingSettings): string[] {
-  return listApprovalToolDefinitions(tooling).map((tool) => tool.id);
+export function listApprovalToolNames(
+  tooling: WorkspaceToolingSettings,
+  runtimeTools?: ReadonlyArray<RuntimeToolDefinition>,
+): string[] {
+  return listApprovalToolDefinitions(tooling, runtimeTools).map((tool) => tool.id);
 }
 
 export function validateMcpServerDefinition(server: McpServerDefinition): string | undefined {
@@ -276,6 +310,7 @@ function registerApprovalTool(
   tool: {
     id: string;
     label: string;
+    description?: string;
     kind: Exclude<ApprovalToolKind, 'mixed'>;
     providerId: string;
     providerName: string;
@@ -286,6 +321,7 @@ function registerApprovalTool(
     toolsById.set(tool.id, {
       id: tool.id,
       label: tool.label,
+      description: tool.description,
       kind: tool.kind,
       providerIds: [tool.providerId],
       providerNames: [tool.providerName],
@@ -298,6 +334,9 @@ function registerApprovalTool(
   }
   if (!existing.providerNames.includes(tool.providerName)) {
     existing.providerNames.push(tool.providerName);
+  }
+  if (!existing.description && tool.description) {
+    existing.description = tool.description;
   }
   if (existing.kind !== tool.kind) {
     existing.kind = 'mixed';

@@ -19,6 +19,7 @@ import {
 import type {
   LspProfileDefinition,
   McpServerDefinition,
+  RuntimeToolDefinition,
   SessionToolingSelection,
   WorkspaceToolingSettings,
 } from '@shared/domain/tooling';
@@ -163,6 +164,7 @@ interface ActivityPanelProps {
   lspProfiles: LspProfileDefinition[];
   mcpServers: McpServerDefinition[];
   toolingSettings: WorkspaceToolingSettings;
+  runtimeTools?: ReadonlyArray<RuntimeToolDefinition>;
   onJumpToMessage?: (messageId: string) => void;
   onUpdateSessionTooling: (selection: SessionToolingSelection) => void;
   onUpdateSessionApprovalSettings: (settings: { autoApprovedToolNames?: string[] }) => void;
@@ -176,6 +178,7 @@ export function ActivityPanel({
   lspProfiles,
   mcpServers,
   toolingSettings,
+  runtimeTools,
   onJumpToMessage,
   onUpdateSessionTooling,
   onUpdateSessionApprovalSettings,
@@ -188,7 +191,10 @@ export function ActivityPanel({
     [activity, pattern.agents],
   );
   const selection = useMemo(() => resolveSessionToolingSelection(session), [session]);
-  const approvalTools = useMemo(() => listApprovalToolDefinitions(toolingSettings), [toolingSettings]);
+  const approvalTools = useMemo(
+    () => listApprovalToolDefinitions(toolingSettings, runtimeTools),
+    [runtimeTools, toolingSettings],
+  );
 
   const isOverridden = session.approvalSettings !== undefined;
   const effectiveAutoApproved = new Set(
@@ -353,7 +359,7 @@ export function ActivityPanel({
               </p>
             ) : approvalTools.length === 0 ? (
               <p className="text-[11px] leading-relaxed text-zinc-600">
-                Add MCP servers or LSP profiles in Settings to configure tool auto-approvals.
+                No approval-capable runtime tools are currently available.
               </p>
             ) : (
               <>
@@ -478,7 +484,13 @@ function ApprovalOverrideRow({
   disabled: boolean;
   onToggle: () => void;
 }) {
-  const kindBadge = tool.kind === 'lsp' ? 'LSP' : tool.kind === 'mcp' ? 'MCP' : 'Mixed';
+  const kindBadge = tool.kind === 'builtin'
+    ? 'Built-in'
+    : tool.kind === 'lsp'
+      ? 'LSP'
+      : tool.kind === 'mcp'
+        ? 'MCP'
+        : 'Mixed';
   return (
     <button
       className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition ${
@@ -496,6 +508,11 @@ function ApprovalOverrideRow({
             {kindBadge}
           </span>
         </div>
+        {(tool.description || tool.providerNames.length > 0) && (
+          <div className="truncate text-[10px] text-zinc-600">
+            {tool.description ?? tool.providerNames.join(', ')}
+          </div>
+        )}
       </div>
       <ToggleSwitch enabled={enabled} />
     </button>

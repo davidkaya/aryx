@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using GitHub.Copilot.SDK;
+using GitHub.Copilot.SDK.Rpc;
 using Eryx.AgentHost.Contracts;
 
 namespace Eryx.AgentHost.Services;
@@ -187,6 +188,7 @@ public sealed class SidecarProtocolHost
     private static async Task<SidecarCapabilitiesDto> BuildCapabilitiesAsync(CancellationToken cancellationToken)
     {
         IReadOnlyList<SidecarModelCapabilityDto> models = [];
+        IReadOnlyList<SidecarRuntimeToolDto> runtimeTools = [];
         CopilotCliContext cliContext;
         SidecarConnectionDiagnosticsDto connection;
         SidecarCopilotCliVersionDiagnosticsDto? cliVersion = null;
@@ -227,6 +229,14 @@ public sealed class SidecarProtocolHost
                 cancellationToken).ConfigureAwait(false);
 
             models = await ListAvailableModelsAsync(client, cancellationToken).ConfigureAwait(false);
+            try
+            {
+                runtimeTools = await ListAvailableRuntimeToolsAsync(client, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception exception)
+            {
+                Console.Error.WriteLine($"[eryx sidecar] Failed to list available Copilot runtime tools: {exception.Message}");
+            }
             cliVersion = await cliVersionTask.ConfigureAwait(false);
             connection = CreateReadyConnectionDiagnostics(cliContext.CliPath, models.Count, cliVersion, account);
         }
@@ -241,6 +251,7 @@ public sealed class SidecarProtocolHost
         {
             Modes = BuildModeCapabilities(),
             Models = models,
+            RuntimeTools = runtimeTools,
             Connection = connection,
         };
     }
@@ -281,6 +292,24 @@ public sealed class SidecarProtocolHost
                     : null,
             })
             .OrderBy(model => model.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static async Task<IReadOnlyList<SidecarRuntimeToolDto>> ListAvailableRuntimeToolsAsync(
+        CopilotClient client,
+        CancellationToken cancellationToken)
+    {
+        ToolsListResult result = await client.Rpc.Tools.ListAsync(null!, cancellationToken).ConfigureAwait(false);
+        return result.Tools
+            .Where(tool => !string.IsNullOrWhiteSpace(tool.Name))
+            .Select(tool => new SidecarRuntimeToolDto
+            {
+                Id = tool.Name.Trim(),
+                Label = tool.Name.Trim(),
+                Description = string.IsNullOrWhiteSpace(tool.Description) ? null : tool.Description.Trim(),
+            })
+            .DistinctBy(tool => tool.Id, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(tool => tool.Label, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
 

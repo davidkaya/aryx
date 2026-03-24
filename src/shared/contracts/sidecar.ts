@@ -1,6 +1,7 @@
 import type { PatternDefinition, PatternValidationIssue, ReasoningEffort } from '@shared/domain/pattern';
 import type { ApprovalCheckpointKind, ApprovalDecision } from '@shared/domain/approval';
 import type { ChatMessageRecord } from '@shared/domain/session';
+import type { RuntimeToolDefinition } from '@shared/domain/tooling';
 
 export interface SidecarModeCapability {
   available: boolean;
@@ -52,6 +53,7 @@ export interface SidecarCapabilities {
   runtime: 'dotnet-maf';
   modes: Record<PatternDefinition['mode'], SidecarModeCapability>;
   models: SidecarModelCapability[];
+  runtimeTools: RuntimeToolDefinition[];
   connection: SidecarConnectionDiagnostics;
 }
 

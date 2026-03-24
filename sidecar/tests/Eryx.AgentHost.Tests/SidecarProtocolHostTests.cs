@@ -37,6 +37,10 @@ public sealed class SidecarProtocolHostTests
                 JsonElement model = Assert.Single(models);
                 Assert.Equal("gpt-5.4", model.GetProperty("id").GetString());
                 Assert.Equal("medium", model.GetProperty("defaultReasoningEffort").GetString());
+                JsonElement[] runtimeTools = capabilities.GetProperty("runtimeTools").EnumerateArray().ToArray();
+                JsonElement runtimeTool = Assert.Single(runtimeTools);
+                Assert.Equal("web_fetch", runtimeTool.GetProperty("id").GetString());
+                Assert.Equal("web_fetch", runtimeTool.GetProperty("label").GetString());
                 JsonElement connection = capabilities.GetProperty("connection");
                 Assert.Equal("ready", connection.GetProperty("status").GetString());
                 Assert.Equal(@"C:\tools\copilot\copilot.exe", connection.GetProperty("copilotCliPath").GetString());
@@ -401,6 +405,15 @@ public sealed class SidecarProtocolHostTests
                         Name = "GPT-5.4",
                         SupportedReasoningEfforts = ["low", "medium", "high", "xhigh"],
                         DefaultReasoningEffort = "medium",
+                    },
+                ],
+                RuntimeTools =
+                [
+                    new SidecarRuntimeToolDto
+                    {
+                        Id = "web_fetch",
+                        Label = "web_fetch",
+                        Description = "Fetch content from the web.",
                     },
                 ],
                 Connection = new SidecarConnectionDiagnosticsDto

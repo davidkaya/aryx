@@ -32,6 +32,7 @@ import {
 import {
   listApprovalToolDefinitions,
   type ApprovalToolDefinition,
+  type RuntimeToolDefinition,
   type WorkspaceToolingSettings,
 } from '@shared/domain/tooling';
 
@@ -42,6 +43,7 @@ interface PatternEditorProps {
   pattern: PatternDefinition;
   isBuiltin: boolean;
   toolingSettings: WorkspaceToolingSettings;
+  runtimeTools?: ReadonlyArray<RuntimeToolDefinition>;
   onChange: (pattern: PatternDefinition) => void;
   onDelete?: () => void;
   onSave: () => void;
@@ -209,6 +211,7 @@ export function PatternEditor({
   pattern,
   isBuiltin,
   toolingSettings,
+  runtimeTools,
   onChange,
   onDelete,
   onSave,
@@ -262,7 +265,7 @@ export function PatternEditor({
     });
   }
 
-  const approvalTools = listApprovalToolDefinitions(toolingSettings);
+  const approvalTools = listApprovalToolDefinitions(toolingSettings, runtimeTools);
   const autoApprovedSet = new Set(pattern.approvalPolicy?.autoApprovedToolNames ?? []);
 
   function toggleToolAutoApproval(toolId: string) {
@@ -568,7 +571,7 @@ export function PatternEditor({
             <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 py-3">
               {approvalTools.length === 0 ? (
                 <p className="py-2 text-center text-[11px] text-zinc-600">
-                  No tools available. Add MCP servers or LSP profiles in Settings to configure auto-approvals.
+                  No approval-capable runtime tools are currently available.
                 </p>
               ) : (
                 <div className="space-y-0.5">
@@ -719,7 +722,13 @@ function ToolApprovalToggleRow({
   enabled: boolean;
   onToggle: () => void;
 }) {
-  const kindBadge = tool.kind === 'lsp' ? 'LSP' : tool.kind === 'mcp' ? 'MCP' : 'Mixed';
+  const kindBadge = tool.kind === 'builtin'
+    ? 'Built-in'
+    : tool.kind === 'lsp'
+      ? 'LSP'
+      : tool.kind === 'mcp'
+        ? 'MCP'
+        : 'Mixed';
   return (
     <button
       className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition hover:bg-zinc-800/60"
@@ -733,8 +742,10 @@ function ToolApprovalToggleRow({
             {kindBadge}
           </span>
         </div>
-        {tool.providerNames.length > 0 && (
-          <div className="truncate text-[10px] text-zinc-600">{tool.providerNames.join(', ')}</div>
+        {(tool.description || tool.providerNames.length > 0) && (
+          <div className="truncate text-[10px] text-zinc-600">
+            {tool.description ?? tool.providerNames.join(', ')}
+          </div>
         )}
       </div>
       <ToggleSwitch enabled={enabled} onToggle={onToggle} />

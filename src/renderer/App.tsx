@@ -275,6 +275,7 @@ export default function App() {
         lspProfiles={workspace.settings.tooling.lspProfiles}
         mcpServers={workspace.settings.tooling.mcpServers}
         toolingSettings={workspace.settings.tooling}
+        runtimeTools={sidecarCapabilities?.runtimeTools}
         onJumpToMessage={jumpToMessage}
         onUpdateSessionTooling={(selection) => {
           void api.updateSessionTooling({

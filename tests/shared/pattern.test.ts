@@ -137,9 +137,9 @@ describe('pattern validation', () => {
       ...singlePattern!,
       approvalPolicy: {
         rules: [{ kind: 'tool-call' }],
-        autoApprovedToolNames: ['git.status', 'unknown.tool'],
+        autoApprovedToolNames: ['web_fetch', 'unknown.tool'],
       },
-    }, ['git.status']);
+    }, ['web_fetch']);
 
     expect(issues.find((issue) => issue.field === 'approvalPolicy')?.message).toBe(
       'Approval auto-approve references unknown tool "unknown.tool".',

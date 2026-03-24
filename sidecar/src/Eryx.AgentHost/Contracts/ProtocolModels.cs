@@ -69,6 +69,13 @@ public sealed class SidecarModelCapabilityDto
     public string? DefaultReasoningEffort { get; init; }
 }
 
+public sealed class SidecarRuntimeToolDto
+{
+    public string Id { get; init; } = string.Empty;
+    public string Label { get; init; } = string.Empty;
+    public string? Description { get; init; }
+}
+
 public sealed class SidecarConnectionDiagnosticsDto
 {
     public string Status { get; init; } = "copilot-error";
@@ -103,6 +110,7 @@ public sealed class SidecarCapabilitiesDto
     public string Runtime { get; init; } = "dotnet-maf";
     public Dictionary<string, SidecarModeCapabilityDto> Modes { get; init; } = new(StringComparer.OrdinalIgnoreCase);
     public IReadOnlyList<SidecarModelCapabilityDto> Models { get; init; } = [];
+    public IReadOnlyList<SidecarRuntimeToolDto> RuntimeTools { get; init; } = [];
     public SidecarConnectionDiagnosticsDto Connection { get; init; } = new();
 }
 

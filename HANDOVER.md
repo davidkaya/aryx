@@ -8,7 +8,7 @@ This builds on the existing approval-checkpoint system:
 
 - `final-response` approvals still work the same way
 - `tool-call` checkpoints still decide **whether a tool call needs approval at all**
-- the new feature decides **which known tools can be auto-approved instead of surfacing a manual approval**
+- the new feature decides **which known runtime tools can be auto-approved instead of surfacing a manual approval**
 
 The approval queue work from earlier is unchanged and still applies.
 
@@ -80,20 +80,38 @@ Unknown or non-tool-specific permission requests still require manual approval w
 Use the shared helper in `src/shared/domain/tooling.ts`:
 
 ```ts
-listApprovalToolDefinitions(workspace.settings.tooling)
+listApprovalToolDefinitions(workspace.settings.tooling, sidecarCapabilities?.runtimeTools)
 ```
 
 This is the canonical source for UI rendering and validation.
+
+Important:
+
+- runtime tools should come from `describeSidecarCapabilities().runtimeTools` when available
+- the shared helper falls back to a conservative built-in catalog until capabilities load or when the CLI cannot report tools
+- the helper also merges configured MCP server tools and derived LSP tools
 
 Each returned item includes:
 
 - `id` → the runtime tool identifier used by approvals
 - `label` → human-readable label for the UI
-- `kind` → `mcp`, `lsp`, or `mixed`
+- `kind` → `builtin`, `mcp`, `lsp`, or `mixed`
 - `providerIds`
 - `providerNames`
 
 Do **not** re-derive tool IDs in the renderer.
+
+### Runtime tool IDs
+
+For Copilot CLI runtime tools, the ID is the tool name returned by the sidecar capability payload.
+
+Examples:
+
+- `web_fetch`
+- `view`
+- `glob`
+
+Descriptions come from the sidecar when available and can be surfaced in the UI.
 
 ### MCP tool IDs
 
@@ -157,7 +175,7 @@ The backend now enforces and maintains tool references consistently:
 - saving a pattern rejects unknown `autoApprovedToolNames`
 - updating session approval settings rejects unknown tool IDs
 - scratchpad sessions reject non-empty session tool auto-approval overrides
-- workspace load prunes stale tool IDs from patterns and sessions
+- workspace load normalizes approval state and the app service prunes stale tool IDs after runtime tools/capabilities are available
 - saving or deleting MCP/LSP definitions also prunes stale tool IDs from patterns and sessions
 
 This is intentional: stored approval defaults should only reference tools that still exist.
@@ -180,13 +198,17 @@ Existing UI can keep working without changes, but the UX agent can now surface b
 - `src/shared/domain/approval.ts`
   - pattern defaults, session override model, effective-policy helpers, pruning/validation helpers
 - `src/shared/domain/tooling.ts`
-  - canonical `listApprovalToolDefinitions(...)` helper
+  - canonical merged runtime/MCP/LSP `listApprovalToolDefinitions(...)` helper
+- `src/shared/contracts/sidecar.ts`
+  - runtime tool capability payload
 - `src/shared/domain/session.ts`
   - session approval settings + effective pattern merge helper
 - `src/main/EryxAppService.ts`
   - pattern validation, session override IPC handler, tooling cleanup, effective-pattern merge
 - `src/main/persistence/workspaceRepository.ts`
-  - load-time normalization + pruning for stale tool IDs
+  - load-time normalization without prematurely pruning dynamic runtime tool IDs
+- `sidecar/src/Eryx.AgentHost/Services/SidecarProtocolHost.cs`
+  - dynamic Copilot CLI runtime tool discovery via `tools.list`
 - `src/shared/contracts/ipc.ts`
 - `src/shared/contracts/channels.ts`
 - `src\preload\index.ts`
@@ -198,55 +220,27 @@ Existing UI can keep working without changes, but the UX agent can now surface b
 
 ## UX work for the frontend agent
 
-### 1. Pattern editor: default tool auto-approval
+All UX tasks from this section have been implemented in commit `4ff5cbb`.
 
-In `PatternEditor`, add a section that renders `listApprovalToolDefinitions(workspace.settings.tooling)`.
+### 1. Pattern editor: default tool auto-approval — ✅ Done
 
-Recommended behavior:
+`PatternEditor` renders `listApprovalToolDefinitions(workspace.settings.tooling, sidecarCapabilities?.runtimeTools)` with toggles writing to `pattern.approvalPolicy.autoApprovedToolNames`. Runtime tools come from the sidecar when available and fall back to the shared built-in catalog until capabilities load.
 
-- show every available approval tool with a toggle
-- write the selected tool IDs to `pattern.approvalPolicy.autoApprovedToolNames`
-- keep this separate from the existing `tool-call` / `final-response` checkpoint toggles
-- if there are no tools, show an empty state instead of an interactive list
+### 2. Activity panel: per-session override — ✅ Done
 
-### 2. Activity panel: per-session override
+Right-side Activity panel shows "Inheriting pattern defaults" / "Custom for this session" badge with "Reset to pattern" action. Toggle rows for each tool call `updateSessionApprovalSettings(...)`.
 
-In the right-side Activity panel, add a per-session auto-approval section for tools.
+### 3. Disable while running — ✅ Done
 
-Recommended behavior:
+Per-session override controls disabled when `session.status === 'running'`. Scratchpad shows non-interactive explanation.
 
-- base the list on `listApprovalToolDefinitions(workspace.settings.tooling)`
-- show the current **effective** state
-- distinguish inherited vs overridden state in the UI
-- allow resetting the session to inherit the pattern defaults
-- call `updateSessionApprovalSettings(...)` when the user changes the override
+### 4. Surface tool context in approval UI — ✅ Done
 
-Suggested UX:
+`approval.toolName` displayed in both the active approval banner and queued approval list when present.
 
-- `Inheriting pattern defaults` badge/state when `session.approvalSettings` is `undefined`
-- `Custom for this session` badge/state when the override object exists
-- `Reset to pattern` action that calls `updateSessionApprovalSettings({ sessionId })`
+### 5. Avoid ID duplication logic in the renderer — ✅ Done
 
-### 3. Disable while running
-
-Match the current tools behavior:
-
-- disable the per-session override controls while `session.status === 'running'`
-- scratchpad sessions should show a non-interactive explanation because tool auto-approval does not apply there
-
-### 4. Surface tool context in approval UI
-
-Optional but recommended:
-
-- show `approval.toolName` in the active approval banner / queued approval list when present
-- this is now available for tool-specific approval requests
-
-### 5. Avoid ID duplication logic in the renderer
-
-Important:
-
-- do not manually rebuild LSP tool IDs in UI code
-- use the shared helper output and persist the `id` values from it
+All tool ID resolution uses `listApprovalToolDefinitions()` output exclusively.
 
 ## Validation commands
 

@@ -157,7 +157,7 @@ describe('tooling settings helpers', () => {
     ).toBe('LSP profile "Typescript LSP" needs the "--stdio" argument.');
   });
 
-  test('lists approval tools from MCP and LSP definitions using runtime tool identifiers', () => {
+  test('lists builtin, MCP, and LSP approval tools using runtime tool identifiers', () => {
     const tools = listApprovalToolDefinitions({
       mcpServers: [
         {
@@ -196,6 +196,14 @@ describe('tooling settings helpers', () => {
     });
 
     expect(tools).toContainEqual({
+      id: 'web_fetch',
+      label: 'web_fetch',
+      description: 'Fetch content from a URL.',
+      kind: 'builtin',
+      providerIds: ['builtin:web_fetch'],
+      providerNames: ['Built-in'],
+    });
+    expect(tools).toContainEqual({
       id: 'git.status',
       label: 'git.status',
       kind: 'mcp',
@@ -209,5 +217,28 @@ describe('tooling settings helpers', () => {
       providerIds: ['ts'],
       providerNames: ['TypeScript'],
     });
+  });
+
+  test('prefers dynamically reported runtime tools over the fallback builtin catalog', () => {
+    const tools = listApprovalToolDefinitions(
+      { mcpServers: [], lspProfiles: [] },
+      [
+        {
+          id: 'fetch',
+          label: 'fetch',
+          description: 'Dynamic runtime tool from Copilot CLI.',
+        },
+      ],
+    );
+
+    expect(tools).toContainEqual({
+      id: 'fetch',
+      label: 'fetch',
+      description: 'Dynamic runtime tool from Copilot CLI.',
+      kind: 'builtin',
+      providerIds: ['builtin:fetch'],
+      providerNames: ['Built-in'],
+    });
+    expect(tools.some((tool) => tool.id === 'web_fetch')).toBe(false);
   });
 });

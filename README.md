@@ -84,7 +84,7 @@ Eryx includes connection status in the app so you can quickly tell whether Copil
    Use a simple single-agent setup to begin, or choose a saved multi-agent pattern when you want a more structured workflow.
 
 5. **Configure optional tooling**
-   If you want MCP or LSP support, add the global definitions in settings and then enable the ones you want for the current session from the Activity panel. You can also set pattern-level tool auto-approval defaults and override them per session.
+   If you want MCP or LSP support, add the global definitions in settings and then enable the ones you want for the current session from the Activity panel. Eryx also surfaces Copilot CLI runtime tools for tool auto-approval, and you can set pattern-level defaults and override them per session.
 
 6. **Start working**
    Ask a question, describe a task, or explore a project. As the run progresses, you can watch the participating agents and keep the session for later.

@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   AlertTriangle,
   ArrowRight,
@@ -203,14 +203,15 @@ function CollapsedEventRow({
 
 function RunCard({
   run,
-  isLatest,
+  expanded,
+  onToggle,
   onJumpToMessage,
 }: {
   run: SessionRunRecord;
-  isLatest: boolean;
+  expanded: boolean;
+  onToggle: () => void;
   onJumpToMessage?: (messageId: string) => void;
 }) {
-  const [expanded, setExpanded] = useState(isLatest);
   const accent = modeAccent[run.patternMode] ?? modeAccent.single;
   const statusStyle = runStatusStyles[run.status];
   const duration = formatRunDuration(run.startedAt, run.completedAt);
@@ -225,7 +226,7 @@ function RunCard({
       {/* Run header */}
       <button
         className="flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-zinc-800/30"
-        onClick={() => setExpanded(!expanded)}
+        onClick={onToggle}
         type="button"
       >
         {expanded
@@ -305,17 +306,26 @@ interface RunTimelineProps {
 }
 
 export function RunTimeline({ runs, onJumpToMessage }: RunTimelineProps) {
+  const latestRunId = runs.length > 0 ? runs[0].id : undefined;
+  const [expandedRunId, setExpandedRunId] = useState<string | undefined>(latestRunId);
+
+  // Auto-expand the latest run when it changes
+  useEffect(() => {
+    setExpandedRunId(latestRunId);
+  }, [latestRunId]);
+
   if (runs.length === 0) {
     return <EmptyTimeline />;
   }
 
   return (
     <div className="space-y-2">
-      {runs.map((run, index) => (
+      {runs.map((run) => (
         <RunCard
-          isLatest={index === 0}
+          expanded={expandedRunId === run.id}
           key={run.id}
           onJumpToMessage={onJumpToMessage}
+          onToggle={() => setExpandedRunId(expandedRunId === run.id ? undefined : run.id)}
           run={run}
         />
       ))}

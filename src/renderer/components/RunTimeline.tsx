@@ -112,6 +112,18 @@ function TimelineEventRow({
           <span className={`text-[11px] font-medium ${terminal ? 'text-zinc-600' : 'text-zinc-300'} ${isClickable ? 'group-hover:text-indigo-300' : ''}`}>
             {label}
           </span>
+          {/* Approval kind badge */}
+          {event.kind === 'approval' && event.approvalKind && (
+            <span className={`rounded-full px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wider ${
+              event.status === 'running'
+                ? 'bg-amber-500/15 text-amber-400'
+                : event.status === 'completed'
+                  ? 'bg-emerald-500/15 text-emerald-400'
+                  : 'bg-red-500/15 text-red-400'
+            }`}>
+              {event.approvalKind === 'final-response' ? 'response' : 'tool'}
+            </span>
+          )}
           <span className="ml-auto shrink-0 text-[9px] tabular-nums text-zinc-700">{timestamp}</span>
         </div>
 
@@ -119,6 +131,13 @@ function TimelineEventRow({
         {preview && (
           <p className={`mt-0.5 text-[10px] leading-snug text-zinc-600 ${isClickable ? 'group-hover:text-zinc-500' : ''}`}>
             {preview}
+          </p>
+        )}
+
+        {/* Approval detail */}
+        {event.kind === 'approval' && event.approvalDetail && (
+          <p className="mt-0.5 text-[10px] leading-snug text-zinc-500">
+            {truncateContent(event.approvalDetail, 120)}
           </p>
         )}
 

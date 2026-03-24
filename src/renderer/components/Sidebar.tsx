@@ -167,6 +167,7 @@ function SessionItem({
 }) {
   const isRunning = session.status === 'running';
   const isError = session.status === 'error';
+  const hasPendingApproval = session.pendingApproval?.status === 'pending';
   const mode = pattern?.mode ?? 'single';
   const visual = modeVisuals[mode];
   const ModeIcon = visual.icon;
@@ -214,9 +215,12 @@ function SessionItem({
       tabIndex={0}
       onKeyDown={(e) => { if (e.key === 'Enter' && !isRenaming) onSelect(); }}
     >
-      {/* Running left accent bar */}
-      {isRunning && (
+      {/* Running/approval left accent bar */}
+      {isRunning && !hasPendingApproval && (
         <span className="absolute inset-y-1.5 left-0 w-[3px] rounded-full bg-blue-400 sidebar-pulse" />
+      )}
+      {hasPendingApproval && (
+        <span className="absolute inset-y-1.5 left-0 w-[3px] rounded-full bg-amber-400" />
       )}
 
       {/* Mode icon */}
@@ -260,10 +264,16 @@ function SessionItem({
               {agentCount}
             </span>
           )}
-          {isRunning && (
+          {isRunning && !hasPendingApproval && (
             <span className="inline-flex items-center gap-1 text-[10px] font-medium text-blue-400">
               <span className="size-1.5 rounded-full bg-blue-400 sidebar-pulse" />
               Running
+            </span>
+          )}
+          {hasPendingApproval && (
+            <span className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-400">
+              <span className="size-1.5 rounded-full bg-amber-400 animate-pulse" />
+              Awaiting approval
             </span>
           )}
           {isError && (

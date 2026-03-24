@@ -1,9 +1,10 @@
 import { type KeyboardEvent, useEffect, useRef, useState } from 'react';
-import { AlertCircle, ArrowUp, Bot, ChevronDown, Circle, GitBranch, Loader2, Sparkles, User } from 'lucide-react';
+import { AlertCircle, ArrowUp, Bot, Check, ChevronDown, Circle, GitBranch, Loader2, ShieldAlert, ShieldCheck, Sparkles, User, X } from 'lucide-react';
 
 import { MarkdownContent } from '@renderer/components/MarkdownContent';
 import { getAssistantMessagePhase } from '@renderer/lib/messagePhase';
 import { ProviderIcon } from '@renderer/components/ProviderIcons';
+import type { ApprovalDecision, PendingApprovalRecord } from '@shared/domain/approval';
 import {
   findModel,
   getSupportedReasoningEfforts,
@@ -221,6 +222,90 @@ function InlineThinkingPill({
   );
 }
 
+/* ── Approval banner ────────────────────────────────────────── */
+
+function ApprovalBanner({
+  approval,
+  onResolve,
+  isResolving,
+}: {
+  approval: PendingApprovalRecord;
+  onResolve: (decision: ApprovalDecision) => void;
+  isResolving: boolean;
+}) {
+  const kindLabel = approval.kind === 'final-response' ? 'Final response review' : 'Tool call approval';
+  const hasMessages = approval.messages && approval.messages.length > 0;
+
+  return (
+    <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3">
+      {/* Header */}
+      <div className="flex items-start gap-2.5">
+        <ShieldAlert className="mt-0.5 size-4 shrink-0 text-amber-400" />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="text-[13px] font-semibold text-amber-200">{approval.title}</span>
+            <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-amber-400">
+              {kindLabel}
+            </span>
+          </div>
+
+          {/* Agent / permission context */}
+          <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-zinc-400">
+            {approval.agentName && <span>Agent: <span className="text-zinc-300">{approval.agentName}</span></span>}
+            {approval.permissionKind && <span>Permission: <span className="text-zinc-300">{approval.permissionKind}</span></span>}
+          </div>
+
+          {approval.detail && (
+            <p className="mt-1.5 text-[12px] leading-relaxed text-zinc-400">{approval.detail}</p>
+          )}
+        </div>
+      </div>
+
+      {/* Final-response message preview */}
+      {hasMessages && (
+        <div className="mt-3 space-y-2 rounded-lg border border-zinc-800 bg-zinc-900/60 p-3">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+            Pending messages — not yet published
+          </p>
+          {approval.messages!.map((message) => (
+            <div className="mt-2" key={message.id}>
+              <div className="mb-1 flex items-center gap-2 text-[11px] font-medium text-zinc-500">
+                <Bot className="size-3" />
+                <span>{message.authorName}</span>
+              </div>
+              <div className="rounded-lg border border-zinc-800/60 bg-zinc-900/40 px-3 py-2 text-[13px] leading-relaxed text-zinc-300">
+                <MarkdownContent content={message.content} />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Actions */}
+      <div className="mt-3 flex items-center gap-2">
+        <button
+          className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3.5 py-1.5 text-[12px] font-medium text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={isResolving}
+          onClick={() => onResolve('approved')}
+          type="button"
+        >
+          {isResolving ? <Loader2 className="size-3 animate-spin" /> : <Check className="size-3" />}
+          Approve
+        </button>
+        <button
+          className="inline-flex items-center gap-1.5 rounded-lg bg-zinc-800 px-3.5 py-1.5 text-[12px] font-medium text-zinc-300 transition hover:bg-zinc-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={isResolving}
+          onClick={() => onResolve('rejected')}
+          type="button"
+        >
+          <X className="size-3" />
+          Reject
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /* ── ChatPane ──────────────────────────────────────────────── */
 
 interface ChatPaneProps {
@@ -229,6 +314,7 @@ interface ChatPaneProps {
   session: SessionRecord;
   availableModels: ReadonlyArray<ModelDefinition>;
   onSend: (content: string) => Promise<void>;
+  onResolveApproval?: (approvalId: string, decision: ApprovalDecision) => Promise<unknown>;
   onUpdateScratchpadConfig?: (config: {
     model: string;
     reasoningEffort?: ReasoningEffort;
@@ -241,15 +327,19 @@ export function ChatPane({
   session,
   availableModels,
   onSend,
+  onResolveApproval,
   onUpdateScratchpadConfig,
 }: ChatPaneProps) {
   const [input, setInput] = useState('');
   const [configError, setConfigError] = useState<string>();
+  const [approvalError, setApprovalError] = useState<string>();
+  const [isResolvingApproval, setIsResolvingApproval] = useState(false);
   const [isUpdatingScratchpadConfig, setIsUpdatingScratchpadConfig] = useState(false);
   const transcriptRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const isSessionBusy = session.status === 'running';
+  const pendingApproval = session.pendingApproval?.status === 'pending' ? session.pendingApproval : undefined;
   const isScratchpad = isScratchpadProject(project);
   const primaryAgent = pattern.agents[0];
   const selectedModel = primaryAgent ? findModel(primaryAgent.model, availableModels) : undefined;
@@ -266,6 +356,8 @@ export function ChatPane({
 
   useEffect(() => {
     setConfigError(undefined);
+    setApprovalError(undefined);
+    setIsResolvingApproval(false);
     setIsUpdatingScratchpadConfig(false);
   }, [session.id]);
 
@@ -303,6 +395,21 @@ export function ChatPane({
     }
   }
 
+  async function handleResolveApproval(decision: ApprovalDecision) {
+    if (!pendingApproval || !onResolveApproval || isResolvingApproval) return;
+
+    setApprovalError(undefined);
+    setIsResolvingApproval(true);
+
+    try {
+      await onResolveApproval(pendingApproval.id, decision);
+    } catch (error) {
+      setApprovalError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsResolvingApproval(false);
+    }
+  }
+
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
@@ -335,14 +442,20 @@ export function ChatPane({
             </p>
           </div>
           <div className="flex items-center gap-2">
-            {isSessionBusy && <span className="size-2 animate-pulse rounded-full bg-blue-400" />}
+            {pendingApproval && (
+              <div className="flex items-center gap-1.5 text-[12px] font-medium text-amber-400">
+                <ShieldAlert className="size-3.5" />
+                Awaiting approval
+              </div>
+            )}
+            {isSessionBusy && !pendingApproval && <span className="size-2 animate-pulse rounded-full bg-blue-400" />}
             {session.status === 'error' && (
               <div className="flex items-center gap-1.5 text-[12px] text-red-400">
                 <AlertCircle className="size-3.5" />
                 Error
               </div>
             )}
-            {session.status === 'idle' && session.messages.length > 0 && (
+            {session.status === 'idle' && !pendingApproval && session.messages.length > 0 && (
               <span className="text-[12px] text-zinc-600">
                 {session.messages.length} message{session.messages.length === 1 ? '' : 's'}
               </span>
@@ -456,7 +569,25 @@ export function ChatPane({
           </div>
         )}
 
+        {approvalError && (
+          <div className="mb-3 flex items-start gap-2 rounded-lg bg-red-500/10 px-3 py-2 text-[13px] text-red-300">
+            <AlertCircle className="mt-0.5 size-4 shrink-0 text-red-400" />
+            <span>{approvalError}</span>
+          </div>
+        )}
+
         <div className="mx-auto max-w-3xl">
+          {/* Pending approval banner */}
+          {pendingApproval && (
+            <div className="mb-3">
+              <ApprovalBanner
+                approval={pendingApproval}
+                isResolving={isResolvingApproval}
+                onResolve={(decision) => void handleResolveApproval(decision)}
+              />
+            </div>
+          )}
+
           {/* Scratchpad config pills — inline above composer */}
           {isScratchpad && primaryAgent && (
             <div className="mb-2 flex items-center gap-2">
@@ -496,11 +627,13 @@ export function ChatPane({
               onChange={(event) => setInput(event.target.value)}
               onKeyDown={handleKeyDown}
               placeholder={
-                isSessionBusy
-                  ? 'Waiting for response...'
-                  : isUpdatingScratchpadConfig
-                    ? 'Saving scratchpad settings...'
-                    : 'Message...'
+                pendingApproval
+                  ? 'Awaiting approval...'
+                  : isSessionBusy
+                    ? 'Waiting for response...'
+                    : isUpdatingScratchpadConfig
+                      ? 'Saving scratchpad settings...'
+                      : 'Message...'
               }
               ref={textareaRef}
               rows={1}

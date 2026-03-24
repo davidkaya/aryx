@@ -10,11 +10,13 @@ import {
   Lock,
   MessageSquare,
   Plus,
+  ShieldCheck,
   Trash2,
   Users,
   type LucideIcon,
 } from 'lucide-react';
 
+import type { ApprovalCheckpointKind, ApprovalPolicy } from '@shared/domain/approval';
 import {
   findModel,
   getSupportedReasoningEfforts,
@@ -219,6 +221,37 @@ export function PatternEditor({
     updateAgent(agent.id, {
       model: modelId,
       reasoningEffort: resolveReasoningEffort(model, agent.reasoningEffort),
+    });
+  }
+
+  function updateApprovalPolicy(updater: (current: ApprovalPolicy | undefined) => ApprovalPolicy | undefined) {
+    onChange({ ...pattern, approvalPolicy: updater(pattern.approvalPolicy) });
+  }
+
+  function isCheckpointEnabled(kind: ApprovalCheckpointKind): boolean {
+    return pattern.approvalPolicy?.rules.some((r) => r.kind === kind) ?? false;
+  }
+
+  function checkpointAgentIds(kind: ApprovalCheckpointKind): string[] | undefined {
+    return pattern.approvalPolicy?.rules.find((r) => r.kind === kind)?.agentIds;
+  }
+
+  function toggleCheckpoint(kind: ApprovalCheckpointKind, enabled: boolean) {
+    updateApprovalPolicy((current) => {
+      const otherRules = (current?.rules ?? []).filter((r) => r.kind !== kind);
+      if (!enabled) {
+        return otherRules.length > 0 ? { rules: otherRules } : undefined;
+      }
+      return { rules: [...otherRules, { kind }] };
+    });
+  }
+
+  function setCheckpointAgentScope(kind: ApprovalCheckpointKind, agentIds: string[] | undefined) {
+    updateApprovalPolicy((current) => {
+      const rules = (current?.rules ?? []).map((r) =>
+        r.kind === kind ? { ...r, agentIds } : r,
+      );
+      return { rules };
     });
   }
 
@@ -463,8 +496,160 @@ export function PatternEditor({
               ))}
             </div>
           </section>
+
+          {/* Approval checkpoints */}
+          <section className="space-y-4">
+            <h4 className="text-[12px] font-semibold uppercase tracking-wider text-zinc-500">
+              Approval Checkpoints
+            </h4>
+
+            <p className="text-[11px] leading-relaxed text-zinc-600">
+              Pause the run for human review before risky actions or publishing responses.
+            </p>
+
+            <div className="space-y-3">
+              <ApprovalCheckpointRow
+                agents={pattern.agents}
+                enabled={isCheckpointEnabled('tool-call')}
+                kind="tool-call"
+                label="Tool call approval"
+                description="Require approval before the agent executes tool calls"
+                onToggle={(enabled) => toggleCheckpoint('tool-call', enabled)}
+                scopedAgentIds={checkpointAgentIds('tool-call')}
+                onScopeChange={(agentIds) => setCheckpointAgentScope('tool-call', agentIds)}
+              />
+              <ApprovalCheckpointRow
+                agents={pattern.agents}
+                enabled={isCheckpointEnabled('final-response')}
+                kind="final-response"
+                label="Final response review"
+                description="Review and approve assistant messages before publication"
+                onToggle={(enabled) => toggleCheckpoint('final-response', enabled)}
+                scopedAgentIds={checkpointAgentIds('final-response')}
+                onScopeChange={(agentIds) => setCheckpointAgentScope('final-response', agentIds)}
+              />
+            </div>
+          </section>
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ── Toggle switch ─────────────────────────────────────────── */
+
+function ToggleSwitch({ enabled, onToggle }: { enabled: boolean; onToggle: () => void }) {
+  return (
+    <button
+      className={`relative inline-flex h-[18px] w-[32px] shrink-0 items-center rounded-full transition-colors ${
+        enabled ? 'bg-indigo-500' : 'bg-zinc-700'
+      }`}
+      onClick={onToggle}
+      type="button"
+    >
+      <span
+        className={`inline-block size-[14px] rounded-full bg-white shadow-sm transition-transform ${
+          enabled ? 'translate-x-[16px]' : 'translate-x-[2px]'
+        }`}
+      />
+    </button>
+  );
+}
+
+/* ── Approval checkpoint row ───────────────────────────────── */
+
+function ApprovalCheckpointRow({
+  agents,
+  enabled,
+  kind: _kind,
+  label,
+  description,
+  onToggle,
+  scopedAgentIds,
+  onScopeChange,
+}: {
+  agents: PatternAgentDefinition[];
+  enabled: boolean;
+  kind: ApprovalCheckpointKind;
+  label: string;
+  description: string;
+  onToggle: (enabled: boolean) => void;
+  scopedAgentIds: string[] | undefined;
+  onScopeChange: (agentIds: string[] | undefined) => void;
+}) {
+  const isAllAgents = !scopedAgentIds || scopedAgentIds.length === 0;
+
+  function toggleAgentScope(agentId: string) {
+    const current = scopedAgentIds ?? [];
+    const next = current.includes(agentId)
+      ? current.filter((id) => id !== agentId)
+      : [...current, agentId];
+    onScopeChange(next.length > 0 ? next : undefined);
+  }
+
+  return (
+    <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+      <div className="flex items-center gap-3">
+        <ShieldCheck className={`size-4 shrink-0 ${enabled ? 'text-indigo-400' : 'text-zinc-600'}`} />
+        <div className="min-w-0 flex-1">
+          <span className="text-[12px] font-medium text-zinc-200">{label}</span>
+          <p className="text-[11px] text-zinc-500">{description}</p>
+        </div>
+        <ToggleSwitch enabled={enabled} onToggle={() => onToggle(!enabled)} />
+      </div>
+
+      {/* Agent scope selector */}
+      {enabled && agents.length > 1 && (
+        <div className="mt-3 border-t border-zinc-800/50 pt-3">
+          <div className="mb-2 flex items-center gap-2">
+            <span className="text-[11px] font-medium text-zinc-400">Scope</span>
+            <button
+              className={`rounded-full px-2 py-0.5 text-[10px] font-medium transition ${
+                isAllAgents
+                  ? 'bg-indigo-500/15 text-indigo-300'
+                  : 'bg-zinc-800 text-zinc-500 hover:text-zinc-400'
+              }`}
+              onClick={() => onScopeChange(undefined)}
+              type="button"
+            >
+              All agents
+            </button>
+            <button
+              className={`rounded-full px-2 py-0.5 text-[10px] font-medium transition ${
+                !isAllAgents
+                  ? 'bg-indigo-500/15 text-indigo-300'
+                  : 'bg-zinc-800 text-zinc-500 hover:text-zinc-400'
+              }`}
+              onClick={() => onScopeChange([])}
+              type="button"
+            >
+              Selected agents
+            </button>
+          </div>
+
+          {!isAllAgents && (
+            <div className="flex flex-wrap gap-1.5">
+              {agents.map((agent) => {
+                const isSelected = scopedAgentIds?.includes(agent.id) ?? false;
+                return (
+                  <button
+                    className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition ${
+                      isSelected
+                        ? 'bg-indigo-500/20 text-indigo-300 ring-1 ring-indigo-500/30'
+                        : 'bg-zinc-800 text-zinc-500 hover:bg-zinc-700 hover:text-zinc-400'
+                    }`}
+                    key={agent.id}
+                    onClick={() => toggleAgentScope(agent.id)}
+                    type="button"
+                  >
+                    {agent.name || 'Unnamed'}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

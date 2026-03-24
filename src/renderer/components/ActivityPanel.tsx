@@ -1,5 +1,5 @@
 import { useMemo, type ReactNode } from 'react';
-import { Activity, Clock, Server, Code, Sparkles, Users } from 'lucide-react';
+import { Activity, Clock, Server, Code, ShieldAlert, Sparkles, Users } from 'lucide-react';
 
 import {
   buildAgentActivityRows,
@@ -183,6 +183,7 @@ export function ActivityPanel({
   const selection = useMemo(() => resolveSessionToolingSelection(session), [session]);
 
   const isBusy = session.status === 'running';
+  const hasPendingApproval = session.pendingApproval?.status === 'pending';
   const toolsDisabled = isBusy || projectIsScratchpad;
   const accent = modeAccent[pattern.mode] ?? modeAccent.single;
   const hasTools = mcpServers.length > 0 || lspProfiles.length > 0;
@@ -196,7 +197,14 @@ export function ActivityPanel({
           <span className="text-[12px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
             Activity
           </span>
-          {isBusy && <span className="size-1.5 animate-pulse rounded-full bg-blue-400" />}
+          {hasPendingApproval ? (
+            <span className="flex items-center gap-1">
+              <ShieldAlert className="size-3 text-amber-400" />
+              <span className="text-[9px] font-semibold uppercase tracking-wider text-amber-400">Approval</span>
+            </span>
+          ) : isBusy ? (
+            <span className="size-1.5 animate-pulse rounded-full bg-blue-400" />
+          ) : null}
         </div>
       </div>
 

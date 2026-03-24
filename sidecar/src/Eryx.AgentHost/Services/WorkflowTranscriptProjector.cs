@@ -159,6 +159,24 @@ internal static class WorkflowTranscriptProjector
             }
         }
 
+        if (remainingMessageCount == 1)
+        {
+            if (fallbackAgent.HasValue
+                && AgentIdentityResolver.IsGenericAssistantIdentifier(message.AuthorName)
+                && TryFindLastSegment(
+                    remainingSegments,
+                    segment => string.Equals(
+                        AgentIdentityResolver.ResolveDisplayAuthorName(pattern, segment.AuthorName),
+                        fallbackAgent.Value.AgentName,
+                        StringComparison.Ordinal),
+                    out (string MessageId, string AuthorName, string Content) fallbackMatchedSegment))
+            {
+                return fallbackMatchedSegment;
+            }
+
+            return remainingSegments[^1];
+        }
+
         return remainingSegments.Count == remainingMessageCount
             ? remainingSegments[0]
             : null;
@@ -171,6 +189,25 @@ internal static class WorkflowTranscriptProjector
     {
         foreach ((string MessageId, string AuthorName, string Content) segment in segments)
         {
+            if (predicate(segment))
+            {
+                matchedSegment = segment;
+                return true;
+            }
+        }
+
+        matchedSegment = default;
+        return false;
+    }
+
+    private static bool TryFindLastSegment(
+        IReadOnlyList<(string MessageId, string AuthorName, string Content)> segments,
+        Func<(string MessageId, string AuthorName, string Content), bool> predicate,
+        out (string MessageId, string AuthorName, string Content) matchedSegment)
+    {
+        for (int index = segments.Count - 1; index >= 0; index--)
+        {
+            (string MessageId, string AuthorName, string Content) segment = segments[index];
             if (predicate(segment))
             {
                 matchedSegment = segment;

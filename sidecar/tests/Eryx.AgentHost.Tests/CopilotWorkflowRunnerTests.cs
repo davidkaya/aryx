@@ -495,6 +495,47 @@ public sealed class CopilotWorkflowRunnerTests
     }
 
     [Fact]
+    public void ProjectCompletedMessages_UsesFallbackAgentForSingleGenericAssistantOutputWithMultipleSegments()
+    {
+        RunTurnCommandDto command = new()
+        {
+            RequestId = "turn-1",
+            SessionId = "session-1",
+            Pattern = new PatternDefinitionDto
+            {
+                Id = "pattern-handoff",
+                Name = "Handoff Support Flow",
+                Mode = "handoff",
+                Availability = "available",
+                Agents =
+                [
+                    CreateAgent(id: "agent-handoff-triage", name: "Triage"),
+                    CreateAgent(id: "agent-handoff-runtime", name: "Runtime Specialist"),
+                ],
+            },
+        };
+
+        IReadOnlyList<ChatMessageDto> messages = WorkflowTranscriptProjector.ProjectCompletedMessages(
+            command,
+            [
+                new ChatMessage(ChatRole.Assistant, "Done — GoogleClient.cs now contains the requested class with cleaned formatting.")
+                {
+                    AuthorName = "assistant",
+                },
+            ],
+            [
+                ("msg-1", "Triage", "I'll hand this to a coding specialist."),
+                ("msg-2", "Runtime Specialist", "Done — GoogleClient.cs now contains the requested class with draft formatting."),
+            ],
+            new AgentIdentity("agent-handoff-runtime", "Runtime Specialist"));
+
+        ChatMessageDto message = Assert.Single(messages);
+        Assert.Equal("msg-2", message.Id);
+        Assert.Equal("Runtime Specialist", message.AuthorName);
+        Assert.Equal("Done — GoogleClient.cs now contains the requested class with cleaned formatting.", message.Content);
+    }
+
+    [Fact]
     public void ProjectCompletedMessages_DropsBlankAssistantOutputMessages()
     {
         RunTurnCommandDto command = new()

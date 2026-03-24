@@ -19,6 +19,7 @@ import type { QuerySessionsInput } from '@shared/domain/sessionLibrary';
 import type { AppearanceTheme } from '@shared/domain/tooling';
 
 import { EryxAppService } from '@main/EryxAppService';
+import { applyTitleBarTheme } from '@main/windows/titleBarTheme';
 
 export function registerIpcHandlers(window: BrowserWindow, service: EryxAppService): void {
   ipcMain.handle(ipcChannels.describeSidecarCapabilities, () => service.describeSidecarCapabilities());
@@ -34,9 +35,11 @@ export function registerIpcHandlers(window: BrowserWindow, service: EryxAppServi
   ipcMain.handle(ipcChannels.setPatternFavorite, (_event, input: SetPatternFavoriteInput) =>
     service.setPatternFavorite(input.patternId, input.isFavorite),
   );
-  ipcMain.handle(ipcChannels.setTheme, (_event, theme: AppearanceTheme) =>
-    service.setTheme(theme),
-  );
+  ipcMain.handle(ipcChannels.setTheme, async (_event, theme: AppearanceTheme) => {
+    const result = await service.setTheme(theme);
+    applyTitleBarTheme(window, theme);
+    return result;
+  });
   ipcMain.handle(ipcChannels.saveMcpServer, (_event, input: SaveMcpServerInput) =>
     service.saveMcpServer(input.server),
   );

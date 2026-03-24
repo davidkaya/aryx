@@ -3,6 +3,7 @@ import { app, BrowserWindow } from 'electron';
 import { registerIpcHandlers } from '@main/ipc/registerIpcHandlers';
 import { EryxAppService } from '@main/EryxAppService';
 import { createMainWindow } from '@main/windows/createMainWindow';
+import { applyTitleBarTheme } from '@main/windows/titleBarTheme';
 
 let mainWindow: BrowserWindow | undefined;
 let appService: EryxAppService | undefined;
@@ -12,6 +13,10 @@ async function bootstrap(): Promise<void> {
 
   mainWindow = createMainWindow();
   registerIpcHandlers(mainWindow, appService);
+
+  // Apply persisted theme to the title bar overlay
+  const workspace = await appService.loadWorkspace();
+  applyTitleBarTheme(mainWindow, workspace.settings.theme);
 
   if (!app.isPackaged) {
     mainWindow.webContents.openDevTools({ mode: 'detach' });

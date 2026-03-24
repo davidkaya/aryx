@@ -66,8 +66,11 @@ const handleStyles = {
   hidden: '!size-0 !border-0 !bg-transparent !min-w-0 !min-h-0',
 };
 
-/* user-input: source only (no incoming handle)
-   user-output: target only (no outgoing handle) */
+/* Every node shows a single visible handle (circle).
+   The arrow marker on each edge indicates flow direction.
+   - user-input:  source on right (visible)
+   - user-output: target on left  (visible)
+   - others:      source on right (visible), target on left (hidden but functional) */
 
 export const UserInputNode = memo(function UserInputNode({ data, selected }: NodeProps) {
   const nodeData = data as unknown as GraphNodeData;
@@ -95,7 +98,7 @@ export const SystemNode = memo(function SystemNode({ data, selected }: NodeProps
   const nodeData = data as unknown as GraphNodeData;
   return (
     <>
-      <Handle type="target" position={Position.Left} className={handleStyles.system} />
+      <Handle type="target" position={Position.Left} className={handleStyles.hidden} />
       <GraphNodeContent data={nodeData} selected={selected ?? false} />
       <Handle type="source" position={Position.Right} className={handleStyles.system} />
     </>
@@ -106,7 +109,7 @@ export const AgentNode = memo(function AgentNode({ data, selected }: NodeProps) 
   const nodeData = data as unknown as GraphNodeData;
   return (
     <>
-      <Handle type="target" position={Position.Left} className={handleStyles.agent} />
+      <Handle type="target" position={Position.Left} className={handleStyles.hidden} />
       <GraphNodeContent data={nodeData} selected={selected ?? false} />
       <Handle type="source" position={Position.Right} className={handleStyles.agent} />
     </>

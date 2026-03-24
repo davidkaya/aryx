@@ -1,5 +1,5 @@
 import { useMemo, type ReactNode } from 'react';
-import { Activity, Clock, Server, Code, ShieldAlert, Sparkles, Users } from 'lucide-react';
+import { Activity, Clock, RotateCcw, Server, Code, ShieldAlert, ShieldCheck, Sparkles, Users } from 'lucide-react';
 
 import {
   buildAgentActivityRows,
@@ -20,7 +20,10 @@ import type {
   LspProfileDefinition,
   McpServerDefinition,
   SessionToolingSelection,
+  WorkspaceToolingSettings,
 } from '@shared/domain/tooling';
+import { listApprovalToolDefinitions, type ApprovalToolDefinition } from '@shared/domain/tooling';
+import type { SessionApprovalSettings } from '@shared/domain/approval';
 import { ProviderIcon } from './ProviderIcons';
 
 /* ── Mode accent colours ───────────────────────────────────── */
@@ -159,8 +162,10 @@ interface ActivityPanelProps {
   activity?: SessionActivityState;
   lspProfiles: LspProfileDefinition[];
   mcpServers: McpServerDefinition[];
+  toolingSettings: WorkspaceToolingSettings;
   onJumpToMessage?: (messageId: string) => void;
   onUpdateSessionTooling: (selection: SessionToolingSelection) => void;
+  onUpdateSessionApprovalSettings: (settings: { autoApprovedToolNames?: string[] }) => void;
   pattern: PatternDefinition;
   projectIsScratchpad: boolean;
   session: SessionRecord;
@@ -170,8 +175,10 @@ export function ActivityPanel({
   activity,
   lspProfiles,
   mcpServers,
+  toolingSettings,
   onJumpToMessage,
   onUpdateSessionTooling,
+  onUpdateSessionApprovalSettings,
   pattern,
   projectIsScratchpad,
   session,
@@ -181,12 +188,21 @@ export function ActivityPanel({
     [activity, pattern.agents],
   );
   const selection = useMemo(() => resolveSessionToolingSelection(session), [session]);
+  const approvalTools = useMemo(() => listApprovalToolDefinitions(toolingSettings), [toolingSettings]);
+
+  const isOverridden = session.approvalSettings !== undefined;
+  const effectiveAutoApproved = new Set(
+    isOverridden
+      ? session.approvalSettings!.autoApprovedToolNames
+      : pattern.approvalPolicy?.autoApprovedToolNames ?? [],
+  );
 
   const isBusy = session.status === 'running';
   const hasPendingApproval = session.pendingApproval?.status === 'pending';
   const queuedCount = (session.pendingApprovalQueue ?? []).filter((a) => a.status === 'pending').length;
   const totalApprovalCount = (hasPendingApproval ? 1 : 0) + queuedCount;
   const toolsDisabled = isBusy || projectIsScratchpad;
+  const approvalDisabled = isBusy || projectIsScratchpad;
   const accent = modeAccent[pattern.mode] ?? modeAccent.single;
   const hasTools = mcpServers.length > 0 || lspProfiles.length > 0;
 
@@ -317,6 +333,77 @@ export function ActivityPanel({
             )}
           </div>
         </div>
+
+        {/* ── Auto-approval overrides section ──────────────── */}
+        <div className="mb-4">
+          <SectionHeader>
+            <ShieldCheck className="size-3" />
+            <span>Auto-Approval</span>
+            {approvalDisabled && (
+              <span className="ml-auto text-[9px] font-medium normal-case tracking-normal text-zinc-600">
+                {projectIsScratchpad ? 'Scratchpad' : 'Running'}
+              </span>
+            )}
+          </SectionHeader>
+
+          <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 px-3 py-2.5">
+            {projectIsScratchpad ? (
+              <p className="text-[11px] leading-relaxed text-zinc-600">
+                Tool auto-approval does not apply to scratchpad sessions.
+              </p>
+            ) : approvalTools.length === 0 ? (
+              <p className="text-[11px] leading-relaxed text-zinc-600">
+                Add MCP servers or LSP profiles in Settings to configure tool auto-approvals.
+              </p>
+            ) : (
+              <>
+                {/* Override state badge + reset action */}
+                <div className="mb-2 flex items-center gap-2">
+                  <span className={`rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider ${
+                    isOverridden
+                      ? 'bg-amber-500/15 text-amber-400'
+                      : 'bg-zinc-800 text-zinc-500'
+                  }`}>
+                    {isOverridden ? 'Custom for this session' : 'Inheriting pattern defaults'}
+                  </span>
+                  {isOverridden && (
+                    <button
+                      className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-medium text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-300 disabled:cursor-not-allowed disabled:opacity-50"
+                      disabled={approvalDisabled}
+                      onClick={() => onUpdateSessionApprovalSettings({})}
+                      type="button"
+                    >
+                      <RotateCcw className="size-2.5" />
+                      Reset to pattern
+                    </button>
+                  )}
+                </div>
+
+                <div className="space-y-0.5">
+                  {approvalTools.map((tool) => (
+                    <ApprovalOverrideRow
+                      disabled={approvalDisabled}
+                      enabled={effectiveAutoApproved.has(tool.id)}
+                      key={tool.id}
+                      onToggle={() => {
+                        const next = new Set(effectiveAutoApproved);
+                        if (next.has(tool.id)) {
+                          next.delete(tool.id);
+                        } else {
+                          next.add(tool.id);
+                        }
+                        onUpdateSessionApprovalSettings({
+                          autoApprovedToolNames: [...next],
+                        });
+                      }}
+                      tool={tool}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -378,4 +465,39 @@ function toggleId(current: string[], id: string): string[] {
   return current.includes(id)
     ? current.filter((currentId) => currentId !== id)
     : [...current, id];
+}
+
+function ApprovalOverrideRow({
+  tool,
+  enabled,
+  disabled,
+  onToggle,
+}: {
+  tool: ApprovalToolDefinition;
+  enabled: boolean;
+  disabled: boolean;
+  onToggle: () => void;
+}) {
+  const kindBadge = tool.kind === 'lsp' ? 'LSP' : tool.kind === 'mcp' ? 'MCP' : 'Mixed';
+  return (
+    <button
+      className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition ${
+        disabled ? 'cursor-not-allowed opacity-50' : 'hover:bg-zinc-800/60'
+      }`}
+      disabled={disabled}
+      onClick={onToggle}
+      type="button"
+    >
+      <ShieldCheck className={`size-3 shrink-0 ${enabled ? 'text-indigo-400' : 'text-zinc-600'}`} />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5">
+          <span className="truncate text-[12px] font-medium text-zinc-300">{tool.label}</span>
+          <span className="shrink-0 rounded-full bg-zinc-800 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wider text-zinc-500">
+            {kindBadge}
+          </span>
+        </div>
+      </div>
+      <ToggleSwitch enabled={enabled} />
+    </button>
+  );
 }

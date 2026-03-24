@@ -29,6 +29,11 @@ import {
   type PatternDefinition,
   type PatternAgentDefinition,
 } from '@shared/domain/pattern';
+import {
+  listApprovalToolDefinitions,
+  type ApprovalToolDefinition,
+  type WorkspaceToolingSettings,
+} from '@shared/domain/tooling';
 
 import { ModelSelect, ReasoningEffortSelect } from './AgentConfigFields';
 
@@ -36,6 +41,7 @@ interface PatternEditorProps {
   availableModels: ReadonlyArray<ModelDefinition>;
   pattern: PatternDefinition;
   isBuiltin: boolean;
+  toolingSettings: WorkspaceToolingSettings;
   onChange: (pattern: PatternDefinition) => void;
   onDelete?: () => void;
   onSave: () => void;
@@ -202,6 +208,7 @@ export function PatternEditor({
   availableModels,
   pattern,
   isBuiltin,
+  toolingSettings,
   onChange,
   onDelete,
   onSave,
@@ -253,6 +260,22 @@ export function PatternEditor({
       );
       return { rules };
     });
+  }
+
+  const approvalTools = listApprovalToolDefinitions(toolingSettings);
+  const autoApprovedSet = new Set(pattern.approvalPolicy?.autoApprovedToolNames ?? []);
+
+  function toggleToolAutoApproval(toolId: string) {
+    const current = new Set(pattern.approvalPolicy?.autoApprovedToolNames ?? []);
+    if (current.has(toolId)) {
+      current.delete(toolId);
+    } else {
+      current.add(toolId);
+    }
+    updateApprovalPolicy((policy) => ({
+      rules: policy?.rules ?? [],
+      autoApprovedToolNames: current.size > 0 ? [...current] : undefined,
+    }));
   }
 
   return (
@@ -530,6 +553,37 @@ export function PatternEditor({
               />
             </div>
           </section>
+
+          {/* Tool auto-approval defaults */}
+          <section className="space-y-4">
+            <h4 className="text-[12px] font-semibold uppercase tracking-wider text-zinc-500">
+              Tool Auto-Approval Defaults
+            </h4>
+
+            <p className="text-[11px] leading-relaxed text-zinc-600">
+              When tool-call approval is enabled, these tools will be auto-approved without manual review.
+              Sessions can override these defaults from the Activity panel.
+            </p>
+
+            <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 py-3">
+              {approvalTools.length === 0 ? (
+                <p className="py-2 text-center text-[11px] text-zinc-600">
+                  No tools available. Add MCP servers or LSP profiles in Settings to configure auto-approvals.
+                </p>
+              ) : (
+                <div className="space-y-0.5">
+                  {approvalTools.map((tool) => (
+                    <ToolApprovalToggleRow
+                      enabled={autoApprovedSet.has(tool.id)}
+                      key={tool.id}
+                      onToggle={() => toggleToolAutoApproval(tool.id)}
+                      tool={tool}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
         </div>
       </div>
     </div>
@@ -651,5 +705,39 @@ function ApprovalCheckpointRow({
         </div>
       )}
     </div>
+  );
+}
+
+/* ── Tool auto-approval toggle row ─────────────────────────── */
+
+function ToolApprovalToggleRow({
+  tool,
+  enabled,
+  onToggle,
+}: {
+  tool: ApprovalToolDefinition;
+  enabled: boolean;
+  onToggle: () => void;
+}) {
+  const kindBadge = tool.kind === 'lsp' ? 'LSP' : tool.kind === 'mcp' ? 'MCP' : 'Mixed';
+  return (
+    <button
+      className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition hover:bg-zinc-800/60"
+      onClick={onToggle}
+      type="button"
+    >
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="truncate text-[12px] font-medium text-zinc-300">{tool.label}</span>
+          <span className="shrink-0 rounded-full bg-zinc-800 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wider text-zinc-500">
+            {kindBadge}
+          </span>
+        </div>
+        {tool.providerNames.length > 0 && (
+          <div className="truncate text-[10px] text-zinc-600">{tool.providerNames.join(', ')}</div>
+        )}
+      </div>
+      <ToggleSwitch enabled={enabled} onToggle={onToggle} />
+    </button>
   );
 }

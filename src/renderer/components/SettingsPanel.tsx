@@ -132,6 +132,7 @@ export function SettingsPanel({
             setEditingPattern(null);
           }}
           pattern={editingPattern}
+          toolingSettings={toolingSettings}
         />
       </div>
     );

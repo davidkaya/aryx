@@ -262,6 +262,7 @@ function ApprovalBanner({
           {/* Agent / permission context */}
           <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-zinc-400">
             {approval.agentName && <span>Agent: <span className="text-zinc-300">{approval.agentName}</span></span>}
+            {approval.toolName && <span>Tool: <span className="text-zinc-300">{approval.toolName}</span></span>}
             {approval.permissionKind && <span>Permission: <span className="text-zinc-300">{approval.permissionKind}</span></span>}
           </div>
 
@@ -355,6 +356,9 @@ function QueuedApprovalsList({ approvals }: { approvals: PendingApprovalRecord[]
                 <span className="shrink-0 rounded-full bg-zinc-800 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wider text-zinc-500">
                   {kindLabel}
                 </span>
+                {approval.toolName && (
+                  <span className="shrink-0 text-[10px] text-zinc-500">{approval.toolName}</span>
+                )}
                 {approval.agentName && (
                   <span className="shrink-0 text-[10px] text-zinc-600">{approval.agentName}</span>
                 )}

@@ -274,12 +274,19 @@ export default function App() {
         activity={activityForSession}
         lspProfiles={workspace.settings.tooling.lspProfiles}
         mcpServers={workspace.settings.tooling.mcpServers}
+        toolingSettings={workspace.settings.tooling}
         onJumpToMessage={jumpToMessage}
         onUpdateSessionTooling={(selection) => {
           void api.updateSessionTooling({
             sessionId: selectedSession.id,
             enabledMcpServerIds: selection.enabledMcpServerIds,
             enabledLspProfileIds: selection.enabledLspProfileIds,
+          });
+        }}
+        onUpdateSessionApprovalSettings={(settings) => {
+          void api.updateSessionApprovalSettings({
+            sessionId: selectedSession.id,
+            autoApprovedToolNames: settings.autoApprovedToolNames,
           });
         }}
         pattern={patternForSession}

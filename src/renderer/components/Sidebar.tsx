@@ -400,11 +400,7 @@ function ProjectGroup({
 
       {expanded && (
         <div className="ml-2 mt-0.5 space-y-0.5 border-l border-zinc-800/60 pl-2">
-          {visibleSessions.length === 0 ? (
-            <div className="px-3 py-3 text-center text-[12px] text-zinc-600">
-              {isScratchpad ? 'No scratchpad chats yet' : 'No sessions yet'}
-            </div>
-          ) : (
+          {visibleSessions.length > 0 &&
             visibleSessions.map((session) => (
               <SessionItem
                 isActive={selectedSessionId === session.id}
@@ -417,9 +413,8 @@ function ProjectGroup({
                 pattern={patternMap.get(session.patternId)}
                 session={session}
               />
-            ))
-          )}
-          {onNewSession && (
+            ))}
+          {onNewSession ? (
             <button
               className="flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-zinc-700/60 bg-zinc-800/20 px-2.5 py-1.5 text-[12px] font-medium text-zinc-500 transition hover:border-indigo-500/40 hover:bg-indigo-500/5 hover:text-indigo-300"
               onClick={onNewSession}
@@ -428,6 +423,12 @@ function ProjectGroup({
               <Plus className="size-3.5" />
               {newSessionLabel ?? 'New Session'}
             </button>
+          ) : (
+            visibleSessions.length === 0 && (
+              <div className="px-3 py-3 text-center text-[12px] text-zinc-600">
+                {isScratchpad ? 'No scratchpad chats yet' : 'No sessions yet'}
+              </div>
+            )
           )}
         </div>
       )}

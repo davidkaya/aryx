@@ -101,18 +101,32 @@ export function toCanvasNodes(
   });
 }
 
-/** Determines whether user-created edges can be deleted in this mode. */
+/** Determines whether an edge can be deleted by the user.
+ *
+ * Deletable edges:
+ * - handoff:    agent ↔ agent edges (handoff routes)
+ * - group-chat: orchestrator ↔ agent edges (participation links)
+ *
+ * Structural edges (user-input/output, distributor/collector) are never deletable.
+ * Sequential, concurrent, and single modes have fully structural topologies.
+ */
 function isEdgeDeletable(edge: PatternGraphEdge, mode: OrchestrationMode, graph: PatternGraph): boolean {
-  if (mode !== 'handoff') {
+  const sourceNode = graph.nodes.find((n) => n.id === edge.source);
+  const targetNode = graph.nodes.find((n) => n.id === edge.target);
+  if (!sourceNode || !targetNode) {
     return false;
   }
 
-  const sourceNode = graph.nodes.find((n) => n.id === edge.source);
-  const targetNode = graph.nodes.find((n) => n.id === edge.target);
+  if (mode === 'handoff') {
+    return sourceNode.kind === 'agent' && targetNode.kind === 'agent';
+  }
 
-  // Only agent↔agent edges in handoff mode are user-deletable;
-  // system edges (user-input → triage, agent → user-output) are structural.
-  return sourceNode?.kind === 'agent' && targetNode?.kind === 'agent';
+  if (mode === 'group-chat') {
+    const kinds = new Set([sourceNode.kind, targetNode.kind]);
+    return kinds.has('orchestrator') && kinds.has('agent');
+  }
+
+  return false;
 }
 
 const EDGE_COLORS = {
@@ -201,9 +215,9 @@ export function isConnectionAllowed(
   }
 }
 
-/** Whether edges can be deleted by the user in this mode. */
+/** Whether any edges can be deleted by the user in this mode. */
 export function isEdgeDeletionAllowed(mode: OrchestrationMode): boolean {
-  return mode === 'handoff';
+  return mode === 'handoff' || mode === 'group-chat';
 }
 
 /* ── Graph mutation helpers ─────────────────────────────────── */

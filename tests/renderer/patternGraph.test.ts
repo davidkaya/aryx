@@ -226,11 +226,11 @@ describe('sequential reorder', () => {
 });
 
 describe('edge deletion rules', () => {
-  test('only handoff mode allows edge deletion', () => {
+  test('handoff and group-chat modes allow edge deletion', () => {
     expect(isEdgeDeletionAllowed('handoff')).toBe(true);
+    expect(isEdgeDeletionAllowed('group-chat')).toBe(true);
     expect(isEdgeDeletionAllowed('sequential')).toBe(false);
     expect(isEdgeDeletionAllowed('concurrent')).toBe(false);
-    expect(isEdgeDeletionAllowed('group-chat')).toBe(false);
     expect(isEdgeDeletionAllowed('single')).toBe(false);
   });
 
@@ -245,6 +245,20 @@ describe('edge deletion rules', () => {
     // Agent-to-agent edges should be deletable
     expect(deletableEdges.length).toBeGreaterThan(0);
     // Structural edges (user-input → triage, agent → user-output) should not
+    expect(nonDeletableEdges.length).toBeGreaterThan(0);
+  });
+
+  test('group-chat marks orchestrator↔agent edges as deletable', () => {
+    const pattern = findPattern('group-chat');
+    const graph = resolvePatternGraph(pattern);
+    const edges = toCanvasEdges(graph, 'group-chat');
+
+    const deletableEdges = edges.filter((e) => e.deletable);
+    const nonDeletableEdges = edges.filter((e) => !e.deletable);
+
+    // Orchestrator↔agent edges should be deletable
+    expect(deletableEdges.length).toBeGreaterThan(0);
+    // Structural edges (user-input → orchestrator, orchestrator → user-output)
     expect(nonDeletableEdges.length).toBeGreaterThan(0);
   });
 

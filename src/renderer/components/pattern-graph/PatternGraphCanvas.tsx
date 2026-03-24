@@ -114,18 +114,11 @@ function PatternGraphCanvasInner({
 
   const handleEdgesChange: OnEdgesChange = useCallback(
     (changes) => {
-      // Block all edge deletions in modes that don't support it
-      if (!isEdgeDeletionAllowed(pattern.mode)) {
-        const filtered = changes.filter((c) => c.type !== 'remove');
-        if (filtered.length > 0) {
-          onEdgesChange(filtered);
-        }
-        return;
-      }
-
-      // For handoff mode, apply removals to the authoritative graph
+      // Route edge removals through the authoritative graph.
+      // Non-deletable edges are already protected by the per-edge `deletable`
+      // flag, so React Flow will not emit removal changes for them.
       const removals = changes.filter((c) => c.type === 'remove');
-      if (removals.length > 0) {
+      if (removals.length > 0 && isEdgeDeletionAllowed(pattern.mode)) {
         let updatedGraph = graph;
         for (const removal of removals) {
           if (removal.type === 'remove') {

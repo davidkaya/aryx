@@ -32,6 +32,25 @@ public sealed class WorkflowRequestInfoInterpreterTests
     }
 
     [Fact]
+    public void TryCreateActivityFromRequest_MapsMcpToolCalls()
+    {
+        ConcurrentDictionary<string, string> toolNamesByCallId = new(StringComparer.Ordinal);
+        RequestInfoEvent requestInfo = CreateRequestInfoEvent(
+            CreateMcpToolCall("call-1", "git.status", "Git MCP"));
+
+        AgentActivityEventDto? activity = WorkflowRequestInfoInterpreter.TryCreateActivityFromRequest(
+            CreateSingleAgentCommand(),
+            requestInfo,
+            new AgentIdentity("agent-1", "Primary"),
+            toolNamesByCallId);
+
+        Assert.NotNull(activity);
+        Assert.Equal("tool-calling", activity.ActivityType);
+        Assert.Equal("git.status", activity.ToolName);
+        Assert.Equal("git.status", toolNamesByCallId["call-1"]);
+    }
+
+    [Fact]
     public void TryCreateActivityFromRequest_MapsCodeInterpreterCallsToSyntheticToolName()
     {
         ConcurrentDictionary<string, string> toolNamesByCallId = new(StringComparer.Ordinal);
@@ -157,6 +176,14 @@ public sealed class WorkflowRequestInfoInterpreterTests
         object instance = Activator.CreateInstance(type)!;
         type.GetProperty("CallId")!.SetValue(instance, callId);
         return instance;
+    }
+
+    private static object CreateMcpToolCall(string callId, string toolName, string serverName)
+    {
+        Type type = Type.GetType(
+            "Microsoft.Extensions.AI.McpServerToolCallContent, Microsoft.Extensions.AI.Abstractions",
+            throwOnError: true)!;
+        return Activator.CreateInstance(type, callId, toolName, serverName)!;
     }
 
     private static object CreateImageGenerationToolCall()

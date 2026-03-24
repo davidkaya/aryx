@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using Eryx.AgentHost.Contracts;
 using Microsoft.Agents.AI.Workflows;
+using Microsoft.Extensions.AI;
 
 namespace Eryx.AgentHost.Services;
 
@@ -8,14 +9,6 @@ internal static class WorkflowRequestInfoInterpreter
 {
     private static readonly Type? HandoffTargetType = LoadType(
         "Microsoft.Agents.AI.Workflows.Specialized.HandoffTarget, Microsoft.Agents.AI.Workflows");
-    private static readonly Type? FunctionCallContentType = LoadType(
-        "Microsoft.Extensions.AI.FunctionCallContent, Microsoft.Extensions.AI.Abstractions");
-    private static readonly Type? McpServerToolCallContentType = LoadType(
-        "Microsoft.Extensions.AI.McpServerToolCallContent, Microsoft.Extensions.AI.Abstractions");
-    private static readonly Type? CodeInterpreterToolCallContentType = LoadType(
-        "Microsoft.Extensions.AI.CodeInterpreterToolCallContent, Microsoft.Extensions.AI.Abstractions");
-    private static readonly Type? ImageGenerationToolCallContentType = LoadType(
-        "Microsoft.Extensions.AI.ImageGenerationToolCallContent, Microsoft.Extensions.AI.Abstractions");
 
     public static AgentActivityEventDto? TryCreateActivityFromRequest(
         RunTurnCommandDto command,
@@ -85,30 +78,53 @@ internal static class WorkflowRequestInfoInterpreter
         out string toolName,
         out string? toolCallId)
     {
-        if (TryReadPortableValue(requestInfo.Request.Data, FunctionCallContentType, out object? functionCall))
+        if (TryGetStableToolRequestInfo(requestInfo.Request.Data, out toolName, out toolCallId))
         {
-            toolName = GetStringProperty(functionCall, "Name") ?? "function";
-            toolCallId = NormalizeOptionalString(GetStringProperty(functionCall, "CallId"));
             return true;
         }
 
-        if (TryReadPortableValue(requestInfo.Request.Data, McpServerToolCallContentType, out object? mcpToolCall))
+        return TryGetEvaluationToolRequestInfo(requestInfo.Request.Data, out toolName, out toolCallId);
+    }
+
+    private static bool TryGetStableToolRequestInfo(
+        PortableValue requestData,
+        out string toolName,
+        out string? toolCallId)
+    {
+        if (requestData.Is<FunctionCallContent>(out FunctionCallContent? functionCall))
         {
-            toolName = GetStringProperty(mcpToolCall, "ToolName")
-                ?? GetStringProperty(mcpToolCall, "ServerName")
+            toolName = NormalizeOptionalString(functionCall.Name) ?? "function";
+            toolCallId = NormalizeOptionalString(functionCall.CallId);
+            return true;
+        }
+
+        toolName = string.Empty;
+        toolCallId = null;
+        return false;
+    }
+
+    private static bool TryGetEvaluationToolRequestInfo(
+        PortableValue requestData,
+        out string toolName,
+        out string? toolCallId)
+    {
+        if (requestData.Is<McpServerToolCallContent>(out McpServerToolCallContent? mcpToolCall))
+        {
+            toolName = NormalizeOptionalString(mcpToolCall.ToolName)
+                ?? NormalizeOptionalString(mcpToolCall.ServerName)
                 ?? string.Empty;
-            toolCallId = NormalizeOptionalString(GetStringProperty(mcpToolCall, "CallId"));
+            toolCallId = NormalizeOptionalString(mcpToolCall.CallId);
             return !string.IsNullOrWhiteSpace(toolName);
         }
 
-        if (TryReadPortableValue(requestInfo.Request.Data, CodeInterpreterToolCallContentType, out object? codeInterpreterToolCall))
+        if (requestData.Is<CodeInterpreterToolCallContent>(out CodeInterpreterToolCallContent? codeInterpreterToolCall))
         {
             toolName = "code interpreter";
-            toolCallId = NormalizeOptionalString(GetStringProperty(codeInterpreterToolCall, "CallId"));
+            toolCallId = NormalizeOptionalString(codeInterpreterToolCall.CallId);
             return true;
         }
 
-        if (TryReadPortableValue(requestInfo.Request.Data, ImageGenerationToolCallContentType, out _))
+        if (requestData.Is<ImageGenerationToolCallContent>())
         {
             toolName = "image generation";
             toolCallId = null;

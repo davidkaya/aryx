@@ -184,6 +184,8 @@ export function ActivityPanel({
 
   const isBusy = session.status === 'running';
   const hasPendingApproval = session.pendingApproval?.status === 'pending';
+  const queuedCount = (session.pendingApprovalQueue ?? []).filter((a) => a.status === 'pending').length;
+  const totalApprovalCount = (hasPendingApproval ? 1 : 0) + queuedCount;
   const toolsDisabled = isBusy || projectIsScratchpad;
   const accent = modeAccent[pattern.mode] ?? modeAccent.single;
   const hasTools = mcpServers.length > 0 || lspProfiles.length > 0;
@@ -200,7 +202,9 @@ export function ActivityPanel({
           {hasPendingApproval ? (
             <span className="flex items-center gap-1">
               <ShieldAlert className="size-3 text-amber-400" />
-              <span className="text-[9px] font-semibold uppercase tracking-wider text-amber-400">Approval</span>
+              <span className="text-[9px] font-semibold uppercase tracking-wider text-amber-400">
+                Approval{totalApprovalCount > 1 ? `s (${totalApprovalCount})` : ''}
+              </span>
             </span>
           ) : isBusy ? (
             <span className="size-1.5 animate-pulse rounded-full bg-blue-400" />

@@ -168,6 +168,7 @@ function SessionItem({
   const isRunning = session.status === 'running';
   const isError = session.status === 'error';
   const hasPendingApproval = session.pendingApproval?.status === 'pending';
+  const queuedCount = (session.pendingApprovalQueue ?? []).filter((a) => a.status === 'pending').length;
   const mode = pattern?.mode ?? 'single';
   const visual = modeVisuals[mode];
   const ModeIcon = visual.icon;
@@ -273,7 +274,7 @@ function SessionItem({
           {hasPendingApproval && (
             <span className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-400">
               <span className="size-1.5 rounded-full bg-amber-400 animate-pulse" />
-              Awaiting approval
+              Awaiting approval{queuedCount > 0 && ` (+${queuedCount})`}
             </span>
           )}
           {isError && (

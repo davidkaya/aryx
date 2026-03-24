@@ -228,13 +228,18 @@ function ApprovalBanner({
   approval,
   onResolve,
   isResolving,
+  position,
+  total,
 }: {
   approval: PendingApprovalRecord;
   onResolve: (decision: ApprovalDecision) => void;
   isResolving: boolean;
+  position?: number;
+  total?: number;
 }) {
   const kindLabel = approval.kind === 'final-response' ? 'Final response review' : 'Tool call approval';
   const hasMessages = approval.messages && approval.messages.length > 0;
+  const showPosition = position !== undefined && total !== undefined && total > 1;
 
   return (
     <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3">
@@ -247,6 +252,11 @@ function ApprovalBanner({
             <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-amber-400">
               {kindLabel}
             </span>
+            {showPosition && (
+              <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-[9px] font-semibold tabular-nums text-zinc-400">
+                {position} of {total}
+              </span>
+            )}
           </div>
 
           {/* Agent / permission context */}
@@ -301,7 +311,58 @@ function ApprovalBanner({
           <X className="size-3" />
           Reject
         </button>
+        {showPosition && (
+          <span className="ml-auto text-[10px] text-zinc-600">
+            Next approval will appear after this one is resolved
+          </span>
+        )}
       </div>
+    </div>
+  );
+}
+
+/* ── Queued approvals preview ──────────────────────────────── */
+
+function QueuedApprovalsList({ approvals }: { approvals: PendingApprovalRecord[] }) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 px-3 py-2">
+      <button
+        className="flex w-full items-center gap-2 text-left"
+        onClick={() => setExpanded(!expanded)}
+        type="button"
+      >
+        <ShieldCheck className="size-3 text-zinc-500" />
+        <span className="text-[11px] font-medium text-zinc-400">
+          {approvals.length} queued approval{approvals.length === 1 ? '' : 's'}
+        </span>
+        <ChevronDown
+          className={`ml-auto size-3 text-zinc-600 transition-transform ${expanded ? 'rotate-180' : ''}`}
+        />
+      </button>
+      {expanded && (
+        <div className="mt-2 space-y-1.5 border-t border-zinc-800/60 pt-2">
+          {approvals.map((approval) => {
+            const kindLabel = approval.kind === 'final-response' ? 'response' : 'tool';
+            return (
+              <div
+                className="flex items-center gap-2 rounded-md bg-zinc-800/40 px-2.5 py-1.5"
+                key={approval.id}
+              >
+                <ShieldAlert className="size-3 shrink-0 text-zinc-600" />
+                <span className="min-w-0 flex-1 truncate text-[11px] text-zinc-400">{approval.title}</span>
+                <span className="shrink-0 rounded-full bg-zinc-800 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wider text-zinc-500">
+                  {kindLabel}
+                </span>
+                {approval.agentName && (
+                  <span className="shrink-0 text-[10px] text-zinc-600">{approval.agentName}</span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -340,6 +401,8 @@ export function ChatPane({
 
   const isSessionBusy = session.status === 'running';
   const pendingApproval = session.pendingApproval?.status === 'pending' ? session.pendingApproval : undefined;
+  const queuedApprovals = (session.pendingApprovalQueue ?? []).filter((a) => a.status === 'pending');
+  const totalPendingCount = (pendingApproval ? 1 : 0) + queuedApprovals.length;
   const isScratchpad = isScratchpadProject(project);
   const primaryAgent = pattern.agents[0];
   const selectedModel = primaryAgent ? findModel(primaryAgent.model, availableModels) : undefined;
@@ -446,6 +509,11 @@ export function ChatPane({
               <div className="flex items-center gap-1.5 text-[12px] font-medium text-amber-400">
                 <ShieldAlert className="size-3.5" />
                 Awaiting approval
+                {queuedApprovals.length > 0 && (
+                  <span className="rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] tabular-nums">
+                    +{queuedApprovals.length} queued
+                  </span>
+                )}
               </div>
             )}
             {isSessionBusy && !pendingApproval && <span className="size-2 animate-pulse rounded-full bg-blue-400" />}
@@ -579,12 +647,17 @@ export function ChatPane({
         <div className="mx-auto max-w-3xl">
           {/* Pending approval banner */}
           {pendingApproval && (
-            <div className="mb-3">
+            <div className="mb-3 space-y-2">
               <ApprovalBanner
                 approval={pendingApproval}
                 isResolving={isResolvingApproval}
                 onResolve={(decision) => void handleResolveApproval(decision)}
+                position={totalPendingCount > 1 ? 1 : undefined}
+                total={totalPendingCount > 1 ? totalPendingCount : undefined}
               />
+              {queuedApprovals.length > 0 && (
+                <QueuedApprovalsList approvals={queuedApprovals} />
+              )}
             </div>
           )}
 

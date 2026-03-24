@@ -52,13 +52,44 @@ function GraphNodeContent({ data, selected }: { data: GraphNodeData; selected: b
   );
 }
 
+const handleStyles = {
+  system: '!size-2 !border-zinc-600 !bg-zinc-400',
+  agent: '!size-2 !border-indigo-400 !bg-indigo-500',
+  hidden: '!size-0 !border-0 !bg-transparent !min-w-0 !min-h-0',
+};
+
+/* user-input: source only (no incoming handle)
+   user-output: target only (no outgoing handle) */
+
+export const UserInputNode = memo(function UserInputNode({ data, selected }: NodeProps) {
+  const nodeData = data as unknown as GraphNodeData;
+  return (
+    <>
+      <Handle type="target" position={Position.Left} className={handleStyles.hidden} />
+      <GraphNodeContent data={nodeData} selected={selected ?? false} />
+      <Handle type="source" position={Position.Right} className={handleStyles.system} />
+    </>
+  );
+});
+
+export const UserOutputNode = memo(function UserOutputNode({ data, selected }: NodeProps) {
+  const nodeData = data as unknown as GraphNodeData;
+  return (
+    <>
+      <Handle type="target" position={Position.Left} className={handleStyles.system} />
+      <GraphNodeContent data={nodeData} selected={selected ?? false} />
+      <Handle type="source" position={Position.Right} className={handleStyles.hidden} />
+    </>
+  );
+});
+
 export const SystemNode = memo(function SystemNode({ data, selected }: NodeProps) {
   const nodeData = data as unknown as GraphNodeData;
   return (
     <>
-      <Handle type="target" position={Position.Left} className="!size-2 !border-zinc-600 !bg-zinc-400" />
+      <Handle type="target" position={Position.Left} className={handleStyles.system} />
       <GraphNodeContent data={nodeData} selected={selected ?? false} />
-      <Handle type="source" position={Position.Right} className="!size-2 !border-zinc-600 !bg-zinc-400" />
+      <Handle type="source" position={Position.Right} className={handleStyles.system} />
     </>
   );
 });
@@ -67,14 +98,16 @@ export const AgentNode = memo(function AgentNode({ data, selected }: NodeProps) 
   const nodeData = data as unknown as GraphNodeData;
   return (
     <>
-      <Handle type="target" position={Position.Left} className="!size-2 !border-indigo-400 !bg-indigo-500" />
+      <Handle type="target" position={Position.Left} className={handleStyles.agent} />
       <GraphNodeContent data={nodeData} selected={selected ?? false} />
-      <Handle type="source" position={Position.Right} className="!size-2 !border-indigo-400 !bg-indigo-500" />
+      <Handle type="source" position={Position.Right} className={handleStyles.agent} />
     </>
   );
 });
 
 export const graphNodeTypes = {
+  userInputNode: UserInputNode,
+  userOutputNode: UserOutputNode,
   systemNode: SystemNode,
   agentNode: AgentNode,
 };

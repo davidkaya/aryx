@@ -34,6 +34,7 @@ import {
   type WorkspaceToolingSettings,
 } from '@shared/domain/tooling';
 
+import { addAgentNodeToGraph } from '@renderer/lib/patternGraph';
 import { PatternGraphCanvas } from './pattern-graph/PatternGraphCanvas';
 import { PatternGraphInspector } from './pattern-graph/PatternGraphInspector';
 
@@ -149,20 +150,16 @@ export function PatternEditor({
   }
 
   function addAgent() {
-    emitChange({
-      ...pattern,
-      agents: [
-        ...pattern.agents,
-        {
-          id: `agent-${crypto.randomUUID()}`,
-          name: `Agent ${pattern.agents.length + 1}`,
-          description: '',
-          instructions: '',
-          model: 'gpt-5.4',
-          reasoningEffort: 'high',
-        },
-      ],
-    });
+    const newAgent: PatternAgentDefinition = {
+      id: `agent-${crypto.randomUUID()}`,
+      name: `Agent ${pattern.agents.length + 1}`,
+      description: '',
+      instructions: '',
+      model: 'gpt-5.4',
+      reasoningEffort: 'high',
+    };
+    const updatedGraph = addAgentNodeToGraph(graph, newAgent);
+    onChange({ ...pattern, agents: [...pattern.agents, newAgent], graph: updatedGraph });
   }
 
   function updateAgent(agentId: string, patch: Partial<PatternAgentDefinition>) {
@@ -474,9 +471,11 @@ export function PatternEditor({
             availableModels={availableModels}
             agents={pattern.agents}
             graph={graph}
+            mode={pattern.mode}
             selectedNodeId={selectedNodeId}
             onAgentChange={updateAgent}
             onAgentRemove={removeAgent}
+            onGraphChange={emitGraphChange}
           />
         </div>
       </div>

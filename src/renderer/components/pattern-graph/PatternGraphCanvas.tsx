@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   ReactFlow,
   Background,
@@ -6,17 +6,21 @@ import {
   useNodesState,
   useEdgesState,
   type Node,
+  type Edge,
   type OnConnect,
+  type OnEdgesChange,
   type OnNodesChange,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
-import type { PatternDefinition, PatternGraph } from '@shared/domain/pattern';
+import type { OrchestrationMode, PatternDefinition, PatternGraph } from '@shared/domain/pattern';
 import { resolvePatternGraph } from '@shared/domain/pattern';
 import {
   addHandoffEdge,
   fromCanvasPositions,
   isConnectionAllowed,
+  isEdgeDeletionAllowed,
+  removeEdge,
   toCanvasEdges,
   toCanvasNodes,
   type GraphNodeData,
@@ -80,6 +84,37 @@ export function PatternGraphCanvas({
     [onNodesChange, pattern, onGraphChange, setNodes],
   );
 
+  const handleEdgesChange: OnEdgesChange = useCallback(
+    (changes) => {
+      // Block all edge deletions in modes that don't support it
+      if (!isEdgeDeletionAllowed(pattern.mode)) {
+        const filtered = changes.filter((c) => c.type !== 'remove');
+        if (filtered.length > 0) {
+          onEdgesChange(filtered);
+        }
+        return;
+      }
+
+      // For handoff mode, apply removals to the authoritative graph
+      const removals = changes.filter((c) => c.type === 'remove');
+      if (removals.length > 0) {
+        let updatedGraph = graph;
+        for (const removal of removals) {
+          if (removal.type === 'remove') {
+            updatedGraph = removeEdge(updatedGraph, removal.id);
+          }
+        }
+        onGraphChange(updatedGraph);
+      }
+
+      const nonRemovals = changes.filter((c) => c.type !== 'remove');
+      if (nonRemovals.length > 0) {
+        onEdgesChange(nonRemovals);
+      }
+    },
+    [onEdgesChange, pattern.mode, graph, onGraphChange],
+  );
+
   const handleConnect: OnConnect = useCallback(
     (connection) => {
       if (!isConnectionAllowed(connection, pattern.mode, graph)) {
@@ -114,7 +149,7 @@ export function PatternGraphCanvas({
         }))}
         edges={edges}
         onNodesChange={handleNodesChange}
-        onEdgesChange={onEdgesChange}
+        onEdgesChange={handleEdgesChange}
         onConnect={handleConnect}
         onNodeClick={handleNodeClick}
         onPaneClick={handlePaneClick}
@@ -125,9 +160,11 @@ export function PatternGraphCanvas({
         maxZoom={2}
         proOptions={{ hideAttribution: true }}
         defaultEdgeOptions={{
+          type: 'smoothstep',
           style: { stroke: '#52525b', strokeWidth: 1.5 },
         }}
         connectionLineStyle={{ stroke: '#6366f1', strokeWidth: 1.5 }}
+        deleteKeyCode="Delete"
       >
         <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#27272a" />
       </ReactFlow>

@@ -2,10 +2,14 @@ import { describe, expect, test } from 'bun:test';
 
 import { createBuiltinPatterns, resolvePatternGraph, type PatternDefinition } from '@shared/domain/pattern';
 import {
+  addAgentNodeToGraph,
   addHandoffEdge,
+  canMoveSequential,
   findAgentForNode,
   isConnectionAllowed,
+  isEdgeDeletionAllowed,
   removeEdge,
+  swapSequentialOrder,
   toCanvasEdges,
   toCanvasNodes,
 } from '@renderer/lib/patternGraph';
@@ -31,7 +35,7 @@ describe('pattern graph view model', () => {
     expect(userOutput).toBeDefined();
     expect(userInput!.data.readOnly).toBe(true);
     expect(userOutput!.data.readOnly).toBe(true);
-    expect(userInput!.type).toBe('systemNode');
+    expect(userInput!.type).toBe('userInputNode');
 
     const agentNodes = nodes.filter((n) => n.data.kind === 'agent');
     expect(agentNodes.length).toBe(pattern.agents.length);
@@ -167,5 +171,91 @@ describe('pattern graph mutation helpers', () => {
     const updated = removeEdge(graph, firstEdge.id);
     expect(updated.edges.length).toBe(graph.edges.length - 1);
     expect(updated.edges.find((e) => e.id === firstEdge.id)).toBeUndefined();
+  });
+
+  test('addAgentNodeToGraph places a disconnected agent node on the canvas', () => {
+    const pattern = findPattern('sequential');
+    const graph = resolvePatternGraph(pattern);
+    const newAgent = { id: 'new-1', name: 'New Agent', description: '', instructions: '', model: 'gpt-5.4' };
+
+    const updated = addAgentNodeToGraph(graph, newAgent);
+    expect(updated.nodes.length).toBe(graph.nodes.length + 1);
+
+    const newNode = updated.nodes.find((n) => n.agentId === 'new-1');
+    expect(newNode).toBeDefined();
+    expect(newNode!.kind).toBe('agent');
+
+    // No new edges added — node is disconnected
+    expect(updated.edges.length).toBe(graph.edges.length);
+  });
+});
+
+describe('sequential reorder', () => {
+  test('swapSequentialOrder swaps two adjacent agents and rebuilds edges', () => {
+    const pattern = findPattern('sequential');
+    const graph = resolvePatternGraph(pattern);
+    const agentNodes = graph.nodes.filter((n) => n.kind === 'agent').sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
+    const firstId = agentNodes[0]!.id;
+    const secondId = agentNodes[1]!.id;
+
+    const swapped = swapSequentialOrder(graph, firstId, 'down');
+    const newFirst = swapped.nodes.find((n) => n.id === firstId)!;
+    const newSecond = swapped.nodes.find((n) => n.id === secondId)!;
+
+    expect(newFirst.order).toBe(1);
+    expect(newSecond.order).toBe(0);
+
+    // Verify linear edges still form a valid chain
+    const sortedAgents = swapped.nodes.filter((n) => n.kind === 'agent').sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    expect(sortedAgents[0]!.id).toBe(secondId);
+    expect(sortedAgents[1]!.id).toBe(firstId);
+  });
+
+  test('canMoveSequential respects boundary conditions', () => {
+    const pattern = findPattern('sequential');
+    const graph = resolvePatternGraph(pattern);
+    const agentNodes = graph.nodes.filter((n) => n.kind === 'agent').sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
+    expect(canMoveSequential(graph, agentNodes[0]!.id, 'up')).toBe(false);
+    expect(canMoveSequential(graph, agentNodes[0]!.id, 'down')).toBe(true);
+    expect(canMoveSequential(graph, agentNodes[agentNodes.length - 1]!.id, 'down')).toBe(false);
+    expect(canMoveSequential(graph, agentNodes[agentNodes.length - 1]!.id, 'up')).toBe(true);
+  });
+});
+
+describe('edge deletion rules', () => {
+  test('only handoff mode allows edge deletion', () => {
+    expect(isEdgeDeletionAllowed('handoff')).toBe(true);
+    expect(isEdgeDeletionAllowed('sequential')).toBe(false);
+    expect(isEdgeDeletionAllowed('concurrent')).toBe(false);
+    expect(isEdgeDeletionAllowed('group-chat')).toBe(false);
+    expect(isEdgeDeletionAllowed('single')).toBe(false);
+  });
+
+  test('handoff canvas edges mark only agent-to-agent edges as deletable', () => {
+    const pattern = findPattern('handoff');
+    const graph = resolvePatternGraph(pattern);
+    const edges = toCanvasEdges(graph, 'handoff');
+
+    const deletableEdges = edges.filter((e) => e.deletable);
+    const nonDeletableEdges = edges.filter((e) => !e.deletable);
+
+    // Agent-to-agent edges should be deletable
+    expect(deletableEdges.length).toBeGreaterThan(0);
+    // Structural edges (user-input → triage, agent → user-output) should not
+    expect(nonDeletableEdges.length).toBeGreaterThan(0);
+  });
+
+  test('user-input nodes use userInputNode type and user-output use userOutputNode type', () => {
+    const pattern = findPattern('sequential');
+    const graph = resolvePatternGraph(pattern);
+    const nodes = toCanvasNodes(graph, pattern.agents);
+
+    const inputNode = nodes.find((n) => n.data.kind === 'user-input');
+    const outputNode = nodes.find((n) => n.data.kind === 'user-output');
+
+    expect(inputNode!.type).toBe('userInputNode');
+    expect(outputNode!.type).toBe('userOutputNode');
   });
 });

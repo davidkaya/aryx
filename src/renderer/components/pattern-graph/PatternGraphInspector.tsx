@@ -1,4 +1,4 @@
-import { Bot, CircleUser, Layers, Plus, Radio, Shuffle, Trash2 } from 'lucide-react';
+import { Bot, ChevronDown, ChevronUp, CircleUser, Layers, Radio, Shuffle, Trash2 } from 'lucide-react';
 
 import {
   findModel,
@@ -6,17 +6,28 @@ import {
   resolveReasoningEffort,
   type ModelDefinition,
 } from '@shared/domain/models';
-import type { PatternAgentDefinition, PatternGraph, PatternGraphNodeKind } from '@shared/domain/pattern';
-import { findAgentForNode } from '@renderer/lib/patternGraph';
+import type {
+  OrchestrationMode,
+  PatternAgentDefinition,
+  PatternGraph,
+  PatternGraphNodeKind,
+} from '@shared/domain/pattern';
+import {
+  canMoveSequential,
+  findAgentForNode,
+  swapSequentialOrder,
+} from '@renderer/lib/patternGraph';
 import { ModelSelect, ReasoningEffortSelect } from '../AgentConfigFields';
 
 interface PatternGraphInspectorProps {
   availableModels: ReadonlyArray<ModelDefinition>;
   agents: PatternAgentDefinition[];
   graph: PatternGraph;
+  mode: OrchestrationMode;
   selectedNodeId: string | null;
   onAgentChange: (agentId: string, patch: Partial<PatternAgentDefinition>) => void;
   onAgentRemove: (agentId: string) => void;
+  onGraphChange: (graph: PatternGraph) => void;
 }
 
 function InputField({
@@ -104,15 +115,26 @@ function SystemNodeInspector({ kind }: { kind: PatternGraphNodeKind }) {
 function AgentNodeInspector({
   agent,
   availableModels,
+  mode,
+  graph,
+  nodeId,
   onAgentChange,
   onAgentRemove,
+  onGraphChange,
 }: {
   agent: PatternAgentDefinition;
   availableModels: ReadonlyArray<ModelDefinition>;
+  mode: OrchestrationMode;
+  graph: PatternGraph;
+  nodeId: string;
   onAgentChange: (agentId: string, patch: Partial<PatternAgentDefinition>) => void;
   onAgentRemove: (agentId: string) => void;
+  onGraphChange: (graph: PatternGraph) => void;
 }) {
   const model = findModel(agent.model, availableModels);
+  const showReorder = mode === 'sequential' || mode === 'single' || mode === 'magentic';
+  const canUp = showReorder && canMoveSequential(graph, nodeId, 'up');
+  const canDown = showReorder && canMoveSequential(graph, nodeId, 'down');
 
   return (
     <div className="space-y-4">
@@ -123,14 +145,37 @@ function AgentNodeInspector({
           </div>
           <div className="text-[13px] font-semibold text-zinc-200">{agent.name || 'Unnamed'}</div>
         </div>
-        <button
-          className="flex items-center gap-1 text-[12px] text-zinc-600 transition hover:text-red-400"
-          onClick={() => onAgentRemove(agent.id)}
-          type="button"
-        >
-          <Trash2 className="size-3" />
-          Remove
-        </button>
+        <div className="flex items-center gap-1">
+          {showReorder && (
+            <>
+              <button
+                className="flex size-6 items-center justify-center rounded text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-300 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-zinc-500"
+                disabled={!canUp}
+                onClick={() => onGraphChange(swapSequentialOrder(graph, nodeId, 'up'))}
+                title="Move earlier in sequence"
+                type="button"
+              >
+                <ChevronUp className="size-3.5" />
+              </button>
+              <button
+                className="flex size-6 items-center justify-center rounded text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-300 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-zinc-500"
+                disabled={!canDown}
+                onClick={() => onGraphChange(swapSequentialOrder(graph, nodeId, 'down'))}
+                title="Move later in sequence"
+                type="button"
+              >
+                <ChevronDown className="size-3.5" />
+              </button>
+            </>
+          )}
+          <button
+            className="flex items-center gap-1 text-[12px] text-zinc-600 transition hover:text-red-400"
+            onClick={() => onAgentRemove(agent.id)}
+            type="button"
+          >
+            <Trash2 className="size-3" />
+          </button>
+        </div>
       </div>
 
       <InputField
@@ -181,9 +226,11 @@ export function PatternGraphInspector({
   availableModels,
   agents,
   graph,
+  mode,
   selectedNodeId,
   onAgentChange,
   onAgentRemove,
+  onGraphChange,
 }: PatternGraphInspectorProps) {
   if (!selectedNodeId) {
     return (
@@ -218,8 +265,12 @@ export function PatternGraphInspector({
       <AgentNodeInspector
         agent={agent}
         availableModels={availableModels}
+        mode={mode}
+        graph={graph}
+        nodeId={selectedNodeId}
         onAgentChange={onAgentChange}
         onAgentRemove={onAgentRemove}
+        onGraphChange={onGraphChange}
       />
     </div>
   );

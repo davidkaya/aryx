@@ -210,14 +210,20 @@ function createHandoffGraph(agents: PatternAgentDefinition[]): PatternGraph {
   const outputNode: PatternGraphNode = {
     id: SYSTEM_NODE_IDS.userOutput,
     kind: 'user-output',
-    position: { x: 860, y: 0 },
+    position: { x: 700, y: 0 },
   };
   const entryAgent = agents[0];
+  const specialistCount = Math.max(agents.length - 1, 1);
   const entryNode = entryAgent
-    ? createAgentNode(entryAgent, 0, { x: 220, y: 0 })
+    ? createAgentNode(entryAgent, 0, { x: 200, y: 0 })
     : undefined;
+  // Place specialists in a vertical column with enough spacing so
+  // bidirectional edges to/from the triage agent don't overlap.
   const specialistNodes = agents.slice(1).map((agent, index) =>
-    createAgentNode(agent, index + 1, { x: 540, y: spreadY(index, Math.max(agents.length - 1, 1), 220) }),
+    createAgentNode(agent, index + 1, {
+      x: 460,
+      y: spreadY(index, specialistCount, 150),
+    }),
   );
   const nodes = [inputNode, ...(entryNode ? [entryNode] : []), ...specialistNodes, outputNode];
   const edges: PatternGraphEdge[] = [];
@@ -245,24 +251,21 @@ function createGroupChatGraph(agents: PatternAgentDefinition[]): PatternGraph {
   const orchestratorNode: PatternGraphNode = {
     id: SYSTEM_NODE_IDS.orchestrator,
     kind: 'orchestrator',
-    position: { x: 250, y: 0 },
+    position: { x: 200, y: 0 },
   };
   const outputNode: PatternGraphNode = {
     id: SYSTEM_NODE_IDS.userOutput,
     kind: 'user-output',
-    position: { x: 900, y: 0 },
+    position: { x: 660, y: 0 },
   };
-  const centerX = 560;
-  const centerY = 0;
-  const radiusX = 190;
-  const radiusY = 170;
-  const agentNodes = agents.map((agent, index) => {
-    const angle = agents.length <= 1 ? 0 : (Math.PI * 2 * index) / agents.length - Math.PI / 2;
-    return createAgentNode(agent, index, {
-      x: Math.round(centerX + Math.cos(angle) * radiusX),
-      y: Math.round(centerY + Math.sin(angle) * radiusY),
-    });
-  });
+  // Place agents in a vertical column to the right of the orchestrator.
+  // This avoids crossing edges from the bidirectional orchestrator↔agent links.
+  const agentNodes = agents.map((agent, index) =>
+    createAgentNode(agent, index, {
+      x: 440,
+      y: spreadY(index, Math.max(agents.length, 1), 130),
+    }),
+  );
 
   return {
     nodes: [inputNode, orchestratorNode, ...agentNodes, outputNode],

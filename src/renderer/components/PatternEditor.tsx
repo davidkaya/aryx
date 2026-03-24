@@ -1,9 +1,8 @@
-import { type ReactNode } from 'react';
+import { useState } from 'react';
 import {
   AlertCircle,
   ArrowLeftRight,
   CheckCircle,
-  ChevronDown,
   ChevronLeft,
   GitFork,
   ListOrdered,
@@ -17,18 +16,15 @@ import {
 } from 'lucide-react';
 
 import type { ApprovalCheckpointKind, ApprovalPolicy } from '@shared/domain/approval';
+import type { ModelDefinition } from '@shared/domain/models';
 import {
-  findModel,
-  getSupportedReasoningEfforts,
-  resolveReasoningEffort,
-  type ModelDefinition,
-} from '@shared/domain/models';
-import {
+  resolvePatternGraph,
   syncPatternGraph,
   validatePatternDefinition,
   type OrchestrationMode,
   type PatternDefinition,
   type PatternAgentDefinition,
+  type PatternGraph,
 } from '@shared/domain/pattern';
 import {
   listApprovalToolDefinitions,
@@ -38,7 +34,8 @@ import {
   type WorkspaceToolingSettings,
 } from '@shared/domain/tooling';
 
-import { ModelSelect, ReasoningEffortSelect } from './AgentConfigFields';
+import { PatternGraphCanvas } from './pattern-graph/PatternGraphCanvas';
+import { PatternGraphInspector } from './pattern-graph/PatternGraphInspector';
 
 interface PatternEditorProps {
   availableModels: ReadonlyArray<ModelDefinition>;
@@ -91,86 +88,6 @@ const modeInfo: Record<OrchestrationMode, ModeInfo> = {
   },
 };
 
-function FlowPill({ children, variant = 'agent' }: { children: ReactNode; variant?: 'user' | 'agent' }) {
-  return (
-    <span
-      className={`inline-flex rounded px-1.5 py-0.5 text-[9px] font-semibold leading-none ${
-        variant === 'user'
-          ? 'bg-indigo-500/20 text-indigo-400'
-          : 'bg-zinc-700/60 text-zinc-400'
-      }`}
-    >
-      {children}
-    </span>
-  );
-}
-
-function FlowArrow({ label }: { label?: string }) {
-  return <span className="text-[10px] leading-none text-zinc-600">{label ?? '→'}</span>;
-}
-
-function ModeFlowDiagram({ mode }: { mode: OrchestrationMode }) {
-  switch (mode) {
-    case 'single':
-      return (
-        <div className="flex items-center gap-1">
-          <FlowPill variant="user">You</FlowPill>
-          <FlowArrow />
-          <FlowPill>Agent</FlowPill>
-          <FlowArrow />
-          <FlowPill variant="user">You</FlowPill>
-        </div>
-      );
-    case 'sequential':
-      return (
-        <div className="flex items-center gap-1">
-          <FlowPill>A₁</FlowPill>
-          <FlowArrow />
-          <FlowPill>A₂</FlowPill>
-          <FlowArrow />
-          <FlowPill>A₃</FlowPill>
-        </div>
-      );
-    case 'concurrent':
-      return (
-        <div className="flex items-center gap-1">
-          <FlowPill variant="user">You</FlowPill>
-          <FlowArrow />
-          <div className="flex gap-0.5">
-            <FlowPill>A₁</FlowPill>
-            <FlowPill>A₂</FlowPill>
-            <FlowPill>A₃</FlowPill>
-          </div>
-          <FlowArrow />
-          <FlowPill variant="user">You</FlowPill>
-        </div>
-      );
-    case 'handoff':
-      return (
-        <div className="flex items-center gap-1">
-          <FlowPill>Triage</FlowPill>
-          <FlowArrow label="⇄" />
-          <FlowPill>S₁</FlowPill>
-          <FlowPill>S₂</FlowPill>
-        </div>
-      );
-    case 'group-chat':
-      return (
-        <div className="flex items-center gap-1">
-          <FlowPill>A₁</FlowPill>
-          <FlowArrow label="⇄" />
-          <FlowPill>A₂</FlowPill>
-          <FlowArrow label="⇄" />
-          <FlowPill>A₃</FlowPill>
-        </div>
-      );
-    case 'magentic':
-      return <span className="text-[10px] italic text-zinc-700">Coming soon</span>;
-    default:
-      return null;
-  }
-}
-
 function InputField({
   label,
   value,
@@ -219,10 +136,33 @@ export function PatternEditor({
   onSave,
   onBack,
 }: PatternEditorProps) {
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const issues = validatePatternDefinition(pattern);
+  const graph = resolvePatternGraph(pattern);
 
   function emitChange(nextPattern: PatternDefinition) {
     onChange(syncPatternGraph(nextPattern));
+  }
+
+  function emitGraphChange(nextGraph: PatternGraph) {
+    onChange({ ...pattern, graph: nextGraph });
+  }
+
+  function addAgent() {
+    emitChange({
+      ...pattern,
+      agents: [
+        ...pattern.agents,
+        {
+          id: `agent-${crypto.randomUUID()}`,
+          name: `Agent ${pattern.agents.length + 1}`,
+          description: '',
+          instructions: '',
+          model: 'gpt-5.4',
+          reasoningEffort: 'high',
+        },
+      ],
+    });
   }
 
   function updateAgent(agentId: string, patch: Partial<PatternAgentDefinition>) {
@@ -232,12 +172,16 @@ export function PatternEditor({
     });
   }
 
-  function updateAgentModel(agent: PatternAgentDefinition, modelId: string) {
-    const model = findModel(modelId, availableModels);
-    updateAgent(agent.id, {
-      model: modelId,
-      reasoningEffort: resolveReasoningEffort(model, agent.reasoningEffort),
+  function removeAgent(agentId: string) {
+    if (pattern.agents.length <= 1) {
+      return;
+    }
+
+    emitChange({
+      ...pattern,
+      agents: pattern.agents.filter((a) => a.id !== agentId),
     });
+    setSelectedNodeId(null);
   }
 
   function updateApprovalPolicy(updater: (current: ApprovalPolicy | undefined) => ApprovalPolicy | undefined) {
@@ -289,7 +233,7 @@ export function PatternEditor({
 
   return (
     <div className="flex h-full flex-col">
-      {/* Header — consistent ← navigation */}
+      {/* Header */}
       <div className="drag-region flex items-center justify-between border-b border-[var(--color-border)] px-5 pb-3 pt-3">
         <div className="flex items-center gap-3">
           <button
@@ -329,267 +273,211 @@ export function PatternEditor({
         </div>
       </div>
 
-      {/* Body */}
-      <div className="flex-1 overflow-y-auto px-6 py-5">
-        <div className="mx-auto max-w-2xl space-y-8">
+      {/* Body — graph canvas + inspector split */}
+      <div className="flex min-h-0 flex-1">
+        {/* Left column: graph canvas + settings below */}
+        <div className="flex min-w-0 flex-1 flex-col">
           {/* Validation banner */}
-          {issues.length > 0 ? (
-            <div className="space-y-2">
-              {issues.map((issue, i) => (
-                <div
-                  className={`flex items-start gap-2 rounded-lg px-3 py-2 text-[13px] ${
-                    issue.level === 'error'
-                      ? 'bg-red-500/10 text-red-300'
-                      : 'bg-amber-500/10 text-amber-300'
-                  }`}
-                  key={`${issue.field ?? 'v'}-${i}`}
-                >
-                  <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
-                  {issue.message}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 rounded-lg bg-emerald-500/10 px-3 py-2 text-[13px] text-emerald-300">
-              <CheckCircle className="size-3.5" />
-              Pattern is valid and ready to use
-            </div>
-          )}
-
-          {/* Name + description */}
-          <section className="space-y-4">
-            <h4 className="text-[12px] font-semibold uppercase tracking-wider text-zinc-500">
-              General
-            </h4>
-            <InputField
-              label="Name"
-              onChange={(v) => emitChange({ ...pattern, name: v })}
-              placeholder="Pattern name"
-              value={pattern.name}
-            />
-            <InputField
-              label="Description"
-              multiline
-              onChange={(v) => emitChange({ ...pattern, description: v })}
-              placeholder="What this pattern does..."
-              value={pattern.description}
-            />
-          </section>
-
-          {/* Mode selector cards */}
-          <section className="space-y-4">
-            <h4 className="text-[12px] font-semibold uppercase tracking-wider text-zinc-500">
-              Orchestration Mode
-            </h4>
-            <div className="grid grid-cols-2 gap-2">
-              {(Object.keys(modeInfo) as OrchestrationMode[]).map((mode) => {
-                const info = modeInfo[mode];
-                const Icon = info.icon;
-                const selected = pattern.mode === mode;
-                const disabled = mode === 'magentic';
-
-                return (
-                  <button
-                    className={`flex flex-col rounded-xl border p-3 text-left transition ${
-                      selected
-                        ? 'border-indigo-500/40 bg-indigo-500/5 ring-1 ring-indigo-500/20'
-                        : disabled
-                          ? 'cursor-not-allowed border-zinc-800/50 opacity-40'
-                          : 'border-zinc-800 hover:border-zinc-700 hover:bg-zinc-900/60'
+          <div className="px-5 pt-4">
+            {issues.length > 0 ? (
+              <div className="space-y-1.5">
+                {issues.map((issue, i) => (
+                  <div
+                    className={`flex items-start gap-2 rounded-lg px-3 py-2 text-[12px] ${
+                      issue.level === 'error'
+                        ? 'bg-red-500/10 text-red-300'
+                        : 'bg-amber-500/10 text-amber-300'
                     }`}
-                    disabled={disabled}
-                    key={mode}
-                    onClick={() => emitChange({ ...pattern, mode })}
-                    type="button"
+                    key={`${issue.field ?? 'v'}-${i}`}
                   >
-                    <div className="flex items-center gap-2">
-                      <Icon
-                        className={`size-4 ${selected ? 'text-indigo-400' : 'text-zinc-500'}`}
-                      />
-                      <span
-                        className={`text-[12px] font-semibold ${
-                          selected ? 'text-indigo-200' : 'text-zinc-300'
-                        }`}
-                      >
-                        {info.label}
-                      </span>
-                    </div>
-                    <p className="mt-1 text-[11px] leading-snug text-zinc-500">
-                      {info.description}
-                    </p>
-                    <div className="mt-2.5">
-                      <ModeFlowDiagram mode={mode} />
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </section>
+                    <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
+                    {issue.message}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 rounded-lg bg-emerald-500/10 px-3 py-2 text-[12px] text-emerald-300">
+                <CheckCircle className="size-3.5" />
+                Pattern is valid
+              </div>
+            )}
+          </div>
 
-          {/* Agents */}
-          <section className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h4 className="text-[12px] font-semibold uppercase tracking-wider text-zinc-500">
-                Agents ({pattern.agents.length})
-              </h4>
-              <button
-                className="flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[12px] font-medium text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-200"
-                onClick={() =>
-                  emitChange({
-                    ...pattern,
-                    agents: [
-                      ...pattern.agents,
-                      {
-                        id: `agent-${crypto.randomUUID()}`,
-                        name: `Agent ${pattern.agents.length + 1}`,
-                        description: '',
-                        instructions: '',
-                        model: 'gpt-5.4',
-                        reasoningEffort: 'high',
-                      },
-                    ],
-                  })
-                }
-                type="button"
-              >
-                <Plus className="size-3" />
-                Add agent
-              </button>
-            </div>
+          {/* Graph canvas */}
+          <div className="flex items-center justify-between px-5 pt-4">
+            <h4 className="text-[12px] font-semibold uppercase tracking-wider text-zinc-500">
+              Topology
+            </h4>
+            <button
+              className="flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[12px] font-medium text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-200"
+              onClick={addAgent}
+              type="button"
+            >
+              <Plus className="size-3" />
+              Add agent
+            </button>
+          </div>
 
-            <div className="space-y-3">
-              {pattern.agents.map((agent, index) => (
-                <div
-                  className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4"
-                  key={agent.id}
-                >
-                  <div className="mb-3 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="flex size-5 items-center justify-center rounded bg-zinc-700/60 text-[10px] font-bold text-zinc-400">
-                        {index + 1}
-                      </span>
-                      <span className="text-[12px] font-medium text-zinc-300">
-                        {agent.name || 'Unnamed agent'}
-                      </span>
-                    </div>
-                    {pattern.agents.length > 1 && (
+          <div className="min-h-[300px] flex-1 px-5 py-3">
+            <PatternGraphCanvas
+              pattern={pattern}
+              onGraphChange={emitGraphChange}
+              onNodeSelect={setSelectedNodeId}
+              selectedNodeId={selectedNodeId}
+            />
+          </div>
+
+          {/* Scrollable settings below graph */}
+          <div className="max-h-[45%] overflow-y-auto border-t border-zinc-800/50 px-5 py-5">
+            <div className="space-y-8">
+              {/* General */}
+              <section className="space-y-4">
+                <h4 className="text-[12px] font-semibold uppercase tracking-wider text-zinc-500">
+                  General
+                </h4>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <InputField
+                    label="Name"
+                    onChange={(v) => emitChange({ ...pattern, name: v })}
+                    placeholder="Pattern name"
+                    value={pattern.name}
+                  />
+                  <InputField
+                    label="Description"
+                    onChange={(v) => emitChange({ ...pattern, description: v })}
+                    placeholder="What this pattern does..."
+                    value={pattern.description}
+                  />
+                </div>
+              </section>
+
+              {/* Mode selector */}
+              <section className="space-y-4">
+                <h4 className="text-[12px] font-semibold uppercase tracking-wider text-zinc-500">
+                  Orchestration Mode
+                </h4>
+                <div className="grid grid-cols-3 gap-2">
+                  {(Object.keys(modeInfo) as OrchestrationMode[]).map((mode) => {
+                    const info = modeInfo[mode];
+                    const Icon = info.icon;
+                    const selected = pattern.mode === mode;
+                    const disabled = mode === 'magentic';
+
+                    return (
                       <button
-                        className="flex items-center gap-1 text-[12px] text-zinc-600 transition hover:text-red-400"
-                        onClick={() =>
-                          emitChange({
-                            ...pattern,
-                            agents: pattern.agents.filter((a) => a.id !== agent.id),
-                          })
-                        }
+                        className={`flex flex-col rounded-xl border p-2.5 text-left transition ${
+                          selected
+                            ? 'border-indigo-500/40 bg-indigo-500/5 ring-1 ring-indigo-500/20'
+                            : disabled
+                              ? 'cursor-not-allowed border-zinc-800/50 opacity-40'
+                              : 'border-zinc-800 hover:border-zinc-700 hover:bg-zinc-900/60'
+                        }`}
+                        disabled={disabled}
+                        key={mode}
+                        onClick={() => emitChange({ ...pattern, mode })}
                         type="button"
                       >
-                        <Trash2 className="size-3" />
-                        Remove
+                        <div className="flex items-center gap-1.5">
+                          <Icon
+                            className={`size-3.5 ${selected ? 'text-indigo-400' : 'text-zinc-500'}`}
+                          />
+                          <span
+                            className={`text-[11px] font-semibold ${
+                              selected ? 'text-indigo-200' : 'text-zinc-300'
+                            }`}
+                          >
+                            {info.label}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-[10px] leading-snug text-zinc-500">
+                          {info.description}
+                        </p>
                       </button>
+                    );
+                  })}
+                </div>
+              </section>
+
+              {/* Approval checkpoints */}
+              <section className="space-y-4">
+                <h4 className="text-[12px] font-semibold uppercase tracking-wider text-zinc-500">
+                  Approval Checkpoints
+                </h4>
+
+                <p className="text-[11px] leading-relaxed text-zinc-600">
+                  Pause the run for human review before risky actions or publishing responses.
+                </p>
+
+                <div className="space-y-3">
+                  <ApprovalCheckpointRow
+                    agents={pattern.agents}
+                    enabled={isCheckpointEnabled('tool-call')}
+                    kind="tool-call"
+                    label="Tool call approval"
+                    description="Require approval before the agent executes tool calls"
+                    onToggle={(enabled) => toggleCheckpoint('tool-call', enabled)}
+                    scopedAgentIds={checkpointAgentIds('tool-call')}
+                    onScopeChange={(agentIds) => setCheckpointAgentScope('tool-call', agentIds)}
+                  />
+                  <ApprovalCheckpointRow
+                    agents={pattern.agents}
+                    enabled={isCheckpointEnabled('final-response')}
+                    kind="final-response"
+                    label="Final response review"
+                    description="Review and approve assistant messages before publication"
+                    onToggle={(enabled) => toggleCheckpoint('final-response', enabled)}
+                    scopedAgentIds={checkpointAgentIds('final-response')}
+                    onScopeChange={(agentIds) => setCheckpointAgentScope('final-response', agentIds)}
+                  />
+                </div>
+              </section>
+
+              {/* Tool auto-approval */}
+              {isCheckpointEnabled('tool-call') && (
+                <section className="space-y-4">
+                  <h4 className="text-[12px] font-semibold uppercase tracking-wider text-zinc-500">
+                    Tool Auto-Approval Defaults
+                  </h4>
+
+                  <p className="text-[11px] leading-relaxed text-zinc-600">
+                    Tools marked as auto-approved will skip manual review.
+                    Sessions can override these defaults from the Activity panel.
+                  </p>
+
+                  <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 py-3">
+                    {approvalTools.length === 0 ? (
+                      <p className="py-2 text-center text-[11px] text-zinc-600">
+                        No tools available yet. Connect MCP servers or wait for runtime capabilities to load.
+                      </p>
+                    ) : (
+                      <ToolApprovalGroupedList
+                        autoApprovedSet={autoApprovedSet}
+                        onToggle={toggleToolAutoApproval}
+                        tools={approvalTools}
+                      />
                     )}
                   </div>
-
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    <InputField
-                      label="Name"
-                      onChange={(v) => updateAgent(agent.id, { name: v })}
-                      value={agent.name}
-                    />
-                    <ModelSelect
-                      models={availableModels}
-                      onChange={(value) => updateAgentModel(agent, value)}
-                      value={agent.model}
-                    />
-                    <ReasoningEffortSelect
-                      label="Reasoning"
-                      onChange={(value) => updateAgent(agent.id, { reasoningEffort: value })}
-                      supportedEfforts={getSupportedReasoningEfforts(findModel(agent.model, availableModels))}
-                      value={resolveReasoningEffort(findModel(agent.model, availableModels), agent.reasoningEffort)}
-                    />
-                  </div>
-                  <div className="mt-3">
-                    <InputField
-                      label="Description"
-                      onChange={(v) => updateAgent(agent.id, { description: v })}
-                      placeholder="What this agent does..."
-                      value={agent.description}
-                    />
-                  </div>
-                  <div className="mt-3">
-                    <InputField
-                      label="Instructions"
-                      multiline
-                      onChange={(v) => updateAgent(agent.id, { instructions: v })}
-                      placeholder="System prompt for this agent..."
-                      value={agent.instructions}
-                    />
-                  </div>
-                </div>
-              ))}
+                </section>
+              )}
             </div>
-          </section>
+          </div>
+        </div>
 
-          {/* Approval checkpoints */}
-          <section className="space-y-4">
+        {/* Right column: node inspector */}
+        <div className="w-[320px] shrink-0 overflow-y-auto border-l border-zinc-800/50 bg-zinc-900/30">
+          <div className="border-b border-zinc-800/50 px-4 py-3">
             <h4 className="text-[12px] font-semibold uppercase tracking-wider text-zinc-500">
-              Approval Checkpoints
+              Inspector
             </h4>
-
-            <p className="text-[11px] leading-relaxed text-zinc-600">
-              Pause the run for human review before risky actions or publishing responses.
-            </p>
-
-            <div className="space-y-3">
-              <ApprovalCheckpointRow
-                agents={pattern.agents}
-                enabled={isCheckpointEnabled('tool-call')}
-                kind="tool-call"
-                label="Tool call approval"
-                description="Require approval before the agent executes tool calls"
-                onToggle={(enabled) => toggleCheckpoint('tool-call', enabled)}
-                scopedAgentIds={checkpointAgentIds('tool-call')}
-                onScopeChange={(agentIds) => setCheckpointAgentScope('tool-call', agentIds)}
-              />
-              <ApprovalCheckpointRow
-                agents={pattern.agents}
-                enabled={isCheckpointEnabled('final-response')}
-                kind="final-response"
-                label="Final response review"
-                description="Review and approve assistant messages before publication"
-                onToggle={(enabled) => toggleCheckpoint('final-response', enabled)}
-                scopedAgentIds={checkpointAgentIds('final-response')}
-                onScopeChange={(agentIds) => setCheckpointAgentScope('final-response', agentIds)}
-              />
-            </div>
-          </section>
-
-          {/* Tool auto-approval defaults — only relevant when tool-call approval is on */}
-          {isCheckpointEnabled('tool-call') && (
-            <section className="space-y-4">
-              <h4 className="text-[12px] font-semibold uppercase tracking-wider text-zinc-500">
-                Tool Auto-Approval Defaults
-              </h4>
-
-              <p className="text-[11px] leading-relaxed text-zinc-600">
-                Tools marked as auto-approved will skip manual review.
-                Sessions can override these defaults from the Activity panel.
-              </p>
-
-              <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 py-3">
-                {approvalTools.length === 0 ? (
-                  <p className="py-2 text-center text-[11px] text-zinc-600">
-                    No tools available yet. Connect MCP servers or wait for runtime capabilities to load.
-                  </p>
-                ) : (
-                  <ToolApprovalGroupedList
-                    autoApprovedSet={autoApprovedSet}
-                    onToggle={toggleToolAutoApproval}
-                    tools={approvalTools}
-                  />
-                )}
-              </div>
-            </section>
-          )}
+          </div>
+          <PatternGraphInspector
+            availableModels={availableModels}
+            agents={pattern.agents}
+            graph={graph}
+            selectedNodeId={selectedNodeId}
+            onAgentChange={updateAgent}
+            onAgentRemove={removeAgent}
+          />
         </div>
       </div>
     </div>

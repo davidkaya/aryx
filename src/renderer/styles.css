@@ -140,6 +140,53 @@ textarea {
   max-height: 200px;
 }
 
+/* React Flow dark theme overrides */
+.react-flow__node {
+  font-family: inherit;
+}
+
+.react-flow__edge-path {
+  stroke: #52525b;
+  stroke-width: 1.5;
+}
+
+.react-flow__edge.animated .react-flow__edge-path {
+  stroke-dasharray: 5;
+  animation: reactflow-dash 0.5s linear infinite;
+}
+
+@keyframes reactflow-dash {
+  to {
+    stroke-dashoffset: -10;
+  }
+}
+
+.react-flow__controls {
+  border: 1px solid #27272a;
+  background: #18181b;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.react-flow__controls button {
+  background: #18181b;
+  border-color: #27272a;
+  color: #a1a1aa;
+  width: 28px;
+  height: 28px;
+}
+
+.react-flow__controls button:hover {
+  background: #27272a;
+  color: #e4e4e7;
+}
+
+.react-flow__minimap {
+  background: #09090b;
+  border: 1px solid #27272a;
+  border-radius: 8px;
+}
+
 /* Sidebar running-session pulse animation */
 @keyframes sidebar-pulse {
   0%, 100% { opacity: 1; }

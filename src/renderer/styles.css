@@ -150,6 +150,12 @@ textarea {
   stroke-width: 1.5;
 }
 
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke: #818cf8;
+  stroke-width: 2.5;
+  filter: drop-shadow(0 0 4px rgba(129, 140, 248, 0.4));
+}
+
 .react-flow__edge.animated .react-flow__edge-path {
   stroke-dasharray: 5;
   animation: reactflow-dash 0.5s linear infinite;

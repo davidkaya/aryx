@@ -531,8 +531,13 @@ function getAgentNodes(graph: PatternGraph): PatternGraphNode[] {
   return graph.nodes.filter((node) => node.kind === 'agent');
 }
 
-function pushGraphIssue(issues: PatternValidationIssue[], message: string, field = 'graph'): void {
-  issues.push({ level: 'error', field, message });
+function pushGraphIssue(
+  issues: PatternValidationIssue[],
+  message: string,
+  field = 'graph',
+  level: 'error' | 'warning' = 'error',
+): void {
+  issues.push({ level, field, message });
 }
 
 function buildAdjacency(graph: PatternGraph): {
@@ -779,7 +784,7 @@ function validateHandoffGraph(
 
   for (const agentNode of agentNodes) {
     if (!reachable.has(agentNode.id)) {
-      pushGraphIssue(issues, `Handoff entry agent must be able to reach "${agentNode.agentId}".`);
+      pushGraphIssue(issues, `Handoff entry agent must be able to reach "${agentNode.agentId}".`, 'graph', 'warning');
     }
   }
 
@@ -807,7 +812,7 @@ function validateGroupChatGraph(
   const orchestratorSources = new Set((incoming.get(orchestratorNode.id) ?? []).map((edge) => edge.source));
 
   if (graph.edges.length !== pattern.agents.length * 2 + 2) {
-    pushGraphIssue(issues, 'Group chat graphs must connect the orchestrator to every participant and then back to user output.');
+    pushGraphIssue(issues, 'Group chat graphs must connect the orchestrator to every participant and then back to user output.', 'graph', 'warning');
   }
 
   if ((outgoing.get(inputNode.id) ?? []).some((edge) => edge.target !== orchestratorNode.id)) {
@@ -820,11 +825,11 @@ function validateGroupChatGraph(
 
   for (const agentNode of agentNodes) {
     if (!orchestratorTargets.has(agentNode.id)) {
-      pushGraphIssue(issues, `Orchestrator must connect to agent "${agentNode.agentId}".`);
+      pushGraphIssue(issues, `Orchestrator must connect to agent "${agentNode.agentId}".`, 'graph', 'warning');
     }
 
     if (!orchestratorSources.has(agentNode.id)) {
-      pushGraphIssue(issues, `Agent "${agentNode.agentId}" must connect back to the orchestrator.`);
+      pushGraphIssue(issues, `Agent "${agentNode.agentId}" must connect back to the orchestrator.`, 'graph', 'warning');
     }
   }
 }

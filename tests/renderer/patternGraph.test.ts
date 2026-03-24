@@ -3,7 +3,7 @@ import { describe, expect, test } from 'bun:test';
 import { createBuiltinPatterns, resolvePatternGraph, type PatternDefinition } from '@shared/domain/pattern';
 import {
   addAgentNodeToGraph,
-  addHandoffEdge,
+  addEdge,
   autoLayoutGraph,
   canMoveSequential,
   findAgentForNode,
@@ -148,19 +148,53 @@ describe('pattern graph connection rules', () => {
     );
     expect(allowed).toBe(false);
   });
+
+  test('group-chat mode allows orchestrator-to-agent connections', () => {
+    const pattern = findPattern('group-chat');
+    const graph = resolvePatternGraph(pattern);
+    const orchestratorNode = graph.nodes.find((n) => n.kind === 'orchestrator')!;
+    const agentNode = graph.nodes.find((n) => n.kind === 'agent')!;
+
+    const orcToAgent = isConnectionAllowed(
+      { source: orchestratorNode.id, target: agentNode.id, sourceHandle: null, targetHandle: null },
+      'group-chat',
+      graph,
+    );
+    expect(orcToAgent).toBe(true);
+
+    const agentToOrc = isConnectionAllowed(
+      { source: agentNode.id, target: orchestratorNode.id, sourceHandle: null, targetHandle: null },
+      'group-chat',
+      graph,
+    );
+    expect(agentToOrc).toBe(true);
+  });
+
+  test('group-chat mode disallows agent-to-agent connections', () => {
+    const pattern = findPattern('group-chat');
+    const graph = resolvePatternGraph(pattern);
+    const agentNodes = graph.nodes.filter((n) => n.kind === 'agent');
+
+    const allowed = isConnectionAllowed(
+      { source: agentNodes[0]!.id, target: agentNodes[1]!.id, sourceHandle: null, targetHandle: null },
+      'group-chat',
+      graph,
+    );
+    expect(allowed).toBe(false);
+  });
 });
 
 describe('pattern graph mutation helpers', () => {
-  test('addHandoffEdge adds a new edge between agent nodes', () => {
+  test('addEdge adds a new edge between agent nodes', () => {
     const pattern = findPattern('handoff');
     const graph = resolvePatternGraph(pattern);
     const agentNodes = graph.nodes.filter((n) => n.kind === 'agent');
     const initialEdgeCount = graph.edges.length;
 
-    const updated = addHandoffEdge(graph, agentNodes[1]!.id, agentNodes[2]!.id);
+    const updated = addEdge(graph, agentNodes[1]!.id, agentNodes[2]!.id);
     expect(updated.edges.length).toBe(initialEdgeCount + 1);
 
-    const duplicated = addHandoffEdge(updated, agentNodes[1]!.id, agentNodes[2]!.id);
+    const duplicated = addEdge(updated, agentNodes[1]!.id, agentNodes[2]!.id);
     expect(duplicated.edges.length).toBe(initialEdgeCount + 1);
   });
 

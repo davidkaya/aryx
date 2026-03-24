@@ -208,8 +208,10 @@ export function isConnectionAllowed(
       return false;
     case 'handoff':
       return sourceNode.kind === 'agent' && targetNode.kind === 'agent';
-    case 'group-chat':
-      return false;
+    case 'group-chat': {
+      const kinds = new Set([sourceNode.kind, targetNode.kind]);
+      return kinds.has('orchestrator') && kinds.has('agent');
+    }
     default:
       return false;
   }
@@ -226,7 +228,7 @@ function edgeId(source: string, target: string): string {
   return `edge-${source}-to-${target}`;
 }
 
-export function addHandoffEdge(graph: PatternGraph, source: string, target: string): PatternGraph {
+export function addEdge(graph: PatternGraph, source: string, target: string): PatternGraph {
   const newEdge: PatternGraphEdge = {
     id: edgeId(source, target),
     source,

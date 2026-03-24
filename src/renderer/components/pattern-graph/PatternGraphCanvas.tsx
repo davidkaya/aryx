@@ -22,7 +22,7 @@ import type { OrchestrationMode, PatternDefinition, PatternGraph } from '@shared
 import { resolvePatternGraph } from '@shared/domain/pattern';
 import type { ModelDefinition } from '@shared/domain/models';
 import {
-  addHandoffEdge,
+  addEdge,
   autoLayoutGraph,
   fromCanvasPositions,
   isConnectionAllowed,
@@ -143,7 +143,7 @@ function PatternGraphCanvasInner({
       }
 
       if (connection.source && connection.target) {
-        const updatedGraph = addHandoffEdge(graph, connection.source, connection.target);
+        const updatedGraph = addEdge(graph, connection.source, connection.target);
         onGraphChange(updatedGraph);
       }
     },

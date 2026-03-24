@@ -22,7 +22,7 @@ import {
   resolveReasoningEffort,
 } from '@shared/domain/models';
 import type { PatternDefinition } from '@shared/domain/pattern';
-import { isScratchpadProject } from '@shared/domain/project';
+import { isScratchpadProject, SCRATCHPAD_PROJECT_ID } from '@shared/domain/project';
 import { applyScratchpadSessionConfig } from '@shared/domain/session';
 import type { LspProfileDefinition, McpServerDefinition } from '@shared/domain/tooling';
 import type { WorkspaceState } from '@shared/domain/workspace';
@@ -89,7 +89,7 @@ export default function App() {
   const [isRefreshingCapabilities, setIsRefreshingCapabilities] = useState(false);
 
   const [showSettings, setShowSettings] = useState(false);
-  const [showNewSession, setShowNewSession] = useState(false);
+  const [newSessionProjectId, setNewSessionProjectId] = useState<string>();
 
   // Load workspace on mount
   useEffect(() => {
@@ -201,6 +201,21 @@ export default function App() {
     }
   };
 
+  const handleCreateScratchpad = () => {
+    const singlePatterns = workspace.patterns
+      .filter((p) => p.mode === 'single' && p.availability !== 'unavailable')
+      .sort((a, b) => {
+        if (a.isFavorite && !b.isFavorite) return -1;
+        if (!a.isFavorite && b.isFavorite) return 1;
+        return 0;
+      });
+
+    const defaultPattern = singlePatterns[0];
+    if (defaultPattern) {
+      void api.createSession({ projectId: SCRATCHPAD_PROJECT_ID, patternId: defaultPattern.id });
+    }
+  };
+
   // Determine main content
   let content: React.ReactNode;
   let detailPanel: React.ReactNode | undefined;
@@ -253,7 +268,7 @@ export default function App() {
       <WelcomePane
         hasProjects={hasUserProjects}
         onAddProject={() => void api.addProject()}
-        onNewSession={() => setShowNewSession(true)}
+        onNewScratchpad={() => handleCreateScratchpad()}
         onOpenSettings={() => setShowSettings(true)}
       />
     );
@@ -309,7 +324,10 @@ export default function App() {
         sidebar={
           <Sidebar
             onAddProject={() => void api.addProject()}
-            onNewSession={() => setShowNewSession(true)}
+            onCreateScratchpad={() => handleCreateScratchpad()}
+            onNewProjectSession={(projectId) => {
+              setNewSessionProjectId(projectId);
+            }}
             onOpenSettings={() => setShowSettings(true)}
             onProjectSelect={(projectId) => {
               void api.selectProject(projectId);
@@ -337,12 +355,12 @@ export default function App() {
         }
       />
 
-      {showNewSession && (
+      {newSessionProjectId && (
         <NewSessionModal
-          defaultProjectId={workspace.selectedProjectId}
-          onClose={() => setShowNewSession(false)}
+          defaultProjectId={newSessionProjectId}
+          onClose={() => setNewSessionProjectId(undefined)}
           onCreate={(projectId, patternId) => {
-            setShowNewSession(false);
+            setNewSessionProjectId(undefined);
             void api.createSession({ projectId, patternId });
           }}
           onTogglePatternFavorite={(patternId, isFavorite) => {

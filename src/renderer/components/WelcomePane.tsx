@@ -2,14 +2,14 @@ import { MessageSquare, Plus, Settings } from 'lucide-react';
 
 interface WelcomePaneProps {
   hasProjects: boolean;
-  onNewSession: () => void;
+  onNewScratchpad: () => void;
   onAddProject: () => void;
   onOpenSettings: () => void;
 }
 
 export function WelcomePane({
   hasProjects,
-  onNewSession,
+  onNewScratchpad,
   onAddProject,
   onOpenSettings,
 }: WelcomePaneProps) {
@@ -31,11 +31,11 @@ export function WelcomePane({
         <div className="flex flex-col items-center gap-2">
           <button
             className="flex items-center gap-2 rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-indigo-500"
-            onClick={onNewSession}
+            onClick={onNewScratchpad}
             type="button"
           >
             <Plus className="size-4" />
-            New Session
+            New Scratchpad
           </button>
           {!hasProjects && (
             <button

@@ -35,7 +35,8 @@ import type { WorkspaceState } from '@shared/domain/workspace';
 interface SidebarProps {
   workspace: WorkspaceState;
   onAddProject: () => void;
-  onNewSession: () => void;
+  onCreateScratchpad: () => void;
+  onNewProjectSession: (projectId: string) => void;
   onProjectSelect: (projectId?: string) => void;
   onSessionSelect: (sessionId: string) => void;
   onOpenSettings: () => void;
@@ -310,6 +311,8 @@ function ProjectGroup({
   onRenameSubmit,
   onRenameCancel,
   onRefreshGitContext,
+  onNewSession,
+  newSessionLabel,
 }: {
   project: ProjectRecord;
   sessions: SessionRecord[];
@@ -321,6 +324,8 @@ function ProjectGroup({
   onRenameSubmit: (sessionId: string, title: string) => void;
   onRenameCancel: () => void;
   onRefreshGitContext?: (projectId: string) => void;
+  onNewSession?: () => void;
+  newSessionLabel?: string;
 }){
   const [expanded, setExpanded] = useState(true);
   const isScratchpad = isScratchpadProject(project);
@@ -414,6 +419,16 @@ function ProjectGroup({
               />
             ))
           )}
+          {onNewSession && (
+            <button
+              className="flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-zinc-700/60 bg-zinc-800/20 px-2.5 py-1.5 text-[12px] font-medium text-zinc-500 transition hover:border-indigo-500/40 hover:bg-indigo-500/5 hover:text-indigo-300"
+              onClick={onNewSession}
+              type="button"
+            >
+              <Plus className="size-3.5" />
+              {newSessionLabel ?? 'New Session'}
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -425,7 +440,8 @@ function ProjectGroup({
 export function Sidebar({
   workspace,
   onAddProject,
-  onNewSession,
+  onCreateScratchpad,
+  onNewProjectSession,
   onProjectSelect,
   onSessionSelect,
   onOpenSettings,
@@ -537,18 +553,6 @@ export function Sidebar({
         </div>
       </div>
 
-      {/* New session CTA */}
-      <div className="px-3 pt-2 pb-1">
-        <button
-          className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-zinc-700 bg-zinc-800/30 px-3 py-2 text-[13px] font-medium text-zinc-400 transition hover:border-indigo-500/40 hover:bg-indigo-500/5 hover:text-indigo-300"
-          onClick={onNewSession}
-          type="button"
-        >
-          <Plus className="size-4" />
-          New Session
-        </button>
-      </div>
-
       {/* Session list */}
       <div
         className="flex-1 overflow-y-auto px-2 py-2"
@@ -600,6 +604,8 @@ export function Sidebar({
                   project={scratchpadProject}
                   selectedSessionId={workspace.selectedSessionId}
                   sessions={workspace.sessions.filter((session) => session.projectId === scratchpadProject.id)}
+                  onNewSession={onCreateScratchpad}
+                  newSessionLabel="New Scratchpad"
                 />
               </div>
             )}
@@ -646,6 +652,7 @@ export function Sidebar({
                     project={project}
                     selectedSessionId={workspace.selectedSessionId}
                     sessions={workspace.sessions.filter((session) => session.projectId === project.id)}
+                    onNewSession={() => onNewProjectSession(project.id)}
                   />
                 ))}
               </div>

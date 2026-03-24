@@ -356,7 +356,7 @@ export function ChatPane({
         {session.messages.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center">
             <Bot className="size-10 text-zinc-800" />
-            <p className="text-sm text-zinc-500">Send a message to start the conversation</p>
+            <p className="text-[13px] text-zinc-500">Send a message to start the conversation</p>
             <p className="text-[12px] text-zinc-700">
               {isScratchpad ? (
                 <>

@@ -235,7 +235,7 @@ export function PatternEditor({
             <ChevronLeft className="size-4" />
           </button>
           <div>
-            <h3 className="text-sm font-semibold text-zinc-100">
+            <h3 className="text-[13px] font-semibold text-zinc-100">
               {pattern.name || 'Untitled pattern'}
             </h3>
             <p className="text-[12px] text-zinc-500">

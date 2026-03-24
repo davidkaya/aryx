@@ -186,7 +186,7 @@ export function SettingsPanel({
         >
           <ChevronLeft className="size-4" />
         </button>
-        <h2 className="text-sm font-semibold text-zinc-100">Settings</h2>
+        <h2 className="text-[13px] font-semibold text-zinc-100">Settings</h2>
       </div>
 
       <div className="flex min-h-0 flex-1">
@@ -274,7 +274,7 @@ function ConnectionSection({
   return (
     <div>
       <div className="mb-1">
-        <h3 className="text-sm font-semibold text-zinc-200">GitHub Copilot</h3>
+        <h3 className="text-[13px] font-semibold text-zinc-200">GitHub Copilot</h3>
         <p className="mt-0.5 text-[12px] text-zinc-500">
           Eryx uses your installed GitHub Copilot CLI for AI capabilities
         </p>
@@ -646,7 +646,7 @@ function SectionHeader({
   return (
     <div className="mb-4 flex items-center justify-between gap-3">
       <div>
-        <h3 className="text-sm font-semibold text-zinc-200">{title}</h3>
+        <h3 className="text-[13px] font-semibold text-zinc-200">{title}</h3>
         <p className="mt-0.5 text-[12px] text-zinc-500">{description}</p>
       </div>
       {children}
@@ -737,7 +737,7 @@ function ToolingEditorShell({
             <ChevronLeft className="size-4" />
           </button>
           <div>
-            <h2 className="text-sm font-semibold text-zinc-100">{title}</h2>
+            <h2 className="text-[13px] font-semibold text-zinc-100">{title}</h2>
             <p className="text-[12px] text-zinc-500">{subtitle}</p>
           </div>
         </div>

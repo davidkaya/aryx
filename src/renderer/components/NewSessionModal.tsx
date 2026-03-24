@@ -52,7 +52,7 @@ export function NewSessionModal({
       <div className="w-full max-w-md rounded-xl border border-zinc-800 bg-zinc-900 shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-zinc-800 px-5 py-4">
-          <h2 className="text-sm font-semibold text-zinc-100">New Session</h2>
+          <h2 className="text-[13px] font-semibold text-zinc-100">New Session</h2>
           <button
             className="flex size-7 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-300"
             onClick={onClose}

@@ -34,6 +34,9 @@ These instructions apply to any automated or semi-automated agent working in thi
 - Avoid duplication when a shared abstraction improves clarity and maintainability.
 - Prefer composition and small reusable units over sprawling functions, deep inheritance, or tightly coupled code.
 - Make invalid states difficult to represent through types, structure, or APIs whenever the technology supports it.
+- When refactoring, actively remove code smells instead of relocating them. Large multi-responsibility files, long methods, scattered mutable state, duplicated logic, and protocol or reflection glue mixed into orchestration code should usually be split into focused collaborators.
+- Keep coordinator and orchestration types thin. Push policy decisions, parsing or translation, projection or mapping, and mutable execution state into dedicated helpers or services with clear ownership.
+- For deep refactors, add characterization tests around the current behavior before extracting logic, then keep the tests aligned with the new collaborators so structure improves without changing behavior accidentally.
 - Add comments only when they explain intent, reasoning, or non-obvious behavior that the code itself cannot communicate clearly.
 
 ## 4. Core delivery standards
@@ -52,7 +55,5 @@ These instructions apply to any automated or semi-automated agent working in thi
 - Use Bun for dependency management and script execution.
 - Prefer repository-local tooling over global machine state whenever possible.
 - Keep changes focused and reviewable. Avoid mixing unrelated concerns into a single change.
-- When the user asks only for a plan, stay in planning flow: analyze the codebase, clarify scope as needed, and write or update the plan, but do not begin implementation until the user explicitly asks you to start the work.
-- Do not trigger workflow or mode transitions that implicitly approve or begin implementation unless the user has explicitly requested that transition.
 - Always commit completed repository changes before handing work off. If unrelated pre-existing changes are present in the worktree, stop and ask the user how to proceed before creating the commit.
 - Do not mark work as done until both the implementation and its verification are complete.

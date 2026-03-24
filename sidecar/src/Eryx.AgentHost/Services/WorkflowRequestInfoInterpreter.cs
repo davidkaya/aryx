@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Text.Json;
 using Eryx.AgentHost.Contracts;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
@@ -7,9 +8,6 @@ namespace Eryx.AgentHost.Services;
 
 internal static class WorkflowRequestInfoInterpreter
 {
-    private static readonly Type? HandoffTargetType = LoadType(
-        "Microsoft.Agents.AI.Workflows.Specialized.HandoffTarget, Microsoft.Agents.AI.Workflows");
-
     public static AgentActivityEventDto? TryCreateActivityFromRequest(
         RunTurnCommandDto command,
         RequestInfoEvent requestInfo,
@@ -60,16 +58,22 @@ internal static class WorkflowRequestInfoInterpreter
         out AgentIdentity agent)
     {
         agent = default;
-        if (!TryReadPortableValue(requestInfo.Request.Data, HandoffTargetType, out object? handoffTarget))
+        object? handoffValue = requestInfo.Request.Data.As<object>();
+        if (handoffValue is null)
         {
             return false;
         }
 
-        object? target = handoffTarget?.GetType().GetProperty("Target")?.GetValue(handoffTarget);
+        WorkflowRequestHandoffPayload? handoffTarget = DeserializeHandoffPayload(handoffValue);
+        if (handoffTarget?.Target is not WorkflowRequestHandoffAgentPayload target)
+        {
+            return false;
+        }
+
         agent = AgentIdentityResolver.ResolveAgentIdentity(
             pattern,
-            GetStringProperty(target, "Id"),
-            GetStringProperty(target, "Name"));
+            target.Id,
+            target.Name);
         return !string.IsNullOrWhiteSpace(agent.AgentName);
     }
 
@@ -136,30 +140,26 @@ internal static class WorkflowRequestInfoInterpreter
         return false;
     }
 
-    private static Type? LoadType(string assemblyQualifiedName)
-    {
-        return Type.GetType(assemblyQualifiedName, throwOnError: false);
-    }
-
-    private static bool TryReadPortableValue(PortableValue portableValue, Type? targetType, out object? value)
-    {
-        value = null;
-        if (targetType is null || !portableValue.IsType(targetType))
-        {
-            return false;
-        }
-
-        value = portableValue.AsType(targetType);
-        return value is not null;
-    }
-
-    private static string? GetStringProperty(object? instance, string propertyName)
-    {
-        return instance?.GetType().GetProperty(propertyName)?.GetValue(instance) as string;
-    }
-
     private static string? NormalizeOptionalString(string? value)
     {
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
+
+    private static WorkflowRequestHandoffPayload? DeserializeHandoffPayload(object handoffValue)
+    {
+        string json = JsonSerializer.Serialize(handoffValue, handoffValue.GetType());
+        return JsonSerializer.Deserialize<WorkflowRequestHandoffPayload>(json);
+    }
+}
+
+internal sealed class WorkflowRequestHandoffPayload
+{
+    public WorkflowRequestHandoffAgentPayload? Target { get; init; }
+}
+
+internal sealed class WorkflowRequestHandoffAgentPayload
+{
+    public string? Id { get; init; }
+
+    public string? Name { get; init; }
 }

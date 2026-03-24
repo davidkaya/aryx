@@ -43,6 +43,7 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
             throw new InvalidOperationException(validationError.Message);
         }
 
+        ConcurrentDictionary<string, string> toolNamesByCallId = new(StringComparer.Ordinal);
         await using AgentBundle bundle = await AgentBundle.CreateAsync(
             command,
             (agent, request, invocation) => RequestApprovalAsync(
@@ -50,6 +51,7 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
                 agent,
                 request,
                 invocation,
+                toolNamesByCallId,
                 onApproval,
                 cancellationToken),
             cancellationToken);
@@ -85,7 +87,8 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
                 AgentActivityEventDto? activity = TryCreateActivityFromRequest(
                     command,
                     requestInfo,
-                    activeAgent);
+                    activeAgent,
+                    toolNamesByCallId);
 
                 if (activity is not null)
                 {
@@ -239,10 +242,11 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
         PatternAgentDefinitionDto agent,
         PermissionRequest request,
         PermissionInvocation invocation,
+        IReadOnlyDictionary<string, string> toolNamesByCallId,
         Func<ApprovalRequestedEventDto, Task> onApproval,
         CancellationToken cancellationToken)
     {
-        TryGetApprovalToolName(request, out string? toolName);
+        TryGetApprovalToolName(request, toolNamesByCallId, out string? toolName);
 
         if (!RequiresToolCallApproval(command.Pattern.ApprovalPolicy, agent.Id, toolName))
         {
@@ -294,7 +298,8 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
     private static AgentActivityEventDto? TryCreateActivityFromRequest(
         RunTurnCommandDto command,
         RequestInfoEvent requestInfo,
-        AgentIdentity? activeAgent)
+        AgentIdentity? activeAgent,
+        ConcurrentDictionary<string, string> toolNamesByCallId)
     {
         if (TryGetHandoffTarget(command.Pattern, requestInfo, out AgentIdentity handoffAgent))
         {
@@ -305,9 +310,15 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
                 sourceAgent: activeAgent);
         }
 
-        if (!activeAgent.HasValue || !TryGetToolName(requestInfo, out string toolName))
+        if (!activeAgent.HasValue
+            || !TryGetToolRequestInfo(requestInfo, out string toolName, out string? toolCallId))
         {
             return null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(toolCallId))
+        {
+            toolNamesByCallId[toolCallId] = toolName;
         }
 
         return CreateActivityEvent(
@@ -353,11 +364,15 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
         return !string.IsNullOrWhiteSpace(agent.AgentName);
     }
 
-    private static bool TryGetToolName(RequestInfoEvent requestInfo, out string toolName)
+    private static bool TryGetToolRequestInfo(
+        RequestInfoEvent requestInfo,
+        out string toolName,
+        out string? toolCallId)
     {
         if (TryReadPortableValue(requestInfo.Request.Data, FunctionCallContentType, out object? functionCall))
         {
             toolName = GetStringProperty(functionCall, "Name") ?? "function";
+            toolCallId = NormalizeOptionalString(GetStringProperty(functionCall, "CallId"));
             return true;
         }
 
@@ -366,22 +381,26 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
             toolName = GetStringProperty(mcpToolCall, "ToolName")
                 ?? GetStringProperty(mcpToolCall, "ServerName")
                 ?? string.Empty;
+            toolCallId = NormalizeOptionalString(GetStringProperty(mcpToolCall, "CallId"));
             return !string.IsNullOrWhiteSpace(toolName);
         }
 
-        if (TryReadPortableValue(requestInfo.Request.Data, CodeInterpreterToolCallContentType, out _))
+        if (TryReadPortableValue(requestInfo.Request.Data, CodeInterpreterToolCallContentType, out object? codeInterpreterToolCall))
         {
             toolName = "code interpreter";
+            toolCallId = NormalizeOptionalString(GetStringProperty(codeInterpreterToolCall, "CallId"));
             return true;
         }
 
         if (TryReadPortableValue(requestInfo.Request.Data, ImageGenerationToolCallContentType, out _))
         {
             toolName = "image generation";
+            toolCallId = null;
             return true;
         }
 
         toolName = string.Empty;
+        toolCallId = null;
         return false;
     }
 
@@ -489,19 +508,45 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
             string.Equals(candidate, toolName, StringComparison.OrdinalIgnoreCase));
     }
 
-    internal static bool TryGetApprovalToolName(PermissionRequest request, out string? toolName)
+    internal static bool TryGetApprovalToolName(
+        PermissionRequest request,
+        IReadOnlyDictionary<string, string>? toolNamesByCallId,
+        out string? toolName)
     {
         toolName = request switch
         {
             PermissionRequestMcp mcp when !string.IsNullOrWhiteSpace(mcp.ToolName) => mcp.ToolName.Trim(),
             PermissionRequestCustomTool customTool when !string.IsNullOrWhiteSpace(customTool.ToolName) => customTool.ToolName.Trim(),
             PermissionRequestHook hook when !string.IsNullOrWhiteSpace(hook.ToolName) => hook.ToolName.Trim(),
+            _ => null,
+        };
+
+        if (!string.IsNullOrWhiteSpace(toolName))
+        {
+            return true;
+        }
+
+        string? toolCallId = NormalizeOptionalString(GetStringProperty(request, "ToolCallId"));
+        if (toolCallId is not null
+            && toolNamesByCallId is not null
+            && toolNamesByCallId.TryGetValue(toolCallId, out string? resolvedToolName)
+            && !string.IsNullOrWhiteSpace(resolvedToolName))
+        {
+            toolName = resolvedToolName.Trim();
+            return true;
+        }
+
+        toolName = request switch
+        {
             PermissionRequestUrl => "web_fetch",
             _ => null,
         };
 
         return !string.IsNullOrWhiteSpace(toolName);
     }
+
+    internal static bool TryGetApprovalToolName(PermissionRequest request, out string? toolName)
+        => TryGetApprovalToolName(request, toolNamesByCallId: null, out toolName);
 
     private static string CreateApprovalRequestId()
     {
@@ -528,6 +573,11 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
     private static string? GetStringProperty(object? instance, string propertyName)
     {
         return instance?.GetType().GetProperty(propertyName)?.GetValue(instance) as string;
+    }
+
+    private static string? NormalizeOptionalString(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
 
     private static StreamingSegment GetOrCreateSegment(List<StreamingSegment> segments, string messageId, string authorName)

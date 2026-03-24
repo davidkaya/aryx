@@ -258,7 +258,7 @@ public sealed class CopilotWorkflowRunnerTests
     }
 
     [Fact]
-    public void TryGetApprovalToolName_ReadsMcpCustomHookAndUrlRequests()
+    public void TryGetApprovalToolName_ReadsMcpCustomAndHookRequests()
     {
         Assert.True(
             CopilotWorkflowRunner.TryGetApprovalToolName(
@@ -296,18 +296,6 @@ public sealed class CopilotWorkflowRunnerTests
                 out string? hookToolName));
         Assert.Equal("web_fetch", hookToolName);
 
-        Assert.True(
-            CopilotWorkflowRunner.TryGetApprovalToolName(
-                new PermissionRequestUrl
-                {
-                    Kind = "url",
-                    ToolCallId = "tool-call-1",
-                    Intention = "Fetch the requested page",
-                    Url = "https://example.com/docs",
-                },
-                out string? urlToolName));
-        Assert.Equal("web_fetch", urlToolName);
-
         Assert.False(
             CopilotWorkflowRunner.TryGetApprovalToolName(
                 new PermissionRequestShell
@@ -323,6 +311,77 @@ public sealed class CopilotWorkflowRunnerTests
                 },
                 out string? shellToolName));
         Assert.Null(shellToolName);
+    }
+
+    [Fact]
+    public void TryGetApprovalToolName_UsesToolCallLookupForPermissionCategoriesWithoutDirectToolNames()
+    {
+        Dictionary<string, string> toolNamesByCallId = new(StringComparer.Ordinal)
+        {
+            ["tool-call-url"] = "web_fetch",
+            ["tool-call-shell"] = "shell",
+            ["tool-call-read"] = "view",
+        };
+
+        Assert.True(
+            CopilotWorkflowRunner.TryGetApprovalToolName(
+                new PermissionRequestUrl
+                {
+                    Kind = "url",
+                    ToolCallId = "tool-call-url",
+                    Intention = "Fetch the requested page",
+                    Url = "https://example.com/docs",
+                },
+                toolNamesByCallId,
+                out string? urlToolName));
+        Assert.Equal("web_fetch", urlToolName);
+
+        Assert.True(
+            CopilotWorkflowRunner.TryGetApprovalToolName(
+                new PermissionRequestShell
+                {
+                    Kind = "shell",
+                    ToolCallId = "tool-call-shell",
+                    FullCommandText = "curl https://example.com/docs",
+                    Intention = "Fetch documentation with curl",
+                    Commands = [],
+                    PossiblePaths = [],
+                    PossibleUrls = [],
+                    HasWriteFileRedirection = false,
+                    CanOfferSessionApproval = false,
+                },
+                toolNamesByCallId,
+                out string? shellToolName));
+        Assert.Equal("shell", shellToolName);
+
+        Assert.True(
+            CopilotWorkflowRunner.TryGetApprovalToolName(
+                new PermissionRequestRead
+                {
+                    Kind = "read",
+                    ToolCallId = "tool-call-read",
+                    Intention = "Inspect a file",
+                    Path = "README.md",
+                },
+                toolNamesByCallId,
+                out string? readToolName));
+        Assert.Equal("view", readToolName);
+    }
+
+    [Fact]
+    public void TryGetApprovalToolName_FallsBackToWebFetchForUncorrelatedUrlRequests()
+    {
+        Assert.True(
+            CopilotWorkflowRunner.TryGetApprovalToolName(
+                new PermissionRequestUrl
+                {
+                    Kind = "url",
+                    ToolCallId = "tool-call-1",
+                    Intention = "Fetch the requested page",
+                    Url = "https://example.com/docs",
+                },
+                out string? urlToolName));
+        Assert.Equal("web_fetch", urlToolName);
     }
 
     [Fact]

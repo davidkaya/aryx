@@ -8,15 +8,15 @@
     "dev": "electron-vite dev",
     "build:electron": "electron-vite build",
     "build": "bun run build:electron && bun run sidecar:build",
-    "package": "bun run build:electron && bun run sidecar:publish && node \".\\scripts\\package-electron.mjs\"",
+    "package": "bun run build:electron && bun run sidecar:publish && bun run scripts/package-electron.ts",
     "preview": "electron-vite preview",
     "lsp:typescript": "typescript-language-server --stdio",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "bun run typecheck && bun test",
-    "sidecar:restore": "powershell -NoProfile -Command \"dotnet restore 'sidecar\\\\Eryx.AgentHost.slnx'\"",
-    "sidecar:build": "powershell -NoProfile -Command \"dotnet build 'sidecar\\\\Eryx.AgentHost.slnx'\"",
-    "sidecar:publish": "powershell -NoProfile -Command \"if (Test-Path 'dist-sidecar\\\\win-x64') { Remove-Item 'dist-sidecar\\\\win-x64' -Recurse -Force }; dotnet publish 'sidecar\\\\src\\\\Eryx.AgentHost\\\\Eryx.AgentHost.csproj' -c Release -r win-x64 --self-contained true -p:DebugType=None -p:DebugSymbols=false -o 'dist-sidecar\\\\win-x64'\"",
-    "sidecar:test": "powershell -NoProfile -Command \"dotnet test 'sidecar\\\\Eryx.AgentHost.slnx'\""
+    "sidecar:restore": "dotnet restore sidecar/Eryx.AgentHost.slnx",
+    "sidecar:build": "dotnet build sidecar/Eryx.AgentHost.slnx",
+    "sidecar:publish": "bun run scripts/publish-sidecar.ts",
+    "sidecar:test": "dotnet test sidecar/Eryx.AgentHost.slnx"
   },
   "repository": {
     "type": "git",

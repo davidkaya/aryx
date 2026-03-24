@@ -97,6 +97,20 @@ Eryx shines when you want to:
 - reuse patterns for recurring workflows
 - maintain a history of meaningful sessions instead of disposable chats
 
+## Build and release automation
+
+For local validation, run:
+
+- `bun run test`
+- `bun run sidecar:test`
+- `bun run build`
+
+To package the current platform into `release/`, run:
+
+- `bun run package`
+
+GitHub Actions now runs validation on pushes and pull requests, and pushing a git tag creates a GitHub release with Windows, macOS, and Linux assets uploaded directly to the release.
+
 ## Current focus
 
 Eryx is focused on local, project-based work with your GitHub Copilot account. It already covers the essentials for working with projects, sessions, and reusable orchestration patterns, and it is growing toward a fuller AI workstation experience over time.

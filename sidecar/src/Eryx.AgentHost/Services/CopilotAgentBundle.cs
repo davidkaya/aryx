@@ -94,9 +94,9 @@ internal sealed class CopilotAgentBundle : IAsyncDisposable
     {
         return pattern.Mode switch
         {
-            "single" => AgentWorkflowBuilder.BuildSequential(pattern.Name, Agents),
-            "sequential" => AgentWorkflowBuilder.BuildSequential(pattern.Name, Agents),
-            "concurrent" => AgentWorkflowBuilder.BuildConcurrent(pattern.Name, Agents),
+            "single" => AgentWorkflowBuilder.BuildSequential(pattern.Name, ResolveOrderedAgents(pattern)),
+            "sequential" => AgentWorkflowBuilder.BuildSequential(pattern.Name, ResolveOrderedAgents(pattern)),
+            "concurrent" => AgentWorkflowBuilder.BuildConcurrent(pattern.Name, ResolveOrderedAgents(pattern)),
             "handoff" => BuildHandoffWorkflow(pattern),
             "group-chat" => BuildGroupChatWorkflow(pattern),
             "magentic" => throw new NotSupportedException(
@@ -116,30 +116,30 @@ internal sealed class CopilotAgentBundle : IAsyncDisposable
 
     private Workflow BuildHandoffWorkflow(PatternDefinitionDto pattern)
     {
-        AIAgent firstAgent = Agents[0];
-        PatternAgentDefinitionDto triageDefinition = pattern.Agents[0];
-        IReadOnlyList<(AIAgent Agent, PatternAgentDefinitionDto Definition)> specialists =
-            Agents.Skip(1)
-                .Zip(pattern.Agents.Skip(1), (agent, definition) => (agent, definition))
-                .ToList();
+        Dictionary<string, AIAgent> agentMap = BuildAgentMap(pattern);
+        Dictionary<string, PatternAgentDefinitionDto> definitionMap = pattern.Agents.ToDictionary(
+            definition => definition.Id,
+            definition => definition,
+            StringComparer.Ordinal);
+        PatternHandoffTopology topology = PatternGraphResolver.ResolveHandoff(pattern);
+        AIAgent entryAgent = agentMap.GetValueOrDefault(topology.EntryAgentId) ?? Agents[0];
 
-        HandoffsWorkflowBuilder builder = AgentWorkflowBuilder.CreateHandoffBuilderWith(firstAgent)
+        HandoffsWorkflowBuilder builder = AgentWorkflowBuilder.CreateHandoffBuilderWith(entryAgent)
             .WithHandoffInstructions(HandoffWorkflowGuidance.CreateWorkflowInstructions());
 
-        foreach ((AIAgent specialist, PatternAgentDefinitionDto definition) in specialists)
+        foreach (PatternHandoffRoute route in topology.Routes)
         {
-            builder = builder.WithHandoff(
-                firstAgent,
-                specialist,
-                HandoffWorkflowGuidance.CreateForwardReason(definition));
-        }
+            if (!agentMap.TryGetValue(route.SourceAgentId, out AIAgent? sourceAgent)
+                || !agentMap.TryGetValue(route.TargetAgentId, out AIAgent? targetAgent)
+                || !definitionMap.TryGetValue(route.TargetAgentId, out PatternAgentDefinitionDto? targetDefinition))
+            {
+                continue;
+            }
 
-        foreach ((AIAgent specialist, _) in specialists)
-        {
             builder = builder.WithHandoff(
-                specialist,
-                firstAgent,
-                HandoffWorkflowGuidance.CreateReturnReason(triageDefinition));
+                sourceAgent,
+                targetAgent,
+                HandoffWorkflowGuidance.CreateForwardReason(targetDefinition));
         }
 
         return builder.Build();
@@ -155,7 +155,30 @@ internal sealed class CopilotAgentBundle : IAsyncDisposable
                 {
                     MaximumIterationCount = maximumIterations,
                 })
-            .AddParticipants(Agents.ToArray())
+            .AddParticipants(ResolveOrderedAgents(pattern).ToArray())
             .Build();
+    }
+
+    private IReadOnlyList<AIAgent> ResolveOrderedAgents(PatternDefinitionDto pattern)
+    {
+        Dictionary<string, AIAgent> agentMap = BuildAgentMap(pattern);
+        List<AIAgent> orderedAgents = PatternGraphResolver.ResolveOrderedAgentIds(pattern)
+            .Select(agentId => agentMap.TryGetValue(agentId, out AIAgent? agent) ? agent : null)
+            .Where(agent => agent is not null)
+            .Cast<AIAgent>()
+            .ToList();
+
+        return orderedAgents.Count == Agents.Count ? orderedAgents : Agents;
+    }
+
+    private Dictionary<string, AIAgent> BuildAgentMap(PatternDefinitionDto pattern)
+    {
+        Dictionary<string, AIAgent> agentMap = new(StringComparer.Ordinal);
+        foreach ((PatternAgentDefinitionDto definition, AIAgent agent) in pattern.Agents.Zip(Agents))
+        {
+            agentMap[definition.Id] = agent;
+        }
+
+        return agentMap;
     }
 }

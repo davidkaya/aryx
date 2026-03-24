@@ -1,6 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 
-import { createBuiltinPatterns, validatePatternDefinition } from '@shared/domain/pattern';
+import {
+  createBuiltinPatterns,
+  resolvePatternGraph,
+  syncPatternGraph,
+  validatePatternDefinition,
+} from '@shared/domain/pattern';
 
 const BUILTIN_TIMESTAMP = '2026-03-22T00:00:00.000Z';
 
@@ -144,5 +149,112 @@ describe('pattern validation', () => {
     expect(issues.find((issue) => issue.field === 'approvalPolicy')?.message).toBe(
       'Approval auto-approve references unknown tool "unknown.tool".',
     );
+  });
+
+  test('builtin patterns seed graph topology for each orchestration mode', () => {
+    const patterns = createBuiltinPatterns(BUILTIN_TIMESTAMP);
+    const single = patterns.find((pattern) => pattern.mode === 'single');
+    const concurrent = patterns.find((pattern) => pattern.mode === 'concurrent');
+    const handoff = patterns.find((pattern) => pattern.mode === 'handoff');
+    const groupChat = patterns.find((pattern) => pattern.mode === 'group-chat');
+
+    expect(single).toBeDefined();
+    expect(concurrent).toBeDefined();
+    expect(handoff).toBeDefined();
+    expect(groupChat).toBeDefined();
+
+    expect(resolvePatternGraph(single!).nodes.map((node) => node.kind)).toEqual([
+      'user-input',
+      'agent',
+      'user-output',
+    ]);
+
+    expect(resolvePatternGraph(concurrent!).nodes.map((node) => node.kind)).toEqual([
+      'user-input',
+      'distributor',
+      'agent',
+      'agent',
+      'agent',
+      'collector',
+      'user-output',
+    ]);
+
+    expect(resolvePatternGraph(handoff!).edges).toContainEqual(
+      expect.objectContaining({
+        source: 'system-user-input',
+        target: 'agent-node-agent-handoff-triage',
+      }),
+    );
+    expect(resolvePatternGraph(handoff!).edges).toContainEqual(
+      expect.objectContaining({
+        source: 'agent-node-agent-handoff-triage',
+        target: 'agent-node-agent-handoff-ux',
+      }),
+    );
+
+    expect(resolvePatternGraph(groupChat!).nodes.map((node) => node.kind)).toContain('orchestrator');
+  });
+
+  test('syncPatternGraph rebuilds sequential topology from the current agent list', () => {
+    const sequential = createBuiltinPatterns(BUILTIN_TIMESTAMP).find(
+      (pattern) => pattern.mode === 'sequential',
+    );
+
+    expect(sequential).toBeDefined();
+
+    const updated = syncPatternGraph({
+      ...sequential!,
+      agents: [
+        ...sequential!.agents,
+        {
+          id: 'agent-sequential-final',
+          name: 'Final Reviewer',
+          description: 'Adds a final pass.',
+          instructions: 'Do a last review.',
+          model: 'gpt-5.4',
+          reasoningEffort: 'medium',
+        },
+      ],
+    });
+
+    const graph = resolvePatternGraph(updated);
+    expect(graph.nodes.filter((node) => node.kind === 'agent')).toHaveLength(4);
+    expect(graph.edges).toContainEqual(
+      expect.objectContaining({
+        source: 'agent-node-agent-sequential-reviewer',
+        target: 'agent-node-agent-sequential-final',
+      }),
+    );
+    expect(graph.edges).toContainEqual(
+      expect.objectContaining({
+        source: 'agent-node-agent-sequential-final',
+        target: 'system-user-output',
+      }),
+    );
+  });
+
+  test('graph validation rejects branched sequential topology', () => {
+    const sequential = createBuiltinPatterns(BUILTIN_TIMESTAMP).find(
+      (pattern) => pattern.mode === 'sequential',
+    );
+
+    expect(sequential).toBeDefined();
+
+    const issues = validatePatternDefinition({
+      ...sequential!,
+      graph: {
+        ...resolvePatternGraph(sequential!),
+        edges: [
+          ...resolvePatternGraph(sequential!).edges,
+          {
+            id: 'edge-system-user-input-to-agent-node-agent-sequential-builder-duplicate',
+            source: 'system-user-input',
+            target: 'agent-node-agent-sequential-builder',
+          },
+        ],
+      },
+    });
+
+    expect(issues.find((issue) => issue.field === 'graph')?.message).toContain('single path');
   });
 });

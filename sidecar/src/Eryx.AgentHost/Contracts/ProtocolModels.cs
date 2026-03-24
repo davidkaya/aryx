@@ -12,6 +12,34 @@ public sealed class PatternAgentDefinitionDto
     public string? ReasoningEffort { get; init; }
 }
 
+public sealed class PatternGraphPositionDto
+{
+    public double X { get; init; }
+    public double Y { get; init; }
+}
+
+public sealed class PatternGraphNodeDto
+{
+    public string Id { get; init; } = string.Empty;
+    public string Kind { get; init; } = string.Empty;
+    public PatternGraphPositionDto Position { get; init; } = new();
+    public string? AgentId { get; init; }
+    public int? Order { get; init; }
+}
+
+public sealed class PatternGraphEdgeDto
+{
+    public string Id { get; init; } = string.Empty;
+    public string Source { get; init; } = string.Empty;
+    public string Target { get; init; } = string.Empty;
+}
+
+public sealed class PatternGraphDto
+{
+    public IReadOnlyList<PatternGraphNodeDto> Nodes { get; init; } = [];
+    public IReadOnlyList<PatternGraphEdgeDto> Edges { get; init; } = [];
+}
+
 public sealed class PatternDefinitionDto
 {
     public string Id { get; init; } = string.Empty;
@@ -23,6 +51,7 @@ public sealed class PatternDefinitionDto
     public int MaxIterations { get; init; }
     public ApprovalPolicyDto? ApprovalPolicy { get; init; }
     public IReadOnlyList<PatternAgentDefinitionDto> Agents { get; init; } = [];
+    public PatternGraphDto? Graph { get; init; }
     public string CreatedAt { get; init; } = string.Empty;
     public string UpdatedAt { get; init; } = string.Empty;
 }

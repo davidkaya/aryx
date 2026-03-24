@@ -73,12 +73,46 @@ public sealed class PatternValidatorTests
             && issue.Message.Contains("Unsupported", StringComparison.OrdinalIgnoreCase));
     }
 
+    [Fact]
+    public void SequentialPattern_WithBranchedGraph_IsReportedAsInvalid()
+    {
+        IReadOnlyList<PatternValidationIssueDto> issues = _validator.Validate(
+            CreatePattern(
+                "sequential",
+                [
+                    CreateAgent(id: "agent-1", name: "Analyst"),
+                    CreateAgent(id: "agent-2", name: "Builder"),
+                ],
+                graph: new PatternGraphDto
+                {
+                    Nodes =
+                    [
+                        CreateSystemNode("system-user-input", "user-input"),
+                        CreateAgentNode("agent-1", 0),
+                        CreateAgentNode("agent-2", 1),
+                        CreateSystemNode("system-user-output", "user-output"),
+                    ],
+                    Edges =
+                    [
+                        CreateEdge("system-user-input", "agent-node-agent-1"),
+                        CreateEdge("system-user-input", "agent-node-agent-2"),
+                        CreateEdge("agent-node-agent-1", "agent-node-agent-2"),
+                        CreateEdge("agent-node-agent-2", "system-user-output"),
+                    ],
+                }));
+
+        Assert.Contains(issues, issue =>
+            issue.Field == "graph"
+            && issue.Message.Contains("single path", StringComparison.OrdinalIgnoreCase));
+    }
+
     private static PatternDefinitionDto CreatePattern(
         string mode,
         IReadOnlyList<PatternAgentDefinitionDto> agents,
         string availability = "available",
         string? unavailabilityReason = null,
-        string name = "Pattern")
+        string name = "Pattern",
+        PatternGraphDto? graph = null)
     {
         return new PatternDefinitionDto
         {
@@ -88,6 +122,7 @@ public sealed class PatternValidatorTests
             Availability = availability,
             UnavailabilityReason = unavailabilityReason,
             Agents = agents,
+            Graph = graph,
         };
     }
 
@@ -105,4 +140,30 @@ public sealed class PatternValidatorTests
             Instructions = instructions,
         };
     }
+
+    private static PatternGraphNodeDto CreateSystemNode(string id, string kind)
+        => new()
+        {
+            Id = id,
+            Kind = kind,
+            Position = new PatternGraphPositionDto(),
+        };
+
+    private static PatternGraphNodeDto CreateAgentNode(string agentId, int order)
+        => new()
+        {
+            Id = $"agent-node-{agentId}",
+            Kind = "agent",
+            AgentId = agentId,
+            Order = order,
+            Position = new PatternGraphPositionDto(),
+        };
+
+    private static PatternGraphEdgeDto CreateEdge(string source, string target)
+        => new()
+        {
+            Id = $"edge-{source}-to-{target}",
+            Source = source,
+            Target = target,
+        };
 }

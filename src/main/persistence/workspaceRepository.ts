@@ -1,6 +1,6 @@
 import { mkdir } from 'node:fs/promises';
 
-import { createBuiltinPatterns } from '@shared/domain/pattern';
+import { createBuiltinPatterns, resolvePatternGraph } from '@shared/domain/pattern';
 import type { PatternDefinition } from '@shared/domain/pattern';
 import { mergeScratchpadProject } from '@shared/domain/project';
 import { normalizeSessionRunRecords } from '@shared/domain/runTimeline';
@@ -71,6 +71,7 @@ export class WorkspaceRepository {
       patterns: mergePatterns(stored.patterns ?? []).map((pattern) => ({
         ...pattern,
         approvalPolicy: normalizeApprovalPolicy(pattern.approvalPolicy),
+        graph: resolvePatternGraph(pattern),
       })),
       projects,
       sessions: (stored.sessions ?? []).map((session) => ({

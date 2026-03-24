@@ -20,6 +20,7 @@ import {
 } from '@shared/domain/models';
 import {
   isReasoningEffort,
+  syncPatternGraph,
   type PatternDefinition,
   type ReasoningEffort,
   validatePatternDefinition,
@@ -212,8 +213,9 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
   async savePattern(pattern: PatternDefinition): Promise<WorkspaceState> {
     const workspace = await this.loadWorkspace();
     const knownApprovalToolNames = await this.listKnownApprovalToolNames(workspace);
+    const synchronizedPattern = syncPatternGraph(pattern);
     const issues = validatePatternDefinition(
-      pattern,
+      synchronizedPattern,
       knownApprovalToolNames,
     ).filter((issue) => issue.level === 'error');
     if (issues.length > 0) {
@@ -222,8 +224,8 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
 
     const existingIndex = workspace.patterns.findIndex((current) => current.id === pattern.id);
     const candidate: PatternDefinition = {
-      ...pattern,
-      approvalPolicy: normalizeApprovalPolicy(pattern.approvalPolicy),
+      ...synchronizedPattern,
+      approvalPolicy: normalizeApprovalPolicy(synchronizedPattern.approvalPolicy),
       isFavorite: pattern.isFavorite ?? workspace.patterns[existingIndex]?.isFavorite,
       createdAt: existingIndex >= 0 ? workspace.patterns[existingIndex].createdAt : nowIso(),
       updatedAt: nowIso(),

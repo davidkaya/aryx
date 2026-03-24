@@ -24,6 +24,7 @@ import {
   type ModelDefinition,
 } from '@shared/domain/models';
 import {
+  syncPatternGraph,
   validatePatternDefinition,
   type OrchestrationMode,
   type PatternDefinition,
@@ -220,8 +221,12 @@ export function PatternEditor({
 }: PatternEditorProps) {
   const issues = validatePatternDefinition(pattern);
 
+  function emitChange(nextPattern: PatternDefinition) {
+    onChange(syncPatternGraph(nextPattern));
+  }
+
   function updateAgent(agentId: string, patch: Partial<PatternAgentDefinition>) {
-    onChange({
+    emitChange({
       ...pattern,
       agents: pattern.agents.map((a) => (a.id === agentId ? { ...a, ...patch } : a)),
     });
@@ -236,7 +241,7 @@ export function PatternEditor({
   }
 
   function updateApprovalPolicy(updater: (current: ApprovalPolicy | undefined) => ApprovalPolicy | undefined) {
-    onChange({ ...pattern, approvalPolicy: updater(pattern.approvalPolicy) });
+    emitChange({ ...pattern, approvalPolicy: updater(pattern.approvalPolicy) });
   }
 
   function isCheckpointEnabled(kind: ApprovalCheckpointKind): boolean {
@@ -358,14 +363,14 @@ export function PatternEditor({
             </h4>
             <InputField
               label="Name"
-              onChange={(v) => onChange({ ...pattern, name: v })}
+              onChange={(v) => emitChange({ ...pattern, name: v })}
               placeholder="Pattern name"
               value={pattern.name}
             />
             <InputField
               label="Description"
               multiline
-              onChange={(v) => onChange({ ...pattern, description: v })}
+              onChange={(v) => emitChange({ ...pattern, description: v })}
               placeholder="What this pattern does..."
               value={pattern.description}
             />
@@ -394,7 +399,7 @@ export function PatternEditor({
                     }`}
                     disabled={disabled}
                     key={mode}
-                    onClick={() => onChange({ ...pattern, mode })}
+                    onClick={() => emitChange({ ...pattern, mode })}
                     type="button"
                   >
                     <div className="flex items-center gap-2">
@@ -430,7 +435,7 @@ export function PatternEditor({
               <button
                 className="flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[12px] font-medium text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-200"
                 onClick={() =>
-                  onChange({
+                  emitChange({
                     ...pattern,
                     agents: [
                       ...pattern.agents,
@@ -471,7 +476,7 @@ export function PatternEditor({
                       <button
                         className="flex items-center gap-1 text-[12px] text-zinc-600 transition hover:text-red-400"
                         onClick={() =>
-                          onChange({
+                          emitChange({
                             ...pattern,
                             agents: pattern.agents.filter((a) => a.id !== agent.id),
                           })

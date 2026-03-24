@@ -21,7 +21,7 @@ import {
   normalizePatternModels,
   resolveReasoningEffort,
 } from '@shared/domain/models';
-import type { PatternDefinition } from '@shared/domain/pattern';
+import { syncPatternGraph, type PatternDefinition } from '@shared/domain/pattern';
 import { isScratchpadProject, SCRATCHPAD_PROJECT_ID } from '@shared/domain/project';
 import { applyScratchpadSessionConfig } from '@shared/domain/session';
 import type { AppearanceTheme, LspProfileDefinition, McpServerDefinition } from '@shared/domain/tooling';
@@ -30,7 +30,7 @@ import { createId, nowIso } from '@shared/utils/ids';
 
 function createDraftPattern(defaultModelId: string, defaultReasoningEffort: PatternDefinition['agents'][0]['reasoningEffort']): PatternDefinition {
   const timestamp = nowIso();
-  return {
+  return syncPatternGraph({
     id: createId('custom-pattern'),
     name: 'New Pattern',
     description: '',
@@ -49,7 +49,7 @@ function createDraftPattern(defaultModelId: string, defaultReasoningEffort: Patt
     ],
     createdAt: timestamp,
     updatedAt: timestamp,
-  };
+  });
 }
 
 function createDraftMcpServer(): McpServerDefinition {

@@ -138,6 +138,12 @@ Their runtime semantics follow the Agent Framework orchestration model: sequenti
 
 Patterns are shared application data, not renderer-only configuration. That means the same pattern definition can drive validation, persistence, UI rendering, and sidecar execution.
 
+Patterns now persist an explicit graph-backed topology alongside the flat agent list. Agent nodes carry stable agent ids, ordering, and layout metadata, while system nodes such as user input/output, distributor, collector, and orchestrator make mode-specific flow visible in the saved contract.
+
+That graph is now the execution contract for the sidecar: sequential order comes from the saved path, handoff routes come from directed graph edges, and concurrent/group-chat participant ordering can be derived from graph node metadata instead of hard-coded runtime assumptions.
+
+Until the dedicated canvas editor lands, the current form-based pattern editor keeps the graph synchronized by rebuilding the saved topology from the selected mode and agent list on change/save. This is an intentional temporary adapter so backend/runtime work can land before the renderer graph UX is replaced.
+
 ### Sessions
 
 A session is the working unit of the product. It binds together:

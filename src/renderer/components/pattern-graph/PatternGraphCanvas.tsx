@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   ReactFlow,
+  ReactFlowProvider,
   Background,
   BackgroundVariant,
+  Panel,
   MarkerType,
   useNodesState,
   useEdgesState,
+  useReactFlow,
   type Node,
   type Edge,
   type OnConnect,
@@ -13,12 +16,14 @@ import {
   type OnNodesChange,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import { LayoutGrid } from 'lucide-react';
 
 import type { OrchestrationMode, PatternDefinition, PatternGraph } from '@shared/domain/pattern';
 import { resolvePatternGraph } from '@shared/domain/pattern';
 import type { ModelDefinition } from '@shared/domain/models';
 import {
   addHandoffEdge,
+  autoLayoutGraph,
   fromCanvasPositions,
   isConnectionAllowed,
   isEdgeDeletionAllowed,
@@ -38,13 +43,14 @@ interface PatternGraphCanvasProps {
   selectedNodeId: string | null;
 }
 
-export function PatternGraphCanvas({
+function PatternGraphCanvasInner({
   pattern,
   availableModels,
   onGraphChange,
   onNodeSelect,
   selectedNodeId,
 }: PatternGraphCanvasProps) {
+  const { fitView } = useReactFlow();
   const graph = useMemo(() => resolvePatternGraph(pattern), [pattern]);
   const draggingRef = useRef(false);
 
@@ -144,6 +150,13 @@ export function PatternGraphCanvas({
     onNodeSelect(null);
   }, [onNodeSelect]);
 
+  const handleAutoLayout = useCallback(() => {
+    const layouted = autoLayoutGraph(graph);
+    onGraphChange(layouted);
+    // Allow React to render the new positions before fitting
+    requestAnimationFrame(() => fitView({ padding: 0.3 }));
+  }, [graph, onGraphChange, fitView]);
+
   return (
     <div className="h-full w-full rounded-xl border border-zinc-800 bg-zinc-950/50">
       <ReactFlow
@@ -164,15 +177,34 @@ export function PatternGraphCanvas({
         maxZoom={2}
         proOptions={{ hideAttribution: true }}
         defaultEdgeOptions={{
-          type: 'smoothstep',
-          style: { stroke: '#52525b', strokeWidth: 1.5 },
-          markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16, color: '#52525b' },
+          type: 'default',
+          style: { stroke: '#6366f1', strokeWidth: 1.5 },
+          markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16, color: '#6366f1' },
         }}
         connectionLineStyle={{ stroke: '#6366f1', strokeWidth: 1.5 }}
         deleteKeyCode="Delete"
       >
         <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#27272a" />
+        <Panel position="top-right">
+          <button
+            type="button"
+            onClick={handleAutoLayout}
+            className="flex items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-800/90 px-2.5 py-1.5 text-[11px] font-medium text-zinc-300 shadow-sm backdrop-blur transition hover:border-zinc-600 hover:bg-zinc-700/90 hover:text-zinc-100"
+            title="Auto-layout nodes"
+          >
+            <LayoutGrid className="size-3.5" />
+            Auto layout
+          </button>
+        </Panel>
       </ReactFlow>
     </div>
+  );
+}
+
+export function PatternGraphCanvas(props: PatternGraphCanvasProps) {
+  return (
+    <ReactFlowProvider>
+      <PatternGraphCanvasInner {...props} />
+    </ReactFlowProvider>
   );
 }

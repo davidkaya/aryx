@@ -115,17 +115,37 @@ function isEdgeDeletable(edge: PatternGraphEdge, mode: OrchestrationMode, graph:
   return sourceNode?.kind === 'agent' && targetNode?.kind === 'agent';
 }
 
+const EDGE_COLORS = {
+  structural: { stroke: '#3f3f46', markerColor: '#3f3f46' },   // zinc-700 — muted
+  agentToAgent: { stroke: '#6366f1', markerColor: '#6366f1' }, // indigo-500 — distinct
+};
+
+function resolveEdgeColor(edge: PatternGraphEdge, graph: PatternGraph): typeof EDGE_COLORS.structural {
+  const sourceNode = graph.nodes.find((n) => n.id === edge.source);
+  const targetNode = graph.nodes.find((n) => n.id === edge.target);
+
+  if (sourceNode?.kind === 'agent' && targetNode?.kind === 'agent') {
+    return EDGE_COLORS.agentToAgent;
+  }
+
+  return EDGE_COLORS.structural;
+}
+
 export function toCanvasEdges(graph: PatternGraph, mode: OrchestrationMode): Edge[] {
-  return graph.edges.map((edge) => ({
-    id: edge.id,
-    source: edge.source,
-    target: edge.target,
-    type: 'smoothstep',
-    animated: mode === 'handoff',
-    deletable: isEdgeDeletable(edge, mode, graph),
-    markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16, color: '#52525b' },
-    style: { stroke: '#52525b', strokeWidth: 1.5 },
-  }));
+  return graph.edges.map((edge) => {
+    const color = resolveEdgeColor(edge, graph);
+
+    return {
+      id: edge.id,
+      source: edge.source,
+      target: edge.target,
+      type: 'default',
+      animated: mode === 'handoff',
+      deletable: isEdgeDeletable(edge, mode, graph),
+      markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16, color: color.markerColor },
+      style: { stroke: color.stroke, strokeWidth: 1.5 },
+    };
+  });
 }
 
 export function fromCanvasPositions(
@@ -323,4 +343,50 @@ export function findAgentForNode(
   }
 
   return agents.find((a) => a.id === node.agentId);
+}
+
+/* ── Auto-layout via dagre ─────────────────────────────────── */
+
+import dagre from '@dagrejs/dagre';
+
+const NODE_WIDTH = 170;
+const NODE_HEIGHT = 52;
+
+/**
+ * Re-compute all node positions using dagre's layered layout algorithm.
+ * Direction is always left-to-right to match the graph flow.
+ * Returns a new graph with updated positions; edges are unchanged.
+ */
+export function autoLayoutGraph(graph: PatternGraph): PatternGraph {
+  const g = new dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
+  g.setGraph({
+    rankdir: 'LR',
+    nodesep: 60,
+    ranksep: 120,
+    marginx: 20,
+    marginy: 20,
+  });
+
+  for (const node of graph.nodes) {
+    g.setNode(node.id, { width: NODE_WIDTH, height: NODE_HEIGHT });
+  }
+
+  for (const edge of graph.edges) {
+    g.setEdge(edge.source, edge.target);
+  }
+
+  dagre.layout(g);
+
+  const layoutedNodes = graph.nodes.map((node) => {
+    const dagreNode = g.node(node.id);
+    return {
+      ...node,
+      position: {
+        x: Math.round(dagreNode.x - NODE_WIDTH / 2),
+        y: Math.round(dagreNode.y - NODE_HEIGHT / 2),
+      },
+    };
+  });
+
+  return { nodes: layoutedNodes, edges: graph.edges };
 }

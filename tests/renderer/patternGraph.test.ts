@@ -4,6 +4,7 @@ import { createBuiltinPatterns, resolvePatternGraph, type PatternDefinition } fr
 import {
   addAgentNodeToGraph,
   addHandoffEdge,
+  autoLayoutGraph,
   canMoveSequential,
   findAgentForNode,
   isConnectionAllowed,
@@ -298,6 +299,38 @@ describe('edge deletion rules', () => {
       expect(node.data.provider).toBeDefined();
       // Without catalog, modelLabel falls back to the raw model id
       expect(node.data.modelLabel).toBeDefined();
+    }
+  });
+});
+
+describe('auto-layout', () => {
+  test('autoLayoutGraph repositions nodes without changing edges', () => {
+    const pattern = findPattern('handoff');
+    const graph = resolvePatternGraph(pattern);
+    const layouted = autoLayoutGraph(graph);
+
+    expect(layouted.nodes.length).toBe(graph.nodes.length);
+    expect(layouted.edges.length).toBe(graph.edges.length);
+    expect(layouted.edges).toEqual(graph.edges);
+
+    const positionsChanged = layouted.nodes.some((n, i) => {
+      const orig = graph.nodes[i]!;
+      return n.position.x !== orig.position.x || n.position.y !== orig.position.y;
+    });
+    expect(positionsChanged).toBe(true);
+  });
+
+  test('autoLayoutGraph produces finite positions for all modes', () => {
+    for (const mode of ['sequential', 'concurrent', 'handoff', 'group-chat'] as const) {
+      const pattern = findPattern(mode);
+      const graph = resolvePatternGraph(pattern);
+      const layouted = autoLayoutGraph(graph);
+
+      expect(layouted.nodes.length).toBe(graph.nodes.length);
+      for (const node of layouted.nodes) {
+        expect(Number.isFinite(node.position.x)).toBe(true);
+        expect(Number.isFinite(node.position.y)).toBe(true);
+      }
     }
   });
 });

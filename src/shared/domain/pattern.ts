@@ -140,6 +140,7 @@ function spreadY(index: number, count: number, gap = 170): number {
 }
 
 function createLinearGraph(agents: PatternAgentDefinition[]): PatternGraph {
+  const xStep = 250;
   const inputNode: PatternGraphNode = {
     id: SYSTEM_NODE_IDS.userInput,
     kind: 'user-input',
@@ -148,10 +149,10 @@ function createLinearGraph(agents: PatternAgentDefinition[]): PatternGraph {
   const outputNode: PatternGraphNode = {
     id: SYSTEM_NODE_IDS.userOutput,
     kind: 'user-output',
-    position: { x: 220 * Math.max(agents.length + 1, 2), y: 0 },
+    position: { x: xStep * Math.max(agents.length + 1, 2), y: 0 },
   };
   const agentNodes = agents.map((agent, index) =>
-    createAgentNode(agent, index, { x: 220 * (index + 1), y: 0 }),
+    createAgentNode(agent, index, { x: xStep * (index + 1), y: 0 }),
   );
   const edges: PatternGraphEdge[] = [];
   const path = [inputNode.id, ...agentNodes.map((node) => node.id), outputNode.id];
@@ -166,6 +167,8 @@ function createLinearGraph(agents: PatternAgentDefinition[]): PatternGraph {
 }
 
 function createConcurrentGraph(agents: PatternAgentDefinition[]): PatternGraph {
+  const agentCount = Math.max(agents.length, 1);
+  const agentGap = 150;
   const inputNode: PatternGraphNode = {
     id: SYSTEM_NODE_IDS.userInput,
     kind: 'user-input',
@@ -174,20 +177,25 @@ function createConcurrentGraph(agents: PatternAgentDefinition[]): PatternGraph {
   const distributorNode: PatternGraphNode = {
     id: SYSTEM_NODE_IDS.distributor,
     kind: 'distributor',
-    position: { x: 190, y: 0 },
+    position: { x: 200, y: 0 },
   };
   const collectorNode: PatternGraphNode = {
     id: SYSTEM_NODE_IDS.collector,
     kind: 'collector',
-    position: { x: 650, y: 0 },
+    position: { x: 700, y: 0 },
   };
   const outputNode: PatternGraphNode = {
     id: SYSTEM_NODE_IDS.userOutput,
     kind: 'user-output',
-    position: { x: 860, y: 0 },
+    position: { x: 920, y: 0 },
   };
+  // Stagger agents at alternating X offsets so fan-out/fan-in edges
+  // take distinct bezier paths and don't overlap each other.
   const agentNodes = agents.map((agent, index) =>
-    createAgentNode(agent, index, { x: 430, y: spreadY(index, Math.max(agents.length, 1), 170) }),
+    createAgentNode(agent, index, {
+      x: index % 2 === 0 ? 420 : 480,
+      y: spreadY(index, agentCount, agentGap),
+    }),
   );
 
   return {
@@ -210,19 +218,19 @@ function createHandoffGraph(agents: PatternAgentDefinition[]): PatternGraph {
   const outputNode: PatternGraphNode = {
     id: SYSTEM_NODE_IDS.userOutput,
     kind: 'user-output',
-    position: { x: 700, y: 0 },
+    position: { x: 780, y: 0 },
   };
   const entryAgent = agents[0];
   const specialistCount = Math.max(agents.length - 1, 1);
   const entryNode = entryAgent
-    ? createAgentNode(entryAgent, 0, { x: 200, y: 0 })
+    ? createAgentNode(entryAgent, 0, { x: 220, y: 0 })
     : undefined;
-  // Place specialists in a vertical column with enough spacing so
-  // bidirectional edges to/from the triage agent don't overlap.
+  // Place specialists in a staggered column with wider horizontal and vertical
+  // spacing so bidirectional bezier edges between triage↔specialists route cleanly.
   const specialistNodes = agents.slice(1).map((agent, index) =>
     createAgentNode(agent, index + 1, {
-      x: 460,
-      y: spreadY(index, specialistCount, 150),
+      x: index % 2 === 0 ? 500 : 560,
+      y: spreadY(index, specialistCount, 160),
     }),
   );
   const nodes = [inputNode, ...(entryNode ? [entryNode] : []), ...specialistNodes, outputNode];
@@ -243,6 +251,7 @@ function createHandoffGraph(agents: PatternAgentDefinition[]): PatternGraph {
 }
 
 function createGroupChatGraph(agents: PatternAgentDefinition[]): PatternGraph {
+  const agentCount = Math.max(agents.length, 1);
   const inputNode: PatternGraphNode = {
     id: SYSTEM_NODE_IDS.userInput,
     kind: 'user-input',
@@ -251,19 +260,20 @@ function createGroupChatGraph(agents: PatternAgentDefinition[]): PatternGraph {
   const orchestratorNode: PatternGraphNode = {
     id: SYSTEM_NODE_IDS.orchestrator,
     kind: 'orchestrator',
-    position: { x: 200, y: 0 },
+    position: { x: 220, y: 0 },
   };
   const outputNode: PatternGraphNode = {
     id: SYSTEM_NODE_IDS.userOutput,
     kind: 'user-output',
-    position: { x: 660, y: 0 },
+    position: { x: 740, y: 0 },
   };
-  // Place agents in a vertical column to the right of the orchestrator.
-  // This avoids crossing edges from the bidirectional orchestrator↔agent links.
+  // Place agents in a staggered column to the right of the orchestrator.
+  // Alternating X offsets give bezier curves distinct paths so bidirectional
+  // orchestrator↔agent edges don't stack on top of each other.
   const agentNodes = agents.map((agent, index) =>
     createAgentNode(agent, index, {
-      x: 440,
-      y: spreadY(index, Math.max(agents.length, 1), 130),
+      x: index % 2 === 0 ? 460 : 520,
+      y: spreadY(index, agentCount, 140),
     }),
   );
 

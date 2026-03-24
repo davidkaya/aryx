@@ -46,6 +46,7 @@
     "vite": "7.1.10"
   },
   "dependencies": {
+    "@dagrejs/dagre": "^3.0.0",
     "@xyflow/react": "^12.10.1",
     "keytar": "^7.9.0",
     "lucide-react": "^0.577.0",

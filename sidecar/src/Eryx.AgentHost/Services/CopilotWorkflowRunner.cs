@@ -403,16 +403,29 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
         string? normalizedToolName = string.IsNullOrWhiteSpace(toolName)
             ? null
             : toolName.Trim();
+        string? requestedUrl = request is PermissionRequestUrl urlRequest && !string.IsNullOrWhiteSpace(urlRequest.Url)
+            ? urlRequest.Url.Trim()
+            : null;
         string title = normalizedToolName is null
             ? $"Approve {permissionKind}"
             : $"Approve {normalizedToolName}";
         string detail = normalizedToolName is null
-            ? sessionId is null
-                ? $"{agentName} requested {permissionKind} permission."
-                : $"{agentName} requested {permissionKind} permission for Copilot session {sessionId}."
-            : sessionId is null
-                ? $"{agentName} requested {permissionKind} permission for tool \"{normalizedToolName}\"."
-                : $"{agentName} requested {permissionKind} permission for tool \"{normalizedToolName}\" in Copilot session {sessionId}.";
+            ? $"{agentName} requested {permissionKind} permission"
+            : $"{agentName} requested {permissionKind} permission for tool \"{normalizedToolName}\"";
+
+        if (requestedUrl is not null)
+        {
+            detail = $"{detail} to access \"{requestedUrl}\"";
+        }
+
+        if (sessionId is not null)
+        {
+            detail = normalizedToolName is null
+                ? $"{detail} for Copilot session {sessionId}"
+                : $"{detail} in Copilot session {sessionId}";
+        }
+
+        detail = $"{detail}.";
 
         return new ApprovalRequestedEventDto
         {
@@ -482,6 +495,8 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
         {
             PermissionRequestMcp mcp when !string.IsNullOrWhiteSpace(mcp.ToolName) => mcp.ToolName.Trim(),
             PermissionRequestCustomTool customTool when !string.IsNullOrWhiteSpace(customTool.ToolName) => customTool.ToolName.Trim(),
+            PermissionRequestHook hook when !string.IsNullOrWhiteSpace(hook.ToolName) => hook.ToolName.Trim(),
+            PermissionRequestUrl => "web_fetch",
             _ => null,
         };
 

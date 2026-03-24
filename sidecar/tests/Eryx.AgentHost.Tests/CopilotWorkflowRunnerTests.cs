@@ -247,17 +247,18 @@ public sealed class CopilotWorkflowRunnerTests
                     AgentIds = ["agent-1"],
                 },
             ],
-            AutoApprovedToolNames = ["lsp_ts_hover"],
+            AutoApprovedToolNames = ["lsp_ts_hover", "web_fetch"],
         };
 
         Assert.False(CopilotWorkflowRunner.RequiresToolCallApproval(policy, "agent-1", "lsp_ts_hover"));
+        Assert.False(CopilotWorkflowRunner.RequiresToolCallApproval(policy, "agent-1", "web_fetch"));
         Assert.True(CopilotWorkflowRunner.RequiresToolCallApproval(policy, "agent-1", "lsp_ts_definition"));
         Assert.True(CopilotWorkflowRunner.RequiresToolCallApproval(policy, "agent-1", null));
         Assert.False(CopilotWorkflowRunner.RequiresToolCallApproval(policy, "agent-2", "lsp_ts_definition"));
     }
 
     [Fact]
-    public void TryGetApprovalToolName_ReadsMcpAndCustomToolRequests()
+    public void TryGetApprovalToolName_ReadsMcpCustomHookAndUrlRequests()
     {
         Assert.True(
             CopilotWorkflowRunner.TryGetApprovalToolName(
@@ -282,6 +283,30 @@ public sealed class CopilotWorkflowRunnerTests
                 },
                 out string? customToolName));
         Assert.Equal("lsp_ts_hover", customToolName);
+
+        Assert.True(
+            CopilotWorkflowRunner.TryGetApprovalToolName(
+                new PermissionRequestHook
+                {
+                    Kind = "hook",
+                    ToolName = "web_fetch",
+                    ToolArgs = """{"url":"https://example.com"}""",
+                    HookMessage = "Review required before fetch",
+                },
+                out string? hookToolName));
+        Assert.Equal("web_fetch", hookToolName);
+
+        Assert.True(
+            CopilotWorkflowRunner.TryGetApprovalToolName(
+                new PermissionRequestUrl
+                {
+                    Kind = "url",
+                    ToolCallId = "tool-call-1",
+                    Intention = "Fetch the requested page",
+                    Url = "https://example.com/docs",
+                },
+                out string? urlToolName));
+        Assert.Equal("web_fetch", urlToolName);
 
         Assert.False(
             CopilotWorkflowRunner.TryGetApprovalToolName(
@@ -326,6 +351,37 @@ public sealed class CopilotWorkflowRunnerTests
         Assert.Equal("lsp_ts_hover", approvalEvent.ToolName);
         Assert.Equal("Approve lsp_ts_hover", approvalEvent.Title);
         Assert.Contains("tool \"lsp_ts_hover\"", approvalEvent.Detail);
+    }
+
+    [Fact]
+    public void BuildPermissionApprovalEvent_IncludesRequestedUrlForUrlPermissions()
+    {
+        ApprovalRequestedEventDto approvalEvent = CopilotWorkflowRunner.BuildPermissionApprovalEvent(
+            new RunTurnCommandDto
+            {
+                RequestId = "turn-1",
+                SessionId = "session-1",
+            },
+            CreateAgent("agent-1", "Analyst"),
+            new PermissionRequestUrl
+            {
+                Kind = "url",
+                ToolCallId = "tool-call-1",
+                Intention = "Fetch the requested page",
+                Url = "https://example.com/docs",
+            },
+            new PermissionInvocation
+            {
+                SessionId = "copilot-session-1",
+            },
+            "approval-1",
+            "web_fetch");
+
+        Assert.Equal("web_fetch", approvalEvent.ToolName);
+        Assert.Equal("Approve web_fetch", approvalEvent.Title);
+        Assert.Contains("url permission", approvalEvent.Detail);
+        Assert.Contains("tool \"web_fetch\"", approvalEvent.Detail);
+        Assert.Contains("https://example.com/docs", approvalEvent.Detail);
     }
 
     private static PatternAgentDefinitionDto CreateAgent(string id, string name)

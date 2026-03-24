@@ -20,7 +20,7 @@ public sealed class CopilotWorkflowRunnerTests
             new(ChatRole.Assistant, "Hi there."),
         ];
 
-        IReadOnlyList<ChatMessage> newMessages = CopilotWorkflowRunner.SelectNewOutputMessages(
+        IReadOnlyList<ChatMessage> newMessages = WorkflowTranscriptProjector.SelectNewOutputMessages(
             outputMessages,
             inputMessages);
 
@@ -43,7 +43,7 @@ public sealed class CopilotWorkflowRunnerTests
             new(ChatRole.Assistant, "Hi there."),
         ];
 
-        IReadOnlyList<ChatMessage> newMessages = CopilotWorkflowRunner.SelectNewOutputMessages(
+        IReadOnlyList<ChatMessage> newMessages = WorkflowTranscriptProjector.SelectNewOutputMessages(
             outputMessages,
             inputMessages);
 
@@ -64,7 +64,7 @@ public sealed class CopilotWorkflowRunnerTests
             new(ChatRole.Assistant, "Hi there."),
         ];
 
-        IReadOnlyList<ChatMessage> newMessages = CopilotWorkflowRunner.SelectNewOutputMessages(
+        IReadOnlyList<ChatMessage> newMessages = WorkflowTranscriptProjector.SelectNewOutputMessages(
             outputMessages,
             inputMessages);
 
@@ -94,7 +94,7 @@ public sealed class CopilotWorkflowRunnerTests
             },
         };
 
-        IReadOnlyList<ChatMessageDto> messages = CopilotWorkflowRunner.ProjectCompletedMessages(
+        IReadOnlyList<ChatMessageDto> messages = WorkflowTranscriptProjector.ProjectCompletedMessages(
             command,
             [],
             [
@@ -138,7 +138,7 @@ public sealed class CopilotWorkflowRunnerTests
             },
         };
 
-        IReadOnlyList<ChatMessageDto> messages = CopilotWorkflowRunner.ProjectCompletedMessages(
+        IReadOnlyList<ChatMessageDto> messages = WorkflowTranscriptProjector.ProjectCompletedMessages(
             command,
             [
                 new ChatMessage(ChatRole.Assistant, "Hello")
@@ -177,7 +177,7 @@ public sealed class CopilotWorkflowRunnerTests
             },
         };
 
-        IReadOnlyList<ChatMessageDto> messages = CopilotWorkflowRunner.ProjectCompletedMessages(
+        IReadOnlyList<ChatMessageDto> messages = WorkflowTranscriptProjector.ProjectCompletedMessages(
             command,
             [
                 new ChatMessage(ChatRole.Assistant, "The button is in place.")
@@ -214,7 +214,7 @@ public sealed class CopilotWorkflowRunnerTests
             },
         };
 
-        IReadOnlyList<ChatMessageDto> messages = CopilotWorkflowRunner.ProjectCompletedMessages(
+        IReadOnlyList<ChatMessageDto> messages = WorkflowTranscriptProjector.ProjectCompletedMessages(
             command,
             [
                 new ChatMessage(ChatRole.Assistant, string.Empty)
@@ -235,6 +235,52 @@ public sealed class CopilotWorkflowRunnerTests
     }
 
     [Fact]
+    public void StreamingTranscriptBuffer_MergesUpdatesPerMessageId()
+    {
+        StreamingTranscriptBuffer buffer = new();
+
+        buffer.AppendDelta("msg-1", "Architect", "Hello");
+        (string messageId, string authorName, string content) = buffer.AppendDelta("msg-1", "Architect", " world");
+
+        Assert.Equal("msg-1", messageId);
+        Assert.Equal("Architect", authorName);
+        Assert.Equal("Hello world", content);
+        Assert.Collection(
+            buffer.Snapshot(),
+            segment =>
+            {
+                Assert.Equal("msg-1", segment.MessageId);
+                Assert.Equal("Architect", segment.AuthorName);
+                Assert.Equal("Hello world", segment.Content);
+            });
+    }
+
+    [Fact]
+    public void StreamingTranscriptBuffer_PreservesInsertionOrderAcrossMessages()
+    {
+        StreamingTranscriptBuffer buffer = new();
+
+        buffer.AppendDelta("msg-1", "Architect", "A");
+        buffer.AppendDelta("msg-2", "Implementer", "B");
+        buffer.AppendDelta("msg-1", "Architect", " plus");
+
+        Assert.Collection(
+            buffer.Snapshot(),
+            first =>
+            {
+                Assert.Equal("msg-1", first.MessageId);
+                Assert.Equal("Architect", first.AuthorName);
+                Assert.Equal("A plus", first.Content);
+            },
+            second =>
+            {
+                Assert.Equal("msg-2", second.MessageId);
+                Assert.Equal("Implementer", second.AuthorName);
+                Assert.Equal("B", second.Content);
+            });
+    }
+
+    [Fact]
     public void RequiresToolCallApproval_HonorsAutoApprovedToolNames()
     {
         ApprovalPolicyDto policy = new()
@@ -250,18 +296,18 @@ public sealed class CopilotWorkflowRunnerTests
             AutoApprovedToolNames = ["lsp_ts_hover", "web_fetch"],
         };
 
-        Assert.False(CopilotWorkflowRunner.RequiresToolCallApproval(policy, "agent-1", "lsp_ts_hover"));
-        Assert.False(CopilotWorkflowRunner.RequiresToolCallApproval(policy, "agent-1", "web_fetch"));
-        Assert.True(CopilotWorkflowRunner.RequiresToolCallApproval(policy, "agent-1", "lsp_ts_definition"));
-        Assert.True(CopilotWorkflowRunner.RequiresToolCallApproval(policy, "agent-1", null));
-        Assert.False(CopilotWorkflowRunner.RequiresToolCallApproval(policy, "agent-2", "lsp_ts_definition"));
+        Assert.False(CopilotApprovalCoordinator.RequiresToolCallApproval(policy, "agent-1", "lsp_ts_hover"));
+        Assert.False(CopilotApprovalCoordinator.RequiresToolCallApproval(policy, "agent-1", "web_fetch"));
+        Assert.True(CopilotApprovalCoordinator.RequiresToolCallApproval(policy, "agent-1", "lsp_ts_definition"));
+        Assert.True(CopilotApprovalCoordinator.RequiresToolCallApproval(policy, "agent-1", null));
+        Assert.False(CopilotApprovalCoordinator.RequiresToolCallApproval(policy, "agent-2", "lsp_ts_definition"));
     }
 
     [Fact]
     public void TryGetApprovalToolName_ReadsMcpCustomAndHookRequests()
     {
         Assert.True(
-            CopilotWorkflowRunner.TryGetApprovalToolName(
+            CopilotApprovalCoordinator.TryGetApprovalToolName(
                 new PermissionRequestMcp
                 {
                     Kind = "mcp",
@@ -274,7 +320,7 @@ public sealed class CopilotWorkflowRunnerTests
         Assert.Equal("git.status", mcpToolName);
 
         Assert.True(
-            CopilotWorkflowRunner.TryGetApprovalToolName(
+            CopilotApprovalCoordinator.TryGetApprovalToolName(
                 new PermissionRequestCustomTool
                 {
                     Kind = "custom tool",
@@ -285,7 +331,7 @@ public sealed class CopilotWorkflowRunnerTests
         Assert.Equal("lsp_ts_hover", customToolName);
 
         Assert.True(
-            CopilotWorkflowRunner.TryGetApprovalToolName(
+            CopilotApprovalCoordinator.TryGetApprovalToolName(
                 new PermissionRequestHook
                 {
                     Kind = "hook",
@@ -297,7 +343,7 @@ public sealed class CopilotWorkflowRunnerTests
         Assert.Equal("web_fetch", hookToolName);
 
         Assert.False(
-            CopilotWorkflowRunner.TryGetApprovalToolName(
+            CopilotApprovalCoordinator.TryGetApprovalToolName(
                 new PermissionRequestShell
                 {
                     Kind = "shell",
@@ -324,7 +370,7 @@ public sealed class CopilotWorkflowRunnerTests
         };
 
         Assert.True(
-            CopilotWorkflowRunner.TryGetApprovalToolName(
+            CopilotApprovalCoordinator.TryGetApprovalToolName(
                 new PermissionRequestUrl
                 {
                     Kind = "url",
@@ -337,7 +383,7 @@ public sealed class CopilotWorkflowRunnerTests
         Assert.Equal("web_fetch", urlToolName);
 
         Assert.True(
-            CopilotWorkflowRunner.TryGetApprovalToolName(
+            CopilotApprovalCoordinator.TryGetApprovalToolName(
                 new PermissionRequestShell
                 {
                     Kind = "shell",
@@ -355,7 +401,7 @@ public sealed class CopilotWorkflowRunnerTests
         Assert.Equal("shell", shellToolName);
 
         Assert.True(
-            CopilotWorkflowRunner.TryGetApprovalToolName(
+            CopilotApprovalCoordinator.TryGetApprovalToolName(
                 new PermissionRequestRead
                 {
                     Kind = "read",
@@ -372,7 +418,7 @@ public sealed class CopilotWorkflowRunnerTests
     public void TryGetApprovalToolName_FallsBackToWebFetchForUncorrelatedUrlRequests()
     {
         Assert.True(
-            CopilotWorkflowRunner.TryGetApprovalToolName(
+            CopilotApprovalCoordinator.TryGetApprovalToolName(
                 new PermissionRequestUrl
                 {
                     Kind = "url",
@@ -387,7 +433,7 @@ public sealed class CopilotWorkflowRunnerTests
     [Fact]
     public void BuildPermissionApprovalEvent_IncludesToolContextWhenKnown()
     {
-        ApprovalRequestedEventDto approvalEvent = CopilotWorkflowRunner.BuildPermissionApprovalEvent(
+        ApprovalRequestedEventDto approvalEvent = CopilotApprovalCoordinator.BuildPermissionApprovalEvent(
             new RunTurnCommandDto
             {
                 RequestId = "turn-1",
@@ -415,7 +461,7 @@ public sealed class CopilotWorkflowRunnerTests
     [Fact]
     public void BuildPermissionApprovalEvent_IncludesRequestedUrlForUrlPermissions()
     {
-        ApprovalRequestedEventDto approvalEvent = CopilotWorkflowRunner.BuildPermissionApprovalEvent(
+        ApprovalRequestedEventDto approvalEvent = CopilotApprovalCoordinator.BuildPermissionApprovalEvent(
             new RunTurnCommandDto
             {
                 RequestId = "turn-1",
@@ -443,6 +489,98 @@ public sealed class CopilotWorkflowRunnerTests
         Assert.Contains("https://example.com/docs", approvalEvent.Detail);
     }
 
+    [Fact]
+    public async Task RequestApprovalAsync_RaisesApprovalAndCompletesAfterResolution()
+    {
+        CopilotApprovalCoordinator coordinator = new();
+        ApprovalRequestedEventDto? observedApproval = null;
+        RunTurnCommandDto command = CreateApprovalCommand();
+
+        Task<PermissionRequestResult> pending = coordinator.RequestApprovalAsync(
+            command,
+            command.Pattern.Agents[0],
+            new PermissionRequestCustomTool
+            {
+                Kind = "custom tool",
+                ToolName = "lsp_ts_definition",
+                ToolDescription = "Go to definition",
+            },
+            new PermissionInvocation
+            {
+                SessionId = "copilot-session-1",
+            },
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            approval =>
+            {
+                observedApproval = approval;
+                return Task.CompletedTask;
+            },
+            CancellationToken.None);
+
+        Assert.False(pending.IsCompleted);
+        Assert.NotNull(observedApproval);
+
+        await coordinator.ResolveApprovalAsync(
+            new ResolveApprovalCommandDto
+            {
+                ApprovalId = observedApproval!.ApprovalId,
+                Decision = "approved",
+            },
+            CancellationToken.None);
+
+        PermissionRequestResult result = await pending;
+        Assert.Equal(PermissionRequestResultKind.Approved, result.Kind);
+    }
+
+    [Fact]
+    public async Task RequestApprovalAsync_AutoApprovesToolsThatDoNotRequireApproval()
+    {
+        CopilotApprovalCoordinator coordinator = new();
+        bool sawApproval = false;
+        RunTurnCommandDto command = CreateApprovalCommand();
+
+        PermissionRequestResult result = await coordinator.RequestApprovalAsync(
+            command,
+            command.Pattern.Agents[0],
+            new PermissionRequestCustomTool
+            {
+                Kind = "custom tool",
+                ToolName = "web_fetch",
+                ToolDescription = "Fetch documentation",
+            },
+            new PermissionInvocation
+            {
+                SessionId = "copilot-session-1",
+            },
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            approval =>
+            {
+                sawApproval = true;
+                return Task.CompletedTask;
+            },
+            CancellationToken.None);
+
+        Assert.False(sawApproval);
+        Assert.Equal(PermissionRequestResultKind.Approved, result.Kind);
+    }
+
+    [Fact]
+    public async Task ResolveApprovalAsync_RejectsUnknownApprovalIds()
+    {
+        CopilotApprovalCoordinator coordinator = new();
+
+        InvalidOperationException error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            coordinator.ResolveApprovalAsync(
+                new ResolveApprovalCommandDto
+                {
+                    ApprovalId = "approval-missing",
+                    Decision = "approved",
+                },
+                CancellationToken.None));
+
+        Assert.Contains("is not pending", error.Message);
+    }
+
     private static PatternAgentDefinitionDto CreateAgent(string id, string name)
     {
         return new PatternAgentDefinitionDto
@@ -451,6 +589,38 @@ public sealed class CopilotWorkflowRunnerTests
             Name = name,
             Model = "gpt-5.4",
             Instructions = "Help with the request.",
+        };
+    }
+
+    private static RunTurnCommandDto CreateApprovalCommand()
+    {
+        return new RunTurnCommandDto
+        {
+            RequestId = "turn-1",
+            SessionId = "session-1",
+            Pattern = new PatternDefinitionDto
+            {
+                Id = "pattern-1",
+                Name = "Approval Pattern",
+                Mode = "single",
+                Availability = "available",
+                ApprovalPolicy = new ApprovalPolicyDto
+                {
+                    Rules =
+                    [
+                        new ApprovalCheckpointRuleDto
+                        {
+                            Kind = "tool-call",
+                            AgentIds = ["agent-1"],
+                        },
+                    ],
+                    AutoApprovedToolNames = ["web_fetch"],
+                },
+                Agents =
+                [
+                    CreateAgent("agent-1", "Primary"),
+                ],
+            },
         };
     }
 }

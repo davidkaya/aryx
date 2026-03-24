@@ -52,5 +52,7 @@ These instructions apply to any automated or semi-automated agent working in thi
 - Use Bun for dependency management and script execution.
 - Prefer repository-local tooling over global machine state whenever possible.
 - Keep changes focused and reviewable. Avoid mixing unrelated concerns into a single change.
+- When the user asks only for a plan, stay in planning flow: analyze the codebase, clarify scope as needed, and write or update the plan, but do not begin implementation until the user explicitly asks you to start the work.
+- Do not trigger workflow or mode transitions that implicitly approve or begin implementation unless the user has explicitly requested that transition.
 - Always commit completed repository changes before handing work off. If unrelated pre-existing changes are present in the worktree, stop and ask the user how to proceed before creating the commit.
 - Do not mark work as done until both the implementation and its verification are complete.

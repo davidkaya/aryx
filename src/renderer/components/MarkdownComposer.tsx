@@ -20,7 +20,7 @@ import {
   $convertFromMarkdownString,
   $convertToMarkdownString,
 } from '@lexical/markdown';
-import { $isCodeNode, $createCodeNode } from '@lexical/code';
+import { $isCodeNode, $createCodeNode, CodeNode } from '@lexical/code';
 import {
   $isListNode,
   INSERT_ORDERED_LIST_COMMAND,
@@ -43,7 +43,7 @@ import {
   type EditorThemeClasses,
   type LexicalEditor,
 } from 'lexical';
-import { Bold, Braces, ChevronDown, Code, Italic, List, ListOrdered } from 'lucide-react';
+import { Bold, Braces, Code, Italic, List, ListOrdered } from 'lucide-react';
 
 import {
   inspectMarkdownPaste,
@@ -241,26 +241,87 @@ function MarkdownPastePlugin() {
   return null;
 }
 
-/** Syncs a data-code-language attribute on each CodeNode's DOM element for CSS labels. */
-function CodeBlockLabelPlugin() {
+/** Attaches an imperative language-selector overlay to each CodeNode's DOM element. */
+function CodeBlockLanguagePlugin() {
   const [editor] = useLexicalComposerContext();
 
   useEffect(() => {
-    return editor.registerUpdateListener(({ editorState }) => {
-      editorState.read(() => {
-        for (const child of $getRoot().getChildren()) {
-          if (!$isCodeNode(child)) continue;
-          const element = editor.getElementByKey(child.getKey());
-          if (!element) continue;
-          const lang = child.getLanguage();
-          if (lang) {
-            element.setAttribute('data-code-language', friendlyLanguageName(lang));
-          } else {
-            element.removeAttribute('data-code-language');
-          }
-        }
+    const overlays = new Map<string, { wrapper: HTMLDivElement; select: HTMLSelectElement }>();
+
+    function syncCodeBlock(nodeKey: string) {
+      const codeElement = editor.getElementByKey(nodeKey);
+      if (!codeElement) return;
+
+      let lang: string | null = null;
+      editor.getEditorState().read(() => {
+        const node = $getNodeByKey(nodeKey);
+        if ($isCodeNode(node)) lang = node.getLanguage() ?? null;
       });
+
+      let entry = overlays.get(nodeKey);
+      if (!entry) {
+        const wrapper = document.createElement('div');
+        wrapper.contentEditable = 'false';
+        wrapper.className = 'mc-code-lang-overlay';
+
+        const select = document.createElement('select');
+        select.className = 'mc-code-lang-select';
+        for (const { value, label } of CODE_LANGUAGE_OPTIONS) {
+          const opt = document.createElement('option');
+          opt.value = value;
+          opt.textContent = label;
+          select.appendChild(opt);
+        }
+        select.addEventListener('change', () => {
+          editor.update(() => {
+            const node = $getNodeByKey(nodeKey);
+            if ($isCodeNode(node)) node.setLanguage(select.value || undefined);
+          });
+          requestAnimationFrame(() => editor.focus());
+        });
+        select.addEventListener('mousedown', (e) => e.stopPropagation());
+
+        wrapper.appendChild(select);
+        entry = { wrapper, select };
+        overlays.set(nodeKey, entry);
+      }
+
+      entry.select.value = lang ?? '';
+
+      // Re-insert if Lexical reconciled it away
+      if (!codeElement.contains(entry.wrapper)) {
+        codeElement.insertBefore(entry.wrapper, codeElement.firstChild);
+      }
+    }
+
+    function removeCodeBlock(nodeKey: string) {
+      const entry = overlays.get(nodeKey);
+      if (entry) {
+        entry.wrapper.remove();
+        overlays.delete(nodeKey);
+      }
+    }
+
+    const removeMutation = editor.registerMutationListener(CodeNode, (mutations) => {
+      for (const [nodeKey, type] of mutations) {
+        if (type === 'destroyed') removeCodeBlock(nodeKey);
+        else syncCodeBlock(nodeKey);
+      }
     });
+
+    // Re-sync after every update to survive Lexical reconciliation
+    const removeUpdate = editor.registerUpdateListener(() => {
+      for (const nodeKey of overlays.keys()) {
+        syncCodeBlock(nodeKey);
+      }
+    });
+
+    return () => {
+      removeMutation();
+      removeUpdate();
+      for (const entry of overlays.values()) entry.wrapper.remove();
+      overlays.clear();
+    };
   }, [editor]);
 
   return null;
@@ -273,22 +334,21 @@ interface ToolbarState {
   isItalic: boolean;
   isCode: boolean;
   blockType: string;
-  codeLanguage: string | null;
 }
 
-function getSelectionBlockInfo(): { blockType: string; codeLanguage: string | null; codeNodeKey: string | null } {
+function getSelectionBlockType(): string {
   const selection = $getSelection();
-  if (!$isRangeSelection(selection)) return { blockType: 'paragraph', codeLanguage: null, codeNodeKey: null };
+  if (!$isRangeSelection(selection)) return 'paragraph';
 
   const anchorNode = selection.anchor.getNode();
-  if (anchorNode.getKey() === 'root') return { blockType: 'paragraph', codeLanguage: null, codeNodeKey: null };
+  if (anchorNode.getKey() === 'root') return 'paragraph';
 
   const topElement = anchorNode.getTopLevelElementOrThrow();
-  if ($isHeadingNode(topElement)) return { blockType: topElement.getTag(), codeLanguage: null, codeNodeKey: null };
-  if ($isListNode(topElement)) return { blockType: topElement.getListType() === 'number' ? 'ol' : 'ul', codeLanguage: null, codeNodeKey: null };
-  if ($isCodeNode(topElement)) return { blockType: 'code', codeLanguage: topElement.getLanguage() ?? null, codeNodeKey: topElement.getKey() };
-  if ($isQuoteNode(topElement)) return { blockType: 'quote', codeLanguage: null, codeNodeKey: null };
-  return { blockType: 'paragraph', codeLanguage: null, codeNodeKey: null };
+  if ($isHeadingNode(topElement)) return topElement.getTag();
+  if ($isListNode(topElement)) return topElement.getListType() === 'number' ? 'ol' : 'ul';
+  if ($isCodeNode(topElement)) return 'code';
+  if ($isQuoteNode(topElement)) return 'quote';
+  return 'paragraph';
 }
 
 function ToolbarPlugin({ disabled }: { disabled: boolean }) {
@@ -298,24 +358,18 @@ function ToolbarPlugin({ disabled }: { disabled: boolean }) {
     isItalic: false,
     isCode: false,
     blockType: 'paragraph',
-    codeLanguage: null,
   });
-  // Preserve the code block key so the language dropdown works even when the select steals focus
-  const activeCodeBlockKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     return editor.registerUpdateListener(({ editorState }) => {
       editorState.read(() => {
         const selection = $getSelection();
         if (!$isRangeSelection(selection)) return;
-        const { blockType, codeLanguage, codeNodeKey } = getSelectionBlockInfo();
-        activeCodeBlockKeyRef.current = codeNodeKey;
         setState({
           isBold: selection.hasFormat('bold'),
           isItalic: selection.hasFormat('italic'),
           isCode: selection.hasFormat('code'),
-          blockType,
-          codeLanguage,
+          blockType: getSelectionBlockType(),
         });
       });
     });
@@ -364,26 +418,14 @@ function ToolbarPlugin({ disabled }: { disabled: boolean }) {
         const text = topElement.getTextContent();
         if (text) code.append($createTextNode(text));
         topElement.replace(code);
+        // Ensure a paragraph follows so the user can type below the code block
+        if (!code.getNextSibling()) {
+          code.insertAfter($createParagraphNode());
+        }
         code.select();
       }
     });
   }, [editor]);
-
-  const handleLanguageChange = useCallback(
-    (e: React.ChangeEvent<HTMLSelectElement>) => {
-      const key = activeCodeBlockKeyRef.current;
-      if (!key) return;
-      const newLang = e.target.value || undefined;
-      editor.update(() => {
-        const node = $getNodeByKey(key);
-        if ($isCodeNode(node)) {
-          node.setLanguage(newLang);
-        }
-      });
-      requestAnimationFrame(() => editor.focus());
-    },
-    [editor],
-  );
 
   return (
     <div className="flex items-center gap-0.5 border-b border-zinc-700/50 px-2 py-1">
@@ -394,26 +436,6 @@ function ToolbarPlugin({ disabled }: { disabled: boolean }) {
       <ToolbarButton active={state.blockType === 'ul'} disabled={disabled} icon={<List className="size-3.5" />} onClick={toggleBulletList} onMouseDown={preventFocus} title="Bullet List" />
       <ToolbarButton active={state.blockType === 'ol'} disabled={disabled} icon={<ListOrdered className="size-3.5" />} onClick={toggleNumberedList} onMouseDown={preventFocus} title="Numbered List" />
       <ToolbarButton active={state.blockType === 'code'} disabled={disabled} icon={<Braces className="size-3.5" />} onClick={toggleCodeBlock} onMouseDown={preventFocus} title="Code Block" />
-      {state.blockType === 'code' && (
-        <>
-          <div className="mx-1 h-4 w-px bg-zinc-700/50" />
-          <div className="relative">
-            <select
-              className="mc-lang-select appearance-none rounded bg-zinc-800 py-0.5 pl-2 pr-6 text-[11px] text-zinc-300 outline-none transition hover:bg-zinc-700 focus:ring-1 focus:ring-indigo-500/50"
-              disabled={disabled}
-              onChange={handleLanguageChange}
-              tabIndex={-1}
-              title="Code language"
-              value={state.codeLanguage ?? ''}
-            >
-              {CODE_LANGUAGE_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
-            <ChevronDown className="pointer-events-none absolute right-1 top-1/2 size-3 -translate-y-1/2 text-zinc-500" />
-          </div>
-        </>
-      )}
     </div>
   );
 }
@@ -512,7 +534,7 @@ export const MarkdownComposer = forwardRef<MarkdownComposerHandle, MarkdownCompo
         <LinkPlugin />
         <MarkdownShortcutPlugin transformers={[...markdownEditorTransformers]} />
         <ClearEditorPlugin />
-        <CodeBlockLabelPlugin />
+        <CodeBlockLanguagePlugin />
         <ContentTrackingPlugin onContentChange={onContentChange} />
         <SubmitOnEnterPlugin disabled={disabled} submitRef={submitRef} />
         <MarkdownPastePlugin />

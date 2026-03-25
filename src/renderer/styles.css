@@ -228,10 +228,11 @@ textarea {
 /* Code block */
 .mc-code-block {
   display: block;
+  position: relative;
   background: rgba(24, 24, 27, 0.8);
   border: 1px solid #27272a;
   border-radius: 6px;
-  padding: 6px 10px;
+  padding: 26px 10px 6px 10px;
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
   font-size: 0.9em;
   white-space: pre-wrap;
@@ -240,15 +241,40 @@ textarea {
   overflow-x: auto;
 }
 
-.mc-code-block[data-code-language]::before {
-  content: attr(data-code-language);
-  display: block;
-  font-size: 10px;
-  line-height: 1;
-  color: #71717a;
-  padding-bottom: 4px;
+/* Language selector overlay inside code blocks */
+.mc-code-lang-overlay {
+  position: absolute;
+  top: 3px;
+  right: 4px;
+  z-index: 1;
   user-select: none;
-  letter-spacing: 0.03em;
+}
+
+.mc-code-lang-select {
+  appearance: none;
+  -webkit-appearance: none;
+  background: rgba(39, 39, 42, 0.9);
+  border: 1px solid #3f3f46;
+  border-radius: 4px;
+  color: #a1a1aa;
+  font-family: inherit;
+  font-size: 10px;
+  padding: 2px 18px 2px 6px;
+  outline: none;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2371717a' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 3px center;
+  background-size: 10px;
+}
+
+.mc-code-lang-select:hover {
+  border-color: #52525b;
+  color: #d4d4d8;
+}
+
+.mc-code-lang-select:focus {
+  border-color: rgba(99, 102, 241, 0.5);
 }
 
 /* Link */

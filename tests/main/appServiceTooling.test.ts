@@ -18,6 +18,9 @@ mock.module('electron', () => ({
   dialog: {
     showOpenDialog: async () => ({ canceled: true, filePaths: [] }),
   },
+  shell: {
+    openPath: async () => '',
+  },
 }));
 
 mock.module('keytar', () => ({

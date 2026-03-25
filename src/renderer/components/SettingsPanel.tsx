@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { ChevronLeft, ChevronRight, Code, Cpu, Palette, Plus, Server, Workflow } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Code, Cpu, FolderOpen, Palette, Plus, Server, TriangleAlert, Workflow, Wrench } from 'lucide-react';
 
 import { CopilotStatusCard } from '@renderer/components/CopilotStatusCard';
 import { PatternEditor } from '@renderer/components/PatternEditor';
@@ -36,9 +36,11 @@ interface SettingsPanelProps {
   onDeleteLspProfile: (profileId: string) => Promise<void>;
   onNewLspProfile: () => LspProfileDefinition;
   onSetTheme: (theme: AppearanceTheme) => void;
+  onOpenAppDataFolder: () => void;
+  onResetLocalWorkspace: () => Promise<void>;
 }
 
-type SettingsSection = 'appearance' | 'connection' | 'patterns' | 'mcp-servers' | 'lsp-profiles';
+type SettingsSection = 'appearance' | 'connection' | 'patterns' | 'mcp-servers' | 'lsp-profiles' | 'troubleshooting';
 
 interface NavItem {
   id: SettingsSection;
@@ -77,6 +79,12 @@ const navGroups: NavGroup[] = [
       { id: 'lsp-profiles', label: 'LSP Profiles', icon: <Code className="size-3.5" /> },
     ],
   },
+  {
+    label: 'Support',
+    items: [
+      { id: 'troubleshooting', label: 'Troubleshooting', icon: <Wrench className="size-3.5" /> },
+    ],
+  },
 ];
 
 function modeBadgeClasses(pattern: PatternDefinition) {
@@ -103,6 +111,8 @@ export function SettingsPanel({
   onDeleteLspProfile,
   onNewLspProfile,
   onSetTheme,
+  onOpenAppDataFolder,
+  onResetLocalWorkspace,
 }: SettingsPanelProps) {
   const [activeSection, setActiveSection] = useState<SettingsSection>('appearance');
   const [editingPattern, setEditingPattern] = useState<PatternDefinition | null>(null);
@@ -266,6 +276,12 @@ export function SettingsPanel({
                 onEditProfile={(profile) => setEditingLspProfile(structuredClone(profile))}
                 onNewProfile={() => setEditingLspProfile(onNewLspProfile())}
                 profiles={toolingSettings.lspProfiles}
+              />
+            )}
+            {activeSection === 'troubleshooting' && (
+              <TroubleshootingSection
+                onOpenAppDataFolder={onOpenAppDataFolder}
+                onResetLocalWorkspace={onResetLocalWorkspace}
               />
             )}
           </div>
@@ -560,5 +576,114 @@ function EmptyState({ children }: { children: ReactNode }) {
     <div className="rounded-xl border border-dashed border-zinc-800 bg-zinc-900/20 px-5 py-8 text-center text-[12px] leading-relaxed text-zinc-500">
       {children}
     </div>
+  );
+}
+
+function TroubleshootingSection({
+  onOpenAppDataFolder,
+  onResetLocalWorkspace,
+}: {
+  onOpenAppDataFolder: () => void;
+  onResetLocalWorkspace: () => Promise<void>;
+}) {
+  const [isResetting, setIsResetting] = useState(false);
+  const [confirmingReset, setConfirmingReset] = useState(false);
+
+  async function handleReset() {
+    setIsResetting(true);
+    try {
+      await onResetLocalWorkspace();
+    } finally {
+      setIsResetting(false);
+      setConfirmingReset(false);
+    }
+  }
+
+  return (
+    <div>
+      <SectionHeader
+        description="Diagnose issues and manage local application data"
+        title="Troubleshooting"
+      />
+
+      <div className="space-y-2">
+        <TroubleshootingAction
+          description="Reveal the folder where Aryx stores workspace data, scratchpad files, and configuration."
+          icon={<FolderOpen className="size-4" />}
+          label="Open App Data Folder"
+          onClick={onOpenAppDataFolder}
+        />
+      </div>
+
+      <div className="mt-8 rounded-xl border border-red-500/20 bg-red-500/5 p-5">
+        <div className="flex items-start gap-3">
+          <TriangleAlert className="mt-0.5 size-4 shrink-0 text-red-400" />
+          <div className="min-w-0 flex-1">
+            <h4 className="text-[13px] font-semibold text-red-300">Reset Local Workspace</h4>
+            <p className="mt-1 text-[12px] leading-relaxed text-zinc-400">
+              Restore Aryx to its initial state. This permanently removes all sessions, custom patterns,
+              MCP server definitions, LSP profiles, and scratchpad contents. Your GitHub Copilot sign-in
+              is not affected.
+            </p>
+
+            {!confirmingReset ? (
+              <button
+                className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3.5 py-1.5 text-[13px] font-medium text-red-300 transition hover:border-red-500/50 hover:bg-red-500/20"
+                onClick={() => setConfirmingReset(true)}
+                type="button"
+              >
+                Reset workspace…
+              </button>
+            ) : (
+              <div className="mt-3 flex items-center gap-2">
+                <button
+                  className="rounded-lg bg-red-600 px-3.5 py-1.5 text-[13px] font-medium text-white transition hover:bg-red-500 disabled:opacity-50"
+                  disabled={isResetting}
+                  onClick={() => void handleReset()}
+                  type="button"
+                >
+                  {isResetting ? 'Resetting…' : 'Confirm reset'}
+                </button>
+                <button
+                  className="rounded-lg border border-[var(--color-border)] px-3.5 py-1.5 text-[13px] font-medium text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-200"
+                  disabled={isResetting}
+                  onClick={() => setConfirmingReset(false)}
+                  type="button"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TroubleshootingAction({
+  icon,
+  label,
+  description,
+  onClick,
+}: {
+  icon: ReactNode;
+  label: string;
+  description: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      className="group flex w-full items-center gap-3 rounded-xl border border-transparent px-4 py-3 text-left transition hover:border-zinc-800 hover:bg-zinc-900"
+      onClick={onClick}
+      type="button"
+    >
+      <span className="text-zinc-500 transition group-hover:text-zinc-300">{icon}</span>
+      <div className="min-w-0 flex-1">
+        <span className="text-[13px] font-medium text-zinc-200">{label}</span>
+        <p className="mt-0.5 text-[12px] text-zinc-500">{description}</p>
+      </div>
+      <ChevronRight className="size-4 text-zinc-700 transition group-hover:text-zinc-500" />
+    </button>
   );
 }

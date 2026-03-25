@@ -306,6 +306,10 @@ export default function App() {
           await api.savePattern({ pattern });
         }}
         onSetTheme={(theme) => void api.setTheme(theme)}
+        onOpenAppDataFolder={() => void api.openAppDataFolder()}
+        onResetLocalWorkspace={async () => {
+          await api.resetLocalWorkspace();
+        }}
         patterns={workspace.patterns}
         sidecarCapabilities={sidecarCapabilities}
         theme={workspace.settings.theme}

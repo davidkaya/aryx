@@ -27,6 +27,8 @@ export const ipcChannels = {
   selectProject: 'selection:project',
   selectPattern: 'selection:pattern',
   selectSession: 'selection:session',
+  openAppDataFolder: 'troubleshooting:open-app-data-folder',
+  resetLocalWorkspace: 'troubleshooting:reset-local-workspace',
   workspaceUpdated: 'workspace:updated',
   sessionEvent: 'sessions:event',
 } as const;

@@ -108,6 +108,8 @@ export interface ElectronApi {
   selectSession(sessionId?: string): Promise<WorkspaceState>;
   setPatternFavorite(input: SetPatternFavoriteInput): Promise<WorkspaceState>;
   setTheme(theme: AppearanceTheme): Promise<WorkspaceState>;
+  openAppDataFolder(): Promise<void>;
+  resetLocalWorkspace(): Promise<WorkspaceState>;
   onWorkspaceUpdated(listener: (workspace: WorkspaceState) => void): () => void;
   onSessionEvent(listener: (event: SessionEventRecord) => void): () => void;
 }

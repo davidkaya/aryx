@@ -1,7 +1,8 @@
 import { EventEmitter } from 'node:events';
-import { basename } from 'node:path';
+import { rm } from 'node:fs/promises';
+import { basename, dirname } from 'node:path';
 
-import { dialog } from 'electron';
+import { dialog, shell } from 'electron';
 
 import type {
   AgentActivityEvent,
@@ -157,6 +158,28 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
   async dispose(): Promise<void> {
     await this.sidecar.dispose();
     void this.secretStore;
+  }
+
+  async openAppDataFolder(): Promise<void> {
+    const appDataPath = dirname(this.workspaceRepository.filePath);
+    await shell.openPath(appDataPath);
+  }
+
+  async resetLocalWorkspace(): Promise<WorkspaceState> {
+    await this.sidecar.dispose();
+
+    try {
+      await rm(this.workspaceRepository.filePath, { force: true });
+      await rm(this.workspaceRepository.scratchpadPath, { recursive: true, force: true });
+    } catch (error) {
+      console.error('[aryx reset]', error);
+    }
+
+    this.workspace = undefined;
+    this.sidecarCapabilities = undefined;
+    this.didScheduleInitialProjectGitRefresh = false;
+
+    return this.loadWorkspace();
   }
 
   async addProject(): Promise<WorkspaceState> {

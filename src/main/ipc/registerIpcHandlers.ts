@@ -96,6 +96,8 @@ export function registerIpcHandlers(window: BrowserWindow, service: EryxAppServi
   ipcMain.handle(ipcChannels.selectProject, (_event, projectId?: string) => service.selectProject(projectId));
   ipcMain.handle(ipcChannels.selectPattern, (_event, patternId?: string) => service.selectPattern(patternId));
   ipcMain.handle(ipcChannels.selectSession, (_event, sessionId?: string) => service.selectSession(sessionId));
+  ipcMain.handle(ipcChannels.openAppDataFolder, () => service.openAppDataFolder());
+  ipcMain.handle(ipcChannels.resetLocalWorkspace, () => service.resetLocalWorkspace());
 
   service.on('workspace-updated', (workspace) => {
     window.webContents.send(ipcChannels.workspaceUpdated, workspace);

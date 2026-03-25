@@ -34,7 +34,9 @@ const api: ElectronApi = {
   selectProject: (projectId) => ipcRenderer.invoke(ipcChannels.selectProject, projectId),
   selectPattern: (patternId) => ipcRenderer.invoke(ipcChannels.selectPattern, patternId),
   selectSession: (sessionId) => ipcRenderer.invoke(ipcChannels.selectSession, sessionId),
-  onWorkspaceUpdated: (listener) => {
+  openAppDataFolder: () => ipcRenderer.invoke(ipcChannels.openAppDataFolder),
+  resetLocalWorkspace: () => ipcRenderer.invoke(ipcChannels.resetLocalWorkspace),
+  onWorkspaceUpdated:(listener) => {
     const handler = (_event: Electron.IpcRendererEvent, workspace: Awaited<ReturnType<ElectronApi['loadWorkspace']>>) =>
       listener(workspace);
 

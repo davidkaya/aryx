@@ -187,8 +187,10 @@ public sealed class RunTurnMcpServerConfigDto
     public int? TimeoutMs { get; init; }
     public string? Command { get; init; }
     public IReadOnlyList<string>? Args { get; init; }
+    public IReadOnlyDictionary<string, string>? Env { get; init; }
     public string? Cwd { get; init; }
     public string? Url { get; init; }
+    public IReadOnlyDictionary<string, string>? Headers { get; init; }
 }
 
 public sealed class RunTurnLspProfileConfigDto

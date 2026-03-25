@@ -55,6 +55,7 @@ export function buildRunTurnToolingConfig(
           command: server.command,
           args: [...server.args],
           cwd: server.cwd,
+          env: server.env ? { ...server.env } : undefined,
         },
       ];
     }
@@ -63,12 +64,13 @@ export function buildRunTurnToolingConfig(
       {
         id: server.id,
         name: server.name,
-        transport: server.transport,
-        tools: [...server.tools],
-        timeoutMs: server.timeoutMs,
-        url: server.url,
-      },
-    ];
+          transport: server.transport,
+          tools: [...server.tools],
+          timeoutMs: server.timeoutMs,
+          url: server.url,
+          headers: server.headers ? { ...server.headers } : undefined,
+        },
+      ];
   });
 
   const lspProfiles = selection.enabledLspProfileIds.flatMap((id): RunTurnLspProfileConfig[] => {

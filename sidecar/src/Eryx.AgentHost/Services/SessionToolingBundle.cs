@@ -98,6 +98,7 @@ internal sealed class SessionToolingBundle : IAsyncDisposable
             Timeout = server.TimeoutMs,
             Command = server.Command,
             Args = server.Args?.ToList() ?? [],
+            Env = server.Env is null ? null : new Dictionary<string, string>(server.Env, StringComparer.Ordinal),
             Cwd = string.IsNullOrWhiteSpace(server.Cwd) ? null : server.Cwd,
             Tools = ResolveTools(server),
         };
@@ -116,6 +117,7 @@ internal sealed class SessionToolingBundle : IAsyncDisposable
             Type = server.Transport,
             Timeout = server.TimeoutMs,
             Url = server.Url,
+            Headers = server.Headers is null ? null : new Dictionary<string, string>(server.Headers, StringComparer.Ordinal),
             Tools = ResolveTools(server),
         };
     }

@@ -25,6 +25,12 @@ import {
   validatePatternDefinition,
 } from '@shared/domain/pattern';
 import {
+  applyDiscoveredMcpServerStatus,
+  normalizeDiscoveredToolingState,
+  type DiscoveredToolingState,
+  type DiscoveredToolingStatus,
+} from '@shared/domain/discoveredTooling';
+import {
   approvalPolicyRequiresCheckpoint,
   dequeuePendingApprovalState,
   enqueuePendingApprovalState,
@@ -71,6 +77,8 @@ import {
   createSessionToolingSelection,
   listApprovalToolNames,
   normalizeTheme,
+  resolveProjectToolingSettings,
+  resolveWorkspaceToolingSettings,
   type AppearanceTheme,
   type LspProfileDefinition,
   type McpServerDefinition,
@@ -86,7 +94,11 @@ import { mergeStreamingText } from '@shared/utils/streamingText';
 
 import { WorkspaceRepository } from '@main/persistence/workspaceRepository';
 import { SecretStore } from '@main/secrets/secretStore';
-import { SidecarClient } from '@main/sidecar/sidecarProcess';
+import { ConfigScannerRegistry } from '@main/services/configScanner';
+import {
+  SIDECAR_STOPPED_BEFORE_COMPLETION_MESSAGE,
+  SidecarClient,
+} from '@main/sidecar/sidecarProcess';
 import { GitService } from '@main/git/gitService';
 import {
   buildRunTurnToolingConfig as buildSessionToolingConfig,
@@ -104,6 +116,8 @@ type PendingApprovalHandle = {
   resolve: (decision: ApprovalDecision) => void | Promise<void>;
 };
 
+type DiscoveredToolingResolution = 'accept' | 'dismiss';
+
 function isBuiltinPattern(patternId: string): boolean {
   return patternId.startsWith('pattern-');
 }
@@ -118,14 +132,20 @@ function equalStringArrays(left?: readonly string[], right?: readonly string[]):
   return normalizedLeft.every((value, index) => value === normalizedRight[index]);
 }
 
+function isSidecarStoppedBeforeCompletionError(error: unknown): error is Error {
+  return error instanceof Error && error.message === SIDECAR_STOPPED_BEFORE_COMPLETION_MESSAGE;
+}
+
 export class EryxAppService extends EventEmitter<AppServiceEvents> {
   private readonly workspaceRepository = new WorkspaceRepository();
   private readonly sidecar = new SidecarClient();
   private readonly secretStore = new SecretStore();
   private readonly gitService = new GitService();
+  private readonly configScanner = new ConfigScannerRegistry();
   private readonly pendingApprovalHandles = new Map<string, PendingApprovalHandle>();
   private workspace?: WorkspaceState;
   private sidecarCapabilities?: SidecarCapabilities;
+  private sidecarCapabilitiesPromise?: Promise<SidecarCapabilities>;
   private didScheduleInitialProjectGitRefresh = false;
 
   async describeSidecarCapabilities(): Promise<SidecarCapabilities> {
@@ -139,8 +159,23 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
   async loadWorkspace(): Promise<WorkspaceState> {
     if (!this.workspace) {
       this.workspace = await this.workspaceRepository.load();
+      const selectedProjectId = this.workspace.selectedProjectId;
+      const selectedProject = selectedProjectId
+        ? this.workspace.projects.find((project) => project.id === selectedProjectId)
+        : undefined;
+      const didSyncUserTooling = await this.syncUserDiscoveredTooling(this.workspace);
+      const didSyncProjectTooling = selectedProject
+        ? await this.syncProjectDiscoveredTooling(this.workspace, selectedProject)
+        : false;
+      const didPruneSelections = this.pruneUnavailableSessionToolingSelections(this.workspace);
       const didPruneApprovalTools = await this.pruneUnavailableApprovalTools(this.workspace);
-      if (didPruneApprovalTools || this.failInterruptedPendingApprovals(this.workspace)) {
+      if (
+        didSyncUserTooling
+        || didSyncProjectTooling
+        || didPruneSelections
+        || didPruneApprovalTools
+        || this.failInterruptedPendingApprovals(this.workspace)
+      ) {
         await this.workspaceRepository.save(this.workspace);
       }
     }
@@ -177,6 +212,7 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
 
     this.workspace = undefined;
     this.sidecarCapabilities = undefined;
+    this.sidecarCapabilitiesPromise = undefined;
     this.didScheduleInitialProjectGitRefresh = false;
 
     return this.loadWorkspace();
@@ -197,6 +233,11 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
     const existing = workspace.projects.find((project) => project.path === folderPath);
     if (existing) {
       workspace.selectedProjectId = existing.id;
+      const didSyncProjectTooling = await this.syncProjectDiscoveredTooling(workspace, existing);
+      if (didSyncProjectTooling) {
+        this.pruneUnavailableSessionToolingSelections(workspace);
+        await this.pruneUnavailableApprovalTools(workspace);
+      }
       return this.persistAndBroadcast(workspace);
     }
 
@@ -210,6 +251,7 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
 
     workspace.projects.push(project);
     workspace.selectedProjectId = project.id;
+    await this.syncProjectDiscoveredTooling(workspace, project);
     return this.persistAndBroadcast(workspace);
   }
 
@@ -233,6 +275,49 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
       workspace.selectedSessionId = undefined;
     }
 
+    return this.persistAndBroadcast(workspace);
+  }
+
+  async resolveWorkspaceDiscoveredTooling(
+    serverIds: string[],
+    resolution: DiscoveredToolingResolution,
+  ): Promise<WorkspaceState> {
+    const workspace = await this.loadWorkspace();
+    workspace.settings.discoveredUserTooling = applyDiscoveredMcpServerStatus(
+      workspace.settings.discoveredUserTooling,
+      serverIds,
+      this.resolveDiscoveredToolingStatus(resolution),
+    );
+
+    this.pruneUnavailableSessionToolingSelections(workspace);
+    await this.pruneUnavailableApprovalTools(workspace);
+    return this.persistAndBroadcast(workspace);
+  }
+
+  async rescanProjectConfigs(projectId: string): Promise<WorkspaceState> {
+    const workspace = await this.loadWorkspace();
+    const project = this.requireProject(workspace, projectId);
+    await this.syncProjectDiscoveredTooling(workspace, project);
+    this.pruneUnavailableSessionToolingSelections(workspace);
+    await this.pruneUnavailableApprovalTools(workspace);
+    return this.persistAndBroadcast(workspace);
+  }
+
+  async resolveProjectDiscoveredTooling(
+    projectId: string,
+    serverIds: string[],
+    resolution: DiscoveredToolingResolution,
+  ): Promise<WorkspaceState> {
+    const workspace = await this.loadWorkspace();
+    const project = this.requireProject(workspace, projectId);
+    project.discoveredTooling = applyDiscoveredMcpServerStatus(
+      project.discoveredTooling,
+      serverIds,
+      this.resolveDiscoveredToolingStatus(resolution),
+    );
+
+    this.pruneUnavailableSessionToolingSelections(workspace);
+    await this.pruneUnavailableApprovalTools(workspace);
     return this.persistAndBroadcast(workspace);
   }
 
@@ -675,7 +760,7 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
   ): Promise<WorkspaceState> {
     const workspace = await this.loadWorkspace();
     const session = this.requireSession(workspace, sessionId);
-    this.requireProject(workspace, session.projectId);
+    const project = this.requireProject(workspace, session.projectId);
 
     if (session.status === 'running') {
       throw new Error('Wait for the current response to finish before changing session tools.');
@@ -685,7 +770,10 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
       enabledMcpServerIds,
       enabledLspProfileIds,
     });
-    validateSessionToolingSelectionIds(workspace.settings.tooling, selection);
+    validateSessionToolingSelectionIds(
+      resolveProjectToolingSettings(workspace.settings, project.discoveredTooling),
+      selection,
+    );
 
     session.tooling = selection;
     session.updatedAt = nowIso();
@@ -698,7 +786,7 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
   ): Promise<WorkspaceState> {
     const workspace = await this.loadWorkspace();
     const session = this.requireSession(workspace, sessionId);
-    this.requireProject(workspace, session.projectId);
+    const project = this.requireProject(workspace, session.projectId);
 
     if (session.status === 'running') {
       throw new Error('Wait for the current response to finish before changing session approval settings.');
@@ -708,7 +796,7 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
       autoApprovedToolNames === undefined ? undefined : { autoApprovedToolNames },
     );
 
-    const knownToolNames = new Set(await this.listKnownApprovalToolNames(workspace));
+    const knownToolNames = new Set(await this.listKnownApprovalToolNames(workspace, project));
     const unknownToolName = settings?.autoApprovedToolNames.find((toolName) => !knownToolNames.has(toolName));
     if (unknownToolName) {
       throw new Error(`Unknown approval tool "${unknownToolName}".`);
@@ -741,6 +829,15 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
 
   async selectProject(projectId?: string): Promise<WorkspaceState> {
     const workspace = await this.loadWorkspace();
+    if (projectId) {
+      const project = this.requireProject(workspace, projectId);
+      const didSyncProjectTooling = await this.syncProjectDiscoveredTooling(workspace, project);
+      if (didSyncProjectTooling) {
+        this.pruneUnavailableSessionToolingSelections(workspace);
+        await this.pruneUnavailableApprovalTools(workspace);
+      }
+    }
+
     workspace.selectedProjectId = projectId;
     workspace.selectedSessionId = workspace.selectedSessionId;
     return this.persistAndBroadcast(workspace);
@@ -1177,18 +1274,29 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
     return normalizePatternModels(patternWithApprovalSettings, modelCatalog);
   }
 
-  private async listKnownApprovalToolNames(workspace: WorkspaceState): Promise<string[]> {
+  private async listKnownApprovalToolNames(
+    workspace: WorkspaceState,
+    project?: ProjectRecord,
+  ): Promise<string[]> {
     const capabilities = await this.loadSidecarCapabilities();
     const runtimeTools = capabilities.runtimeTools.length > 0 ? capabilities.runtimeTools : undefined;
-    return listApprovalToolNames(workspace.settings.tooling, runtimeTools);
+    const tooling = project
+      ? resolveProjectToolingSettings(workspace.settings, project.discoveredTooling)
+      : resolveWorkspaceToolingSettings(workspace.settings);
+    return listApprovalToolNames(tooling, runtimeTools);
   }
 
   private async pruneUnavailableApprovalTools(workspace: WorkspaceState): Promise<boolean> {
-    const knownToolNames = await this.listKnownApprovalToolNames(workspace);
+    const capabilities = await this.loadSidecarCapabilities();
+    const runtimeTools = capabilities.runtimeTools.length > 0 ? capabilities.runtimeTools : undefined;
+    const workspaceKnownToolNames = listApprovalToolNames(
+      resolveWorkspaceToolingSettings(workspace.settings),
+      runtimeTools,
+    );
     let changed = false;
 
     for (const pattern of workspace.patterns) {
-      const nextPolicy = pruneApprovalPolicyTools(pattern.approvalPolicy, knownToolNames);
+      const nextPolicy = pruneApprovalPolicyTools(pattern.approvalPolicy, workspaceKnownToolNames);
       if (!equalStringArrays(
         pattern.approvalPolicy?.autoApprovedToolNames,
         nextPolicy?.autoApprovedToolNames,
@@ -1199,6 +1307,11 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
     }
 
     for (const session of workspace.sessions) {
+      const project = this.requireProject(workspace, session.projectId);
+      const knownToolNames = listApprovalToolNames(
+        resolveProjectToolingSettings(workspace.settings, project.discoveredTooling),
+        runtimeTools,
+      );
       const nextSettings = pruneSessionApprovalSettings(
         session.approvalSettings,
         knownToolNames,
@@ -1219,9 +1332,89 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
     workspace: WorkspaceState,
     session: SessionRecord,
   ): RunTurnToolingConfig | undefined {
+    const project = this.requireProject(workspace, session.projectId);
+    const tooling = resolveProjectToolingSettings(workspace.settings, project.discoveredTooling);
     const selection = resolveSessionToolingSelection(session);
-    validateSessionToolingSelectionIds(workspace.settings.tooling, selection);
-    return buildSessionToolingConfig(workspace.settings.tooling, selection);
+    validateSessionToolingSelectionIds(tooling, selection);
+    return buildSessionToolingConfig(tooling, selection);
+  }
+
+  private async syncUserDiscoveredTooling(workspace: WorkspaceState): Promise<boolean> {
+    const nextState = await this.configScanner.scanUser(workspace.settings.discoveredUserTooling);
+    if (this.equalDiscoveredToolingState(workspace.settings.discoveredUserTooling, nextState)) {
+      return false;
+    }
+
+    workspace.settings.discoveredUserTooling = nextState;
+    return true;
+  }
+
+  private async syncProjectDiscoveredTooling(
+    workspace: WorkspaceState,
+    project: ProjectRecord,
+  ): Promise<boolean> {
+    if (isScratchpadProject(project)) {
+      if (!project.discoveredTooling || this.equalDiscoveredToolingState(project.discoveredTooling, undefined)) {
+        return false;
+      }
+
+      project.discoveredTooling = undefined;
+      return true;
+    }
+
+    const nextState = await this.configScanner.scanProject(
+      project.id,
+      project.path,
+      project.discoveredTooling,
+    );
+    if (this.equalDiscoveredToolingState(project.discoveredTooling, nextState)) {
+      return false;
+    }
+
+    project.discoveredTooling = nextState;
+    return true;
+  }
+
+  private pruneUnavailableSessionToolingSelections(workspace: WorkspaceState): boolean {
+    let changed = false;
+
+    for (const session of workspace.sessions) {
+      const project = this.requireProject(workspace, session.projectId);
+      const effectiveTooling = resolveProjectToolingSettings(workspace.settings, project.discoveredTooling);
+      const knownMcpServerIds = new Set(effectiveTooling.mcpServers.map((server) => server.id));
+      const knownLspProfileIds = new Set(effectiveTooling.lspProfiles.map((profile) => profile.id));
+      const selection = resolveSessionToolingSelection(session);
+      const nextSelection = normalizeSessionToolingSelection({
+        enabledMcpServerIds: selection.enabledMcpServerIds.filter((id) => knownMcpServerIds.has(id)),
+        enabledLspProfileIds: selection.enabledLspProfileIds.filter((id) => knownLspProfileIds.has(id)),
+      });
+
+      if (
+        equalStringArrays(selection.enabledMcpServerIds, nextSelection.enabledMcpServerIds)
+        && equalStringArrays(selection.enabledLspProfileIds, nextSelection.enabledLspProfileIds)
+      ) {
+        continue;
+      }
+
+      session.tooling = nextSelection;
+      changed = true;
+    }
+
+    return changed;
+  }
+
+  private resolveDiscoveredToolingStatus(
+    resolution: DiscoveredToolingResolution,
+  ): Exclude<DiscoveredToolingStatus, 'pending'> {
+    return resolution === 'accept' ? 'accepted' : 'dismissed';
+  }
+
+  private equalDiscoveredToolingState(
+    left?: DiscoveredToolingState,
+    right?: DiscoveredToolingState,
+  ): boolean {
+    return JSON.stringify(normalizeDiscoveredToolingState(left).mcpServers)
+      === JSON.stringify(normalizeDiscoveredToolingState(right).mcpServers);
   }
 
   private updateSessionRun(
@@ -1300,10 +1493,43 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
   }
 
   private async loadSidecarCapabilities(forceRefresh = false): Promise<SidecarCapabilities> {
-    if (forceRefresh || !this.sidecarCapabilities) {
-      this.sidecarCapabilities = await this.sidecar.describeCapabilities();
+    if (forceRefresh) {
+      this.sidecarCapabilities = undefined;
+      this.sidecarCapabilitiesPromise = undefined;
     }
 
-    return this.sidecarCapabilities;
+    if (this.sidecarCapabilities) {
+      return this.sidecarCapabilities;
+    }
+
+    if (!this.sidecarCapabilitiesPromise) {
+      let request!: Promise<SidecarCapabilities>;
+      request = (async () => {
+        try {
+          const capabilities = await this.fetchSidecarCapabilities();
+          this.sidecarCapabilities = capabilities;
+          return capabilities;
+        } finally {
+          if (this.sidecarCapabilitiesPromise === request) {
+            this.sidecarCapabilitiesPromise = undefined;
+          }
+        }
+      })();
+      this.sidecarCapabilitiesPromise = request;
+    }
+
+    return this.sidecarCapabilitiesPromise;
+  }
+
+  private async fetchSidecarCapabilities(): Promise<SidecarCapabilities> {
+    try {
+      return await this.sidecar.describeCapabilities();
+    } catch (error) {
+      if (!isSidecarStoppedBeforeCompletionError(error)) {
+        throw error;
+      }
+    }
+
+    return this.sidecar.describeCapabilities();
   }
 }

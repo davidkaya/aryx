@@ -3,8 +3,11 @@ import { BrowserWindow, ipcMain } from 'electron';
 import { ipcChannels } from '@shared/contracts/channels';
 import type {
   CreateSessionInput,
+  ResolveProjectDiscoveredToolingInput,
+  ResolveWorkspaceDiscoveredToolingInput,
   DuplicateSessionInput,
   RenameSessionInput,
+  RescanProjectConfigsInput,
   ResolveSessionApprovalInput,
   SaveLspProfileInput,
   SaveMcpServerInput,
@@ -29,8 +32,21 @@ export function registerIpcHandlers(window: BrowserWindow, service: EryxAppServi
   ipcMain.handle(ipcChannels.loadWorkspace, () => service.loadWorkspace());
   ipcMain.handle(ipcChannels.addProject, () => service.addProject());
   ipcMain.handle(ipcChannels.removeProject, (_event, projectId: string) => service.removeProject(projectId));
+  ipcMain.handle(
+    ipcChannels.resolveWorkspaceDiscoveredTooling,
+    (_event, input: ResolveWorkspaceDiscoveredToolingInput) =>
+      service.resolveWorkspaceDiscoveredTooling(input.serverIds, input.resolution),
+  );
   ipcMain.handle(ipcChannels.refreshProjectGitContext, (_event, projectId?: string) =>
     service.refreshProjectGitContext(projectId),
+  );
+  ipcMain.handle(ipcChannels.rescanProjectConfigs, (_event, input: RescanProjectConfigsInput) =>
+    service.rescanProjectConfigs(input.projectId),
+  );
+  ipcMain.handle(
+    ipcChannels.resolveProjectDiscoveredTooling,
+    (_event, input: ResolveProjectDiscoveredToolingInput) =>
+      service.resolveProjectDiscoveredTooling(input.projectId, input.serverIds, input.resolution),
   );
   ipcMain.handle(ipcChannels.savePattern, (_event, input: SavePatternInput) => service.savePattern(input.pattern));
   ipcMain.handle(ipcChannels.deletePattern, (_event, patternId: string) => service.deletePattern(patternId));

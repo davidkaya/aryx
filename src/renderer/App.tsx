@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AppShell } from '@renderer/components/AppShell';
 import { ActivityPanel } from '@renderer/components/ActivityPanel';
 import { ChatPane } from '@renderer/components/ChatPane';
+import { DiscoveredToolingModal } from '@renderer/components/DiscoveredToolingModal';
 import { NewSessionModal } from '@renderer/components/NewSessionModal';
 import { SettingsPanel } from '@renderer/components/SettingsPanel';
 import { Sidebar } from '@renderer/components/Sidebar';
@@ -22,10 +23,12 @@ import {
   resolveReasoningEffort,
 } from '@shared/domain/models';
 import { createDefaultToolApprovalPolicy } from '@shared/domain/approval';
+import { listPendingDiscoveredMcpServers } from '@shared/domain/discoveredTooling';
 import { syncPatternGraph, type PatternDefinition } from '@shared/domain/pattern';
 import { isScratchpadProject, SCRATCHPAD_PROJECT_ID } from '@shared/domain/project';
 import { applyScratchpadSessionConfig } from '@shared/domain/session';
 import type { AppearanceTheme, LspProfileDefinition, McpServerDefinition } from '@shared/domain/tooling';
+import { resolveProjectToolingSettings } from '@shared/domain/tooling';
 import type { WorkspaceState } from '@shared/domain/workspace';
 import { createId, nowIso } from '@shared/utils/ids';
 
@@ -91,6 +94,7 @@ export default function App() {
 
   const [showSettings, setShowSettings] = useState(false);
   const [newSessionProjectId, setNewSessionProjectId] = useState<string>();
+  const [showDiscoveryModal, setShowDiscoveryModal] = useState(false);
 
   // Load workspace on mount
   useEffect(() => {
@@ -170,6 +174,28 @@ export default function App() {
     [workspace?.projects],
   );
 
+  // Show discovery modal when pending discovered MCPs exist
+  const selectedProject = useMemo(
+    () => workspace?.projects.find((p) => p.id === workspace.selectedProjectId),
+    [workspace?.projects, workspace?.selectedProjectId],
+  );
+
+  const effectiveTooling = useMemo(
+    () => workspace ? resolveProjectToolingSettings(workspace.settings, selectedProject?.discoveredTooling) : undefined,
+    [workspace?.settings, selectedProject?.discoveredTooling],
+  );
+
+  const hasPendingDiscoveries = useMemo(() => {
+    if (!workspace) return false;
+    const pendingUser = listPendingDiscoveredMcpServers(workspace.settings.discoveredUserTooling);
+    const pendingProject = listPendingDiscoveredMcpServers(selectedProject?.discoveredTooling);
+    return pendingUser.length > 0 || pendingProject.length > 0;
+  }, [workspace?.settings.discoveredUserTooling, selectedProject?.discoveredTooling]);
+
+  useEffect(() => {
+    if (hasPendingDiscoveries) setShowDiscoveryModal(true);
+  }, [hasPendingDiscoveries]);
+
   const jumpToMessage = useCallback((messageId: string) => {
     const element = document.querySelector(`[data-message-id="${CSS.escape(messageId)}"]`);
     if (element) {
@@ -248,7 +274,7 @@ export default function App() {
           project={projectForSession}
           runtimeTools={sidecarCapabilities?.runtimeTools}
           session={selectedSession}
-          toolingSettings={workspace.settings.tooling}
+          toolingSettings={effectiveTooling ?? workspace.settings.tooling}
         />
     );
     detailPanel = (
@@ -314,6 +340,16 @@ export default function App() {
         sidecarCapabilities={sidecarCapabilities}
         theme={workspace.settings.theme}
         toolingSettings={workspace.settings.tooling}
+        discoveredUserTooling={workspace.settings.discoveredUserTooling}
+        discoveredProjectTooling={selectedProject?.discoveredTooling}
+        selectedProjectName={selectedProject?.name}
+        onRescanProjectConfigs={selectedProject ? () => void api.rescanProjectConfigs({ projectId: selectedProject.id }) : undefined}
+        onResolveUserDiscoveredTooling={(serverIds, resolution) => {
+          void api.resolveWorkspaceDiscoveredTooling({ serverIds, resolution });
+        }}
+        onResolveProjectDiscoveredTooling={selectedProject ? (serverIds, resolution) => {
+          void api.resolveProjectDiscoveredTooling({ projectId: selectedProject.id, serverIds, resolution });
+        } : undefined}
       />
   ) : null;
 
@@ -370,6 +406,23 @@ export default function App() {
           }}
           patterns={workspace.patterns}
           projects={workspace.projects}
+        />
+      )}
+
+      {showDiscoveryModal && (
+        <DiscoveredToolingModal
+          onClose={() => setShowDiscoveryModal(false)}
+          onResolveProjectServers={(serverIds, resolution) => {
+            if (selectedProject) {
+              void api.resolveProjectDiscoveredTooling({ projectId: selectedProject.id, serverIds, resolution });
+            }
+          }}
+          onResolveUserServers={(serverIds, resolution) => {
+            void api.resolveWorkspaceDiscoveredTooling({ serverIds, resolution });
+          }}
+          projectDiscoveredTooling={selectedProject?.discoveredTooling}
+          projectName={selectedProject?.name}
+          userDiscoveredTooling={workspace.settings.discoveredUserTooling}
         />
       )}
     </>

@@ -1,11 +1,13 @@
 import { useState, type ReactNode } from 'react';
-import { ChevronLeft, ChevronRight, Code, Cpu, FolderOpen, Palette, Plus, Server, TriangleAlert, Workflow, Wrench } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Code, Cpu, FolderOpen, Palette, Plus, RefreshCw, Server, TriangleAlert, Workflow, Wrench } from 'lucide-react';
 
 import { CopilotStatusCard } from '@renderer/components/CopilotStatusCard';
 import { PatternEditor } from '@renderer/components/PatternEditor';
 import { LspProfileEditor } from '@renderer/components/settings/LspProfileEditor';
 import { McpServerEditor } from '@renderer/components/settings/McpServerEditor';
 import type { SidecarCapabilities } from '@shared/contracts/sidecar';
+import type { DiscoveredMcpServer, DiscoveredToolingState, ProjectDiscoveredTooling } from '@shared/domain/discoveredTooling';
+import { listAcceptedDiscoveredMcpServers, listPendingDiscoveredMcpServers } from '@shared/domain/discoveredTooling';
 import type { ModelDefinition } from '@shared/domain/models';
 import type { PatternDefinition } from '@shared/domain/pattern';
 import {
@@ -23,6 +25,9 @@ interface SettingsPanelProps {
   sidecarCapabilities?: SidecarCapabilities;
   theme: AppearanceTheme;
   toolingSettings: WorkspaceToolingSettings;
+  discoveredUserTooling: DiscoveredToolingState;
+  discoveredProjectTooling?: ProjectDiscoveredTooling;
+  selectedProjectName?: string;
   isRefreshingCapabilities: boolean;
   onRefreshCapabilities: () => void;
   onClose: () => void;
@@ -38,6 +43,9 @@ interface SettingsPanelProps {
   onSetTheme: (theme: AppearanceTheme) => void;
   onOpenAppDataFolder: () => void;
   onResetLocalWorkspace: () => Promise<void>;
+  onRescanProjectConfigs?: () => void;
+  onResolveUserDiscoveredTooling?: (serverIds: string[], resolution: 'accept' | 'dismiss') => void;
+  onResolveProjectDiscoveredTooling?: (serverIds: string[], resolution: 'accept' | 'dismiss') => void;
 }
 
 type SettingsSection = 'appearance' | 'connection' | 'patterns' | 'mcp-servers' | 'lsp-profiles' | 'troubleshooting';
@@ -98,6 +106,9 @@ export function SettingsPanel({
   sidecarCapabilities,
   theme,
   toolingSettings,
+  discoveredUserTooling,
+  discoveredProjectTooling,
+  selectedProjectName,
   isRefreshingCapabilities,
   onRefreshCapabilities,
   onClose,
@@ -113,6 +124,9 @@ export function SettingsPanel({
   onSetTheme,
   onOpenAppDataFolder,
   onResetLocalWorkspace,
+  onRescanProjectConfigs,
+  onResolveUserDiscoveredTooling,
+  onResolveProjectDiscoveredTooling,
 }: SettingsPanelProps) {
   const [activeSection, setActiveSection] = useState<SettingsSection>('appearance');
   const [editingPattern, setEditingPattern] = useState<PatternDefinition | null>(null);
@@ -269,6 +283,16 @@ export function SettingsPanel({
                 onEditServer={(server) => setEditingMcpServer(structuredClone(server))}
                 onNewServer={() => setEditingMcpServer(onNewMcpServer())}
                 servers={toolingSettings.mcpServers}
+              />
+            )}
+            {activeSection === 'mcp-servers' && (
+              <DiscoveredMcpSection
+                discoveredProjectTooling={discoveredProjectTooling}
+                discoveredUserTooling={discoveredUserTooling}
+                onRescanProjectConfigs={onRescanProjectConfigs}
+                onResolveProjectDiscoveredTooling={onResolveProjectDiscoveredTooling}
+                onResolveUserDiscoveredTooling={onResolveUserDiscoveredTooling}
+                selectedProjectName={selectedProjectName}
               />
             )}
             {activeSection === 'lsp-profiles' && (
@@ -575,6 +599,181 @@ function EmptyState({ children }: { children: ReactNode }) {
   return (
     <div className="rounded-xl border border-dashed border-zinc-800 bg-zinc-900/20 px-5 py-8 text-center text-[12px] leading-relaxed text-zinc-500">
       {children}
+    </div>
+  );
+}
+
+/* ── Discovered MCP section ────────────────────────────────── */
+
+function DiscoveredMcpSection({
+  discoveredUserTooling,
+  discoveredProjectTooling,
+  selectedProjectName,
+  onRescanProjectConfigs,
+  onResolveUserDiscoveredTooling,
+  onResolveProjectDiscoveredTooling,
+}: {
+  discoveredUserTooling: DiscoveredToolingState;
+  discoveredProjectTooling?: ProjectDiscoveredTooling;
+  selectedProjectName?: string;
+  onRescanProjectConfigs?: () => void;
+  onResolveUserDiscoveredTooling?: (serverIds: string[], resolution: 'accept' | 'dismiss') => void;
+  onResolveProjectDiscoveredTooling?: (serverIds: string[], resolution: 'accept' | 'dismiss') => void;
+}) {
+  const acceptedUser = listAcceptedDiscoveredMcpServers(discoveredUserTooling);
+  const pendingUser = listPendingDiscoveredMcpServers(discoveredUserTooling);
+  const acceptedProject = listAcceptedDiscoveredMcpServers(discoveredProjectTooling);
+  const pendingProject = listPendingDiscoveredMcpServers(discoveredProjectTooling);
+
+  const hasAny = acceptedUser.length + pendingUser.length + acceptedProject.length + pendingProject.length > 0;
+
+  if (!hasAny) return null;
+
+  return (
+    <div className="mt-8">
+      <SectionHeader
+        description="MCP servers discovered from project and user config files. Accepted servers are available for session tooling."
+        title="Discovered MCP Servers"
+      >
+        {onRescanProjectConfigs && (
+          <button
+            className="flex items-center gap-1.5 rounded-lg bg-zinc-800 px-3 py-1.5 text-[13px] font-medium text-zinc-200 transition hover:bg-zinc-700"
+            onClick={onRescanProjectConfigs}
+            title="Re-scan project config files"
+            type="button"
+          >
+            <RefreshCw className="size-3.5" />
+            Re-scan
+          </button>
+        )}
+      </SectionHeader>
+
+      {/* User-level discovered */}
+      {(acceptedUser.length > 0 || pendingUser.length > 0) && (
+        <DiscoveredSubSection
+          label="User-level"
+          description="From ~/.copilot/mcp.json"
+          accepted={acceptedUser}
+          pending={pendingUser}
+          onResolve={onResolveUserDiscoveredTooling}
+        />
+      )}
+
+      {/* Project-level discovered */}
+      {(acceptedProject.length > 0 || pendingProject.length > 0) && (
+        <DiscoveredSubSection
+          label={selectedProjectName ? `Project: ${selectedProjectName}` : 'Project-level'}
+          description="From .vscode/mcp.json, .mcp.json, or .copilot/mcp.json"
+          accepted={acceptedProject}
+          pending={pendingProject}
+          onResolve={onResolveProjectDiscoveredTooling}
+        />
+      )}
+    </div>
+  );
+}
+
+function DiscoveredSubSection({
+  label,
+  description,
+  accepted,
+  pending,
+  onResolve,
+}: {
+  label: string;
+  description: string;
+  accepted: DiscoveredMcpServer[];
+  pending: DiscoveredMcpServer[];
+  onResolve?: (serverIds: string[], resolution: 'accept' | 'dismiss') => void;
+}) {
+  return (
+    <div className="mb-4">
+      <div className="mb-2 flex items-center justify-between">
+        <div>
+          <span className="text-[12px] font-medium text-zinc-300">{label}</span>
+          <p className="text-[11px] text-zinc-600">{description}</p>
+        </div>
+      </div>
+      <div className="space-y-1">
+        {accepted.map((server) => (
+          <DiscoveredServerRow
+            key={server.id}
+            onDismiss={onResolve ? () => onResolve([server.id], 'dismiss') : undefined}
+            server={server}
+            status="accepted"
+          />
+        ))}
+        {pending.map((server) => (
+          <DiscoveredServerRow
+            key={server.id}
+            onAccept={onResolve ? () => onResolve([server.id], 'accept') : undefined}
+            onDismiss={onResolve ? () => onResolve([server.id], 'dismiss') : undefined}
+            server={server}
+            status="pending"
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DiscoveredServerRow({
+  server,
+  status,
+  onAccept,
+  onDismiss,
+}: {
+  server: DiscoveredMcpServer;
+  status: 'accepted' | 'pending';
+  onAccept?: () => void;
+  onDismiss?: () => void;
+}) {
+  const detail =
+    server.transport === 'local'
+      ? server.command || 'No command'
+      : server.url || 'No URL';
+
+  const statusBadge = status === 'accepted'
+    ? 'bg-emerald-500/10 text-emerald-400'
+    : 'bg-amber-500/10 text-amber-400';
+
+  return (
+    <div className="flex items-center gap-3 rounded-xl border border-transparent px-4 py-3 hover:border-zinc-800 hover:bg-zinc-900">
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="truncate text-[13px] font-medium text-zinc-200">{server.name}</span>
+          <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-zinc-400">
+            {server.transport}
+          </span>
+          <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${statusBadge}`}>
+            {status}
+          </span>
+        </div>
+        <p className="mt-0.5 truncate text-[12px] text-zinc-500">
+          {detail}
+          <span className="ml-2 text-zinc-700">· {server.sourceLabel}</span>
+        </p>
+      </div>
+      <div className="flex items-center gap-1">
+        {onAccept && (
+          <button
+            className="rounded-lg px-2.5 py-1 text-[12px] font-medium text-emerald-400 transition hover:bg-emerald-500/10"
+            onClick={onAccept}
+            type="button"
+          >
+            Accept
+          </button>
+        )}
+        {onDismiss && (
+          <button
+            className="rounded-lg px-2.5 py-1 text-[12px] font-medium text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-300"
+            onClick={onDismiss}
+            type="button"
+          >
+            {status === 'accepted' ? 'Remove' : 'Dismiss'}
+          </button>
+        )}
+      </div>
     </div>
   );
 }

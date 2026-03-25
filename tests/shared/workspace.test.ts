@@ -14,6 +14,9 @@ describe('workspace seed', () => {
         mcpServers: [],
         lspProfiles: [],
       },
+      discoveredUserTooling: {
+        mcpServers: [],
+      },
     });
     expect(workspace.selectedProjectId).toBeUndefined();
     expect(workspace.selectedPatternId).toBeUndefined();

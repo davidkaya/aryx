@@ -70,6 +70,23 @@ export interface SaveLspProfileInput {
   profile: LspProfileDefinition;
 }
 
+export type DiscoveredToolingResolution = 'accept' | 'dismiss';
+
+export interface RescanProjectConfigsInput {
+  projectId: string;
+}
+
+export interface ResolveProjectDiscoveredToolingInput {
+  projectId: string;
+  serverIds: string[];
+  resolution: DiscoveredToolingResolution;
+}
+
+export interface ResolveWorkspaceDiscoveredToolingInput {
+  serverIds: string[];
+  resolution: DiscoveredToolingResolution;
+}
+
 export interface UpdateSessionToolingInput extends SessionToolingSelection {
   sessionId: string;
 }
@@ -85,7 +102,10 @@ export interface ElectronApi {
   loadWorkspace(): Promise<WorkspaceState>;
   addProject(): Promise<WorkspaceState>;
   removeProject(projectId: string): Promise<WorkspaceState>;
+  resolveWorkspaceDiscoveredTooling(input: ResolveWorkspaceDiscoveredToolingInput): Promise<WorkspaceState>;
   refreshProjectGitContext(projectId?: string): Promise<WorkspaceState>;
+  rescanProjectConfigs(input: RescanProjectConfigsInput): Promise<WorkspaceState>;
+  resolveProjectDiscoveredTooling(input: ResolveProjectDiscoveredToolingInput): Promise<WorkspaceState>;
   savePattern(input: SavePatternInput): Promise<WorkspaceState>;
   deletePattern(patternId: string): Promise<WorkspaceState>;
   saveMcpServer(input: SaveMcpServerInput): Promise<WorkspaceState>;

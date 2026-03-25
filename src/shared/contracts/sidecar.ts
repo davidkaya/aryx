@@ -101,6 +101,7 @@ export interface RunTurnLocalMcpServerConfig {
   command: string;
   args: string[];
   cwd?: string;
+  env?: Record<string, string>;
 }
 
 export interface RunTurnRemoteMcpServerConfig {
@@ -110,6 +111,7 @@ export interface RunTurnRemoteMcpServerConfig {
   tools: string[];
   timeoutMs?: number;
   url: string;
+  headers?: Record<string, string>;
 }
 
 export type RunTurnMcpServerConfig = RunTurnLocalMcpServerConfig | RunTurnRemoteMcpServerConfig;

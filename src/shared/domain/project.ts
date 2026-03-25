@@ -1,4 +1,5 @@
 import { nowIso } from '@shared/utils/ids';
+import type { ProjectDiscoveredTooling } from '@shared/domain/discoveredTooling';
 
 export type ProjectGitContextStatus = 'ready' | 'not-repository' | 'git-missing' | 'error';
 
@@ -37,6 +38,7 @@ export interface ProjectRecord {
   path: string;
   addedAt: string;
   git?: ProjectGitContext;
+  discoveredTooling?: ProjectDiscoveredTooling;
 }
 
 export const SCRATCHPAD_PROJECT_ID = 'project-scratchpad';

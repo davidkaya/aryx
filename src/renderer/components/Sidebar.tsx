@@ -28,6 +28,7 @@ import {
 
 import type { OrchestrationMode, PatternDefinition } from '@shared/domain/pattern';
 import { isScratchpadProject, type ProjectRecord, type ProjectGitContext } from '@shared/domain/project';
+import { listPendingDiscoveredMcpServers } from '@shared/domain/discoveredTooling';
 import type { SessionRecord } from '@shared/domain/session';
 import { querySessions } from '@shared/domain/sessionLibrary';
 import type { WorkspaceState } from '@shared/domain/workspace';
@@ -360,6 +361,10 @@ function ProjectGroup({
   );
 
   const runningCount = visibleSessions.filter((s) => s.status === 'running').length;
+  const pendingDiscoveryCount = useMemo(
+    () => isScratchpad ? 0 : listPendingDiscoveredMcpServers(project.discoveredTooling).length,
+    [isScratchpad, project.discoveredTooling],
+  );
 
   return (
     <div>
@@ -402,6 +407,14 @@ function ProjectGroup({
             <span className="flex items-center gap-1 rounded-full bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-medium text-blue-400">
               <span className="size-1.5 rounded-full bg-blue-400 sidebar-pulse" />
               {runningCount}
+            </span>
+          )}
+          {pendingDiscoveryCount > 0 && (
+            <span
+              className="flex items-center gap-1 rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-400"
+              title={`${pendingDiscoveryCount} MCP server${pendingDiscoveryCount === 1 ? '' : 's'} discovered`}
+            >
+              {pendingDiscoveryCount} new
             </span>
           )}
           <span className="rounded-full bg-zinc-800 px-1.5 py-0.5 text-[10px] font-medium text-zinc-500">

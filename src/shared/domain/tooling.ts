@@ -1,3 +1,12 @@
+import {
+  createDiscoveredToolingState,
+  listAcceptedDiscoveredMcpServers,
+  normalizeDiscoveredToolingState,
+  type DiscoveredToolingState,
+  type ProjectDiscoveredTooling,
+} from '@shared/domain/discoveredTooling';
+import { nowIso } from '@shared/utils/ids';
+
 export type McpServerTransport = 'local' | 'http' | 'sse';
 
 export interface BaseMcpServerDefinition {
@@ -15,11 +24,13 @@ export interface LocalMcpServerDefinition extends BaseMcpServerDefinition {
   command: string;
   args: string[];
   cwd?: string;
+  env?: Record<string, string>;
 }
 
 export interface RemoteMcpServerDefinition extends BaseMcpServerDefinition {
   transport: 'http' | 'sse';
   url: string;
+  headers?: Record<string, string>;
 }
 
 export type McpServerDefinition = LocalMcpServerDefinition | RemoteMcpServerDefinition;
@@ -45,6 +56,7 @@ export type AppearanceTheme = 'dark' | 'light' | 'system';
 export interface WorkspaceSettings {
   theme: AppearanceTheme;
   tooling: WorkspaceToolingSettings;
+  discoveredUserTooling: DiscoveredToolingState;
 }
 
 export interface SessionToolingSelection {
@@ -95,6 +107,7 @@ export function createWorkspaceSettings(): WorkspaceSettings {
       mcpServers: [],
       lspProfiles: [],
     },
+    discoveredUserTooling: createDiscoveredToolingState(),
   };
 }
 
@@ -118,7 +131,25 @@ export function normalizeWorkspaceSettings(settings?: Partial<WorkspaceSettings>
       mcpServers: (settings?.tooling?.mcpServers ?? []).map(normalizeMcpServerDefinition),
       lspProfiles: (settings?.tooling?.lspProfiles ?? []).map(normalizeLspProfileDefinition),
     },
+    discoveredUserTooling: normalizeDiscoveredToolingState(settings?.discoveredUserTooling),
   };
+}
+
+export function resolveWorkspaceToolingSettings(settings: WorkspaceSettings): WorkspaceToolingSettings {
+  return mergeAcceptedDiscoveredMcpServers(
+    {
+      mcpServers: settings.tooling.mcpServers.map((server) => ({ ...server })),
+      lspProfiles: settings.tooling.lspProfiles.map((profile) => ({ ...profile })),
+    },
+    settings.discoveredUserTooling,
+  );
+}
+
+export function resolveProjectToolingSettings(
+  settings: WorkspaceSettings,
+  projectDiscoveredTooling?: ProjectDiscoveredTooling,
+): WorkspaceToolingSettings {
+  return mergeAcceptedDiscoveredMcpServers(resolveWorkspaceToolingSettings(settings), projectDiscoveredTooling);
 }
 
 export function normalizeSessionToolingSelection(
@@ -249,6 +280,7 @@ export function normalizeMcpServerDefinition(server: McpServerDefinition): McpSe
       command: server.command.trim(),
       args: normalizeStringArray(server.args),
       cwd: server.cwd?.trim() || undefined,
+      env: normalizeStringRecord(server.env),
     };
   }
 
@@ -256,6 +288,7 @@ export function normalizeMcpServerDefinition(server: McpServerDefinition): McpSe
     ...base,
     transport: server.transport,
     url: server.url.trim(),
+    headers: normalizeStringRecord(server.headers),
   };
 }
 
@@ -272,6 +305,57 @@ export function normalizeLspProfileDefinition(profile: LspProfileDefinition): Ls
 
 function normalizeFileExtensions(fileExtensions: string[]): string[] {
   return normalizeStringArray(fileExtensions).map((value) => (value.startsWith('.') ? value : `.${value}`));
+}
+
+function mergeAcceptedDiscoveredMcpServers(
+  tooling: WorkspaceToolingSettings,
+  discoveredTooling?: DiscoveredToolingState,
+): WorkspaceToolingSettings {
+  const discoveredMcpServers = listAcceptedDiscoveredMcpServers(discoveredTooling).map((server) =>
+    toResolvedMcpServerDefinition(server, discoveredTooling?.lastScannedAt),
+  );
+
+  if (discoveredMcpServers.length === 0) {
+    return tooling;
+  }
+
+  return {
+    mcpServers: [...tooling.mcpServers, ...discoveredMcpServers],
+    lspProfiles: [...tooling.lspProfiles],
+  };
+}
+
+function toResolvedMcpServerDefinition(
+  server: ReturnType<typeof listAcceptedDiscoveredMcpServers>[number],
+  timestamp = nowIso(),
+): McpServerDefinition {
+  if (server.transport === 'local') {
+    return normalizeMcpServerDefinition({
+      id: server.id,
+      name: server.name,
+      transport: 'local',
+      command: server.command,
+      args: [...server.args],
+      cwd: server.cwd,
+      env: server.env ? { ...server.env } : undefined,
+      tools: [...server.tools],
+      timeoutMs: server.timeoutMs,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+  }
+
+  return normalizeMcpServerDefinition({
+    id: server.id,
+    name: server.name,
+    transport: server.transport,
+    url: server.url,
+    headers: server.headers ? { ...server.headers } : undefined,
+    tools: [...server.tools],
+    timeoutMs: server.timeoutMs,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  });
 }
 
 function requiresTypeScriptLanguageServerStdio(command: string): boolean {
@@ -349,4 +433,21 @@ function normalizeStringArray(values?: ReadonlyArray<string>): string[] {
   }
 
   return [...new Set(values.map((value) => value.trim()).filter((value) => value.length > 0))];
+}
+
+function normalizeStringRecord(record?: Record<string, string>): Record<string, string> | undefined {
+  if (!record) {
+    return undefined;
+  }
+
+  const normalizedEntries = Object.entries(record)
+    .map(([key, value]) => [key.trim(), value.trim()] as const)
+    .filter(([key, value]) => key.length > 0 && value.length > 0)
+    .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey));
+
+  if (normalizedEntries.length === 0) {
+    return undefined;
+  }
+
+  return Object.fromEntries(normalizedEntries);
 }

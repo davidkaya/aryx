@@ -9,7 +9,12 @@ const api: ElectronApi = {
   loadWorkspace: () => ipcRenderer.invoke(ipcChannels.loadWorkspace),
   addProject: () => ipcRenderer.invoke(ipcChannels.addProject),
   removeProject: (projectId) => ipcRenderer.invoke(ipcChannels.removeProject, projectId),
+  resolveWorkspaceDiscoveredTooling: (input) =>
+    ipcRenderer.invoke(ipcChannels.resolveWorkspaceDiscoveredTooling, input),
   refreshProjectGitContext: (projectId) => ipcRenderer.invoke(ipcChannels.refreshProjectGitContext, projectId),
+  rescanProjectConfigs: (input) => ipcRenderer.invoke(ipcChannels.rescanProjectConfigs, input),
+  resolveProjectDiscoveredTooling: (input) =>
+    ipcRenderer.invoke(ipcChannels.resolveProjectDiscoveredTooling, input),
   savePattern: (input) => ipcRenderer.invoke(ipcChannels.savePattern, input),
   deletePattern: (patternId) => ipcRenderer.invoke(ipcChannels.deletePattern, patternId),
   setPatternFavorite: (input) => ipcRenderer.invoke(ipcChannels.setPatternFavorite, input),

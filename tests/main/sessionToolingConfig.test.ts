@@ -17,7 +17,18 @@ const TOOLING: WorkspaceToolingSettings = {
       command: 'node',
       args: ['server.js'],
       cwd: 'C:\\workspace\\repo',
+      env: { DEBUG: 'true' },
       tools: ['git.status'],
+      createdAt: TIMESTAMP,
+      updatedAt: TIMESTAMP,
+    },
+    {
+      id: 'mcp-remote',
+      name: 'Remote MCP',
+      transport: 'http',
+      url: 'https://example.com/mcp',
+      headers: { Authorization: 'Bearer token' },
+      tools: ['remote.tool'],
       createdAt: TIMESTAMP,
       updatedAt: TIMESTAMP,
     },
@@ -61,7 +72,7 @@ describe('session tooling config helpers', () => {
   test('builds a run-turn tooling config from selected MCP and LSP ids', () => {
     expect(
       buildRunTurnToolingConfig(TOOLING, {
-        enabledMcpServerIds: ['mcp-git'],
+        enabledMcpServerIds: ['mcp-git', 'mcp-remote'],
         enabledLspProfileIds: ['lsp-ts'],
       }),
     ).toEqual({
@@ -74,6 +85,15 @@ describe('session tooling config helpers', () => {
           command: 'node',
           args: ['server.js'],
           cwd: 'C:\\workspace\\repo',
+          env: { DEBUG: 'true' },
+        },
+        {
+          id: 'mcp-remote',
+          name: 'Remote MCP',
+          transport: 'http',
+          tools: ['remote.tool'],
+          url: 'https://example.com/mcp',
+          headers: { Authorization: 'Bearer token' },
         },
       ],
       lspProfiles: [

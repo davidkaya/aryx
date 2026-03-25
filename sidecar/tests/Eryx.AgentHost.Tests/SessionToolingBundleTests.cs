@@ -18,6 +18,10 @@ public sealed class SessionToolingBundleTests
                 Transport = "local",
                 Command = "node",
                 Args = ["server.js", "--stdio"],
+                Env = new Dictionary<string, string>
+                {
+                    ["DEBUG"] = "true",
+                },
                 Cwd = @"C:\workspace\repo",
                 Tools = ["git.status"],
                 TimeoutMs = 1500,
@@ -28,6 +32,10 @@ public sealed class SessionToolingBundleTests
                 Name = "Remote MCP",
                 Transport = "http",
                 Url = "https://example.com/mcp",
+                Headers = new Dictionary<string, string>
+                {
+                    ["Authorization"] = "Bearer token",
+                },
                 Tools = ["*"],
             },
         ];
@@ -38,6 +46,9 @@ public sealed class SessionToolingBundleTests
         Assert.Equal("local", localConfig.Type);
         Assert.Equal("node", localConfig.Command);
         Assert.Equal(["server.js", "--stdio"], localConfig.Args);
+        KeyValuePair<string, string> localEnv = Assert.Single(localConfig.Env!);
+        Assert.Equal("DEBUG", localEnv.Key);
+        Assert.Equal("true", localEnv.Value);
         Assert.Equal(@"C:\workspace\repo", localConfig.Cwd);
         Assert.Equal(["git.status"], localConfig.Tools);
         Assert.Equal(1500, localConfig.Timeout);
@@ -45,6 +56,9 @@ public sealed class SessionToolingBundleTests
         McpRemoteServerConfig remoteConfig = Assert.IsType<McpRemoteServerConfig>(configurations["Remote MCP"]);
         Assert.Equal("http", remoteConfig.Type);
         Assert.Equal("https://example.com/mcp", remoteConfig.Url);
+        KeyValuePair<string, string> remoteHeader = Assert.Single(remoteConfig.Headers!);
+        Assert.Equal("Authorization", remoteHeader.Key);
+        Assert.Equal("Bearer token", remoteHeader.Value);
         Assert.Equal(["*"], remoteConfig.Tools);
     }
 

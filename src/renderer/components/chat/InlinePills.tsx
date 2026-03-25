@@ -225,6 +225,10 @@ export function InlineToolsPill({
   const enabledCount = selection.enabledMcpServerIds.length + selection.enabledLspProfileIds.length;
   const totalCount = mcpServers.length + lspProfiles.length;
 
+  const workspaceMcpServers = mcpServers.filter((s) => !s.id.startsWith('discovered_'));
+  const discoveredUserMcpServers = mcpServers.filter((s) => s.id.startsWith('discovered_user_'));
+  const discoveredProjectMcpServers = mcpServers.filter((s) => s.id.startsWith('discovered_project_'));
+
   return (
     <div className="relative" ref={ref}>
       <button
@@ -246,26 +250,29 @@ export function InlineToolsPill({
 
       {open && !disabled && (
         <div className="absolute bottom-full left-0 z-40 mb-1.5 w-64 overflow-y-auto rounded-lg border border-zinc-700 bg-zinc-900 py-1 shadow-2xl">
-          {mcpServers.length > 0 && (
-            <div>
-              <div className="px-3 pb-1 pt-2 text-[9px] font-semibold uppercase tracking-wider text-zinc-600">
-                MCP Servers
-              </div>
-              {mcpServers.map((server) => (
-                <PopoverToggleRow
-                  detail={server.transport === 'local' ? server.command : server.url}
-                  enabled={selection.enabledMcpServerIds.includes(server.id)}
-                  key={server.id}
-                  label={server.name}
-                  onToggle={() =>
-                    onToggle({
-                      ...selection,
-                      enabledMcpServerIds: toggleInArray(selection.enabledMcpServerIds, server.id),
-                    })
-                  }
-                />
-              ))}
-            </div>
+          {workspaceMcpServers.length > 0 && (
+            <McpServerGroup
+              label="Workspace MCP"
+              onToggle={onToggle}
+              selection={selection}
+              servers={workspaceMcpServers}
+            />
+          )}
+          {discoveredUserMcpServers.length > 0 && (
+            <McpServerGroup
+              label="User MCP"
+              onToggle={onToggle}
+              selection={selection}
+              servers={discoveredUserMcpServers}
+            />
+          )}
+          {discoveredProjectMcpServers.length > 0 && (
+            <McpServerGroup
+              label="Project MCP"
+              onToggle={onToggle}
+              selection={selection}
+              servers={discoveredProjectMcpServers}
+            />
           )}
           {lspProfiles.length > 0 && (
             <div>
@@ -290,6 +297,40 @@ export function InlineToolsPill({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function McpServerGroup({
+  label,
+  servers,
+  selection,
+  onToggle,
+}: {
+  label: string;
+  servers: ReadonlyArray<McpServerDefinition>;
+  selection: SessionToolingSelection;
+  onToggle: (selection: SessionToolingSelection) => void;
+}) {
+  return (
+    <div>
+      <div className="px-3 pb-1 pt-2 text-[9px] font-semibold uppercase tracking-wider text-zinc-600">
+        {label}
+      </div>
+      {servers.map((server) => (
+        <PopoverToggleRow
+          detail={server.transport === 'local' ? server.command : server.url}
+          enabled={selection.enabledMcpServerIds.includes(server.id)}
+          key={server.id}
+          label={server.name}
+          onToggle={() =>
+            onToggle({
+              ...selection,
+              enabledMcpServerIds: toggleInArray(selection.enabledMcpServerIds, server.id),
+            })
+          }
+        />
+      ))}
     </div>
   );
 }

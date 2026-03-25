@@ -3,6 +3,8 @@ import { describe, expect, test } from 'bun:test';
 import {
   listApprovalToolDefinitions,
   normalizeWorkspaceSettings,
+  resolveProjectToolingSettings,
+  resolveWorkspaceToolingSettings,
   validateLspProfileDefinition,
   validateMcpServerDefinition,
   type LspProfileDefinition,
@@ -23,6 +25,7 @@ describe('tooling settings helpers', () => {
             command: ' node ',
             args: [' --stdio ', ' --stdio ', ''],
             cwd: ' C:\\workspace\\repo ',
+            env: { ' DEBUG ': ' true ', EMPTY: ' ' },
             tools: [' git.status ', '', ' git.status '],
             createdAt: TIMESTAMP,
             updatedAt: TIMESTAMP,
@@ -32,6 +35,7 @@ describe('tooling settings helpers', () => {
             name: ' Remote MCP ',
             transport: 'http',
             url: ' https://example.com/mcp ',
+            headers: { ' Authorization ': ' Bearer token ', Empty: ' ' },
             tools: [],
             timeoutMs: 1000,
             createdAt: TIMESTAMP,
@@ -64,6 +68,7 @@ describe('tooling settings helpers', () => {
             command: 'node',
             args: ['--stdio'],
             cwd: 'C:\\workspace\\repo',
+            env: { DEBUG: 'true' },
             tools: ['git.status'],
             createdAt: TIMESTAMP,
             updatedAt: TIMESTAMP,
@@ -73,6 +78,7 @@ describe('tooling settings helpers', () => {
             name: 'Remote MCP',
             transport: 'http',
             url: 'https://example.com/mcp',
+            headers: { Authorization: 'Bearer token' },
             tools: [],
             timeoutMs: 1000,
             createdAt: TIMESTAMP,
@@ -91,6 +97,9 @@ describe('tooling settings helpers', () => {
             updatedAt: TIMESTAMP,
           },
         ],
+      },
+      discoveredUserTooling: {
+        mcpServers: [],
       },
     });
   });
@@ -240,5 +249,86 @@ describe('tooling settings helpers', () => {
       providerNames: ['Built-in'],
     });
     expect(tools.some((tool) => tool.id === 'web_fetch')).toBe(false);
+  });
+
+  test('resolves workspace and project tooling with accepted discovered MCP servers', () => {
+    const workspaceTooling = resolveWorkspaceToolingSettings(normalizeWorkspaceSettings({
+      tooling: {
+        mcpServers: [
+          {
+            id: 'manual',
+            name: 'Manual MCP',
+            transport: 'local',
+            command: 'node',
+            args: ['manual.js'],
+            tools: ['manual.tool'],
+            createdAt: TIMESTAMP,
+            updatedAt: TIMESTAMP,
+          },
+        ],
+        lspProfiles: [],
+      },
+      discoveredUserTooling: {
+        mcpServers: [
+          {
+            id: 'user-discovered',
+            name: 'User MCP',
+            transport: 'local',
+            command: 'node',
+            args: ['user.js'],
+            tools: ['user.tool'],
+            scope: 'user',
+            scannerId: 'copilot-user-mcp',
+            sourcePath: 'C:\\Users\\tester\\.copilot\\mcp.json',
+            sourceLabel: '~\\.copilot\\mcp.json',
+            fingerprint: 'fp-user',
+            status: 'accepted',
+          },
+        ],
+      },
+    }));
+
+    expect(workspaceTooling.mcpServers.map((server) => server.id)).toEqual(['manual', 'user-discovered']);
+
+    const projectTooling = resolveProjectToolingSettings(
+      normalizeWorkspaceSettings({
+        tooling: {
+          mcpServers: [],
+          lspProfiles: [],
+        },
+        discoveredUserTooling: {
+          mcpServers: [],
+        },
+      }),
+      {
+        mcpServers: [
+          {
+            id: 'project-discovered',
+            name: 'Project MCP',
+            transport: 'http',
+            url: 'https://example.com/project',
+            headers: { Authorization: 'Bearer token' },
+            tools: ['project.tool'],
+            scope: 'project',
+            scannerId: 'vscode-mcp',
+            sourcePath: 'C:\\workspace\\repo\\.vscode\\mcp.json',
+            sourceLabel: '.vscode\\mcp.json',
+            fingerprint: 'fp-project',
+            status: 'accepted',
+          },
+        ],
+      },
+    );
+
+    expect(projectTooling.mcpServers).toContainEqual({
+      id: 'project-discovered',
+      name: 'Project MCP',
+      transport: 'http',
+      url: 'https://example.com/project',
+      headers: { Authorization: 'Bearer token' },
+      tools: ['project.tool'],
+      createdAt: expect.any(String),
+      updatedAt: expect.any(String),
+    });
   });
 });

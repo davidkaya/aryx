@@ -3,6 +3,7 @@ import { mkdir } from 'node:fs/promises';
 import { createBuiltinPatterns, resolvePatternGraph } from '@shared/domain/pattern';
 import type { PatternDefinition } from '@shared/domain/pattern';
 import { mergeScratchpadProject } from '@shared/domain/project';
+import { normalizeDiscoveredToolingState } from '@shared/domain/discoveredTooling';
 import { normalizeSessionRunRecords } from '@shared/domain/runTimeline';
 import {
   normalizeSessionToolingSelection,
@@ -63,7 +64,13 @@ export class WorkspaceRepository {
       return seeded;
     }
 
-    const projects = mergeScratchpadProject(stored.projects ?? [], this.scratchpadPath);
+    const projects = mergeScratchpadProject(
+      (stored.projects ?? []).map((project) => ({
+        ...project,
+        discoveredTooling: normalizeDiscoveredToolingState(project.discoveredTooling),
+      })),
+      this.scratchpadPath,
+    );
     const settings = normalizeWorkspaceSettings(stored.settings);
 
     const workspace: WorkspaceState = {

@@ -10,8 +10,8 @@
   --color-accent: #6366f1;
   --color-accent-hover: #818cf8;
   --color-accent-muted: rgba(99, 102, 241, 0.15);
-  --text-pill: 0.5rem;
-  --text-pill--line-height: 1;
+  --text-pill: 0.6875rem;
+  --text-pill--line-height: 1.2;
 }
 
 :root {
@@ -69,13 +69,6 @@ body {
 
 #root {
   min-height: 100vh;
-}
-
-button,
-input,
-select,
-textarea {
-  font: inherit;
 }
 
 /* Scrollbar styling */

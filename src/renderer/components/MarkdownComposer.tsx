@@ -241,90 +241,113 @@ function MarkdownPastePlugin() {
   return null;
 }
 
-/** Attaches an imperative language-selector overlay to each CodeNode's DOM element. */
+/** Renders language-selector overlays for CodeNodes outside Lexical's managed DOM. */
 function CodeBlockLanguagePlugin() {
   const [editor] = useLexicalComposerContext();
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [codeBlocks, setCodeBlocks] = useState<Array<{ key: string; language: string }>>([]);
 
   useEffect(() => {
-    const overlays = new Map<string, { wrapper: HTMLDivElement; select: HTMLSelectElement }>();
-
-    function syncCodeBlock(nodeKey: string) {
-      const codeElement = editor.getElementByKey(nodeKey);
-      if (!codeElement) return;
-
-      let lang: string | null = null;
+    function collectCodeBlocks() {
       editor.getEditorState().read(() => {
-        const node = $getNodeByKey(nodeKey);
-        if ($isCodeNode(node)) lang = node.getLanguage() ?? null;
-      });
-
-      let entry = overlays.get(nodeKey);
-      if (!entry) {
-        const wrapper = document.createElement('div');
-        wrapper.contentEditable = 'false';
-        wrapper.className = 'mc-code-lang-overlay';
-
-        const select = document.createElement('select');
-        select.className = 'mc-code-lang-select';
-        for (const { value, label } of CODE_LANGUAGE_OPTIONS) {
-          const opt = document.createElement('option');
-          opt.value = value;
-          opt.textContent = label;
-          select.appendChild(opt);
+        const blocks: Array<{ key: string; language: string }> = [];
+        for (const child of $getRoot().getChildren()) {
+          if ($isCodeNode(child)) {
+            blocks.push({ key: child.getKey(), language: child.getLanguage() ?? '' });
+          }
         }
-        select.addEventListener('change', () => {
-          editor.update(() => {
-            const node = $getNodeByKey(nodeKey);
-            if ($isCodeNode(node)) node.setLanguage(select.value || undefined);
-          });
-          requestAnimationFrame(() => editor.focus());
+        setCodeBlocks((prev) => {
+          if (
+            prev.length === blocks.length &&
+            prev.every((b, i) => b.key === blocks[i].key && b.language === blocks[i].language)
+          ) {
+            return prev;
+          }
+          return blocks;
         });
-        select.addEventListener('mousedown', (e) => e.stopPropagation());
-
-        wrapper.appendChild(select);
-        entry = { wrapper, select };
-        overlays.set(nodeKey, entry);
-      }
-
-      entry.select.value = lang ?? '';
-
-      // Re-insert if Lexical reconciled it away
-      if (!codeElement.contains(entry.wrapper)) {
-        codeElement.insertBefore(entry.wrapper, codeElement.firstChild);
-      }
+      });
     }
 
-    function removeCodeBlock(nodeKey: string) {
-      const entry = overlays.get(nodeKey);
-      if (entry) {
-        entry.wrapper.remove();
-        overlays.delete(nodeKey);
-      }
-    }
-
-    const removeMutation = editor.registerMutationListener(CodeNode, (mutations) => {
-      for (const [nodeKey, type] of mutations) {
-        if (type === 'destroyed') removeCodeBlock(nodeKey);
-        else syncCodeBlock(nodeKey);
-      }
-    });
-
-    // Re-sync after every update to survive Lexical reconciliation
-    const removeUpdate = editor.registerUpdateListener(() => {
-      for (const nodeKey of overlays.keys()) {
-        syncCodeBlock(nodeKey);
-      }
-    });
-
+    const removeMutation = editor.registerMutationListener(CodeNode, collectCodeBlocks);
+    const removeUpdate = editor.registerUpdateListener(collectCodeBlocks);
     return () => {
       removeMutation();
       removeUpdate();
-      for (const entry of overlays.values()) entry.wrapper.remove();
-      overlays.clear();
     };
   }, [editor]);
 
-  return null;
+  // Position overlays to match their corresponding code block elements
+  const positionOverlays = useCallback(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const containerRect = container.getBoundingClientRect();
+
+    for (const { key } of codeBlocks) {
+      const codeEl = editor.getElementByKey(key);
+      const overlayEl = container.querySelector(`[data-code-key="${key}"]`) as HTMLElement | null;
+      if (!codeEl || !overlayEl) continue;
+
+      const codeRect = codeEl.getBoundingClientRect();
+      overlayEl.style.top = `${codeRect.top - containerRect.top + 3}px`;
+      overlayEl.style.right = `${containerRect.right - codeRect.right + 4}px`;
+    }
+  }, [editor, codeBlocks]);
+
+  // Reposition on editor updates, scroll, and resize
+  useEffect(() => {
+    if (codeBlocks.length === 0) return;
+    positionOverlays();
+
+    let rafId: number | null = null;
+    const schedulePosition = () => {
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(positionOverlays);
+    };
+
+    const removeUpdate = editor.registerUpdateListener(schedulePosition);
+    const rootElement = editor.getRootElement();
+    rootElement?.addEventListener('scroll', schedulePosition);
+
+    return () => {
+      removeUpdate();
+      rootElement?.removeEventListener('scroll', schedulePosition);
+      if (rafId !== null) cancelAnimationFrame(rafId);
+    };
+  }, [editor, codeBlocks, positionOverlays]);
+
+  const handleLanguageChange = useCallback(
+    (nodeKey: string, newLanguage: string) => {
+      editor.update(() => {
+        const node = $getNodeByKey(nodeKey);
+        if ($isCodeNode(node)) node.setLanguage(newLanguage || undefined);
+      });
+      requestAnimationFrame(() => editor.focus());
+    },
+    [editor],
+  );
+
+  if (codeBlocks.length === 0) return null;
+
+  return (
+    <div ref={containerRef} className="mc-code-overlays-container">
+      {codeBlocks.map(({ key, language }) => (
+        <div key={key} data-code-key={key} className="mc-code-lang-overlay">
+          <select
+            className="mc-code-lang-select"
+            value={language}
+            onChange={(e) => handleLanguageChange(key, e.target.value)}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            {CODE_LANGUAGE_OPTIONS.map(({ value, label }) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 /* ── Toolbar ──────────────────────────────────────────── */
@@ -526,6 +549,7 @@ export const MarkdownComposer = forwardRef<MarkdownComposerHandle, MarkdownCompo
             }
             ErrorBoundary={LexicalErrorBoundary}
           />
+          <CodeBlockLanguagePlugin />
           {children}
         </div>
 
@@ -534,7 +558,6 @@ export const MarkdownComposer = forwardRef<MarkdownComposerHandle, MarkdownCompo
         <LinkPlugin />
         <MarkdownShortcutPlugin transformers={[...markdownEditorTransformers]} />
         <ClearEditorPlugin />
-        <CodeBlockLanguagePlugin />
         <ContentTrackingPlugin onContentChange={onContentChange} />
         <SubmitOnEnterPlugin disabled={disabled} submitRef={submitRef} />
         <MarkdownPastePlugin />

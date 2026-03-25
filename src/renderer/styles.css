@@ -228,7 +228,6 @@ textarea {
 /* Code block */
 .mc-code-block {
   display: block;
-  position: relative;
   background: rgba(24, 24, 27, 0.8);
   border: 1px solid #27272a;
   border-radius: 6px;
@@ -241,12 +240,21 @@ textarea {
   overflow-x: auto;
 }
 
-/* Language selector overlay inside code blocks */
+/* Language selector overlays positioned outside Lexical-managed DOM */
+.mc-code-overlays-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 10;
+  overflow: hidden;
+}
+
 .mc-code-lang-overlay {
   position: absolute;
-  top: 3px;
-  right: 4px;
-  z-index: 1;
+  pointer-events: auto;
   user-select: none;
 }
 

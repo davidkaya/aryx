@@ -418,7 +418,26 @@ export function PatternEditor({
                     onToggle={(enabled) => toggleCheckpoint('tool-call', enabled)}
                     scopedAgentIds={checkpointAgentIds('tool-call')}
                     onScopeChange={(agentIds) => setCheckpointAgentScope('tool-call', agentIds)}
-                  />
+                  >
+                    <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+                      Auto-approved tools
+                    </div>
+                    <p className="mb-3 text-[11px] leading-relaxed text-zinc-600">
+                      Tools marked as auto-approved will skip manual review.
+                      Sessions can override these defaults from the Activity panel.
+                    </p>
+                    {approvalTools.length === 0 ? (
+                      <p className="py-2 text-center text-[11px] text-zinc-600">
+                        No tools available yet. Connect MCP servers or wait for runtime capabilities to load.
+                      </p>
+                    ) : (
+                      <ToolApprovalGroupedList
+                        autoApprovedSet={autoApprovedSet}
+                        onToggle={toggleToolAutoApproval}
+                        tools={approvalTools}
+                      />
+                    )}
+                  </ApprovalCheckpointRow>
                   <ApprovalCheckpointRow
                     agents={pattern.agents}
                     enabled={isCheckpointEnabled('final-response')}
@@ -431,34 +450,6 @@ export function PatternEditor({
                   />
                 </div>
               </section>
-
-              {/* Tool auto-approval */}
-              {isCheckpointEnabled('tool-call') && (
-                <section className="space-y-4">
-                  <h4 className="text-[12px] font-semibold uppercase tracking-wider text-zinc-500">
-                    Tool Auto-Approval Defaults
-                  </h4>
-
-                  <p className="text-[11px] leading-relaxed text-zinc-600">
-                    Tools marked as auto-approved will skip manual review.
-                    Sessions can override these defaults from the Activity panel.
-                  </p>
-
-                  <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 py-3">
-                    {approvalTools.length === 0 ? (
-                      <p className="py-2 text-center text-[11px] text-zinc-600">
-                        No tools available yet. Connect MCP servers or wait for runtime capabilities to load.
-                      </p>
-                    ) : (
-                      <ToolApprovalGroupedList
-                        autoApprovedSet={autoApprovedSet}
-                        onToggle={toggleToolAutoApproval}
-                        tools={approvalTools}
-                      />
-                    )}
-                  </div>
-                </section>
-              )}
             </div>
           </div>
         </div>
@@ -490,6 +481,7 @@ export function PatternEditor({
 
 function ApprovalCheckpointRow({
   agents,
+  children,
   enabled,
   kind: _kind,
   label,
@@ -499,6 +491,7 @@ function ApprovalCheckpointRow({
   onScopeChange,
 }: {
   agents: PatternAgentDefinition[];
+  children?: React.ReactNode;
   enabled: boolean;
   kind: ApprovalCheckpointKind;
   label: string;
@@ -506,7 +499,7 @@ function ApprovalCheckpointRow({
   onToggle: (enabled: boolean) => void;
   scopedAgentIds: string[] | undefined;
   onScopeChange: (agentIds: string[] | undefined) => void;
-}) {
+}){
   const isAllAgents = !scopedAgentIds || scopedAgentIds.length === 0;
 
   function toggleAgentScope(agentId: string) {
@@ -578,6 +571,13 @@ function ApprovalCheckpointRow({
               })}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Optional additional content (e.g. tool auto-approval list) */}
+      {enabled && children && (
+        <div className="mt-3 border-t border-zinc-800/50 pt-3">
+          {children}
         </div>
       )}
     </div>

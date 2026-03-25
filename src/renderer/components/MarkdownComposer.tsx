@@ -87,6 +87,7 @@ export interface MarkdownComposerProps {
   placeholder: string;
   onSubmit: (markdown: string) => void;
   onContentChange: (hasContent: boolean) => void;
+  children?: React.ReactNode;
 }
 
 /* ── Internal plugins ─────────────────────────────────── */
@@ -283,10 +284,10 @@ function ToolbarPlugin({ disabled }: { disabled: boolean }) {
         p.selectEnd();
       } else {
         const code = $createCodeNode();
-        const text = topElement.getTextContent();
-        if (text) code.append($createTextNode(text));
+        const textNode = $createTextNode(topElement.getTextContent());
+        code.append(textNode);
         topElement.replace(code);
-        code.selectEnd();
+        textNode.select(0, 0);
       }
     });
   }, [editor]);
@@ -341,7 +342,7 @@ function ToolbarButton({
 /* ── MarkdownComposer ─────────────────────────────────── */
 
 export const MarkdownComposer = forwardRef<MarkdownComposerHandle, MarkdownComposerProps>(
-  function MarkdownComposer({ disabled, placeholder, onSubmit, onContentChange }, ref) {
+  function MarkdownComposer({ disabled, placeholder, onSubmit, onContentChange, children }, ref) {
     const editorRef = useRef<LexicalEditor | null>(null);
     const submitRef = useRef(() => {});
 
@@ -390,6 +391,7 @@ export const MarkdownComposer = forwardRef<MarkdownComposerHandle, MarkdownCompo
             }
             ErrorBoundary={LexicalErrorBoundary}
           />
+          {children}
         </div>
 
         <HistoryPlugin />

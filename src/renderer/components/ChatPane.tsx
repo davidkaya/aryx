@@ -1013,7 +1013,7 @@ export function ChatPane({
             </div>
           )}
 
-          <div className="relative rounded-xl border border-zinc-700 bg-zinc-900 transition-colors focus-within:border-indigo-500/50">
+          <div className="rounded-xl border border-zinc-700 bg-zinc-900 transition-colors focus-within:border-indigo-500/50">
             <MarkdownComposer
               ref={composerRef}
               disabled={isComposerDisabled}
@@ -1028,23 +1028,24 @@ export function ChatPane({
                       ? 'Saving scratchpad settings...'
                       : 'Message...'
               }
-            />
-            <button
-              className={`absolute bottom-2 right-2 flex size-8 items-center justify-center rounded-lg transition ${
-                canSubmitInput
-                  ? 'bg-indigo-600 text-white hover:bg-indigo-500'
-                  : 'bg-zinc-800 text-zinc-600'
-              }`}
-              disabled={!canSubmitInput}
-              onClick={() => composerRef.current?.submit()}
-              type="button"
             >
-              {isSessionBusy ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <ArrowUp className="size-4" />
-              )}
-            </button>
+              <button
+                className={`absolute bottom-2 right-2 flex size-8 items-center justify-center rounded-lg transition ${
+                  canSubmitInput
+                    ? 'bg-indigo-600 text-white hover:bg-indigo-500'
+                    : 'bg-zinc-800 text-zinc-600'
+                }`}
+                disabled={!canSubmitInput}
+                onClick={() => composerRef.current?.submit()}
+                type="button"
+              >
+                {isSessionBusy ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <ArrowUp className="size-4" />
+                )}
+              </button>
+            </MarkdownComposer>
           </div>
         </div>
       </div>

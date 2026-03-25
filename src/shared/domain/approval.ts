@@ -46,6 +46,18 @@ const approvalCheckpointKinds: ApprovalCheckpointKind[] = ['tool-call', 'final-r
 const approvalCheckpointKindSet = new Set<ApprovalCheckpointKind>(approvalCheckpointKinds);
 const approvalStatusSet = new Set<ApprovalStatus>(['pending', 'approved', 'rejected']);
 
+export function createDefaultToolApprovalPolicy(): ApprovalPolicy {
+  return {
+    rules: [{ kind: 'tool-call' }],
+  };
+}
+
+export function applyDefaultToolApprovalPolicy(
+  policy?: Partial<ApprovalPolicy>,
+): ApprovalPolicy {
+  return normalizeApprovalPolicy(policy) ?? createDefaultToolApprovalPolicy();
+}
+
 export function isApprovalCheckpointKind(value: string | undefined): value is ApprovalCheckpointKind {
   return value !== undefined && approvalCheckpointKindSet.has(value as ApprovalCheckpointKind);
 }
@@ -55,6 +67,10 @@ export function isApprovalStatus(value: string | undefined): value is ApprovalSt
 }
 
 export function normalizeApprovalPolicy(policy?: Partial<ApprovalPolicy>): ApprovalPolicy | undefined {
+  if (policy == null) {
+    return undefined;
+  }
+
   const rules = Array.isArray(policy?.rules) ? policy.rules : [];
   const selectedAgents = new Map<ApprovalCheckpointKind, Set<string>>();
   const appliesToAllAgents = new Set<ApprovalCheckpointKind>();
@@ -97,7 +113,9 @@ export function normalizeApprovalPolicy(policy?: Partial<ApprovalPolicy>): Appro
   });
 
   if (normalizedRules.length === 0 && autoApprovedToolNames.length === 0) {
-    return undefined;
+    return {
+      rules: [],
+    };
   }
 
   return {

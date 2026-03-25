@@ -21,6 +21,7 @@ import {
   normalizePatternModels,
   resolveReasoningEffort,
 } from '@shared/domain/models';
+import { createDefaultToolApprovalPolicy } from '@shared/domain/approval';
 import { syncPatternGraph, type PatternDefinition } from '@shared/domain/pattern';
 import { isScratchpadProject, SCRATCHPAD_PROJECT_ID } from '@shared/domain/project';
 import { applyScratchpadSessionConfig } from '@shared/domain/session';
@@ -37,6 +38,7 @@ function createDraftPattern(defaultModelId: string, defaultReasoningEffort: Patt
     mode: 'single',
     availability: 'available',
     maxIterations: 1,
+    approvalPolicy: createDefaultToolApprovalPolicy(),
     agents: [
       {
         id: createId('agent'),

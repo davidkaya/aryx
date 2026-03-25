@@ -31,6 +31,7 @@ describe('workspace seed', () => {
     for (const pattern of workspace.patterns) {
       expect(pattern.createdAt).toBe(workspace.lastUpdatedAt);
       expect(pattern.updatedAt).toBe(workspace.lastUpdatedAt);
+      expect(pattern.approvalPolicy?.rules).toContainEqual({ kind: 'tool-call' });
     }
 
     const magentic = workspace.patterns.find((pattern) => pattern.mode === 'magentic');

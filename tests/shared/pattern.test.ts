@@ -20,6 +20,14 @@ describe('pattern validation', () => {
     }
   });
 
+  test('builtin patterns require tool-call approval by default', () => {
+    const patterns = createBuiltinPatterns(BUILTIN_TIMESTAMP);
+
+    for (const pattern of patterns) {
+      expect(pattern.approvalPolicy?.rules).toContainEqual({ kind: 'tool-call' });
+    }
+  });
+
   test('magentic pattern is marked unavailable', () => {
     const magentic = createBuiltinPatterns(BUILTIN_TIMESTAMP).find(
       (pattern) => pattern.mode === 'magentic',

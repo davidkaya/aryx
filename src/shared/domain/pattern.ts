@@ -1,5 +1,6 @@
 import type { ChatMessageRecord } from '@shared/domain/session';
 import {
+  applyDefaultToolApprovalPolicy,
   normalizeApprovalPolicy,
   type ApprovalPolicy,
   validateApprovalPolicy,
@@ -513,7 +514,10 @@ export function createBuiltinPatterns(timestamp: string): PatternDefinition[] {
     },
   ];
 
-  return patterns.map((pattern) => syncPatternGraph(pattern));
+  return patterns.map((pattern) => syncPatternGraph({
+    ...pattern,
+    approvalPolicy: applyDefaultToolApprovalPolicy(pattern.approvalPolicy),
+  }));
 }
 
 function countByKind(graph: PatternGraph): Map<PatternGraphNodeKind, number> {

@@ -9,7 +9,7 @@ import {
   normalizeWorkspaceSettings,
 } from '@shared/domain/tooling';
 import {
-  normalizeApprovalPolicy,
+  applyDefaultToolApprovalPolicy,
   normalizePendingApprovalState,
   normalizeSessionApprovalSettings,
 } from '@shared/domain/approval';
@@ -70,7 +70,7 @@ export class WorkspaceRepository {
       ...stored,
       patterns: mergePatterns(stored.patterns ?? []).map((pattern) => ({
         ...pattern,
-        approvalPolicy: normalizeApprovalPolicy(pattern.approvalPolicy),
+        approvalPolicy: applyDefaultToolApprovalPolicy(pattern.approvalPolicy),
         graph: resolvePatternGraph(pattern),
       })),
       projects,

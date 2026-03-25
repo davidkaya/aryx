@@ -198,7 +198,7 @@ export function PatternEditor({
     updateApprovalPolicy((current) => {
       const otherRules = (current?.rules ?? []).filter((r) => r.kind !== kind);
       if (!enabled) {
-        return otherRules.length > 0 ? { rules: otherRules } : undefined;
+        return { rules: otherRules };
       }
       return { rules: [...otherRules, { kind }] };
     });

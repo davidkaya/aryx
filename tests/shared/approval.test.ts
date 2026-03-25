@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 
 import {
+  applyDefaultToolApprovalPolicy,
   approvalPolicyRequiresToolCallApproval,
   approvalPolicyRequiresCheckpoint,
   normalizeApprovalPolicy,
@@ -14,6 +15,20 @@ import {
 } from '@shared/domain/approval';
 
 describe('approval helpers', () => {
+  test('applies tool-call approval by default while preserving an explicit empty policy', () => {
+    expect(applyDefaultToolApprovalPolicy()).toEqual({
+      rules: [{ kind: 'tool-call' }],
+    });
+
+    expect(normalizeApprovalPolicy({})).toEqual({
+      rules: [],
+    });
+
+    expect(applyDefaultToolApprovalPolicy({})).toEqual({
+      rules: [],
+    });
+  });
+
   test('normalizes duplicate checkpoint rules and auto-approved tools into stable policy entries', () => {
     expect(normalizeApprovalPolicy({
       rules: [

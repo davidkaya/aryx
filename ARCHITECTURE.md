@@ -256,7 +256,7 @@ Tooling is deliberately split into two levels:
 
 - **dynamic runtime tools** reported by the Copilot CLI, with a fallback catalog for startup/offline cases
 - **global definitions** for MCP servers and LSP profiles
-- **pattern defaults** for which known runtime tools can bypass manual approval
+- **pattern defaults** where tool-call approval is enabled by default, plus which known runtime tools can bypass manual approval
 - **per-session overrides** for both tool enablement and tool auto-approval
 
 This lets the application treat tooling as reusable workspace capability while still preserving session-level control and safety.

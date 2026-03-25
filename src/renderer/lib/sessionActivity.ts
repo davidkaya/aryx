@@ -48,6 +48,14 @@ export function applySessionEventActivity(
     }
   }
 
+  if (
+    event.kind === 'run-updated'
+    && event.run
+    && (event.run.status === 'cancelled' || event.run.status === 'error')
+  ) {
+    return clearActiveSessionActivity(current, event.sessionId);
+  }
+
   return current;
 }
 
@@ -135,6 +143,38 @@ function removeSessionActivity(
   const next = { ...current };
   delete next[sessionId];
   return next;
+}
+
+function clearActiveSessionActivity(
+  current: SessionActivityMap,
+  sessionId: string,
+): SessionActivityMap {
+  const sessionActivity = current[sessionId];
+  if (!sessionActivity) {
+    return current;
+  }
+
+  let changed = false;
+  const nextSessionActivity = Object.fromEntries(
+    Object.entries(sessionActivity).filter(([, activity]) => {
+      const keep = !isAgentActivityActive(activity);
+      changed ||= !keep;
+      return keep;
+    }),
+  );
+
+  if (!changed) {
+    return current;
+  }
+
+  if (Object.keys(nextSessionActivity).length === 0) {
+    return removeSessionActivity(current, sessionId);
+  }
+
+  return {
+    ...current,
+    [sessionId]: nextSessionActivity,
+  };
 }
 
 function resolveAgentKey(event: SessionEventRecord): string | undefined {

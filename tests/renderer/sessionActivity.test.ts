@@ -179,6 +179,55 @@ describe('session activity helpers', () => {
     ).toEqual(current);
   });
 
+  test('clears only active agent states when a run is cancelled', () => {
+    const current: SessionActivityMap = {
+      'session-1': {
+        architect: {
+          agentId: 'architect',
+          agentName: 'Architect',
+          activityType: 'completed',
+        },
+        reviewer: {
+          agentId: 'reviewer',
+          agentName: 'Reviewer',
+          activityType: 'thinking',
+        },
+      },
+    };
+
+    expect(
+      applySessionEventActivity(current, {
+        sessionId: 'session-1',
+        kind: 'run-updated',
+        occurredAt: '2026-03-23T00:00:01.000Z',
+        run: {
+          id: 'run-1',
+          requestId: 'turn-1',
+          projectId: 'project-1',
+          projectPath: 'C:\\workspace\\project',
+          workspaceKind: 'project',
+          patternId: 'pattern-1',
+          patternName: 'Pattern',
+          patternMode: 'single',
+          triggerMessageId: 'msg-1',
+          startedAt: '2026-03-23T00:00:00.000Z',
+          completedAt: '2026-03-23T00:00:01.000Z',
+          status: 'cancelled',
+          agents: [],
+          events: [],
+        },
+      }),
+    ).toEqual({
+      'session-1': {
+        architect: {
+          agentId: 'architect',
+          agentName: 'Architect',
+          activityType: 'completed',
+        },
+      },
+    });
+  });
+
   test('builds rows for all agents with sensible defaults', () => {
     expect(buildAgentActivityRows(undefined, agents)).toEqual([
       {

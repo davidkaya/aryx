@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 
-import { GitService } from '@main/git/gitService';
+import { GitService, resolveExecFileForInterop } from '@main/git/gitService';
 
 function createGitError(message: string, options?: { code?: number | string; stderr?: string }) {
   return Object.assign(new Error(message), options);
@@ -24,6 +24,24 @@ function createService(responses: Record<string, string | Error>) {
 }
 
 describe('GitService', () => {
+  test('resolves execFile from the named child_process export when available', () => {
+    const namedExecFile = (() => undefined) as unknown as typeof import('node:child_process').execFile;
+
+    expect(resolveExecFileForInterop({ execFile: namedExecFile })).toBe(namedExecFile);
+  });
+
+  test('falls back to default.execFile for Bun child_process interop', () => {
+    const defaultExecFile = (() => undefined) as unknown as typeof import('node:child_process').execFile;
+
+    expect(resolveExecFileForInterop({ default: { execFile: defaultExecFile } })).toBe(defaultExecFile);
+  });
+
+  test('throws when execFile is unavailable in both child_process export shapes', () => {
+    expect(() => resolveExecFileForInterop({})).toThrow(
+      'node:child_process execFile is unavailable.',
+    );
+  });
+
   test('describes a git repository with branch, dirty state, change counts, and head commit summary', async () => {
     const service = createService({
       'rev-parse --show-toplevel': 'C:\\workspace\\repo\n',

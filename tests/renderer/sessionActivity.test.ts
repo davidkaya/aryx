@@ -149,7 +149,7 @@ describe('session activity helpers', () => {
     });
   });
 
-  test('keeps the last observed status after completion or error', () => {
+  test('preserves completed activity on idle and error', () => {
     const current: SessionActivityMap = {
       'session-1': {
         architect: {
@@ -177,6 +177,40 @@ describe('session activity helpers', () => {
         error: 'Boom',
       }),
     ).toEqual(current);
+  });
+
+  test('clears only active agent states when a session becomes idle', () => {
+    const current: SessionActivityMap = {
+      'session-1': {
+        architect: {
+          agentId: 'architect',
+          agentName: 'Architect',
+          activityType: 'completed',
+        },
+        reviewer: {
+          agentId: 'reviewer',
+          agentName: 'Reviewer',
+          activityType: 'thinking',
+        },
+      },
+    };
+
+    expect(
+      applySessionEventActivity(current, {
+        sessionId: 'session-1',
+        kind: 'status',
+        occurredAt: '2026-03-23T00:00:01.000Z',
+        status: 'idle',
+      }),
+    ).toEqual({
+      'session-1': {
+        architect: {
+          agentId: 'architect',
+          agentName: 'Architect',
+          activityType: 'completed',
+        },
+      },
+    });
   });
 
   test('clears only active agent states when a run is cancelled', () => {

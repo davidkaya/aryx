@@ -46,6 +46,10 @@ export function applySessionEventActivity(
     if (event.status === 'running') {
       return removeSessionActivity(current, event.sessionId);
     }
+
+    if (event.status === 'idle') {
+      return clearActiveSessionActivity(current, event.sessionId);
+    }
   }
 
   if (

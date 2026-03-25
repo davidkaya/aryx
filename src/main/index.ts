@@ -1,11 +1,14 @@
-import { app, BrowserWindow } from 'electron';
+import electron from 'electron';
+import type { BrowserWindow as BrowserWindowType } from 'electron';
 
 import { registerIpcHandlers } from '@main/ipc/registerIpcHandlers';
 import { AryxAppService } from '@main/AryxAppService';
 import { createMainWindow } from '@main/windows/createMainWindow';
 import { applyTitleBarTheme } from '@main/windows/titleBarTheme';
 
-let mainWindow: BrowserWindow | undefined;
+const { app, BrowserWindow } = electron;
+
+let mainWindow: BrowserWindowType | undefined;
 let appService: AryxAppService | undefined;
 
 async function bootstrap(): Promise<void> {

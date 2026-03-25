@@ -42,12 +42,19 @@ class FakeChildProcess extends EventEmitter {
 
 const spawnedProcesses: FakeChildProcess[] = [];
 
-mock.module('electron', () => ({
-  app: {
-    isPackaged: false,
-    getAppPath: () => 'C:\\workspace\\personal\\repositories\\aryx',
-  },
-}));
+mock.module('electron', () => {
+  const electronMock = {
+    app: {
+      isPackaged: false,
+      getAppPath: () => 'C:\\workspace\\personal\\repositories\\aryx',
+    },
+  };
+
+  return {
+    ...electronMock,
+    default: electronMock,
+  };
+});
 
 mock.module('node:child_process', () => ({
   spawn: () => {

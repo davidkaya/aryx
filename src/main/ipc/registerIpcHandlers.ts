@@ -1,4 +1,5 @@
-import { BrowserWindow, ipcMain } from 'electron';
+import electron from 'electron';
+import type { BrowserWindow } from 'electron';
 
 import { ipcChannels } from '@shared/contracts/channels';
 import type {
@@ -26,6 +27,8 @@ import type { AppearanceTheme } from '@shared/domain/tooling';
 
 import { AryxAppService } from '@main/AryxAppService';
 import { applyTitleBarTheme } from '@main/windows/titleBarTheme';
+
+const { ipcMain } = electron;
 
 export function registerIpcHandlers(window: BrowserWindow, service: AryxAppService): void {
   ipcMain.handle(ipcChannels.describeSidecarCapabilities, () => service.describeSidecarCapabilities());

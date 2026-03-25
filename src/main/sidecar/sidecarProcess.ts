@@ -1,4 +1,4 @@
-import { app } from 'electron';
+import electron from 'electron';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 
 import type {
@@ -22,6 +22,8 @@ import {
 } from '@main/sidecar/runTurnPending';
 import { TurnCancelledError } from '@main/sidecar/turnCancelledError';
 import { resolveSidecarProcess } from '@main/sidecar/sidecarRuntime';
+
+const { app } = electron;
 
 type PendingCommand =
   | ({

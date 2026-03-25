@@ -1,9 +1,12 @@
-import { app, BrowserWindow, Menu, shell } from 'electron';
+import electron from 'electron';
+import type { BrowserWindow as BrowserWindowType } from 'electron';
 import { join } from 'node:path';
 
 import { resolveWindowIconPath } from '@main/windows/appIcon';
 
-export function createMainWindow(): BrowserWindow {
+const { app, BrowserWindow, Menu, shell } = electron;
+
+export function createMainWindow(): BrowserWindowType {
   Menu.setApplicationMenu(null);
 
   const window = new BrowserWindow({

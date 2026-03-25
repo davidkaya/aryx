@@ -2,7 +2,7 @@ import { EventEmitter } from 'node:events';
 import { rm } from 'node:fs/promises';
 import { basename, dirname } from 'node:path';
 
-import { dialog, shell } from 'electron';
+import electron from 'electron';
 
 import type {
   AgentActivityEvent,
@@ -106,6 +106,8 @@ import {
   buildRunTurnToolingConfig as buildSessionToolingConfig,
   validateSessionToolingSelectionIds,
 } from '@main/sessionToolingConfig';
+
+const { dialog, shell } = electron;
 
 type AppServiceEvents = {
   'workspace-updated': [WorkspaceState];

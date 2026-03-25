@@ -2,19 +2,26 @@ import { describe, expect, mock, test } from 'bun:test';
 
 import type { SidecarCapabilities } from '@shared/contracts/sidecar';
 
-mock.module('electron', () => ({
-  app: {
-    isPackaged: false,
-    getAppPath: () => 'C:\\workspace\\personal\\repositories\\aryx',
-    getPath: () => 'C:\\workspace\\personal\\repositories\\aryx\\tests\\fixtures',
-  },
-  dialog: {
-    showOpenDialog: async () => ({ canceled: true, filePaths: [] }),
-  },
-  shell: {
-    openPath: async () => '',
-  },
-}));
+mock.module('electron', () => {
+  const electronMock = {
+    app: {
+      isPackaged: false,
+      getAppPath: () => 'C:\\workspace\\personal\\repositories\\aryx',
+      getPath: () => 'C:\\workspace\\personal\\repositories\\aryx\\tests\\fixtures',
+    },
+    dialog: {
+      showOpenDialog: async () => ({ canceled: true, filePaths: [] }),
+    },
+    shell: {
+      openPath: async () => '',
+    },
+  };
+
+  return {
+    ...electronMock,
+    default: electronMock,
+  };
+});
 
 mock.module('keytar', () => ({
   default: {

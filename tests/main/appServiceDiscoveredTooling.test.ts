@@ -8,19 +8,26 @@ import { createWorkspaceSeed, type WorkspaceState } from '@shared/domain/workspa
 
 const TIMESTAMP = '2026-03-25T00:00:00.000Z';
 
-mock.module('electron', () => ({
-  app: {
-    isPackaged: false,
-    getAppPath: () => 'C:\\workspace\\personal\\repositories\\aryx',
-    getPath: () => 'C:\\workspace\\personal\\repositories\\aryx\\tests\\fixtures',
-  },
-  dialog: {
-    showOpenDialog: async () => ({ canceled: true, filePaths: [] }),
-  },
-  shell: {
-    openPath: async () => '',
-  },
-}));
+mock.module('electron', () => {
+  const electronMock = {
+    app: {
+      isPackaged: false,
+      getAppPath: () => 'C:\\workspace\\personal\\repositories\\aryx',
+      getPath: () => 'C:\\workspace\\personal\\repositories\\aryx\\tests\\fixtures',
+    },
+    dialog: {
+      showOpenDialog: async () => ({ canceled: true, filePaths: [] }),
+    },
+    shell: {
+      openPath: async () => '',
+    },
+  };
+
+  return {
+    ...electronMock,
+    default: electronMock,
+  };
+});
 
 mock.module('keytar', () => ({
   default: {

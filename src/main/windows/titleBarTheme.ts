@@ -1,6 +1,9 @@
-import { nativeTheme, type BrowserWindow } from 'electron';
+import electron from 'electron';
+import type { BrowserWindow } from 'electron';
 
 import type { AppearanceTheme } from '@shared/domain/tooling';
+
+const { nativeTheme } = electron;
 
 interface TitleBarColors {
   backgroundColor: string;

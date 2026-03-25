@@ -1,10 +1,8 @@
-import * as childProcess from 'node:child_process';
+import childProcess, { type ExecFileException } from 'node:child_process';
 import { promisify } from 'node:util';
 
 import type { ProjectGitChangeSummary, ProjectGitCommitSummary, ProjectGitContext } from '@shared/domain/project';
 import { nowIso } from '@shared/utils/ids';
-
-type ExecFileException = childProcess.ExecFileException;
 
 const execFileAsync = promisify(childProcess.execFile);
 const GIT_TIMEOUT_MS = 5_000;

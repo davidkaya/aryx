@@ -1,7 +1,9 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import electron from 'electron';
 
 import { ipcChannels } from '@shared/contracts/channels';
 import type { ElectronApi } from '@shared/contracts/ipc';
+
+const { contextBridge, ipcRenderer } = electron;
 
 const api: ElectronApi = {
   describeSidecarCapabilities: () => ipcRenderer.invoke(ipcChannels.describeSidecarCapabilities),

@@ -6,8 +6,6 @@ import { dialog } from 'electron';
 import type {
   AgentActivityEvent,
   ApprovalRequestedEvent,
-  RunTurnLspProfileConfig,
-  RunTurnMcpServerConfig,
   RunTurnToolingConfig,
   SidecarCapabilities,
   TurnDeltaEvent,
@@ -89,6 +87,10 @@ import { WorkspaceRepository } from '@main/persistence/workspaceRepository';
 import { SecretStore } from '@main/secrets/secretStore';
 import { SidecarClient } from '@main/sidecar/sidecarProcess';
 import { GitService } from '@main/git/gitService';
+import {
+  buildRunTurnToolingConfig as buildSessionToolingConfig,
+  validateSessionToolingSelectionIds,
+} from '@main/sessionToolingConfig';
 
 type AppServiceEvents = {
   'workspace-updated': [WorkspaceState];
@@ -493,7 +495,7 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
           workspaceKind,
           pattern: effectivePattern,
           messages: session.messages,
-          tooling: this.buildRunTurnToolingConfig(workspace, project, session),
+          tooling: this.buildRunTurnToolingConfig(workspace, session),
         },
         async (event) => {
           await this.applyTurnDelta(workspace, session.id, requestId, event);
@@ -650,7 +652,7 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
   ): Promise<WorkspaceState> {
     const workspace = await this.loadWorkspace();
     const session = this.requireSession(workspace, sessionId);
-    const project = this.requireProject(workspace, session.projectId);
+    this.requireProject(workspace, session.projectId);
 
     if (session.status === 'running') {
       throw new Error('Wait for the current response to finish before changing session tools.');
@@ -660,34 +662,7 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
       enabledMcpServerIds,
       enabledLspProfileIds,
     });
-
-    if (
-      isScratchpadProject(project)
-      && (selection.enabledMcpServerIds.length > 0 || selection.enabledLspProfileIds.length > 0)
-    ) {
-      throw new Error('Scratchpad sessions do not support MCP or LSP tools.');
-    }
-
-    const knownMcpServerIds = new Set(
-      workspace.settings.tooling.mcpServers.map((server) => server.id),
-    );
-    const knownLspProfileIds = new Set(
-      workspace.settings.tooling.lspProfiles.map((profile) => profile.id),
-    );
-
-    const unknownMcpServerIds = selection.enabledMcpServerIds.filter(
-      (id) => !knownMcpServerIds.has(id),
-    );
-    if (unknownMcpServerIds.length > 0) {
-      throw new Error(`Unknown MCP server "${unknownMcpServerIds[0]}".`);
-    }
-
-    const unknownLspProfileIds = selection.enabledLspProfileIds.filter(
-      (id) => !knownLspProfileIds.has(id),
-    );
-    if (unknownLspProfileIds.length > 0) {
-      throw new Error(`Unknown LSP profile "${unknownLspProfileIds[0]}".`);
-    }
+    validateSessionToolingSelectionIds(workspace.settings.tooling, selection);
 
     session.tooling = selection;
     session.updatedAt = nowIso();
@@ -700,7 +675,7 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
   ): Promise<WorkspaceState> {
     const workspace = await this.loadWorkspace();
     const session = this.requireSession(workspace, sessionId);
-    const project = this.requireProject(workspace, session.projectId);
+    this.requireProject(workspace, session.projectId);
 
     if (session.status === 'running') {
       throw new Error('Wait for the current response to finish before changing session approval settings.');
@@ -709,14 +684,6 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
     const settings = normalizeSessionApprovalSettings(
       autoApprovedToolNames === undefined ? undefined : { autoApprovedToolNames },
     );
-
-    if (
-      isScratchpadProject(project)
-      && settings
-      && settings.autoApprovedToolNames.length > 0
-    ) {
-      throw new Error('Scratchpad sessions do not support tool auto-approval settings.');
-    }
 
     const knownToolNames = new Set(await this.listKnownApprovalToolNames(workspace));
     const unknownToolName = settings?.autoApprovedToolNames.find((toolName) => !knownToolNames.has(toolName));
@@ -1227,82 +1194,11 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
 
   private buildRunTurnToolingConfig(
     workspace: WorkspaceState,
-    project: ProjectRecord,
     session: SessionRecord,
   ): RunTurnToolingConfig | undefined {
-    if (isScratchpadProject(project)) {
-      return undefined;
-    }
-
     const selection = resolveSessionToolingSelection(session);
-    const mcpServersById = new Map<string, McpServerDefinition>(
-      workspace.settings.tooling.mcpServers.map((server) => [server.id, server]),
-    );
-    const lspProfilesById = new Map<string, LspProfileDefinition>(
-      workspace.settings.tooling.lspProfiles.map((profile) => [profile.id, profile]),
-    );
-
-    const mcpServers = selection.enabledMcpServerIds.flatMap((id): RunTurnMcpServerConfig[] => {
-      const server = mcpServersById.get(id);
-      if (!server) {
-        return [];
-      }
-
-      if (server.transport === 'local') {
-        return [
-          {
-            id: server.id,
-            name: server.name,
-            transport: 'local',
-            tools: [...server.tools],
-            timeoutMs: server.timeoutMs,
-            command: server.command,
-            args: [...server.args],
-            cwd: server.cwd,
-          },
-        ];
-      }
-
-      return [
-        {
-          id: server.id,
-          name: server.name,
-          transport: server.transport,
-          tools: [...server.tools],
-          timeoutMs: server.timeoutMs,
-          url: server.url,
-        },
-      ];
-    });
-
-    const lspProfiles = selection.enabledLspProfileIds.flatMap(
-      (id): RunTurnLspProfileConfig[] => {
-        const profile = lspProfilesById.get(id);
-        if (!profile) {
-          return [];
-        }
-
-        return [
-          {
-            id: profile.id,
-            name: profile.name,
-            command: profile.command,
-            args: [...profile.args],
-            languageId: profile.languageId,
-            fileExtensions: [...profile.fileExtensions],
-          },
-        ];
-      },
-    );
-
-    if (mcpServers.length === 0 && lspProfiles.length === 0) {
-      return undefined;
-    }
-
-    return {
-      mcpServers,
-      lspProfiles,
-    };
+    validateSessionToolingSelectionIds(workspace.settings.tooling, selection);
+    return buildSessionToolingConfig(workspace.settings.tooling, selection);
   }
 
   private updateSessionRun(

@@ -154,7 +154,14 @@ Every interactive component must include basic accessibility:
 - Always commit completed repository changes before handing work off. If unrelated pre-existing changes are present in the worktree, stop and ask the user how to proceed before creating the commit.
 - Do not mark work as done until both the implementation and its verification are complete.
 
-## 8. Validation checklist
+## 8. Planning requirements
+
+- If a task spans both backend and frontend work, the implementation plan must be split into **Part 1 — Backend** and **Part 2 — Frontend**.
+- Backend work must be planned and executed first.
+- Before frontend work begins, backend work must produce a handover artifact in the session workspace `files\` directory. Do not put this handover document in the repository.
+- The frontend phase must consume that backend handover artifact and build on it rather than rediscovering backend contracts from scratch.
+
+## 9. Validation checklist
 
 Before every commit, run the following in order:
 

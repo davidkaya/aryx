@@ -28,8 +28,7 @@ internal sealed class CopilotAgentBundle : IAsyncDisposable
         List<IAsyncDisposable> disposables = [];
         List<AIAgent> agents = [];
         CopilotClientOptions clientOptions = CopilotCliPathResolver.CreateClientOptions();
-        bool isScratchpad = string.Equals(command.WorkspaceKind, "scratchpad", StringComparison.OrdinalIgnoreCase);
-        SessionToolingBundle? toolingBundle = isScratchpad
+        SessionToolingBundle? toolingBundle = command.Tooling is null
             ? null
             : await SessionToolingBundle.CreateAsync(command.Tooling, command.ProjectPath, cancellationToken)
                 .ConfigureAwait(false);
@@ -58,22 +57,7 @@ internal sealed class CopilotAgentBundle : IAsyncDisposable
                 Streaming = true,
             };
 
-            if (isScratchpad)
-            {
-                sessionConfig.AvailableTools = [];
-            }
-            else if (toolingBundle is not null)
-            {
-                if (toolingBundle.McpServers.Count > 0)
-                {
-                    sessionConfig.McpServers = toolingBundle.McpServers;
-                }
-
-                if (toolingBundle.Tools.Count > 0)
-                {
-                    sessionConfig.Tools = toolingBundle.Tools.ToList();
-                }
-            }
+            ApplySessionTooling(sessionConfig, toolingBundle?.McpServers, toolingBundle?.Tools);
 
             GitHubCopilotAgent agent = new(
                 client,
@@ -90,6 +74,22 @@ internal sealed class CopilotAgentBundle : IAsyncDisposable
         CopilotAgentBundle bundle = new(agents);
         bundle._disposables.AddRange(disposables);
         return bundle;
+    }
+
+    internal static void ApplySessionTooling(
+        SessionConfig sessionConfig,
+        Dictionary<string, object>? mcpServers,
+        IReadOnlyList<AIFunction>? tools)
+    {
+        if (mcpServers is { Count: > 0 })
+        {
+            sessionConfig.McpServers = mcpServers;
+        }
+
+        if (tools is { Count: > 0 })
+        {
+            sessionConfig.Tools = tools.ToList();
+        }
     }
 
     public Workflow BuildWorkflow(PatternDefinitionDto pattern)

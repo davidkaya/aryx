@@ -240,6 +240,17 @@ textarea {
   overflow-x: auto;
 }
 
+.mc-code-block[data-code-language]::before {
+  content: attr(data-code-language);
+  display: block;
+  font-size: 10px;
+  line-height: 1;
+  color: #71717a;
+  padding-bottom: 4px;
+  user-select: none;
+  letter-spacing: 0.03em;
+}
+
 /* Link */
 .mc-link {
   color: #818cf8;

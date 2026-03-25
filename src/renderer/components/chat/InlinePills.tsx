@@ -78,7 +78,7 @@ export function InlineModelPill({
       </button>
 
       {open && !disabled && (
-        <div className="absolute bottom-full left-0 z-40 mb-1.5 max-h-72 w-64 overflow-y-auto rounded-lg border border-zinc-700 bg-zinc-900 py-1 shadow-2xl" role="listbox">
+        <div className="absolute bottom-full right-0 z-40 mb-1.5 max-h-72 w-64 overflow-y-auto rounded-lg border border-zinc-700 bg-zinc-900 py-1 shadow-2xl" role="listbox">
           {groupedModels.map((pg) => (
             <div key={pg.id}>
               <div className="flex items-center gap-2 px-3 pb-1 pt-2.5">
@@ -183,7 +183,7 @@ export function InlineThinkingPill({
       </button>
 
       {open && !disabled && (
-        <div className="absolute bottom-full left-0 z-40 mb-1.5 w-36 overflow-hidden rounded-lg border border-zinc-700 bg-zinc-900 py-1 shadow-2xl" role="listbox">
+        <div className="absolute bottom-full right-0 z-40 mb-1.5 w-36 overflow-hidden rounded-lg border border-zinc-700 bg-zinc-900 py-1 shadow-2xl" role="listbox">
           {options.map((option) => (
             <button
               className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] transition hover:bg-zinc-800 ${

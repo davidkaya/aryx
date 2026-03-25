@@ -336,40 +336,62 @@ export function ChatPane({
             </div>
           )}
 
-          {/* Scratchpad config pills — inline above composer */}
-          {isScratchpad && primaryAgent && (
+          {/* Scratchpad pills — tools/approval left, model/reasoning right */}
+          {isScratchpad && (
             <div className="mb-2 flex items-center gap-2">
-              <InlineModelPill
-                disabled={isComposerDisabled}
-                models={availableModels}
-                onChange={(modelId) => {
-                  const nextModel = findModel(modelId, availableModels);
-                  void handleScratchpadConfigChange({
-                    model: modelId,
-                    reasoningEffort: resolveReasoningEffort(nextModel, scratchpadReasoningEffort),
-                  });
-                }}
-                value={primaryAgent.model}
-              />
-              <InlineThinkingPill
-                disabled={isComposerDisabled}
-                onChange={(reasoningEffort) =>
-                  void handleScratchpadConfigChange({
-                    model: primaryAgent.model,
-                    reasoningEffort,
-                  })
-                }
-                supportedEfforts={supportedEfforts}
-                value={scratchpadReasoningEffort}
-              />
-              {isUpdatingScratchpadConfig && (
-                <Loader2 className="size-3 animate-spin text-zinc-500" />
+              {hasConfigurableTools && onUpdateSessionTooling && (
+                <InlineToolsPill
+                  disabled={isComposerDisabled}
+                  lspProfiles={lspProfiles}
+                  mcpServers={mcpServers}
+                  onToggle={onUpdateSessionTooling}
+                  selection={toolSelection}
+                />
+              )}
+              {hasToolCallApproval && onUpdateSessionApprovalSettings && approvalTools.length > 0 && (
+                <InlineApprovalPill
+                  approvalTools={approvalTools}
+                  disabled={isComposerDisabled}
+                  effectiveAutoApproved={effectiveAutoApproved}
+                  isOverridden={isApprovalOverridden}
+                  onUpdate={onUpdateSessionApprovalSettings}
+                />
+              )}
+              {primaryAgent && (
+                <div className="ml-auto flex items-center gap-2">
+                  <InlineModelPill
+                    disabled={isComposerDisabled}
+                    models={availableModels}
+                    onChange={(modelId) => {
+                      const nextModel = findModel(modelId, availableModels);
+                      void handleScratchpadConfigChange({
+                        model: modelId,
+                        reasoningEffort: resolveReasoningEffort(nextModel, scratchpadReasoningEffort),
+                      });
+                    }}
+                    value={primaryAgent.model}
+                  />
+                  <InlineThinkingPill
+                    disabled={isComposerDisabled}
+                    onChange={(reasoningEffort) =>
+                      void handleScratchpadConfigChange({
+                        model: primaryAgent.model,
+                        reasoningEffort,
+                      })
+                    }
+                    supportedEfforts={supportedEfforts}
+                    value={scratchpadReasoningEffort}
+                  />
+                  {isUpdatingScratchpadConfig && (
+                    <Loader2 className="size-3 animate-spin text-zinc-500" />
+                  )}
+                </div>
               )}
             </div>
           )}
 
-          {/* Session config pills — tool & approval controls */}
-          {(hasConfigurableTools || hasToolCallApproval) && (
+          {/* Session config pills — tool & approval controls (non-scratchpad) */}
+          {!isScratchpad && (hasConfigurableTools || hasToolCallApproval) && (
             <div className="mb-2 flex items-center gap-2">
               {hasConfigurableTools && onUpdateSessionTooling && (
                 <InlineToolsPill

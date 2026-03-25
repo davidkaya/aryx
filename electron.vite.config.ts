@@ -33,12 +33,6 @@ export default defineConfig({
     build: {
       outDir: 'dist/renderer',
     },
-    optimizeDeps: {
-      // @lexical/code-prism depends on prismjs + its language components via
-      // CJS require().  Vite must pre-bundle them together so that the Prism
-      // global is available when component IIFEs execute.
-      include: ['prismjs', '@lexical/code-prism'],
-    },
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {

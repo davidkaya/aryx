@@ -20,7 +20,7 @@ import {
   $convertFromMarkdownString,
   $convertToMarkdownString,
 } from '@lexical/markdown';
-import { $isCodeNode, $createCodeNode, CodeNode } from '@lexical/code';
+import { $isCodeNode, $createCodeNode, CodeNode, registerCodeHighlighting } from '@lexical/code';
 import {
   $isListNode,
   INSERT_ORDERED_LIST_COMMAND,
@@ -73,6 +73,38 @@ const editorTheme: EditorThemeClasses = {
   },
   quote: 'mc-blockquote',
   code: 'mc-code-block',
+  codeHighlight: {
+    atrule: 'mc-tok-atrule',
+    attr: 'mc-tok-attr',
+    boolean: 'mc-tok-boolean',
+    builtin: 'mc-tok-builtin',
+    cdata: 'mc-tok-comment',
+    char: 'mc-tok-string',
+    class: 'mc-tok-function',
+    'class-name': 'mc-tok-function',
+    comment: 'mc-tok-comment',
+    constant: 'mc-tok-constant',
+    deleted: 'mc-tok-deleted',
+    doctype: 'mc-tok-comment',
+    entity: 'mc-tok-symbol',
+    function: 'mc-tok-function',
+    important: 'mc-tok-keyword',
+    inserted: 'mc-tok-inserted',
+    keyword: 'mc-tok-keyword',
+    namespace: 'mc-tok-namespace',
+    number: 'mc-tok-number',
+    operator: 'mc-tok-operator',
+    prolog: 'mc-tok-comment',
+    property: 'mc-tok-property',
+    punctuation: 'mc-tok-punctuation',
+    regex: 'mc-tok-regex',
+    selector: 'mc-tok-selector',
+    string: 'mc-tok-string',
+    symbol: 'mc-tok-symbol',
+    tag: 'mc-tok-tag',
+    url: 'mc-tok-string',
+    variable: 'mc-tok-variable',
+  },
   link: 'mc-link',
 };
 
@@ -143,6 +175,15 @@ function EditorRefPlugin({ editorRef }: { editorRef: React.MutableRefObject<Lexi
   useEffect(() => {
     editorRef.current = editor;
   }, [editor, editorRef]);
+  return null;
+}
+
+/** Enables Prism-based syntax highlighting inside CodeNodes. */
+function CodeHighlightPlugin() {
+  const [editor] = useLexicalComposerContext();
+  useEffect(() => {
+    return registerCodeHighlighting(editor);
+  }, [editor]);
   return null;
 }
 
@@ -556,6 +597,7 @@ export const MarkdownComposer = forwardRef<MarkdownComposerHandle, MarkdownCompo
         <HistoryPlugin />
         <ListPlugin />
         <LinkPlugin />
+        <CodeHighlightPlugin />
         <MarkdownShortcutPlugin transformers={[...markdownEditorTransformers]} />
         <ClearEditorPlugin />
         <ContentTrackingPlugin onContentChange={onContentChange} />

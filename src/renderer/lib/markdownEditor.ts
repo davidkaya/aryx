@@ -1,4 +1,4 @@
-import { CodeNode } from '@lexical/code';
+import { CodeHighlightNode, CodeNode } from '@lexical/code';
 import { AutoLinkNode, LinkNode } from '@lexical/link';
 import { type Transformer, TRANSFORMERS } from '@lexical/markdown';
 import { ListItemNode, ListNode } from '@lexical/list';
@@ -38,6 +38,7 @@ export const markdownEditorNodes: ReadonlyArray<Klass<LexicalNode>> = [
   LinkNode,
   AutoLinkNode,
   CodeNode,
+  CodeHighlightNode,
 ];
 
 export const markdownEditorTransformers: ReadonlyArray<Transformer> = TRANSFORMERS;

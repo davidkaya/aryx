@@ -292,6 +292,29 @@ textarea {
   text-underline-offset: 2px;
 }
 
+/* Syntax highlighting tokens (dark theme) */
+.mc-tok-comment   { color: #6b7280; font-style: italic; }
+.mc-tok-keyword   { color: #c084fc; }
+.mc-tok-string    { color: #86efac; }
+.mc-tok-number    { color: #fbbf24; }
+.mc-tok-boolean   { color: #fbbf24; }
+.mc-tok-constant  { color: #fbbf24; }
+.mc-tok-function  { color: #93c5fd; }
+.mc-tok-builtin   { color: #67e8f9; }
+.mc-tok-operator  { color: #f9a8d4; }
+.mc-tok-punctuation { color: #a1a1aa; }
+.mc-tok-property  { color: #7dd3fc; }
+.mc-tok-variable  { color: #fca5a5; }
+.mc-tok-tag       { color: #f87171; }
+.mc-tok-attr      { color: #fdba74; }
+.mc-tok-atrule    { color: #c084fc; }
+.mc-tok-selector  { color: #86efac; }
+.mc-tok-regex     { color: #fcd34d; }
+.mc-tok-symbol    { color: #fbbf24; }
+.mc-tok-namespace { color: #f87171; opacity: 0.8; }
+.mc-tok-deleted   { color: #fca5a5; text-decoration: line-through; }
+.mc-tok-inserted  { color: #86efac; }
+
 /* React Flow dark theme overrides */
 .react-flow__node {
   font-family: inherit;

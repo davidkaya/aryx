@@ -1,10 +1,12 @@
-import { execFile, type ExecFileException } from 'node:child_process';
+import * as childProcess from 'node:child_process';
 import { promisify } from 'node:util';
 
 import type { ProjectGitChangeSummary, ProjectGitCommitSummary, ProjectGitContext } from '@shared/domain/project';
 import { nowIso } from '@shared/utils/ids';
 
-const execFileAsync = promisify(execFile);
+type ExecFileException = childProcess.ExecFileException;
+
+const execFileAsync = promisify(childProcess.execFile);
 const GIT_TIMEOUT_MS = 5_000;
 
 type GitCommandRunner = (projectPath: string, args: string[]) => Promise<string>;

@@ -8,9 +8,10 @@ public sealed class CopilotCliPathResolverTests
     public void Resolve_UsesCopilotFromPath()
     {
         string copilotDirectory = @"C:\tools\copilot";
+        string expectedCliPath = @"C:\tools\copilot\copilot.exe";
         HashSet<string> existingFiles = new(StringComparer.OrdinalIgnoreCase)
         {
-            Path.Combine(copilotDirectory, "copilot.exe"),
+            expectedCliPath,
         };
 
         string? cliPath = CopilotCliPathResolver.Resolve(
@@ -19,16 +20,17 @@ public sealed class CopilotCliPathResolverTests
             isWindows: true,
             fileExists: existingFiles.Contains);
 
-        Assert.Equal(Path.Combine(copilotDirectory, "copilot.exe"), cliPath, ignoreCase: true);
+        Assert.Equal(expectedCliPath, cliPath, ignoreCase: true);
     }
 
     [Fact]
     public void Resolve_UsesDefaultWindowsExtensionsWhenPathExtMissing()
     {
         string copilotDirectory = @"C:\tools\copilot";
+        string expectedCliPath = @"C:\tools\copilot\copilot.cmd";
         HashSet<string> existingFiles = new(StringComparer.OrdinalIgnoreCase)
         {
-            Path.Combine(copilotDirectory, "copilot.cmd"),
+            expectedCliPath,
         };
 
         string? cliPath = CopilotCliPathResolver.Resolve(
@@ -37,7 +39,25 @@ public sealed class CopilotCliPathResolverTests
             isWindows: true,
             fileExists: existingFiles.Contains);
 
-        Assert.Equal(Path.Combine(copilotDirectory, "copilot.cmd"), cliPath, ignoreCase: true);
+        Assert.Equal(expectedCliPath, cliPath, ignoreCase: true);
+    }
+
+    [Fact]
+    public void Resolve_UsesCopilotFromPathOutsideWindows()
+    {
+        const string expectedCliPath = "/usr/local/bin/copilot";
+        HashSet<string> existingFiles = new(StringComparer.Ordinal)
+        {
+            expectedCliPath,
+        };
+
+        string? cliPath = CopilotCliPathResolver.Resolve(
+            pathValue: "/usr/bin:/usr/local/bin",
+            pathExtValue: null,
+            isWindows: false,
+            fileExists: existingFiles.Contains);
+
+        Assert.Equal(expectedCliPath, cliPath);
     }
 
     [Fact]

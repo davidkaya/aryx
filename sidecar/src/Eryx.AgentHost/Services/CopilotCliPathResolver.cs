@@ -8,6 +8,10 @@ internal static class CopilotCliPathResolver
     private const string CopilotCommandName = "copilot";
     private const string DefaultWindowsCommandProcessor = "cmd.exe";
     private const string DefaultWindowsPathExtensions = ".COM;.EXE;.BAT;.CMD";
+    private const char WindowsSearchPathSeparator = ';';
+    private const char UnixSearchPathSeparator = ':';
+    private const char WindowsDirectorySeparator = '\\';
+    private const char UnixDirectorySeparator = '/';
 
     private static readonly string[] BlockedCliEnvironmentPrefixes = ["BUN_", "COPILOT_", "ELECTRON_", "NODE_", "NPM_"];
 
@@ -125,7 +129,7 @@ internal static class CopilotCliPathResolver
         {
             foreach (string candidateName in GetCandidateFileNames(pathExtValue, isWindows))
             {
-                string candidatePath = Path.Combine(directory, candidateName);
+                string candidatePath = CombineSearchPath(directory, candidateName, isWindows);
                 if (fileExists(candidatePath))
                 {
                     return candidatePath;
@@ -145,7 +149,7 @@ internal static class CopilotCliPathResolver
 
         StringComparer comparer = isWindows ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
         foreach (string directory in pathValue
-            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Split(GetSearchPathSeparator(isWindows), StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Select(segment => segment.Trim('"'))
             .Where(segment => !string.IsNullOrWhiteSpace(segment))
             .Distinct(comparer))
@@ -182,6 +186,38 @@ internal static class CopilotCliPathResolver
                 yield return candidateName;
             }
         }
+    }
+
+    private static char GetSearchPathSeparator(bool isWindows)
+    {
+        return isWindows ? WindowsSearchPathSeparator : UnixSearchPathSeparator;
+    }
+
+    private static string CombineSearchPath(string directory, string fileName, bool isWindows)
+    {
+        if (string.IsNullOrEmpty(directory))
+        {
+            return fileName;
+        }
+
+        if (EndsWithDirectorySeparator(directory, isWindows))
+        {
+            return directory + fileName;
+        }
+
+        return directory + GetDirectorySeparator(isWindows) + fileName;
+    }
+
+    private static bool EndsWithDirectorySeparator(string path, bool isWindows)
+    {
+        char lastCharacter = path[^1];
+        return lastCharacter == GetDirectorySeparator(isWindows)
+            || (isWindows && lastCharacter == UnixDirectorySeparator);
+    }
+
+    private static char GetDirectorySeparator(bool isWindows)
+    {
+        return isWindows ? WindowsDirectorySeparator : UnixDirectorySeparator;
     }
 
     private static IEnumerable<KeyValuePair<string, string?>> GetCurrentEnvironmentVariables()

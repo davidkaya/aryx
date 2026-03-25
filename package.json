@@ -13,10 +13,10 @@
     "lsp:typescript": "typescript-language-server --stdio",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "bun run typecheck && bun test",
-    "sidecar:restore": "dotnet restore sidecar/Eryx.AgentHost.slnx",
-    "sidecar:build": "dotnet build sidecar/Eryx.AgentHost.slnx",
+    "sidecar:restore": "dotnet restore sidecar/Aryx.AgentHost.slnx",
+    "sidecar:build": "dotnet build sidecar/Aryx.AgentHost.slnx",
     "sidecar:publish": "bun run scripts/publish-sidecar.ts",
-    "sidecar:test": "dotnet test sidecar/Eryx.AgentHost.slnx"
+    "sidecar:test": "dotnet test sidecar/Aryx.AgentHost.slnx"
   },
   "repository": {
     "type": "git",

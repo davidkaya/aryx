@@ -36,8 +36,8 @@ const sidecarProjectPath = join(
   repositoryRoot,
   'sidecar',
   'src',
-  'Eryx.AgentHost',
-  'Eryx.AgentHost.csproj',
+  'Aryx.AgentHost',
+  'Aryx.AgentHost.csproj',
 );
 const outputDirectory = join(repositoryRoot, 'dist-sidecar', releaseTarget.dotnetRuntime);
 

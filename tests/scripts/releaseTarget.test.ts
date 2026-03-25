@@ -15,7 +15,7 @@ describe('resolveReleaseTarget', () => {
       dotnetRuntime: 'win-x64',
       outputDirectoryName: 'Aryx-windows-x64',
       archiveBaseName: 'Aryx-windows-x64',
-      sidecarExecutableName: 'Eryx.AgentHost.exe',
+      sidecarExecutableName: 'Aryx.AgentHost.exe',
       packagedExecutableName: 'Aryx.exe',
     });
   });
@@ -28,7 +28,7 @@ describe('resolveReleaseTarget', () => {
       dotnetRuntime: 'osx-arm64',
       outputDirectoryName: 'Aryx-macos-arm64',
       archiveBaseName: 'Aryx-macos-arm64',
-      sidecarExecutableName: 'Eryx.AgentHost',
+      sidecarExecutableName: 'Aryx.AgentHost',
       appBundleName: 'Aryx.app',
     });
   });
@@ -41,7 +41,7 @@ describe('resolveReleaseTarget', () => {
       dotnetRuntime: 'linux-x64',
       outputDirectoryName: 'Aryx-linux-x64',
       archiveBaseName: 'Aryx-linux-x64',
-      sidecarExecutableName: 'Eryx.AgentHost',
+      sidecarExecutableName: 'Aryx.AgentHost',
       packagedExecutableName: 'Aryx',
     });
   });

@@ -43,7 +43,7 @@ export function resolveReleaseTarget(
         dotnetRuntime: `win-${supportedArch}`,
         outputDirectoryName: archiveBaseName,
         archiveBaseName,
-        sidecarExecutableName: 'Eryx.AgentHost.exe',
+        sidecarExecutableName: 'Aryx.AgentHost.exe',
         packagedExecutableName: `${productName}.exe`,
       };
     }
@@ -58,7 +58,7 @@ export function resolveReleaseTarget(
         dotnetRuntime: `osx-${supportedArch}`,
         outputDirectoryName: archiveBaseName,
         archiveBaseName,
-        sidecarExecutableName: 'Eryx.AgentHost',
+        sidecarExecutableName: 'Aryx.AgentHost',
         appBundleName: `${productName}.app`,
       };
     }
@@ -73,7 +73,7 @@ export function resolveReleaseTarget(
         dotnetRuntime: `linux-${supportedArch}`,
         outputDirectoryName: archiveBaseName,
         archiveBaseName,
-        sidecarExecutableName: 'Eryx.AgentHost',
+        sidecarExecutableName: 'Aryx.AgentHost',
         packagedExecutableName: productName,
       };
     }

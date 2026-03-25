@@ -18,7 +18,7 @@ function getPathModule(platform: NodeJS.Platform) {
 }
 
 function getBundledSidecarExecutableName(platform: NodeJS.Platform): string {
-  return platform === 'win32' ? 'Eryx.AgentHost.exe' : 'Eryx.AgentHost';
+  return platform === 'win32' ? 'Aryx.AgentHost.exe' : 'Aryx.AgentHost';
 }
 
 export function resolveSidecarProcess(context: SidecarRuntimeContext): ResolvedSidecarProcess {
@@ -39,7 +39,7 @@ export function resolveSidecarProcess(context: SidecarRuntimeContext): ResolvedS
     args: [
       'run',
       '--project',
-      pathModule.join(context.appPath, 'sidecar', 'src', 'Eryx.AgentHost', 'Eryx.AgentHost.csproj'),
+      pathModule.join(context.appPath, 'sidecar', 'src', 'Aryx.AgentHost', 'Aryx.AgentHost.csproj'),
       '--',
       '--stdio',
     ],

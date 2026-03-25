@@ -16,7 +16,7 @@ describe('resolveSidecarProcess', () => {
       args: [
         'run',
         '--project',
-        'C:\\workspace\\personal\\repositories\\eryx\\sidecar\\src\\Eryx.AgentHost\\Eryx.AgentHost.csproj',
+        'C:\\workspace\\personal\\repositories\\eryx\\sidecar\\src\\Aryx.AgentHost\\Aryx.AgentHost.csproj',
         '--',
         '--stdio',
       ],
@@ -33,7 +33,7 @@ describe('resolveSidecarProcess', () => {
         platform: 'win32',
       }),
     ).toEqual({
-      command: 'C:\\workspace\\personal\\repositories\\eryx\\release\\win-unpacked\\resources\\sidecar\\Eryx.AgentHost.exe',
+      command: 'C:\\workspace\\personal\\repositories\\eryx\\release\\win-unpacked\\resources\\sidecar\\Aryx.AgentHost.exe',
       args: ['--stdio'],
       cwd: 'C:\\workspace\\personal\\repositories\\eryx\\release\\win-unpacked\\resources\\sidecar',
     });
@@ -48,7 +48,7 @@ describe('resolveSidecarProcess', () => {
         platform: 'darwin',
       }),
     ).toEqual({
-      command: '/Applications/Aryx.app/Contents/Resources/sidecar/Eryx.AgentHost',
+      command: '/Applications/Aryx.app/Contents/Resources/sidecar/Aryx.AgentHost',
       args: ['--stdio'],
       cwd: '/Applications/Aryx.app/Contents/Resources/sidecar',
     });

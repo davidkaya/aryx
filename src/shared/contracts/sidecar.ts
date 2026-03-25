@@ -79,6 +79,12 @@ export interface RunTurnCommand {
   tooling?: RunTurnToolingConfig;
 }
 
+export interface CancelTurnCommand {
+  type: 'cancel-turn';
+  requestId: string;
+  targetRequestId: string;
+}
+
 export interface ResolveApprovalCommand {
   type: 'resolve-approval';
   requestId: string;
@@ -90,6 +96,7 @@ export type SidecarCommand =
   | DescribeCapabilitiesCommand
   | ValidatePatternCommand
   | RunTurnCommand
+  | CancelTurnCommand
   | ResolveApprovalCommand;
 
 export interface RunTurnLocalMcpServerConfig {
@@ -157,6 +164,7 @@ export interface TurnCompleteEvent {
   requestId: string;
   sessionId: string;
   messages: ChatMessageRecord[];
+  cancelled?: boolean;
 }
 
 export type AgentActivityType = 'thinking' | 'tool-calling' | 'handoff' | 'completed';

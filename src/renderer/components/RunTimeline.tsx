@@ -43,6 +43,7 @@ const modeAccent: Record<OrchestrationMode, { dot: string; ring: string; text: s
 const runStatusStyles: Record<SessionRunRecord['status'], { icon: ReactNode; className: string }> = {
   running:   { icon: <CircleDot className="size-3" />, className: 'text-blue-400' },
   completed: { icon: <CheckCircle2 className="size-3" />, className: 'text-emerald-400' },
+  cancelled: { icon: <XCircle className="size-3" />, className: 'text-zinc-400' },
   error:     { icon: <XCircle className="size-3" />, className: 'text-red-400' },
 };
 
@@ -65,6 +66,8 @@ function EventIcon({ kind, status }: { kind: RunTimelineEventRecord['kind']; sta
       return <MessageSquare className={`${base} ${status === 'running' ? 'text-blue-400 animate-pulse' : status === 'error' ? 'text-red-400' : 'text-emerald-400'}`} />;
     case 'run-completed':
       return <CheckCircle2 className={`${base} text-emerald-400`} />;
+    case 'run-cancelled':
+      return <XCircle className={`${base} text-zinc-400`} />;
     case 'run-failed':
       return <AlertTriangle className={`${base} text-red-400`} />;
   }

@@ -4,6 +4,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import type {
   AgentActivityEvent,
   ApprovalRequestedEvent,
+  CancelTurnCommand,
   SidecarCommand,
   SidecarCapabilities,
   SidecarEvent,
@@ -19,29 +20,54 @@ import {
   shouldHandleRunTurnEvent,
   type RunTurnPendingCommand,
 } from '@main/sidecar/runTurnPending';
+import { TurnCancelledError } from '@main/sidecar/turnCancelledError';
 import { resolveSidecarProcess } from '@main/sidecar/sidecarRuntime';
 
 type PendingCommand =
-  | {
+  | ({
+      processId: number;
       kind: 'capabilities';
       resolve: (capabilities: SidecarCapabilities) => void;
       reject: (error: Error) => void;
-    }
-  | {
+    })
+  | ({
+      processId: number;
       kind: 'validate-pattern';
       resolve: (issues: ValidatePatternCommand['pattern'] extends never ? never : unknown) => void;
       reject: (error: Error) => void;
-    }
-  | {
+    })
+  | ({
+      processId: number;
       kind: 'resolve-approval';
       resolve: () => void;
       reject: (error: Error) => void;
-    }
-  | RunTurnPendingCommand;
+    })
+  | ({
+      processId: number;
+      kind: 'cancel-turn';
+      resolve: () => void;
+      reject: (error: Error) => void;
+    })
+  | ({
+      processId: number;
+    } & RunTurnPendingCommand);
+
+type ManagedSidecarProcess = {
+  id: number;
+  child: ChildProcessWithoutNullStreams;
+  stdoutBuffer: string;
+  exitExpected: boolean;
+  terminated: boolean;
+  closed: Promise<void>;
+  resolveClosed: () => void;
+};
+
+export const SIDECAR_STOPPED_BEFORE_COMPLETION_MESSAGE =
+  'The .NET sidecar was stopped before the command completed.';
 
 export class SidecarClient {
-  private process?: ChildProcessWithoutNullStreams;
-  private stdoutBuffer = '';
+  private processState?: ManagedSidecarProcess;
+  private nextProcessId = 0;
   private readonly pending = new Map<string, PendingCommand>();
 
   async describeCapabilities(): Promise<SidecarCapabilities> {
@@ -79,18 +105,39 @@ export class SidecarClient {
     });
   }
 
+  async cancelTurn(targetRequestId: string): Promise<void> {
+    return this.dispatch<void>({
+      type: 'cancel-turn',
+      requestId: `cancel-${Date.now()}`,
+      targetRequestId,
+    } satisfies CancelTurnCommand);
+  }
+
   async dispose(): Promise<void> {
-    if (!this.process) {
+    const state = this.processState;
+    if (!state) {
       return;
     }
 
-    this.process.kill();
-    this.process = undefined;
+    state.exitExpected = true;
+    if (!state.child.killed && state.child.exitCode === null) {
+      state.child.kill();
+    }
+    await state.closed;
   }
 
-  private async ensureProcess(): Promise<ChildProcessWithoutNullStreams> {
-    if (this.process && !this.process.killed) {
-      return this.process;
+  private async ensureProcess(): Promise<ManagedSidecarProcess> {
+    if (
+      this.processState &&
+      !this.processState.exitExpected &&
+      !this.processState.terminated &&
+      this.processState.child.exitCode === null
+    ) {
+      return this.processState;
+    }
+
+    if (this.processState) {
+      await this.processState.closed;
     }
 
     const sidecar = resolveSidecarProcess({
@@ -105,12 +152,29 @@ export class SidecarClient {
       stdio: 'pipe',
       windowsHide: true,
     });
-    this.process = childProcess;
+    let resolveClosed!: () => void;
+    const state: ManagedSidecarProcess = {
+      id: this.nextProcessId + 1,
+      child: childProcess,
+      stdoutBuffer: '',
+      exitExpected: false,
+      terminated: false,
+      closed: new Promise<void>((resolve) => {
+        resolveClosed = resolve;
+      }),
+      resolveClosed,
+    };
+    this.nextProcessId = state.id;
+    this.processState = state;
 
     childProcess.stdout.setEncoding('utf8');
     childProcess.stdout.on('data', (chunk: string) => {
-      this.stdoutBuffer += chunk;
-      this.flushStdoutBuffer();
+      if (state.terminated) {
+        return;
+      }
+
+      state.stdoutBuffer += chunk;
+      this.flushStdoutBuffer(state);
     });
 
     childProcess.stderr.setEncoding('utf8');
@@ -118,17 +182,14 @@ export class SidecarClient {
       console.error('[aryx sidecar]', chunk.trim());
     });
 
-    childProcess.on('exit', (code) => {
-      const error = new Error(`The .NET sidecar exited unexpectedly with code ${code ?? 'unknown'}.`);
-      for (const pending of this.pending.values()) {
-        pending.reject(error);
-      }
-      this.pending.clear();
-      this.process = undefined;
-      this.stdoutBuffer = '';
+    childProcess.on('close', (code) => {
+      const error = state.exitExpected
+        ? new Error(SIDECAR_STOPPED_BEFORE_COMPLETION_MESSAGE)
+        : new Error(`The .NET sidecar exited unexpectedly with code ${code ?? 'unknown'}.`);
+      this.handleProcessClosed(state, error);
     });
 
-    return childProcess;
+    return state;
   }
 
   private async dispatch<TResult>(
@@ -137,11 +198,12 @@ export class SidecarClient {
     onActivity?: (event: AgentActivityEvent) => void | Promise<void>,
     onApproval?: (event: ApprovalRequestedEvent) => void | Promise<void>,
   ): Promise<TResult> {
-    const process = await this.ensureProcess();
+    const state = await this.ensureProcess();
 
     return new Promise<TResult>((resolve, reject) => {
       if (command.type === 'run-turn') {
         this.pending.set(command.requestId, {
+          processId: state.id,
           kind: 'run-turn',
           resolve: resolve as (messages: ChatMessageRecord[]) => void,
           reject,
@@ -152,46 +214,56 @@ export class SidecarClient {
         });
       } else if (command.type === 'validate-pattern') {
         this.pending.set(command.requestId, {
+          processId: state.id,
           kind: 'validate-pattern',
           resolve: resolve as (issues: unknown) => void,
           reject,
         });
       } else if (command.type === 'resolve-approval') {
         this.pending.set(command.requestId, {
+          processId: state.id,
           kind: 'resolve-approval',
+          resolve: resolve as () => void,
+          reject,
+        });
+      } else if (command.type === 'cancel-turn') {
+        this.pending.set(command.requestId, {
+          processId: state.id,
+          kind: 'cancel-turn',
           resolve: resolve as () => void,
           reject,
         });
       } else {
         this.pending.set(command.requestId, {
+          processId: state.id,
           kind: 'capabilities',
           resolve: resolve as (capabilities: SidecarCapabilities) => void,
           reject,
         });
       }
 
-      process.stdin.write(`${JSON.stringify(command)}\n`);
+      state.child.stdin.write(`${JSON.stringify(command)}\n`);
     });
   }
 
-  private flushStdoutBuffer(): void {
-    let newlineIndex = this.stdoutBuffer.indexOf('\n');
+  private flushStdoutBuffer(state: ManagedSidecarProcess): void {
+    let newlineIndex = state.stdoutBuffer.indexOf('\n');
 
     while (newlineIndex >= 0) {
-      const rawLine = this.stdoutBuffer.slice(0, newlineIndex).trim();
-      this.stdoutBuffer = this.stdoutBuffer.slice(newlineIndex + 1);
+      const rawLine = state.stdoutBuffer.slice(0, newlineIndex).trim();
+      state.stdoutBuffer = state.stdoutBuffer.slice(newlineIndex + 1);
 
       if (rawLine) {
-        this.handleEvent(JSON.parse(rawLine) as SidecarEvent);
+        this.handleEvent(state.id, JSON.parse(rawLine) as SidecarEvent);
       }
 
-      newlineIndex = this.stdoutBuffer.indexOf('\n');
+      newlineIndex = state.stdoutBuffer.indexOf('\n');
     }
   }
 
-  private handleEvent(event: SidecarEvent): void {
+  private handleEvent(processId: number, event: SidecarEvent): void {
     const pending = this.pending.get(event.requestId);
-    if (!pending) {
+    if (!pending || pending.processId !== processId) {
       return;
     }
 
@@ -226,7 +298,11 @@ export class SidecarClient {
       case 'turn-complete':
         if (pending.kind === 'run-turn') {
           if (shouldHandleRunTurnEvent(pending)) {
-            pending.resolve(event.messages);
+            if (event.cancelled) {
+              markRunTurnPendingErrored(pending, new TurnCancelledError());
+            } else {
+              pending.resolve(event.messages);
+            }
           }
           this.pending.delete(event.requestId);
         }
@@ -240,7 +316,7 @@ export class SidecarClient {
         this.pending.delete(event.requestId);
         return;
       case 'command-complete':
-        if (pending.kind === 'resolve-approval') {
+        if (pending.kind === 'resolve-approval' || pending.kind === 'cancel-turn') {
           pending.resolve();
           this.pending.delete(event.requestId);
         } else if (pending.kind !== 'run-turn' || pending.errored) {
@@ -261,5 +337,28 @@ export class SidecarClient {
         return;
       }
     });
+  }
+
+  private handleProcessClosed(state: ManagedSidecarProcess, error: Error): void {
+    if (state.terminated) {
+      return;
+    }
+
+    state.terminated = true;
+    if (this.processState === state) {
+      this.processState = undefined;
+    }
+
+    state.stdoutBuffer = '';
+    state.resolveClosed();
+
+    for (const [requestId, pending] of this.pending.entries()) {
+      if (pending.processId !== state.id) {
+        continue;
+      }
+
+      pending.reject(error);
+      this.pending.delete(requestId);
+    }
   }
 }

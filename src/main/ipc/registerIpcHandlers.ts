@@ -2,6 +2,7 @@ import { BrowserWindow, ipcMain } from 'electron';
 
 import { ipcChannels } from '@shared/contracts/channels';
 import type {
+  CancelSessionTurnInput,
   CreateSessionInput,
   ResolveProjectDiscoveredToolingInput,
   ResolveWorkspaceDiscoveredToolingInput,
@@ -99,6 +100,9 @@ export function registerIpcHandlers(window: BrowserWindow, service: EryxAppServi
   );
   ipcMain.handle(ipcChannels.sendSessionMessage, (_event, input: SendSessionMessageInput) =>
     service.sendSessionMessage(input.sessionId, input.content),
+  );
+  ipcMain.handle(ipcChannels.cancelSessionTurn, (_event, input: CancelSessionTurnInput) =>
+    service.cancelSessionTurn(input.sessionId),
   );
   ipcMain.handle(ipcChannels.resolveSessionApproval, (_event, input: ResolveSessionApprovalInput) =>
     service.resolveSessionApproval(input.sessionId, input.approvalId, input.decision),

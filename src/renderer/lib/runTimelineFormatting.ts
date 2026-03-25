@@ -59,6 +59,8 @@ export function formatRunStatusLabel(status: SessionRunStatus): string {
       return 'Running';
     case 'completed':
       return 'Completed';
+    case 'cancelled':
+      return 'Cancelled';
     case 'error':
       return 'Failed';
   }
@@ -91,6 +93,8 @@ export function formatEventLabel(event: RunTimelineEventRecord): string {
       return event.agentName ?? 'Response';
     case 'run-completed':
       return 'Completed';
+    case 'run-cancelled':
+      return 'Cancelled';
     case 'run-failed':
       return 'Failed';
   }
@@ -144,11 +148,12 @@ const eventKindOrder: Record<RunTimelineEventKind, number> = {
   'approval': 4,
   'message': 5,
   'run-completed': 6,
+  'run-cancelled': 6,
   'run-failed': 6,
 };
 
 export function isTerminalEvent(kind: RunTimelineEventKind): boolean {
-  return kind === 'run-completed' || kind === 'run-failed' || kind === 'run-started';
+  return kind === 'run-completed' || kind === 'run-cancelled' || kind === 'run-failed' || kind === 'run-started';
 }
 
 export function eventSortKey(event: RunTimelineEventRecord): number {

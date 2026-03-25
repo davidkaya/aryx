@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, ArrowUp, Bot, Circle, GitBranch, Loader2, ShieldAlert, User } from 'lucide-react';
+import { AlertCircle, ArrowUp, Bot, Circle, GitBranch, Loader2, ShieldAlert, Square, User } from 'lucide-react';
 
 import { MarkdownContent } from '@renderer/components/MarkdownContent';
 import { MarkdownComposer, type MarkdownComposerHandle } from '@renderer/components/MarkdownComposer';
@@ -34,6 +34,7 @@ interface ChatPaneProps {
   toolingSettings: WorkspaceToolingSettings;
   runtimeTools?: ReadonlyArray<RuntimeToolDefinition>;
   onSend: (content: string) => Promise<void>;
+  onCancelTurn?: () => void;
   onResolveApproval?: (approvalId: string, decision: ApprovalDecision) => Promise<unknown>;
   onUpdateScratchpadConfig?: (config: {
     model: string;
@@ -51,6 +52,7 @@ export function ChatPane({
   toolingSettings,
   runtimeTools,
   onSend,
+  onCancelTurn,
   onResolveApproval,
   onUpdateScratchpadConfig,
   onUpdateSessionTooling,
@@ -432,16 +434,25 @@ export function ChatPane({
             >
               <button
                 className={`absolute bottom-2 right-2 flex size-8 items-center justify-center rounded-lg transition ${
-                  canSubmitInput
-                    ? 'bg-indigo-600 text-white hover:bg-indigo-500'
-                    : 'bg-zinc-800 text-zinc-600'
+                  isSessionBusy
+                    ? 'bg-red-600/80 text-white hover:bg-red-500'
+                    : canSubmitInput
+                      ? 'bg-indigo-600 text-white hover:bg-indigo-500'
+                      : 'bg-zinc-800 text-zinc-600'
                 }`}
-                disabled={!canSubmitInput}
-                onClick={() => composerRef.current?.submit()}
+                disabled={!canSubmitInput && !isSessionBusy}
+                onClick={() => {
+                  if (isSessionBusy) {
+                    onCancelTurn?.();
+                  } else {
+                    composerRef.current?.submit();
+                  }
+                }}
                 type="button"
+                aria-label={isSessionBusy ? 'Stop generating' : 'Send message'}
               >
                 {isSessionBusy ? (
-                  <Loader2 className="size-4 animate-spin" />
+                  <Square className="size-3.5" fill="currentColor" />
                 ) : (
                   <ArrowUp className="size-4" />
                 )}

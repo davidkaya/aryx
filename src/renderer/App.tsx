@@ -246,6 +246,7 @@ export default function App() {
     content = (
         <ChatPane
           onSend={(c) => api.sendSessionMessage({ sessionId: selectedSession.id, content: c })}
+          onCancelTurn={() => { void api.cancelSessionTurn({ sessionId: selectedSession.id }); }}
           onResolveApproval={(approvalId, decision) =>
             api.resolveSessionApproval({ sessionId: selectedSession.id, approvalId, decision })
           }

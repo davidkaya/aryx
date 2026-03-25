@@ -65,6 +65,7 @@ import {
 import { prepareChatMessageContent } from '@shared/utils/chatMessage';
 import {
   appendRunActivityEvent,
+  cancelSessionRunRecord,
   completeSessionRunRecord,
   createSessionRunRecord,
   failSessionRunRecord,
@@ -99,6 +100,7 @@ import {
   SIDECAR_STOPPED_BEFORE_COMPLETION_MESSAGE,
   SidecarClient,
 } from '@main/sidecar/sidecarProcess';
+import { TurnCancelledError } from '@main/sidecar/turnCancelledError';
 import { GitService } from '@main/git/gitService';
 import {
   buildRunTurnToolingConfig as buildSessionToolingConfig,
@@ -621,6 +623,12 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
       this.finalizeTurn(workspace, session.id, requestId, responseMessages);
       await this.persistAndBroadcast(workspace);
     } catch (error) {
+      if (error instanceof TurnCancelledError) {
+        this.finalizeCancelledTurn(workspace, session, requestId);
+        await this.persistAndBroadcast(workspace);
+        return;
+      }
+
       const failedAt = nowIso();
       session.status = 'error';
       session.lastError = error instanceof Error ? error.message : String(error);
@@ -641,6 +649,21 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
 
       await this.persistAndBroadcast(workspace);
     }
+  }
+
+  async cancelSessionTurn(sessionId: string): Promise<void> {
+    const workspace = await this.loadWorkspace();
+    const session = this.requireSession(workspace, sessionId);
+    if (session.status !== 'running') {
+      return;
+    }
+
+    const runningRun = session.runs.find((run) => run.status === 'running');
+    if (!runningRun) {
+      return;
+    }
+
+    await this.sidecar.cancelTurn(runningRun.requestId);
   }
 
   async resolveSessionApproval(
@@ -1098,6 +1121,36 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
     });
     if (completedRun) {
       this.emitRunUpdated(sessionId, completedAt, completedRun);
+    }
+  }
+
+  private finalizeCancelledTurn(
+    workspace: WorkspaceState,
+    session: SessionRecord,
+    requestId: string,
+  ): void {
+    for (const message of session.messages) {
+      if (message.pending) {
+        message.pending = false;
+      }
+    }
+
+    this.rejectPendingApprovals(session, nowIso(), 'The turn was cancelled.');
+
+    const cancelledAt = nowIso();
+    session.status = 'idle';
+    session.lastError = undefined;
+    session.updatedAt = cancelledAt;
+    const cancelledRun = this.updateSessionRun(session, requestId, (run) =>
+      cancelSessionRunRecord(run, cancelledAt));
+    this.emitSessionEvent({
+      sessionId: session.id,
+      kind: 'status',
+      occurredAt: cancelledAt,
+      status: 'idle',
+    });
+    if (cancelledRun) {
+      this.emitRunUpdated(session.id, cancelledAt, cancelledRun);
     }
   }
 

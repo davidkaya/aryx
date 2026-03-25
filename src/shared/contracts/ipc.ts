@@ -26,6 +26,10 @@ export interface SendSessionMessageInput {
   content: string;
 }
 
+export interface CancelSessionTurnInput {
+  sessionId: string;
+}
+
 export interface ResolveSessionApprovalInput {
   sessionId: string;
   approvalId: string;
@@ -120,6 +124,7 @@ export interface ElectronApi {
   setSessionPinned(input: SetSessionPinnedInput): Promise<WorkspaceState>;
   setSessionArchived(input: SetSessionArchivedInput): Promise<WorkspaceState>;
   sendSessionMessage(input: SendSessionMessageInput): Promise<void>;
+  cancelSessionTurn(input: CancelSessionTurnInput): Promise<void>;
   resolveSessionApproval(input: ResolveSessionApprovalInput): Promise<WorkspaceState>;
   updateScratchpadSessionConfig(input: UpdateScratchpadSessionConfigInput): Promise<WorkspaceState>;
   querySessions(input: QuerySessionsInput): Promise<SessionQueryResult[]>;

@@ -7,7 +7,7 @@ import type { PatternDefinition, ReasoningEffort } from '@shared/domain/pattern'
 import type { ProjectRecord } from '@shared/domain/project';
 import { createId } from '@shared/utils/ids';
 
-export type SessionRunStatus = 'running' | 'completed' | 'error';
+export type SessionRunStatus = 'running' | 'completed' | 'cancelled' | 'error';
 export type SessionRunWorkspaceKind = 'project' | 'scratchpad';
 export type RunTimelineEventKind =
   | 'run-started'
@@ -17,6 +17,7 @@ export type RunTimelineEventKind =
   | 'approval'
   | 'message'
   | 'run-completed'
+  | 'run-cancelled'
   | 'run-failed';
 export type RunTimelineEventStatus = 'running' | 'completed' | 'error';
 
@@ -318,7 +319,7 @@ export function normalizeSessionRunRecords(
         triggerMessageId,
         startedAt,
         completedAt: normalizeOptionalString(run.completedAt),
-        status: run.status === 'error' ? 'error' : run.status === 'running' ? 'running' : 'completed',
+        status: run.status === 'error' ? 'error' : run.status === 'running' ? 'running' : run.status === 'cancelled' ? 'cancelled' : 'completed',
         agents: run.agents.flatMap((agent) => {
           const normalized = normalizeRunTimelineAgent(agent);
           return normalized ? [normalized] : [];
@@ -512,6 +513,24 @@ export function completeSessionRunRecord(
   return appendRunTimelineEvent(completedRun, {
     kind: 'run-completed',
     occurredAt: completedAt,
+    status: 'completed',
+  });
+}
+
+export function cancelSessionRunRecord(
+  run: SessionRunRecord,
+  cancelledAt: string,
+): SessionRunRecord {
+  const settledRun = settleOpenMessageEvents(run, 'completed', cancelledAt);
+  const cancelledRun: SessionRunRecord = {
+    ...settledRun,
+    status: 'cancelled',
+    completedAt: cancelledAt,
+  };
+
+  return appendRunTimelineEvent(cancelledRun, {
+    kind: 'run-cancelled',
+    occurredAt: cancelledAt,
     status: 'completed',
   });
 }

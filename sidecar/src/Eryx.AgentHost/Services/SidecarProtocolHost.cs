@@ -12,6 +12,7 @@ public sealed class SidecarProtocolHost
     private const string DescribeCapabilitiesCommandType = "describe-capabilities";
     private const string ValidatePatternCommandType = "validate-pattern";
     private const string RunTurnCommandType = "run-turn";
+    private const string CancelTurnCommandType = "cancel-turn";
     private const string ResolveApprovalCommandType = "resolve-approval";
 
     private static readonly string[] AuthenticationErrorIndicators =
@@ -34,6 +35,7 @@ public sealed class SidecarProtocolHost
     private readonly IReadOnlyDictionary<string, Func<CommandContext, Task>> _commandHandlers;
     private readonly SemaphoreSlim _writeLock = new(1, 1);
     private readonly ConcurrentDictionary<string, Task> _inFlight = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, CancellationTokenSource> _turnCancellations = new(StringComparer.Ordinal);
 
     public SidecarProtocolHost()
         : this(new PatternValidator())
@@ -58,6 +60,7 @@ public sealed class SidecarProtocolHost
             [DescribeCapabilitiesCommandType] = HandleDescribeCapabilitiesAsync,
             [ValidatePatternCommandType] = HandleValidatePatternAsync,
             [RunTurnCommandType] = HandleRunTurnAsync,
+            [CancelTurnCommandType] = HandleCancelTurnAsync,
             [ResolveApprovalCommandType] = HandleResolveApprovalAsync,
         };
     }
@@ -160,21 +163,66 @@ public sealed class SidecarProtocolHost
     private async Task HandleRunTurnAsync(CommandContext context)
     {
         RunTurnCommandDto command = DeserializeCommand<RunTurnCommandDto>(context);
-        IReadOnlyList<ChatMessageDto> messages = await _workflowRunner.RunTurnAsync(
-                command,
-                delta => WriteAsync(context.Output, delta, context.CancellationToken),
-                activity => WriteAsync(context.Output, activity, context.CancellationToken),
-                approval => WriteAsync(context.Output, approval, context.CancellationToken),
-                context.CancellationToken)
-            .ConfigureAwait(false);
-
-        await WriteAsync(context.Output, new TurnCompleteEventDto
+        using CancellationTokenSource turnCancellation =
+            CancellationTokenSource.CreateLinkedTokenSource(context.CancellationToken);
+        if (!_turnCancellations.TryAdd(context.Envelope.RequestId, turnCancellation))
         {
-            Type = "turn-complete",
-            RequestId = context.Envelope.RequestId,
-            SessionId = command.SessionId,
-            Messages = messages,
-        }, context.CancellationToken).ConfigureAwait(false);
+            throw new InvalidOperationException(
+                $"A turn with request ID '{context.Envelope.RequestId}' is already in progress.");
+        }
+
+        try
+        {
+            IReadOnlyList<ChatMessageDto> messages = await _workflowRunner.RunTurnAsync(
+                    command,
+                    delta => WriteAsync(context.Output, delta, turnCancellation.Token),
+                    activity => WriteAsync(context.Output, activity, turnCancellation.Token),
+                    approval => WriteAsync(context.Output, approval, turnCancellation.Token),
+                    turnCancellation.Token)
+                .ConfigureAwait(false);
+
+            await WriteTurnCompleteAsync(
+                    context.Output,
+                    context.Envelope.RequestId,
+                    command.SessionId,
+                    messages,
+                    cancelled: false,
+                    context.CancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (turnCancellation.IsCancellationRequested)
+        {
+            await WriteTurnCompleteAsync(
+                    context.Output,
+                    context.Envelope.RequestId,
+                    command.SessionId,
+                    [],
+                    cancelled: true,
+                    context.CancellationToken)
+                .ConfigureAwait(false);
+        }
+        finally
+        {
+            _turnCancellations.TryRemove(context.Envelope.RequestId, out _);
+        }
+    }
+
+    private Task HandleCancelTurnAsync(CommandContext context)
+    {
+        CancelTurnCommandDto command = DeserializeCommand<CancelTurnCommandDto>(context);
+        if (_turnCancellations.TryGetValue(command.TargetRequestId, out CancellationTokenSource? turnCancellation))
+        {
+            try
+            {
+                turnCancellation.Cancel();
+            }
+            catch (ObjectDisposedException)
+            {
+                // The turn completed between lookup and cancellation.
+            }
+        }
+
+        return Task.CompletedTask;
     }
 
     private async Task HandleResolveApprovalAsync(CommandContext context)
@@ -198,6 +246,24 @@ public sealed class SidecarProtocolHost
             Type = "command-complete",
             RequestId = context.Envelope.RequestId,
         }, context.CancellationToken);
+    }
+
+    private Task WriteTurnCompleteAsync(
+        TextWriter output,
+        string requestId,
+        string sessionId,
+        IReadOnlyList<ChatMessageDto> messages,
+        bool cancelled,
+        CancellationToken cancellationToken)
+    {
+        return WriteAsync(output, new TurnCompleteEventDto
+        {
+            Type = "turn-complete",
+            RequestId = requestId,
+            SessionId = sessionId,
+            Messages = messages,
+            Cancelled = cancelled,
+        }, cancellationToken);
     }
 
     private Task WriteCommandErrorAsync(CommandContext context, string message)

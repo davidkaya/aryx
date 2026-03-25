@@ -166,6 +166,11 @@ public sealed class RunTurnCommandDto : SidecarCommandEnvelope
     public RunTurnToolingConfigDto? Tooling { get; init; }
 }
 
+public sealed class CancelTurnCommandDto : SidecarCommandEnvelope
+{
+    public string TargetRequestId { get; init; } = string.Empty;
+}
+
 public sealed class ResolveApprovalCommandDto : SidecarCommandEnvelope
 {
     public string ApprovalId { get; init; } = string.Empty;
@@ -232,6 +237,7 @@ public sealed class TurnCompleteEventDto : SidecarEventDto
 {
     public string SessionId { get; init; } = string.Empty;
     public IReadOnlyList<ChatMessageDto> Messages { get; init; } = [];
+    public bool Cancelled { get; init; }
 }
 
 public sealed class AgentActivityEventDto : SidecarEventDto

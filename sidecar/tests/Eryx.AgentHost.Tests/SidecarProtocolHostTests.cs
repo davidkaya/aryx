@@ -219,6 +219,7 @@ public sealed class SidecarProtocolHostTests
             {
                 Assert.Equal("turn-complete", completionEvent.GetProperty("type").GetString());
                 Assert.Equal("session-1", completionEvent.GetProperty("sessionId").GetString());
+                Assert.False(completionEvent.GetProperty("cancelled").GetBoolean());
                 JsonElement[] messages = completionEvent.GetProperty("messages").EnumerateArray().ToArray();
                 Assert.Single(messages);
                 Assert.Equal("Hello world", messages[0].GetProperty("content").GetString());
@@ -287,12 +288,82 @@ public sealed class SidecarProtocolHostTests
             completionEvent =>
             {
                 Assert.Equal("turn-complete", completionEvent.GetProperty("type").GetString());
+                Assert.False(completionEvent.GetProperty("cancelled").GetBoolean());
             },
             commandCompleteEvent =>
             {
                 Assert.Equal("command-complete", commandCompleteEvent.GetProperty("type").GetString());
                 Assert.Equal("turn-approval", commandCompleteEvent.GetProperty("requestId").GetString());
             });
+    }
+
+    [Fact]
+    public async Task CancelTurnCommand_CancelsInProgressTurnAndCompletesBothCommands()
+    {
+        SidecarProtocolHost host = new(
+            new PatternValidator(),
+            new FakeWorkflowRunner(async (command, onDelta, onActivity, onApproval, cancellationToken) =>
+            {
+                await Task.Delay(Timeout.Infinite, cancellationToken);
+                return [];
+            }));
+
+        IReadOnlyList<JsonElement> events = await RunHostAsync(
+            [
+                CreateRunTurnCommand(requestId: "turn-cancel"),
+                new CancelTurnCommandDto
+                {
+                    Type = "cancel-turn",
+                    RequestId = "cancel-command-1",
+                    TargetRequestId = "turn-cancel",
+                },
+            ],
+            host);
+
+        JsonElement turnCompleteEvent = AssertSingleEvent(events, "turn-complete", "turn-cancel");
+        Assert.Equal("session-1", turnCompleteEvent.GetProperty("sessionId").GetString());
+        Assert.True(turnCompleteEvent.GetProperty("cancelled").GetBoolean());
+        Assert.Empty(turnCompleteEvent.GetProperty("messages").EnumerateArray().ToArray());
+
+        AssertSingleEvent(events, "command-complete", "turn-cancel");
+        AssertSingleEvent(events, "command-complete", "cancel-command-1");
+        Assert.DoesNotContain(events, evt => evt.GetProperty("type").GetString() == "command-error");
+    }
+
+    [Fact]
+    public async Task CancelTurnCommand_UnknownTarget_CompletesWithoutError()
+    {
+        IReadOnlyList<JsonElement> events = await RunHostAsync(new CancelTurnCommandDto
+        {
+            Type = "cancel-turn",
+            RequestId = "cancel-command-unknown",
+            TargetRequestId = "missing-turn",
+        });
+
+        JsonElement completionEvent = Assert.Single(events);
+        Assert.Equal("command-complete", completionEvent.GetProperty("type").GetString());
+        Assert.Equal("cancel-command-unknown", completionEvent.GetProperty("requestId").GetString());
+    }
+
+    [Fact]
+    public async Task CancelTurnCommand_AfterTurnCompletion_IsNoOp()
+    {
+        SidecarProtocolHost host = new(
+            new PatternValidator(),
+            new FakeWorkflowRunner(async (command, onDelta, onActivity, onApproval, cancellationToken) => []));
+
+        await RunHostAsync(CreateRunTurnCommand(requestId: "turn-completed"), host);
+
+        IReadOnlyList<JsonElement> events = await RunHostAsync(new CancelTurnCommandDto
+        {
+            Type = "cancel-turn",
+            RequestId = "cancel-command-completed",
+            TargetRequestId = "turn-completed",
+        }, host);
+
+        JsonElement completionEvent = Assert.Single(events);
+        Assert.Equal("command-complete", completionEvent.GetProperty("type").GetString());
+        Assert.Equal("cancel-command-completed", completionEvent.GetProperty("requestId").GetString());
     }
 
     [Fact]
@@ -369,13 +440,33 @@ public sealed class SidecarProtocolHostTests
         object command,
         SidecarProtocolHost? host = null)
     {
-        string input = JsonSerializer.Serialize(command, JsonOptions) + Environment.NewLine;
+        return await RunHostAsync([command], host);
+    }
+
+    private static async Task<IReadOnlyList<JsonElement>> RunHostAsync(
+        IReadOnlyList<object> commands,
+        SidecarProtocolHost? host = null)
+    {
+        string input = string.Join(
+                Environment.NewLine,
+                commands.Select(command => JsonSerializer.Serialize(command, JsonOptions)))
+            + Environment.NewLine;
 
         using StringReader reader = new(input);
         using StringWriter writer = new();
 
         await (host ?? CreateHostForTests()).RunAsync(reader, writer, CancellationToken.None);
         return ParseEvents(writer.ToString());
+    }
+
+    private static JsonElement AssertSingleEvent(
+        IEnumerable<JsonElement> events,
+        string eventType,
+        string requestId)
+    {
+        return Assert.Single(events.Where(evt =>
+            evt.GetProperty("type").GetString() == eventType
+            && evt.GetProperty("requestId").GetString() == requestId));
     }
 
     private static SidecarProtocolHost CreateHostForTests()
@@ -471,6 +562,41 @@ public sealed class SidecarProtocolHostTests
             Name = name,
             Model = model,
             Instructions = instructions,
+        };
+    }
+
+    private static RunTurnCommandDto CreateRunTurnCommand(
+        string requestId = "turn-1",
+        string sessionId = "session-1")
+    {
+        return new RunTurnCommandDto
+        {
+            Type = "run-turn",
+            RequestId = requestId,
+            SessionId = sessionId,
+            ProjectPath = "C:\\workspace\\project",
+            Pattern = new PatternDefinitionDto
+            {
+                Id = "pattern-1",
+                Name = "Single Agent",
+                Mode = "single",
+                Availability = "available",
+                Agents =
+                [
+                    CreateAgent(name: "Primary"),
+                ],
+            },
+            Messages =
+            [
+                new ChatMessageDto
+                {
+                    Id = "user-1",
+                    Role = "user",
+                    AuthorName = "You",
+                    Content = "Hello",
+                    CreatedAt = "2026-01-01T00:00:00.0000000Z",
+                },
+            ],
         };
     }
 

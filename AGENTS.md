@@ -156,7 +156,7 @@ Every interactive component must include basic accessibility:
 
 ## 8. Planning requirements
 
-- If a task spans both backend and frontend work, the implementation plan must be split into **Part 1 — Backend** and **Part 2 — Frontend**.
+- If a task spans both backend and frontend work, the implementation plan must be split into **Part 1 — Backend** and **Part 2 — Frontend**. The Frontend part will be launched manually by the user.
 - Backend work must be planned and executed first.
 - Before frontend work begins, backend work must produce a handover artifact in the session workspace `files\` directory. Do not put this handover document in the repository.
 - The frontend phase must consume that backend handover artifact and build on it rather than rediscovering backend contracts from scratch.

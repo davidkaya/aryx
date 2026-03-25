@@ -55,9 +55,9 @@ import {
 import type { SessionEventRecord } from '@shared/domain/event';
 import {
   applySessionApprovalSettings,
-  applyScratchpadSessionConfig,
+  applySessionModelConfig,
   resolveSessionToolingSelection,
-  createScratchpadSessionConfig,
+  createSessionModelConfig,
   resolveSessionTitle,
   type ChatMessageRecord,
   type SessionRecord,
@@ -494,8 +494,8 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
       updatedAt: nowIso(),
       status: 'idle',
       messages: [],
-      scratchpadConfig: isScratchpadProject(project)
-        ? createScratchpadSessionConfig(normalizedPattern)
+      sessionModelConfig: normalizedPattern.agents.length === 1
+        ? createSessionModelConfig(normalizedPattern)
         : undefined,
       tooling: createSessionToolingSelection(),
       runs: [],
@@ -553,7 +553,7 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
     }
     const project = this.requireProject(workspace, session.projectId);
     const pattern = this.requirePattern(workspace, session.patternId);
-    const effectivePattern = await this.buildEffectivePattern(project, pattern, session);
+    const effectivePattern = await this.buildEffectivePattern(pattern, session);
 
     const preparedContent = prepareChatMessageContent(content);
     if (!preparedContent) {
@@ -740,7 +740,7 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
     return result;
   }
 
-  async updateScratchpadSessionConfig(
+  async updateSessionModelConfig(
     sessionId: string,
     model: string,
     reasoningEffort?: ReasoningEffort,
@@ -749,13 +749,15 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
     const session = this.requireSession(workspace, sessionId);
     const project = this.requireProject(workspace, session.projectId);
     const modelCatalog = await this.loadAvailableModelCatalog();
+    const pattern = this.requirePattern(workspace, session.patternId);
+    const effectivePattern = normalizePatternModels(pattern, modelCatalog);
 
-    if (!isScratchpadProject(project)) {
-      throw new Error('Only scratchpad sessions can change model settings in chat.');
+    if (effectivePattern.agents.length !== 1) {
+      throw new Error('Model override is only supported for single-agent sessions.');
     }
 
     if (session.status === 'running') {
-      throw new Error('Wait for the current scratchpad response to finish before changing model settings.');
+      throw new Error('Wait for the current response to finish before changing model settings.');
     }
 
     const normalizedModel = model.trim();
@@ -767,7 +769,7 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
       throw new Error(`Reasoning effort "${reasoningEffort}" is not supported.`);
     }
 
-    session.scratchpadConfig = {
+    session.sessionModelConfig = {
       model: normalizedModel,
       reasoningEffort: resolveReasoningEffort(selectedModel, reasoningEffort),
     };
@@ -1326,12 +1328,11 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
   }
 
   private async buildEffectivePattern(
-    project: ProjectRecord,
     pattern: PatternDefinition,
     session: SessionRecord,
   ): Promise<PatternDefinition> {
-    const patternWithSessionConfig = isScratchpadProject(project)
-      ? applyScratchpadSessionConfig(pattern, session)
+    const patternWithSessionConfig = session.sessionModelConfig
+      ? applySessionModelConfig(pattern, session)
       : pattern;
     const patternWithApprovalSettings = applySessionApprovalSettings(patternWithSessionConfig, session);
 

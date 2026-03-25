@@ -19,7 +19,7 @@ import type {
   SetSessionPinnedInput,
   UpdateSessionApprovalSettingsInput,
   UpdateSessionToolingInput,
-  UpdateScratchpadSessionConfigInput,
+  UpdateSessionModelConfigInput,
 } from '@shared/contracts/ipc';
 import type { QuerySessionsInput } from '@shared/domain/sessionLibrary';
 import type { AppearanceTheme } from '@shared/domain/tooling';
@@ -108,9 +108,9 @@ export function registerIpcHandlers(window: BrowserWindow, service: EryxAppServi
     service.resolveSessionApproval(input.sessionId, input.approvalId, input.decision),
   );
   ipcMain.handle(
-    ipcChannels.updateScratchpadSessionConfig,
-    (_event, input: UpdateScratchpadSessionConfigInput) =>
-      service.updateScratchpadSessionConfig(input.sessionId, input.model, input.reasoningEffort),
+    ipcChannels.updateSessionModelConfig,
+    (_event, input: UpdateSessionModelConfigInput) =>
+      service.updateSessionModelConfig(input.sessionId, input.model, input.reasoningEffort),
   );
   ipcMain.handle(ipcChannels.querySessions, (_event, input: QuerySessionsInput) => service.querySessions(input));
   ipcMain.handle(ipcChannels.selectProject, (_event, projectId?: string) => service.selectProject(projectId));

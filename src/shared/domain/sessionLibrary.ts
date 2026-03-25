@@ -174,7 +174,7 @@ export function duplicateSessionRecord(
     isPinned: false,
     isArchived: false,
     lastError: undefined,
-    scratchpadConfig: session.scratchpadConfig ? { ...session.scratchpadConfig } : undefined,
+    sessionModelConfig: session.sessionModelConfig ? { ...session.sessionModelConfig } : undefined,
     tooling: session.tooling
       ? {
           enabledMcpServerIds: [...session.tooling.enabledMcpServerIds],

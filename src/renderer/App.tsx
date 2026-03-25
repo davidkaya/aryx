@@ -27,7 +27,7 @@ import { createDefaultToolApprovalPolicy } from '@shared/domain/approval';
 import { listPendingDiscoveredMcpServers } from '@shared/domain/discoveredTooling';
 import { syncPatternGraph, type PatternDefinition } from '@shared/domain/pattern';
 import { isScratchpadProject, SCRATCHPAD_PROJECT_ID } from '@shared/domain/project';
-import { applyScratchpadSessionConfig } from '@shared/domain/session';
+import { applySessionModelConfig } from '@shared/domain/session';
 import type { AppearanceTheme, LspProfileDefinition, McpServerDefinition } from '@shared/domain/tooling';
 import type { WorkspaceState } from '@shared/domain/workspace';
 import { createId, nowIso } from '@shared/utils/ids';
@@ -159,8 +159,8 @@ export default function App() {
     }
 
     const patternWithSessionConfig =
-      projectForSession && isScratchpadProject(projectForSession)
-        ? applyScratchpadSessionConfig(basePattern, selectedSession)
+      projectForSession && selectedSession.sessionModelConfig
+        ? applySessionModelConfig(basePattern, selectedSession)
         : basePattern;
 
     return normalizePatternModels(patternWithSessionConfig, availableModels);
@@ -250,8 +250,8 @@ export default function App() {
           onResolveApproval={(approvalId, decision) =>
             api.resolveSessionApproval({ sessionId: selectedSession.id, approvalId, decision })
           }
-          onUpdateScratchpadConfig={(config) =>
-            api.updateScratchpadSessionConfig({
+          onUpdateSessionModelConfig={(config) =>
+            api.updateSessionModelConfig({
               sessionId: selectedSession.id,
               model: config.model,
               reasoningEffort: config.reasoningEffort,

@@ -36,7 +36,7 @@ export interface ResolveSessionApprovalInput {
   decision: ApprovalDecision;
 }
 
-export interface UpdateScratchpadSessionConfigInput {
+export interface UpdateSessionModelConfigInput {
   sessionId: string;
   model: string;
   reasoningEffort?: ReasoningEffort;
@@ -126,7 +126,7 @@ export interface ElectronApi {
   sendSessionMessage(input: SendSessionMessageInput): Promise<void>;
   cancelSessionTurn(input: CancelSessionTurnInput): Promise<void>;
   resolveSessionApproval(input: ResolveSessionApprovalInput): Promise<WorkspaceState>;
-  updateScratchpadSessionConfig(input: UpdateScratchpadSessionConfigInput): Promise<WorkspaceState>;
+  updateSessionModelConfig(input: UpdateSessionModelConfigInput): Promise<WorkspaceState>;
   querySessions(input: QuerySessionsInput): Promise<SessionQueryResult[]>;
   selectProject(projectId?: string): Promise<WorkspaceState>;
   selectPattern(patternId?: string): Promise<WorkspaceState>;

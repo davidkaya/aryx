@@ -27,7 +27,7 @@ export const ipcChannels = {
   cancelSessionTurn: 'sessions:cancel-turn',
   resolveSessionApproval: 'sessions:resolve-approval',
   querySessions: 'sessions:query',
-  updateScratchpadSessionConfig: 'sessions:update-scratchpad-config',
+  updateSessionModelConfig: 'sessions:update-model-config',
   selectProject: 'selection:project',
   selectPattern: 'selection:pattern',
   selectSession: 'selection:session',

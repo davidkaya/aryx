@@ -3,12 +3,12 @@ import { describe, expect, test } from 'bun:test';
 import type { PatternDefinition } from '@shared/domain/pattern';
 import {
   applySessionApprovalSettings,
-  applyScratchpadSessionConfig,
-  createScratchpadSessionConfig,
+  applySessionModelConfig,
+  createSessionModelConfig,
   resolveSessionApprovalSettings,
   resolveSessionToolingSelection,
   resolveSessionTitle,
-  resolveScratchpadSessionConfig,
+  resolveSessionModelConfig,
   type SessionRecord,
 } from '@shared/domain/session';
 
@@ -58,18 +58,18 @@ function createSession(overrides?: Partial<SessionRecord>): SessionRecord {
   };
 }
 
-describe('scratchpad session config helpers', () => {
-  test('captures the initial scratchpad model settings from the primary agent', () => {
-    expect(createScratchpadSessionConfig(createPattern())).toEqual({
+describe('session model config helpers', () => {
+  test('captures the initial model settings from the primary agent', () => {
+    expect(createSessionModelConfig(createPattern())).toEqual({
       model: 'gpt-5.4',
       reasoningEffort: 'high',
     });
   });
 
-  test('resolves persisted scratchpad overrides over the pattern defaults', () => {
-    const config = resolveScratchpadSessionConfig(
+  test('resolves persisted session overrides over the pattern defaults', () => {
+    const config = resolveSessionModelConfig(
       createSession({
-        scratchpadConfig: {
+        sessionModelConfig: {
           model: 'claude-opus-4.5',
           reasoningEffort: 'medium',
         },
@@ -83,12 +83,12 @@ describe('scratchpad session config helpers', () => {
     });
   });
 
-  test('applies scratchpad settings only to the primary agent', () => {
+  test('applies session model settings only to the primary agent', () => {
     const pattern = createPattern();
-    const updated = applyScratchpadSessionConfig(
+    const updated = applySessionModelConfig(
       pattern,
       createSession({
-        scratchpadConfig: {
+        sessionModelConfig: {
           model: 'gpt-5.4-mini',
           reasoningEffort: 'low',
         },

@@ -36,7 +36,7 @@ interface ChatPaneProps {
   onSend: (content: string) => Promise<void>;
   onCancelTurn?: () => void;
   onResolveApproval?: (approvalId: string, decision: ApprovalDecision) => Promise<unknown>;
-  onUpdateScratchpadConfig?: (config: {
+  onUpdateSessionModelConfig?: (config: {
     model: string;
     reasoningEffort?: ReasoningEffort;
   }) => Promise<unknown>;
@@ -54,7 +54,7 @@ export function ChatPane({
   onSend,
   onCancelTurn,
   onResolveApproval,
-  onUpdateScratchpadConfig,
+  onUpdateSessionModelConfig,
   onUpdateSessionTooling,
   onUpdateSessionApprovalSettings,
 }: ChatPaneProps) {
@@ -62,7 +62,7 @@ export function ChatPane({
   const [configError, setConfigError] = useState<string>();
   const [approvalError, setApprovalError] = useState<string>();
   const [isResolvingApproval, setIsResolvingApproval] = useState(false);
-  const [isUpdatingScratchpadConfig, setIsUpdatingScratchpadConfig] = useState(false);
+  const [isUpdatingSessionModelConfig, setIsUpdatingSessionModelConfig] = useState(false);
   const transcriptRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<MarkdownComposerHandle>(null);
 
@@ -71,11 +71,12 @@ export function ChatPane({
   const queuedApprovals = (session.pendingApprovalQueue ?? []).filter((a) => a.status === 'pending');
   const totalPendingCount = (pendingApproval ? 1 : 0) + queuedApprovals.length;
   const isScratchpad = isScratchpadProject(project);
+  const isSingleAgent = pattern.agents.length === 1;
   const primaryAgent = pattern.agents[0];
   const selectedModel = primaryAgent ? findModel(primaryAgent.model, availableModels) : undefined;
   const supportedEfforts = getSupportedReasoningEfforts(selectedModel);
-  const scratchpadReasoningEffort = resolveReasoningEffort(selectedModel, primaryAgent?.reasoningEffort);
-  const isComposerDisabled = isSessionBusy || isUpdatingScratchpadConfig;
+  const sessionReasoningEffort = resolveReasoningEffort(selectedModel, primaryAgent?.reasoningEffort);
+  const isComposerDisabled = isSessionBusy || isUpdatingSessionModelConfig;
   const canSubmitInput = hasComposerContent && !isComposerDisabled;
 
   const toolSelection = useMemo(() => resolveSessionToolingSelection(session), [session]);
@@ -108,37 +109,37 @@ export function ChatPane({
     setConfigError(undefined);
     setApprovalError(undefined);
     setIsResolvingApproval(false);
-    setIsUpdatingScratchpadConfig(false);
+    setIsUpdatingSessionModelConfig(false);
   }, [session.id]);
 
   function handleComposerSubmit(content: string) {
     void onSend(content);
   }
 
-  async function handleScratchpadConfigChange(config: {
+  async function handleSessionModelConfigChange(config: {
     model: string;
     reasoningEffort?: ReasoningEffort;
   }) {
-    if (!isScratchpad || !primaryAgent || isComposerDisabled || !onUpdateScratchpadConfig) {
+    if (!isSingleAgent || !primaryAgent || isComposerDisabled || !onUpdateSessionModelConfig) {
       return;
     }
 
     if (
       config.model === primaryAgent.model &&
-      config.reasoningEffort === scratchpadReasoningEffort
+      config.reasoningEffort === sessionReasoningEffort
     ) {
       return;
     }
 
     setConfigError(undefined);
-    setIsUpdatingScratchpadConfig(true);
+    setIsUpdatingSessionModelConfig(true);
 
     try {
-      await onUpdateScratchpadConfig(config);
+      await onUpdateSessionModelConfig(config);
     } catch (error) {
       setConfigError(error instanceof Error ? error.message : String(error));
     } finally {
-      setIsUpdatingScratchpadConfig(false);
+      setIsUpdatingSessionModelConfig(false);
     }
   }
 
@@ -338,8 +339,8 @@ export function ChatPane({
             </div>
           )}
 
-          {/* Scratchpad pills — tools/approval left, model/reasoning right */}
-          {isScratchpad && (
+          {/* Session config pills — tools/approval left, model/reasoning right */}
+          {isSingleAgent && (
             <div className="mb-2 flex items-center gap-2">
               {hasConfigurableTools && onUpdateSessionTooling && (
                 <InlineToolsPill
@@ -366,9 +367,9 @@ export function ChatPane({
                     models={availableModels}
                     onChange={(modelId) => {
                       const nextModel = findModel(modelId, availableModels);
-                      void handleScratchpadConfigChange({
+                      void handleSessionModelConfigChange({
                         model: modelId,
-                        reasoningEffort: resolveReasoningEffort(nextModel, scratchpadReasoningEffort),
+                        reasoningEffort: resolveReasoningEffort(nextModel, sessionReasoningEffort),
                       });
                     }}
                     value={primaryAgent.model}
@@ -376,15 +377,15 @@ export function ChatPane({
                   <InlineThinkingPill
                     disabled={isComposerDisabled}
                     onChange={(reasoningEffort) =>
-                      void handleScratchpadConfigChange({
+                      void handleSessionModelConfigChange({
                         model: primaryAgent.model,
                         reasoningEffort,
                       })
                     }
                     supportedEfforts={supportedEfforts}
-                    value={scratchpadReasoningEffort}
+                    value={sessionReasoningEffort}
                   />
-                  {isUpdatingScratchpadConfig && (
+                  {isUpdatingSessionModelConfig && (
                     <Loader2 className="size-3 animate-spin text-zinc-500" />
                   )}
                 </div>
@@ -392,8 +393,8 @@ export function ChatPane({
             </div>
           )}
 
-          {/* Session config pills — tool & approval controls (non-scratchpad) */}
-          {!isScratchpad && (hasConfigurableTools || hasToolCallApproval) && (
+          {/* Session config pills — tool & approval controls (multi-agent) */}
+          {!isSingleAgent && (hasConfigurableTools || hasToolCallApproval) && (
             <div className="mb-2 flex items-center gap-2">
               {hasConfigurableTools && onUpdateSessionTooling && (
                 <InlineToolsPill
@@ -427,8 +428,8 @@ export function ChatPane({
                   ? 'Awaiting approval...'
                   : isSessionBusy
                     ? 'Waiting for response...'
-                    : isUpdatingScratchpadConfig
-                      ? 'Saving scratchpad settings...'
+                    : isUpdatingSessionModelConfig
+                      ? 'Saving model settings...'
                       : 'Message...'
               }
             >

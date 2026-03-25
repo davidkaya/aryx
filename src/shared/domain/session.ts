@@ -16,7 +16,7 @@ export type ChatRole = 'system' | 'user' | 'assistant';
 export type SessionStatus = 'idle' | 'running' | 'error';
 export type SessionTitleSource = 'auto' | 'manual';
 
-export interface ScratchpadSessionConfig {
+export interface SessionModelConfig {
   model: string;
   reasoningEffort?: ReasoningEffort;
 }
@@ -43,7 +43,7 @@ export interface SessionRecord {
   isArchived?: boolean;
   messages: ChatMessageRecord[];
   lastError?: string;
-  scratchpadConfig?: ScratchpadSessionConfig;
+  sessionModelConfig?: SessionModelConfig;
   tooling?: SessionToolingSelection;
   approvalSettings?: SessionApprovalSettings;
   pendingApproval?: PendingApprovalRecord;
@@ -63,9 +63,9 @@ export function resolveSessionTitle(
   return buildSessionTitle(pattern, messages);
 }
 
-export function createScratchpadSessionConfig(
+export function createSessionModelConfig(
   pattern: PatternDefinition,
-): ScratchpadSessionConfig | undefined {
+): SessionModelConfig | undefined {
   const primaryAgent = pattern.agents[0];
   if (!primaryAgent) {
     return undefined;
@@ -89,27 +89,27 @@ export function resolveSessionApprovalSettings(
   return normalizeSessionApprovalSettings(session.approvalSettings);
 }
 
-export function resolveScratchpadSessionConfig(
+export function resolveSessionModelConfig(
   session: SessionRecord,
   pattern: PatternDefinition,
-): ScratchpadSessionConfig | undefined {
-  const defaults = createScratchpadSessionConfig(pattern);
+): SessionModelConfig | undefined {
+  const defaults = createSessionModelConfig(pattern);
   if (!defaults) {
     return undefined;
   }
 
-  const overrideModel = session.scratchpadConfig?.model.trim();
+  const overrideModel = session.sessionModelConfig?.model.trim();
   return {
     model: overrideModel || defaults.model,
-    reasoningEffort: session.scratchpadConfig?.reasoningEffort ?? defaults.reasoningEffort,
+    reasoningEffort: session.sessionModelConfig?.reasoningEffort ?? defaults.reasoningEffort,
   };
 }
 
-export function applyScratchpadSessionConfig(
+export function applySessionModelConfig(
   pattern: PatternDefinition,
   session: SessionRecord,
 ): PatternDefinition {
-  const config = resolveScratchpadSessionConfig(session, pattern);
+  const config = resolveSessionModelConfig(session, pattern);
   const primaryAgent = pattern.agents[0];
   if (!config || !primaryAgent) {
     return pattern;

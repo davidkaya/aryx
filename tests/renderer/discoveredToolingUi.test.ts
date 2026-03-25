@@ -1,8 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 
+import { resolveChatToolingSettings } from '@renderer/lib/chatTooling';
 import type { DiscoveredLocalMcpServer } from '@shared/domain/discoveredTooling';
 import { listPendingDiscoveredMcpServers, normalizeDiscoveredToolingState, type DiscoveredToolingState } from '@shared/domain/discoveredTooling';
+import type { ProjectRecord } from '@shared/domain/project';
 import { resolveProjectToolingSettings, createWorkspaceSettings, type WorkspaceSettings } from '@shared/domain/tooling';
+import { createWorkspaceSeed } from '@shared/domain/workspace';
 
 function makeDiscoveredServer(
   overrides: Partial<DiscoveredLocalMcpServer> & { id: string; name: string },
@@ -116,5 +119,50 @@ describe('frontend discovered tooling integration', () => {
 
     expect(projectDiscovered).toHaveLength(1);
     expect(projectDiscovered[0].name).toBe('proj-srv');
+  });
+
+  test('chat tooling follows the session project instead of the separately selected project', () => {
+    const workspace = createWorkspaceSeed();
+    const sessionProject: ProjectRecord = {
+      id: 'project-session',
+      name: 'session-project',
+      path: 'C:\\workspace\\session-project',
+      addedAt: '2026-03-25T00:00:00.000Z',
+      discoveredTooling: normalizeDiscoveredToolingState({
+        mcpServers: [
+          makeDiscoveredServer({
+            id: 'discovered_project_project_session_vscode_mcp_session_srv',
+            name: 'session-srv',
+            status: 'accepted',
+            scope: 'project',
+          }),
+        ],
+      }),
+    };
+    const separatelySelectedProject: ProjectRecord = {
+      id: 'project-selected',
+      name: 'selected-project',
+      path: 'C:\\workspace\\selected-project',
+      addedAt: '2026-03-25T00:00:00.000Z',
+      discoveredTooling: normalizeDiscoveredToolingState({
+        mcpServers: [
+          makeDiscoveredServer({
+            id: 'discovered_project_project_selected_vscode_mcp_selected_srv',
+            name: 'selected-srv',
+            status: 'accepted',
+            scope: 'project',
+          }),
+        ],
+      }),
+    };
+
+    workspace.projects = [sessionProject, separatelySelectedProject];
+    workspace.selectedProjectId = separatelySelectedProject.id;
+
+    const tooling = resolveChatToolingSettings(workspace, sessionProject);
+    const serverIds = tooling?.mcpServers.map((server) => server.id) ?? [];
+
+    expect(serverIds).toContain('discovered_project_project_session_vscode_mcp_session_srv');
+    expect(serverIds).not.toContain('discovered_project_project_selected_vscode_mcp_selected_srv');
   });
 });

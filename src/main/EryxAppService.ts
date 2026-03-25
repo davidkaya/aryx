@@ -852,6 +852,18 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
 
   async selectSession(sessionId?: string): Promise<WorkspaceState> {
     const workspace = await this.loadWorkspace();
+    if (sessionId) {
+      const session = this.requireSession(workspace, sessionId);
+      const project = this.requireProject(workspace, session.projectId);
+      const didSyncProjectTooling = await this.syncProjectDiscoveredTooling(workspace, project);
+      if (didSyncProjectTooling) {
+        this.pruneUnavailableSessionToolingSelections(workspace);
+        await this.pruneUnavailableApprovalTools(workspace);
+      }
+
+      workspace.selectedProjectId = session.projectId;
+    }
+
     workspace.selectedSessionId = sessionId;
     return this.persistAndBroadcast(workspace);
   }

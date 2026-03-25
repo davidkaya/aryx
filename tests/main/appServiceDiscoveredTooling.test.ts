@@ -224,4 +224,37 @@ describe('EryxAppService discovered tooling', () => {
       },
     ]);
   });
+
+  test('selecting a session also selects that session project', async () => {
+    const workspace = createWorkspaceSeed();
+    const pattern = workspace.patterns.find((candidate) => candidate.mode === 'single');
+    if (!pattern) {
+      throw new Error('Expected a single-agent pattern in the workspace seed.');
+    }
+
+    const projectAlpha = createProject({
+      id: 'project-alpha',
+      name: 'alpha',
+      path: 'C:\\workspace\\alpha',
+    });
+    const projectBeta = createProject({
+      id: 'project-beta',
+      name: 'beta',
+      path: 'C:\\workspace\\beta',
+    });
+    const session = createSession(projectBeta.id, pattern.id, {
+      id: 'session-beta',
+    });
+
+    workspace.projects = [projectAlpha, projectBeta];
+    workspace.sessions = [session];
+    workspace.selectedProjectId = projectAlpha.id;
+
+    const service = createService(workspace, pattern);
+
+    const updatedWorkspace = await service.selectSession(session.id);
+
+    expect(updatedWorkspace.selectedSessionId).toBe(session.id);
+    expect(updatedWorkspace.selectedProjectId).toBe(projectBeta.id);
+  });
 });

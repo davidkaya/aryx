@@ -7,6 +7,7 @@ import { DiscoveredToolingModal } from '@renderer/components/DiscoveredToolingMo
 import { NewSessionModal } from '@renderer/components/NewSessionModal';
 import { SettingsPanel } from '@renderer/components/SettingsPanel';
 import { Sidebar } from '@renderer/components/Sidebar';
+import { resolveChatToolingSettings } from '@renderer/lib/chatTooling';
 import {
   applySessionEventActivity,
   pruneSessionActivities,
@@ -28,7 +29,6 @@ import { syncPatternGraph, type PatternDefinition } from '@shared/domain/pattern
 import { isScratchpadProject, SCRATCHPAD_PROJECT_ID } from '@shared/domain/project';
 import { applyScratchpadSessionConfig } from '@shared/domain/session';
 import type { AppearanceTheme, LspProfileDefinition, McpServerDefinition } from '@shared/domain/tooling';
-import { resolveProjectToolingSettings } from '@shared/domain/tooling';
 import type { WorkspaceState } from '@shared/domain/workspace';
 import { createId, nowIso } from '@shared/utils/ids';
 
@@ -180,9 +180,9 @@ export default function App() {
     [workspace?.projects, workspace?.selectedProjectId],
   );
 
-  const effectiveTooling = useMemo(
-    () => workspace ? resolveProjectToolingSettings(workspace.settings, selectedProject?.discoveredTooling) : undefined,
-    [workspace?.settings, selectedProject?.discoveredTooling],
+  const chatToolingSettings = useMemo(
+    () => resolveChatToolingSettings(workspace, projectForSession),
+    [projectForSession, workspace],
   );
 
   const hasPendingDiscoveries = useMemo(() => {
@@ -274,7 +274,7 @@ export default function App() {
           project={projectForSession}
           runtimeTools={sidecarCapabilities?.runtimeTools}
           session={selectedSession}
-          toolingSettings={effectiveTooling ?? workspace.settings.tooling}
+          toolingSettings={chatToolingSettings ?? workspace.settings.tooling}
         />
     );
     detailPanel = (

@@ -43,14 +43,14 @@ describe('resolveSidecarProcess', () => {
     expect(
       resolveSidecarProcess({
         isPackaged: true,
-        appPath: '/Applications/Eryx.app/Contents/Resources/app',
-        resourcesPath: '/Applications/Eryx.app/Contents/Resources',
+        appPath: '/Applications/Aryx.app/Contents/Resources/app',
+        resourcesPath: '/Applications/Aryx.app/Contents/Resources',
         platform: 'darwin',
       }),
     ).toEqual({
-      command: '/Applications/Eryx.app/Contents/Resources/sidecar/Eryx.AgentHost',
+      command: '/Applications/Aryx.app/Contents/Resources/sidecar/Eryx.AgentHost',
       args: ['--stdio'],
-      cwd: '/Applications/Eryx.app/Contents/Resources/sidecar',
+      cwd: '/Applications/Aryx.app/Contents/Resources/sidecar',
     });
   });
 });

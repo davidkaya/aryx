@@ -27,7 +27,7 @@ internal static class CopilotCliPathResolver
         if (string.IsNullOrWhiteSpace(cliPath))
         {
             throw new InvalidOperationException(
-                "Eryx requires the system-installed 'copilot' command on PATH. Install the GitHub Copilot CLI and ensure it is available in the current environment.");
+                "Aryx requires the system-installed 'copilot' command on PATH. Install the GitHub Copilot CLI and ensure it is available in the current environment.");
         }
 
         CopilotCliLaunch launch = ResolveCliLaunch(

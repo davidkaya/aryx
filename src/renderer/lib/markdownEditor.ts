@@ -28,7 +28,7 @@ export interface MarkdownPasteInspection {
   reason: MarkdownPasteReason;
 }
 
-export const markdownEditorNamespace = 'eryx-markdown-composer';
+export const markdownEditorNamespace = 'aryx-markdown-composer';
 
 export const markdownEditorNodes: ReadonlyArray<Klass<LexicalNode>> = [
   HeadingNode,

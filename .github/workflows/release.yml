@@ -94,13 +94,13 @@ jobs:
         include:
           - os: windows-latest
             label: Windows
-            asset_path: release/Eryx-windows-x64.zip
+            asset_path: release/Aryx-windows-x64.zip
           - os: macos-13
             label: macOS
-            asset_path: release/Eryx-macos-x64.zip
+            asset_path: release/Aryx-macos-x64.zip
           - os: ubuntu-latest
             label: Linux
-            asset_path: release/Eryx-linux-x64.tar.gz
+            asset_path: release/Aryx-linux-x64.tar.gz
 
     steps:
       - name: Check out repository
@@ -130,20 +130,20 @@ jobs:
 
       - name: Ad-hoc sign macOS app bundle
         if: runner.os == 'macOS'
-        run: codesign --force --deep --sign - release/Eryx-macos-x64/Eryx.app
+        run: codesign --force --deep --sign - release/Aryx-macos-x64/Aryx.app
 
       - name: Create Windows release archive
         if: runner.os == 'Windows'
         shell: pwsh
-        run: Compress-Archive -Path 'release\Eryx-windows-x64\*' -DestinationPath 'release\Eryx-windows-x64.zip' -Force
+        run: Compress-Archive -Path 'release\Aryx-windows-x64\*' -DestinationPath 'release\Aryx-windows-x64.zip' -Force
 
       - name: Create macOS release archive
         if: runner.os == 'macOS'
-        run: ditto -c -k --sequesterRsrc --keepParent release/Eryx-macos-x64/Eryx.app release/Eryx-macos-x64.zip
+        run: ditto -c -k --sequesterRsrc --keepParent release/Aryx-macos-x64/Aryx.app release/Aryx-macos-x64.zip
 
       - name: Create Linux release archive
         if: runner.os == 'Linux'
-        run: tar -czf release/Eryx-linux-x64.tar.gz -C release Eryx-linux-x64
+        run: tar -czf release/Aryx-linux-x64.tar.gz -C release Aryx-linux-x64
 
       - name: Upload asset to GitHub release
         shell: bash

@@ -524,9 +524,9 @@ export function Sidebar({
       {/* Header — extra top padding clears the title bar overlay zone */}
       <div className="drag-region flex items-center justify-between border-b border-[var(--color-border)] px-4 pb-3 pt-3">
         <div className="flex items-center gap-2.5">
-          <img alt="eryx" className="size-8 rounded-xl" src={appIconUrl} />
+          <img alt="aryx" className="size-8 rounded-xl" src={appIconUrl} />
           <div>
-            <span className="text-sm font-semibold text-zinc-100">eryx</span>
+            <span className="text-sm font-semibold text-zinc-100">aryx</span>
             <span className="ml-1.5 rounded bg-zinc-800 px-1 py-0.5 text-[9px] font-medium text-zinc-500">
               ALPHA
             </span>

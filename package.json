@@ -1,5 +1,5 @@
 {
-  "name": "eryx",
+  "name": "aryx",
   "version": "1.0.0",
   "description": "Electron orchestrator for Copilot-powered agent workflows across multiple projects.",
   "private": true,

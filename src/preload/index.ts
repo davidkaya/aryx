@@ -50,4 +50,4 @@ const api: ElectronApi = {
   },
 };
 
-contextBridge.exposeInMainWorld('eryxApi', api);
+contextBridge.exposeInMainWorld('aryxApi', api);

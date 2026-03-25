@@ -145,7 +145,7 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
     if (!this.didScheduleInitialProjectGitRefresh) {
       this.didScheduleInitialProjectGitRefresh = true;
       void this.refreshProjectGitContext().catch((error) => {
-        console.error('[eryx git]', error);
+        console.error('[aryx git]', error);
       });
     }
 
@@ -1348,7 +1348,7 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
 
       changed = true;
       const failedAt = nowIso();
-      const error = 'Pending approval was interrupted because Eryx restarted before a decision was recorded.';
+      const error = 'Pending approval was interrupted because Aryx restarted before a decision was recorded.';
       const requestIds = this.rejectPendingApprovals(session, failedAt, error);
       session.status = 'error';
       session.lastError = error;

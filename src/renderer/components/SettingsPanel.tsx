@@ -293,7 +293,7 @@ function AppearanceSection({
       <div className="mb-1">
         <h3 className="text-[13px] font-semibold text-zinc-200">Appearance</h3>
         <p className="mt-0.5 text-[12px] text-zinc-500">
-          Choose how Eryx looks on your device
+          Choose how Aryx looks on your device
         </p>
       </div>
 
@@ -348,7 +348,7 @@ function ConnectionSection({
       <div className="mb-1">
         <h3 className="text-[13px] font-semibold text-zinc-200">GitHub Copilot</h3>
         <p className="mt-0.5 text-[12px] text-zinc-500">
-          Eryx uses your installed GitHub Copilot CLI for AI capabilities
+          Aryx uses your installed GitHub Copilot CLI for AI capabilities
         </p>
       </div>
       <div className="mt-4 rounded-xl border border-[var(--color-border)] bg-zinc-900/30 p-4">

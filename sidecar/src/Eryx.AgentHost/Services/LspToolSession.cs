@@ -198,7 +198,7 @@ internal sealed class LspToolSession : IAsyncDisposable
                 },
                 clientInfo = new
                 {
-                    name = "Eryx",
+                    name = "Aryx",
                     version = "1.0.0",
                 },
             },
@@ -516,7 +516,7 @@ internal sealed class LspToolSession : IAsyncDisposable
                 if (!string.IsNullOrWhiteSpace(line))
                 {
                     RecordStderrLine(line);
-                    Console.Error.WriteLine($"[eryx lsp:{_profile.Id}] {line}");
+                    Console.Error.WriteLine($"[aryx lsp:{_profile.Id}] {line}");
                 }
             }
         }

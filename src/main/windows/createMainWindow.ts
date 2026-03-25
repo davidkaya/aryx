@@ -11,7 +11,7 @@ export function createMainWindow(): BrowserWindow {
     height: 960,
     minWidth: 1120,
     minHeight: 720,
-    title: 'eryx',
+    title: 'aryx',
     icon: resolveWindowIconPath({
       appPath: app.getAppPath(),
       platform: process.platform,

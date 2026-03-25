@@ -1,21 +1,21 @@
 <p align="center">
-  <img src="assets/icons/icon.png" alt="Eryx logo" width="180" />
+  <img src="assets/icons/icon.png" alt="Aryx logo" width="180" />
 </p>
 
-<h1 align="center">Eryx</h1>
+<h1 align="center">Aryx</h1>
 
 <p align="center">
   A desktop workspace for Copilot-powered work across real projects.
 </p>
 
-Eryx is built for people who want more than a generic AI chat window. It gives you a place to ask quick questions, connect real projects, run reusable agent patterns, and keep ongoing work organized in one app.
+Aryx is built for people who want more than a generic AI chat window. It gives you a place to ask quick questions, connect real projects, run reusable agent patterns, and keep ongoing work organized in one app.
 
 It works especially well when you want AI help that stays grounded in an actual codebase: your folders, your repository state, your current branch, and your active work.
 
-## Why use Eryx?
+## Why use Aryx?
 
 - **Start fast** with a scratchpad conversation for quick questions and ad-hoc work.
-- **Work against real projects** by attaching local folders and letting Eryx stay aware of repository context.
+- **Work against real projects** by attaching local folders and letting Aryx stay aware of repository context.
 - **Go beyond one assistant** with orchestration patterns such as single-agent, sequential, concurrent, handoff, and group-chat flows.
 - **See what is happening** with live activity for each agent while a run is in progress.
 - **Stay organized** with persistent sessions you can rename, pin, archive, and return to later.
@@ -29,11 +29,11 @@ If you just want to think through an idea, draft something, or ask for help with
 
 ### Connect a real project
 
-Add a local folder when you want help that is grounded in your work. Eryx is designed to feel strongest when it is attached to a real project instead of acting like a general-purpose chatbot.
+Add a local folder when you want help that is grounded in your work. Aryx is designed to feel strongest when it is attached to a real project instead of acting like a general-purpose chatbot.
 
 ### Choose how agents collaborate
 
-Eryx supports several ways of working:
+Aryx supports several ways of working:
 
 - **Single** for direct one-agent help
 - **Sequential** for pipeline-style work where each agent sees the full conversation and appends its contribution
@@ -59,7 +59,7 @@ Sessions are persistent, so you can return to ongoing work instead of starting f
 
 ## Before you start
 
-To use Eryx comfortably, make sure you have:
+To use Aryx comfortably, make sure you have:
 
 - a **Windows machine**
 - **GitHub Copilot CLI** installed and available as `copilot`
@@ -67,11 +67,11 @@ To use Eryx comfortably, make sure you have:
 - a local folder or git repository ready to connect if you want project-aware help
 - any MCP servers or language servers you want to use installed and reachable from your machine
 
-Eryx includes connection status in the app so you can quickly tell whether Copilot is ready before you start a session.
+Aryx includes connection status in the app so you can quickly tell whether Copilot is ready before you start a session.
 
 ## Getting started
 
-1. **Open Eryx**
+1. **Open Aryx**
    Launch the app and head to settings if you want to confirm your Copilot connection first.
 
 2. **Check that Copilot is ready**
@@ -84,14 +84,14 @@ Eryx includes connection status in the app so you can quickly tell whether Copil
    Use a simple single-agent setup to begin, or choose a saved multi-agent pattern when you want a more structured workflow.
 
 5. **Configure optional tooling**
-   If you want MCP or LSP support, add the global definitions in settings and then enable the ones you want for the current session from the Activity panel. Eryx also surfaces Copilot CLI runtime tools for tool auto-approval, and you can set pattern-level defaults and override them per session.
+   If you want MCP or LSP support, add the global definitions in settings and then enable the ones you want for the current session from the Activity panel. Aryx also surfaces Copilot CLI runtime tools for tool auto-approval, and you can set pattern-level defaults and override them per session.
 
 6. **Start working**
    Ask a question, describe a task, or explore a project. As the run progresses, you can watch the participating agents and keep the session for later.
 
-## When Eryx feels most useful
+## When Aryx feels most useful
 
-Eryx shines when you want to:
+Aryx shines when you want to:
 
 - move from quick chat to deeper multi-step work without leaving the app
 - keep AI conversations tied to actual projects instead of isolated prompts
@@ -115,6 +115,6 @@ GitHub Actions now runs validation on pushes and pull requests, and pushing a gi
 
 ## Current focus
 
-Eryx is focused on local, project-based work with your GitHub Copilot account. It already covers the essentials for working with projects, sessions, and reusable orchestration patterns, and it is growing toward a fuller AI workstation experience over time.
+Aryx is focused on local, project-based work with your GitHub Copilot account. It already covers the essentials for working with projects, sessions, and reusable orchestration patterns, and it is growing toward a fuller AI workstation experience over time.
 
-If you want an AI app that feels closer to a control room for real work than a blank chat box, Eryx is built for that.
+If you want an AI app that feels closer to a control room for real work than a blank chat box, Aryx is built for that.

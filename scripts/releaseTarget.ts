@@ -1,5 +1,5 @@
-export const productName = 'Eryx';
-export const macBundleIdentifier = 'com.davidkaya.eryx';
+export const productName = 'Aryx';
+export const macBundleIdentifier = 'com.davidkaya.aryx';
 
 type SupportedPlatform = 'win32' | 'darwin' | 'linux';
 type SupportedArch = 'x64' | 'arm64';

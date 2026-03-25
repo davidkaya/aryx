@@ -156,7 +156,7 @@ internal static partial class CopilotConnectionMetadataResolver
         }
         catch (Exception exception)
         {
-            Console.Error.WriteLine($"[eryx sidecar] Failed to inspect Copilot auth status: {exception.Message}");
+            Console.Error.WriteLine($"[aryx sidecar] Failed to inspect Copilot auth status: {exception.Message}");
             return null;
         }
     }

@@ -236,7 +236,7 @@ public sealed class SidecarProtocolHost
         catch (Exception exception)
         {
             SidecarConnectionDiagnosticsDto connection = CreateMissingCliDiagnostics(exception);
-            Console.Error.WriteLine($"[eryx sidecar] {connection.Summary} {exception.Message}");
+            Console.Error.WriteLine($"[aryx sidecar] {connection.Summary} {exception.Message}");
             return CreateCapabilities([], [], connection);
         }
     }
@@ -279,7 +279,7 @@ public sealed class SidecarProtocolHost
         catch (Exception exception)
         {
             cliVersion = await cliVersionTask.ConfigureAwait(false);
-            Console.Error.WriteLine($"[eryx sidecar] Failed to list available Copilot models: {exception.Message}");
+            Console.Error.WriteLine($"[aryx sidecar] Failed to list available Copilot models: {exception.Message}");
 
             return new CapabilityProbeResult(
                 models,
@@ -351,7 +351,7 @@ public sealed class SidecarProtocolHost
         }
         catch (Exception exception)
         {
-            Console.Error.WriteLine($"[eryx sidecar] Failed to list available Copilot runtime tools: {exception.Message}");
+            Console.Error.WriteLine($"[aryx sidecar] Failed to list available Copilot runtime tools: {exception.Message}");
             return [];
         }
     }
@@ -423,8 +423,8 @@ public sealed class SidecarProtocolHost
     {
         string status = ClassifyConnectionStatus(exception);
         string summary = status == "copilot-auth-required"
-            ? "GitHub Copilot requires authentication before Eryx can load models."
-            : "GitHub Copilot was found, but Eryx could not load its model list.";
+            ? "GitHub Copilot requires authentication before Aryx can load models."
+            : "GitHub Copilot was found, but Aryx could not load its model list.";
 
         return new SidecarConnectionDiagnosticsDto
         {

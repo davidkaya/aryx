@@ -2,7 +2,7 @@
 
 ## What this system is
 
-Eryx is a desktop workspace for Copilot-powered development work. It combines a persistent session model, project-aware context, reusable multi-agent orchestration patterns, optional external tooling, and live run visibility inside a single Electron application.
+Aryx is a desktop workspace for Copilot-powered development work. It combines a persistent session model, project-aware context, reusable multi-agent orchestration patterns, optional external tooling, and live run visibility inside a single Electron application.
 
 At a high level, the architecture is built around one core idea:
 
@@ -63,7 +63,7 @@ This split is the most important architectural feature in the app. It is what ke
 
 ## High-level runtime model
 
-Eryx runs as a multi-process desktop application:
+Aryx runs as a multi-process desktop application:
 
 1. The **renderer** displays the workspace and captures user intent.
 2. The **preload bridge** exposes a small, typed API into the browser context.
@@ -101,7 +101,7 @@ sequenceDiagram
     M-->>R: Final workspace snapshot
 ```
 
-This flow is important because it shows that Eryx is not architected as a simple "send prompt, get string" application. It treats execution as a structured, observable process.
+This flow is important because it shows that Aryx is not architected as a simple "send prompt, get string" application. It treats execution as a structured, observable process.
 
 ## Application state model
 
@@ -113,7 +113,7 @@ The durable state of the app is a **workspace**. The workspace contains:
 - settings
 - run history
 
-This gives Eryx a persistent operating model rather than a transient chat model.
+This gives Aryx a persistent operating model rather than a transient chat model.
 
 ### Projects
 
@@ -155,7 +155,7 @@ A session is the working unit of the product. It binds together:
 - optional per-session tool selection
 - persisted run history
 
-This is how Eryx keeps "ongoing work" first class. Sessions can survive restarts, can be organized, and can accumulate operational history over time.
+This is how Aryx keeps "ongoing work" first class. Sessions can survive restarts, can be organized, and can accumulate operational history over time.
 
 ### Runs
 
@@ -171,7 +171,7 @@ That run model is what enables the activity panel and historical timeline instea
 
 ## Communication model
 
-Eryx uses two main communication links:
+Aryx uses two main communication links:
 
 ### 1. Renderer <-> main process
 
@@ -301,7 +301,7 @@ This keeps those concerns out of the renderer while still letting the UI feel na
 
 ## Build and release architecture
 
-Eryx ships as an Electron application bundled together with a self-contained .NET sidecar.
+Aryx ships as an Electron application bundled together with a self-contained .NET sidecar.
 
 The build pipeline is organized around three layers:
 
@@ -315,7 +315,7 @@ This packaging model matches the runtime architecture: one desktop shell plus on
 
 ## Why this architecture works well
 
-This architecture fits the product because it gives Eryx:
+This architecture fits the product because it gives Aryx:
 
 - a clear privilege split between UI and native capabilities
 - a stable, persistent workspace model

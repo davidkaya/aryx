@@ -10,7 +10,7 @@ import {
 
 describe('scratchpad project helpers', () => {
   test('creates a stable built-in scratchpad project', () => {
-    const project = createScratchpadProject('C:\\Users\\me\\AppData\\Roaming\\eryx\\scratchpad');
+    const project = createScratchpadProject('C:\\Users\\me\\AppData\\Roaming\\aryx\\scratchpad');
 
     expect(project.id).toBe(SCRATCHPAD_PROJECT_ID);
     expect(project.name).toBe(SCRATCHPAD_PROJECT_NAME);
@@ -38,7 +38,7 @@ describe('scratchpad project helpers', () => {
           addedAt: '2026-03-23T00:00:00.000Z',
         },
       ],
-      'C:\\Users\\me\\AppData\\Roaming\\eryx\\scratchpad',
+      'C:\\Users\\me\\AppData\\Roaming\\aryx\\scratchpad',
     );
 
     expect(merged[0].id).toBe(SCRATCHPAD_PROJECT_ID);
@@ -69,7 +69,7 @@ describe('scratchpad project helpers', () => {
           },
         },
       ],
-      'C:\\Users\\me\\AppData\\Roaming\\eryx\\scratchpad',
+      'C:\\Users\\me\\AppData\\Roaming\\aryx\\scratchpad',
     );
 
     expect(merged[0].git).toBeUndefined();

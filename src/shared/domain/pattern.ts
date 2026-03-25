@@ -4,6 +4,7 @@ import {
   type ApprovalPolicy,
   validateApprovalPolicy,
 } from '@shared/domain/approval';
+import { buildMarkdownExcerpt } from '@shared/utils/markdownText';
 
 export type OrchestrationMode =
   | 'single'
@@ -1009,5 +1010,5 @@ export function buildSessionTitle(pattern: PatternDefinition, messages: ChatMess
     return pattern.name;
   }
 
-  return firstUserMessage.content.slice(0, 48).trim() || pattern.name;
+  return buildMarkdownExcerpt(firstUserMessage.content, 48) ?? pattern.name;
 }

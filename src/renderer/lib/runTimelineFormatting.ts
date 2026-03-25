@@ -4,6 +4,7 @@ import type {
   SessionRunRecord,
   SessionRunStatus,
 } from '@shared/domain/runTimeline';
+import { buildMarkdownExcerpt } from '@shared/utils/markdownText';
 
 export function formatRunTimestamp(isoDate: string): string {
   try {
@@ -156,9 +157,7 @@ export function eventSortKey(event: RunTimelineEventRecord): number {
 
 export function truncateContent(content: string | undefined, maxLength = 80): string | undefined {
   if (!content) return undefined;
-  const singleLine = content.replace(/\n/g, ' ').trim();
-  if (singleLine.length <= maxLength) return singleLine;
-  return `${singleLine.slice(0, maxLength)}…`;
+  return buildMarkdownExcerpt(content, maxLength);
 }
 
 export function findLatestRun(runs: readonly SessionRunRecord[]): SessionRunRecord | undefined {

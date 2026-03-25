@@ -121,6 +121,23 @@ describe('session title helpers', () => {
       ]),
     ).toBe('Release readiness review');
   });
+
+  test('builds auto titles from markdown-heavy first messages', () => {
+    const pattern = createPattern();
+    const session = createSession();
+
+    expect(
+      resolveSessionTitle(session, pattern, [
+        {
+          id: 'msg-1',
+          role: 'user',
+          authorName: 'You',
+          content: '```ts\nconst answer = 42;\n```',
+          createdAt: '2026-03-23T00:00:00.000Z',
+        },
+      ]),
+    ).toBe('const answer = 42;');
+  });
 });
 
 describe('session tooling helpers', () => {

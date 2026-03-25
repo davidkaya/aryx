@@ -86,6 +86,7 @@ describe('run timeline formatting', () => {
     expect(truncateContent('Short content')).toBe('Short content');
     expect(truncateContent('A'.repeat(100), 80)).toBe('A'.repeat(80) + '…');
     expect(truncateContent('Line 1\nLine 2')).toBe('Line 1 Line 2');
+    expect(truncateContent('**Bold** [Docs](https://example.com)')).toBe('Bold Docs');
   });
 
   test('collapses consecutive thinking events from the same agent', () => {

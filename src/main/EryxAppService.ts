@@ -57,6 +57,7 @@ import {
   type ChatMessageRecord,
   type SessionRecord,
 } from '@shared/domain/session';
+import { prepareChatMessageContent } from '@shared/utils/chatMessage';
 import {
   appendRunActivityEvent,
   completeSessionRunRecord,
@@ -442,8 +443,8 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
     const pattern = this.requirePattern(workspace, session.patternId);
     const effectivePattern = await this.buildEffectivePattern(project, pattern, session);
 
-    const trimmed = content.trim();
-    if (!trimmed) {
+    const preparedContent = prepareChatMessageContent(content);
+    if (!preparedContent) {
       return;
     }
 
@@ -455,7 +456,7 @@ export class EryxAppService extends EventEmitter<AppServiceEvents> {
       id: userMessageId,
       role: 'user',
       authorName: 'You',
-      content: trimmed,
+      content: preparedContent,
       createdAt: occurredAt,
     });
     session.title = resolveSessionTitle(session, effectivePattern, session.messages);

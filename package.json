@@ -31,6 +31,7 @@
   "homepage": "https://github.com/davidkaya/eryx#readme",
   "packageManager": "bun@1.3.6",
   "devDependencies": {
+    "@lexical/headless": "0.42.0",
     "@tailwindcss/vite": "^4.2.2",
     "@types/node": "^25.5.0",
     "@types/react": "^19.2.14",
@@ -47,8 +48,15 @@
   },
   "dependencies": {
     "@dagrejs/dagre": "^3.0.0",
+    "@lexical/code": "0.42.0",
+    "@lexical/link": "0.42.0",
+    "@lexical/list": "0.42.0",
+    "@lexical/markdown": "0.42.0",
+    "@lexical/react": "0.42.0",
+    "@lexical/rich-text": "0.42.0",
     "@xyflow/react": "^12.10.1",
     "keytar": "^7.9.0",
+    "lexical": "0.42.0",
     "lucide-react": "^0.577.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",

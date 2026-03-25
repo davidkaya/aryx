@@ -16,6 +16,7 @@ import {
 import { reasoningEffortOptions, type PatternDefinition, type ReasoningEffort } from '@shared/domain/pattern';
 import { isScratchpadProject, type ProjectRecord } from '@shared/domain/project';
 import { resolveSessionToolingSelection, type SessionRecord } from '@shared/domain/session';
+import { hasMeaningfulChatMessageContent, prepareChatMessageContent } from '@shared/utils/chatMessage';
 import {
   listApprovalToolDefinitions,
   type ApprovalToolDefinition,
@@ -694,6 +695,7 @@ export function ChatPane({
   const supportedEfforts = getSupportedReasoningEfforts(selectedModel);
   const scratchpadReasoningEffort = resolveReasoningEffort(selectedModel, primaryAgent?.reasoningEffort);
   const isComposerDisabled = isSessionBusy || isUpdatingScratchpadConfig;
+  const canSubmitInput = hasMeaningfulChatMessageContent(input) && !isComposerDisabled;
 
   const toolSelection = useMemo(() => resolveSessionToolingSelection(session), [session]);
   const mcpServers = toolingSettings.mcpServers;
@@ -729,7 +731,7 @@ export function ChatPane({
   }, [session.id]);
 
   async function handleSubmit() {
-    const text = input.trim();
+    const text = prepareChatMessageContent(input);
     if (!text || isComposerDisabled) return;
     setInput('');
     await onSend(text);
@@ -1042,11 +1044,11 @@ export function ChatPane({
             />
             <button
               className={`absolute bottom-2 right-2 flex size-8 items-center justify-center rounded-lg transition ${
-                input.trim() && !isComposerDisabled
+                canSubmitInput
                   ? 'bg-indigo-600 text-white hover:bg-indigo-500'
                   : 'bg-zinc-800 text-zinc-600'
               }`}
-              disabled={isComposerDisabled || !input.trim()}
+              disabled={!canSubmitInput}
               onClick={() => void handleSubmit()}
               type="button"
             >

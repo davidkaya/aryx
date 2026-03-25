@@ -177,16 +177,8 @@ export default function App() {
     }
   }, []);
 
-  // Loading state
-  if (!workspace) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-[var(--color-surface-0)]">
-        <div className="text-sm text-zinc-500">Loading workspace…</div>
-      </div>
-    );
-  }
-
   const handleCreateScratchpad = useCallback(() => {
+    if (!workspace) return;
     const singlePatterns = workspace.patterns
       .filter((p) => p.mode === 'single' && p.availability !== 'unavailable')
       .sort((a, b) => {
@@ -199,7 +191,16 @@ export default function App() {
     if (defaultPattern) {
       void api.createSession({ projectId: SCRATCHPAD_PROJECT_ID, patternId: defaultPattern.id });
     }
-  }, [api, workspace?.patterns]);
+  }, [api, workspace]);
+
+  // Loading state
+  if (!workspace) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-[var(--color-surface-0)]">
+        <div className="text-sm text-zinc-500">Loading workspace…</div>
+      </div>
+    );
+  }
 
   // Determine main content
   let content: React.ReactNode;

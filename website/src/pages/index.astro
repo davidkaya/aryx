@@ -1,0 +1,375 @@
+---
+import Base from '../layouts/Base.astro';
+---
+
+<Base>
+  <!-- Hero -->
+  <section class="relative overflow-hidden">
+    <!-- Background gradient -->
+    <div class="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-900/20 via-zinc-950 to-zinc-950"></div>
+
+    <div class="relative mx-auto max-w-6xl px-6 pb-20 pt-24 md:pb-32 md:pt-36">
+      <div class="mx-auto max-w-3xl text-center">
+        <div class="mb-6 inline-flex items-center gap-2 rounded-full border border-indigo-500/20 bg-indigo-500/10 px-4 py-1.5 text-sm text-indigo-300">
+          <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+          Desktop AI Workspace
+        </div>
+
+        <h1 class="text-4xl font-bold leading-tight tracking-tight md:text-6xl">
+          Your control room for
+          <span class="bg-gradient-to-r from-indigo-400 to-violet-400 bg-clip-text text-transparent">
+            Copilot-powered
+          </span>
+          work
+        </h1>
+
+        <p class="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-zinc-400 md:text-xl">
+          Aryx gives you a persistent workspace to ask questions, connect real projects,
+          orchestrate multi-agent patterns, and keep ongoing AI work organized in one app.
+        </p>
+
+        <div class="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
+          <a
+            href="https://github.com/davidkaya/eryx/releases"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-500/20 transition hover:bg-indigo-500 hover:shadow-indigo-500/30"
+          >
+            <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            Download Latest Release
+          </a>
+          <a
+            href="https://github.com/davidkaya/eryx"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="inline-flex items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 px-6 py-3 text-sm font-semibold text-zinc-300 transition hover:border-zinc-600 hover:bg-zinc-800"
+          >
+            <svg class="size-4" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
+            </svg>
+            View on GitHub
+          </a>
+        </div>
+      </div>
+
+      <!-- Screenshot -->
+      <div class="mx-auto mt-16 max-w-5xl md:mt-24">
+        <div class="relative rounded-2xl border border-zinc-800 bg-zinc-900/50 p-2 shadow-2xl shadow-black/40 ring-1 ring-white/5">
+          <div class="overflow-hidden rounded-xl">
+            <img
+              src="/images/screenshot-placeholder.svg"
+              alt="Aryx application screenshot showing the workspace with chat, sidebar, and activity panel"
+              class="w-full"
+              width="1280"
+              height="800"
+            />
+          </div>
+          <!-- Glow effect under screenshot -->
+          <div class="pointer-events-none absolute -inset-px rounded-2xl bg-gradient-to-t from-indigo-500/10 via-transparent to-transparent opacity-0 transition-opacity group-hover:opacity-100"></div>
+        </div>
+        <p class="mt-4 text-center text-xs text-zinc-600">
+          The Aryx workspace — sessions, live activity, and agent orchestration in one place.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section id="features" class="relative border-t border-zinc-800/80">
+    <div class="mx-auto max-w-6xl px-6 py-24 md:py-32">
+      <div class="mx-auto max-w-2xl text-center">
+        <h2 class="text-3xl font-bold tracking-tight md:text-4xl">
+          Everything you need for
+          <span class="text-indigo-400">structured AI work</span>
+        </h2>
+        <p class="mt-4 text-lg text-zinc-400">
+          More than a chat window. Aryx is built for people who want AI help that stays grounded in real projects.
+        </p>
+      </div>
+
+      <div class="mx-auto mt-16 grid max-w-5xl gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <!-- Feature 1: Scratchpad -->
+        <div class="group rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6 transition hover:border-zinc-700 hover:bg-zinc-900/60">
+          <div class="mb-4 flex size-10 items-center justify-center rounded-xl bg-indigo-500/10 text-indigo-400">
+            <svg class="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+          </div>
+          <h3 class="text-base font-semibold">Start Fast</h3>
+          <p class="mt-2 text-sm leading-relaxed text-zinc-400">
+            Open a scratchpad session for quick questions and ad-hoc work — no project setup needed.
+          </p>
+        </div>
+
+        <!-- Feature 2: Projects -->
+        <div class="group rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6 transition hover:border-zinc-700 hover:bg-zinc-900/60">
+          <div class="mb-4 flex size-10 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-400">
+            <svg class="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+            </svg>
+          </div>
+          <h3 class="text-base font-semibold">Real Project Context</h3>
+          <p class="mt-2 text-sm leading-relaxed text-zinc-400">
+            Attach local folders and repos so conversations stay grounded in your actual codebase, branch, and work.
+          </p>
+        </div>
+
+        <!-- Feature 3: Orchestration -->
+        <div class="group rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6 transition hover:border-zinc-700 hover:bg-zinc-900/60">
+          <div class="mb-4 flex size-10 items-center justify-center rounded-xl bg-violet-500/10 text-violet-400">
+            <svg class="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
+            </svg>
+          </div>
+          <h3 class="text-base font-semibold">Agent Orchestration</h3>
+          <p class="mt-2 text-sm leading-relaxed text-zinc-400">
+            Go beyond one assistant with reusable patterns — sequential, concurrent, handoff, and group-chat flows.
+          </p>
+        </div>
+
+        <!-- Feature 4: Live Activity -->
+        <div class="group rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6 transition hover:border-zinc-700 hover:bg-zinc-900/60">
+          <div class="mb-4 flex size-10 items-center justify-center rounded-xl bg-sky-500/10 text-sky-400">
+            <svg class="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+            </svg>
+          </div>
+          <h3 class="text-base font-semibold">Live Visibility</h3>
+          <p class="mt-2 text-sm leading-relaxed text-zinc-400">
+            Watch each agent think, use tools, and hand off work in real time. Know exactly what's happening during complex runs.
+          </p>
+        </div>
+
+        <!-- Feature 5: Sessions -->
+        <div class="group rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6 transition hover:border-zinc-700 hover:bg-zinc-900/60">
+          <div class="mb-4 flex size-10 items-center justify-center rounded-xl bg-amber-500/10 text-amber-400">
+            <svg class="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+            </svg>
+          </div>
+          <h3 class="text-base font-semibold">Persistent Sessions</h3>
+          <p class="mt-2 text-sm leading-relaxed text-zinc-400">
+            Rename, pin, archive, and return to sessions later. Your work persists instead of disappearing after each conversation.
+          </p>
+        </div>
+
+        <!-- Feature 6: Model Selection -->
+        <div class="group rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6 transition hover:border-zinc-700 hover:bg-zinc-900/60">
+          <div class="mb-4 flex size-10 items-center justify-center rounded-xl bg-rose-500/10 text-rose-400">
+            <svg class="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+            </svg>
+          </div>
+          <h3 class="text-base font-semibold">Tune Your Workflow</h3>
+          <p class="mt-2 text-sm leading-relaxed text-zinc-400">
+            Choose models, adjust reasoning effort, configure MCP servers and LSP profiles, and manage tool approval policies.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Orchestration Patterns -->
+  <section id="patterns" class="relative border-t border-zinc-800/80 bg-zinc-900/30">
+    <div class="mx-auto max-w-6xl px-6 py-24 md:py-32">
+      <div class="mx-auto max-w-2xl text-center">
+        <h2 class="text-3xl font-bold tracking-tight md:text-4xl">
+          Five ways to
+          <span class="text-violet-400">orchestrate agents</span>
+        </h2>
+        <p class="mt-4 text-lg text-zinc-400">
+          Choose how agents collaborate — from simple one-on-one help to complex multi-agent workflows.
+          Save patterns and reuse them across projects.
+        </p>
+      </div>
+
+      <div class="mx-auto mt-16 grid max-w-5xl gap-4 md:grid-cols-2 lg:grid-cols-5">
+        <!-- Single -->
+        <div class="flex flex-col items-center rounded-2xl border border-zinc-800 bg-zinc-950/60 p-6 text-center transition hover:border-indigo-500/30 hover:bg-zinc-900/40">
+          <div class="mb-3 flex size-12 items-center justify-center rounded-full bg-indigo-500/10">
+            <svg class="size-6 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+            </svg>
+          </div>
+          <h3 class="text-sm font-semibold">Single</h3>
+          <p class="mt-2 text-xs leading-relaxed text-zinc-500">
+            Direct one-on-one help with a single agent.
+          </p>
+        </div>
+
+        <!-- Sequential -->
+        <div class="flex flex-col items-center rounded-2xl border border-zinc-800 bg-zinc-950/60 p-6 text-center transition hover:border-emerald-500/30 hover:bg-zinc-900/40">
+          <div class="mb-3 flex size-12 items-center justify-center rounded-full bg-emerald-500/10">
+            <svg class="size-6 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+            </svg>
+          </div>
+          <h3 class="text-sm font-semibold">Sequential</h3>
+          <p class="mt-2 text-xs leading-relaxed text-zinc-500">
+            Pipeline-style work where each agent builds on the previous.
+          </p>
+        </div>
+
+        <!-- Concurrent -->
+        <div class="flex flex-col items-center rounded-2xl border border-zinc-800 bg-zinc-950/60 p-6 text-center transition hover:border-sky-500/30 hover:bg-zinc-900/40">
+          <div class="mb-3 flex size-12 items-center justify-center rounded-full bg-sky-500/10">
+            <svg class="size-6 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+            </svg>
+          </div>
+          <h3 class="text-sm font-semibold">Concurrent</h3>
+          <p class="mt-2 text-xs leading-relaxed text-zinc-500">
+            Parallel exploration with aggregated results.
+          </p>
+        </div>
+
+        <!-- Handoff -->
+        <div class="flex flex-col items-center rounded-2xl border border-zinc-800 bg-zinc-950/60 p-6 text-center transition hover:border-amber-500/30 hover:bg-zinc-900/40">
+          <div class="mb-3 flex size-12 items-center justify-center rounded-full bg-amber-500/10">
+            <svg class="size-6 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4M16 17H4m0 0l4 4m-4-4l4-4" />
+            </svg>
+          </div>
+          <h3 class="text-sm font-semibold">Handoff</h3>
+          <p class="mt-2 text-xs leading-relaxed text-zinc-500">
+            Agent-to-agent delegation with specialist routing.
+          </p>
+        </div>
+
+        <!-- Group Chat -->
+        <div class="flex flex-col items-center rounded-2xl border border-zinc-800 bg-zinc-950/60 p-6 text-center transition hover:border-violet-500/30 hover:bg-zinc-900/40">
+          <div class="mb-3 flex size-12 items-center justify-center rounded-full bg-violet-500/10">
+            <svg class="size-6 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+            </svg>
+          </div>
+          <h3 class="text-sm font-semibold">Group Chat</h3>
+          <p class="mt-2 text-xs leading-relaxed text-zinc-500">
+            Round-robin collaborative refinement across agents.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- How It Works -->
+  <section id="get-started" class="relative border-t border-zinc-800/80">
+    <div class="mx-auto max-w-6xl px-6 py-24 md:py-32">
+      <div class="mx-auto max-w-2xl text-center">
+        <h2 class="text-3xl font-bold tracking-tight md:text-4xl">
+          Get started in
+          <span class="text-emerald-400">four steps</span>
+        </h2>
+        <p class="mt-4 text-lg text-zinc-400">
+          From download to your first AI-powered session in minutes.
+        </p>
+      </div>
+
+      <div class="mx-auto mt-16 grid max-w-4xl gap-8 md:grid-cols-2">
+        <!-- Step 1 -->
+        <div class="relative flex gap-4 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
+          <div class="flex size-10 shrink-0 items-center justify-center rounded-xl bg-indigo-500/10 text-lg font-bold text-indigo-400">
+            1
+          </div>
+          <div>
+            <h3 class="text-base font-semibold">Download &amp; Launch</h3>
+            <p class="mt-2 text-sm leading-relaxed text-zinc-400">
+              Grab the latest release from GitHub and open Aryx. Make sure GitHub Copilot CLI is installed and authenticated.
+            </p>
+          </div>
+        </div>
+
+        <!-- Step 2 -->
+        <div class="relative flex gap-4 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
+          <div class="flex size-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-lg font-bold text-emerald-400">
+            2
+          </div>
+          <div>
+            <h3 class="text-base font-semibold">Connect a Project</h3>
+            <p class="mt-2 text-sm leading-relaxed text-zinc-400">
+              Add a local folder or git repository, or start with a scratchpad for quick questions without project setup.
+            </p>
+          </div>
+        </div>
+
+        <!-- Step 3 -->
+        <div class="relative flex gap-4 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
+          <div class="flex size-10 shrink-0 items-center justify-center rounded-xl bg-violet-500/10 text-lg font-bold text-violet-400">
+            3
+          </div>
+          <div>
+            <h3 class="text-base font-semibold">Pick a Pattern</h3>
+            <p class="mt-2 text-sm leading-relaxed text-zinc-400">
+              Choose a single-agent chat for direct help, or select a multi-agent orchestration pattern for more structured workflows.
+            </p>
+          </div>
+        </div>
+
+        <!-- Step 4 -->
+        <div class="relative flex gap-4 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
+          <div class="flex size-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-lg font-bold text-amber-400">
+            4
+          </div>
+          <div>
+            <h3 class="text-base font-semibold">Start Working</h3>
+            <p class="mt-2 text-sm leading-relaxed text-zinc-400">
+              Ask questions, describe tasks, or explore your codebase. Watch agents work in real time and keep sessions for later.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- CTA -->
+      <div class="mt-16 text-center">
+        <a
+          href="https://github.com/davidkaya/eryx/releases"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-8 py-3.5 text-sm font-semibold text-white shadow-lg shadow-indigo-500/20 transition hover:bg-indigo-500 hover:shadow-indigo-500/30"
+        >
+          <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+          </svg>
+          Download Aryx
+        </a>
+        <p class="mt-4 text-sm text-zinc-600">
+          Available for Windows, macOS, and Linux
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Tech Banner -->
+  <section class="border-t border-zinc-800/80 bg-zinc-900/30">
+    <div class="mx-auto max-w-6xl px-6 py-16">
+      <div class="flex flex-wrap items-center justify-center gap-x-12 gap-y-6 text-sm text-zinc-500">
+        <div class="flex items-center gap-2">
+          <svg class="size-5 text-zinc-600" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
+          </svg>
+          Powered by GitHub Copilot
+        </div>
+        <span class="hidden text-zinc-800 md:inline">·</span>
+        <div class="flex items-center gap-2">
+          <span class="text-zinc-600">⚡</span>
+          Electron + .NET Sidecar
+        </div>
+        <span class="hidden text-zinc-800 md:inline">·</span>
+        <div class="flex items-center gap-2">
+          <span class="text-zinc-600">🔧</span>
+          MCP &amp; LSP Tooling
+        </div>
+        <span class="hidden text-zinc-800 md:inline">·</span>
+        <div class="flex items-center gap-2">
+          <span class="text-zinc-600">🛡️</span>
+          Tool Approval Controls
+        </div>
+      </div>
+    </div>
+  </section>
+</Base>

@@ -22,7 +22,9 @@ jobs:
           - os: windows-latest
             label: Windows
           - os: macos-15-intel
-            label: macOS
+            label: macOS (x64)
+          - os: macos-15
+            label: macOS (arm64)
           - os: ubuntu-latest
             label: Linux
 
@@ -94,12 +96,19 @@ jobs:
         include:
           - os: windows-latest
             label: Windows
+            release_dir_name: Aryx-windows-x64
             asset_path: release/Aryx-windows-x64.zip
           - os: macos-15-intel
-            label: macOS
+            label: macOS (x64)
+            release_dir_name: Aryx-macos-x64
             asset_path: release/Aryx-macos-x64.zip
+          - os: macos-15
+            label: macOS (arm64)
+            release_dir_name: Aryx-macos-arm64
+            asset_path: release/Aryx-macos-arm64.zip
           - os: ubuntu-latest
             label: Linux
+            release_dir_name: Aryx-linux-x64
             asset_path: release/Aryx-linux-x64.tar.gz
 
     steps:
@@ -130,7 +139,7 @@ jobs:
 
       - name: Ad-hoc sign macOS app bundle
         if: runner.os == 'macOS'
-        run: codesign --force --deep --sign - release/Aryx-macos-x64/Aryx.app
+        run: codesign --force --deep --sign - "release/${{ matrix.release_dir_name }}/Aryx.app"
 
       - name: Create Windows release archive
         if: runner.os == 'Windows'
@@ -139,7 +148,7 @@ jobs:
 
       - name: Create macOS release archive
         if: runner.os == 'macOS'
-        run: ditto -c -k --sequesterRsrc --keepParent release/Aryx-macos-x64/Aryx.app release/Aryx-macos-x64.zip
+        run: ditto -c -k --sequesterRsrc --keepParent "release/${{ matrix.release_dir_name }}/Aryx.app" "${{ matrix.asset_path }}"
 
       - name: Create Linux release archive
         if: runner.os == 'Linux'

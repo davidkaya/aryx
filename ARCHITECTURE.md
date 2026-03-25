@@ -309,7 +309,7 @@ The build pipeline is organized around three layers:
 - publishing the sidecar for the target runtime
 - assembling a platform-specific release bundle
 
-Release automation validates the app across Windows, macOS, and Linux, and tag-based releases publish platform bundles directly to GitHub Releases.
+Release automation validates the app across Windows, macOS, and Linux, and tag-based releases publish platform bundles directly to GitHub Releases, including both macOS x64 and arm64 artifacts.
 
 This packaging model matches the runtime architecture: one desktop shell plus one dedicated AI execution process.
 

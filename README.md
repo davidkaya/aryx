@@ -111,7 +111,7 @@ To package the current platform into `release/`, run:
 
 - `bun run package`
 
-GitHub Actions now runs validation on pushes and pull requests, and pushing a git tag creates a GitHub release with Windows, macOS, and Linux assets uploaded directly to the release.
+GitHub Actions now runs validation on pushes and pull requests, and pushing a git tag creates a GitHub release with Windows, macOS (x64 and arm64), and Linux assets uploaded directly to the release.
 
 ## Current focus
 

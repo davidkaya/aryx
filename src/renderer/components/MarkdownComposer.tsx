@@ -756,6 +756,7 @@ function ToolbarButton({
 }) {
   return (
     <button
+      aria-pressed={active}
       className={`flex size-7 items-center justify-center rounded transition ${
         active
           ? 'bg-indigo-600/30 text-indigo-300'

@@ -14,7 +14,7 @@ import {
 import { applySessionEventWorkspace } from '@renderer/lib/sessionWorkspace';
 import { WelcomePane } from '@renderer/components/WelcomePane';
 import { getElectronApi } from '@renderer/lib/electronApi';
-import type { SidecarCapabilities } from '@shared/contracts/sidecar';
+import { useTheme, useSidecarCapabilities } from '@renderer/hooks/useAppHooks';
 import {
   buildAvailableModelCatalog,
   findModel,
@@ -84,9 +84,8 @@ export default function App() {
   const api = getElectronApi();
   const [workspace, setWorkspace] = useState<WorkspaceState>();
   const [error, setError] = useState<string>();
-  const [sidecarCapabilities, setSidecarCapabilities] = useState<SidecarCapabilities>();
+  const { capabilities: sidecarCapabilities, isRefreshing: isRefreshingCapabilities, refresh: refreshCapabilities } = useSidecarCapabilities(api);
   const [sessionActivities, setSessionActivities] = useState<SessionActivityMap>({});
-  const [isRefreshingCapabilities, setIsRefreshingCapabilities] = useState(false);
 
   const [showSettings, setShowSettings] = useState(false);
   const [newSessionProjectId, setNewSessionProjectId] = useState<string>();
@@ -99,14 +98,6 @@ export default function App() {
       .loadWorkspace()
       .then((ws) => !disposed && setWorkspace(ws))
       .catch((e) => !disposed && setError(e instanceof Error ? e.message : String(e)));
-    void api
-      .describeSidecarCapabilities()
-      .then((capabilities) => !disposed && setSidecarCapabilities(capabilities))
-      .catch((e) => {
-        if (!disposed) {
-          console.warn('Failed to load sidecar capabilities', e);
-        }
-      });
 
     const offWorkspace = api.onWorkspaceUpdated((ws) => {
       setWorkspace(ws);
@@ -133,24 +124,7 @@ export default function App() {
 
   // Apply theme to the document root
   const themeSetting: AppearanceTheme = workspace?.settings.theme ?? 'dark';
-  useEffect(() => {
-    function resolveEffective(pref: AppearanceTheme): 'dark' | 'light' {
-      if (pref === 'dark' || pref === 'light') return pref;
-      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-    }
-
-    const apply = () => {
-      document.documentElement.dataset.theme = resolveEffective(themeSetting);
-    };
-
-    apply();
-
-    if (themeSetting === 'system') {
-      const mq = window.matchMedia('(prefers-color-scheme: dark)');
-      mq.addEventListener('change', apply);
-      return () => mq.removeEventListener('change', apply);
-    }
-  }, [themeSetting]);
+  useTheme(themeSetting);
 
   // Derived state
   const selectedSession = useMemo(
@@ -212,17 +186,7 @@ export default function App() {
     );
   }
 
-  const refreshCapabilities = async () => {
-    setIsRefreshingCapabilities(true);
-    try {
-      const capabilities = await api.refreshSidecarCapabilities();
-      setSidecarCapabilities(capabilities);
-    } finally {
-      setIsRefreshingCapabilities(false);
-    }
-  };
-
-  const handleCreateScratchpad = () => {
+  const handleCreateScratchpad = useCallback(() => {
     const singlePatterns = workspace.patterns
       .filter((p) => p.mode === 'single' && p.availability !== 'unavailable')
       .sort((a, b) => {
@@ -235,7 +199,7 @@ export default function App() {
     if (defaultPattern) {
       void api.createSession({ projectId: SCRATCHPAD_PROJECT_ID, patternId: defaultPattern.id });
     }
-  };
+  }, [api, workspace?.patterns]);
 
   // Determine main content
   let content: React.ReactNode;

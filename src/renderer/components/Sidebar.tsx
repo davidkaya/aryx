@@ -136,6 +136,7 @@ function ActionMenuItem({
     <button
       className="flex w-full items-center gap-2 px-3 py-1.5 text-[12px] text-zinc-300 transition hover:bg-zinc-800"
       onClick={onClick}
+      role="menuitem"
       type="button"
     >
       <Icon className="size-3.5" />
@@ -214,7 +215,7 @@ function SessionItem({
       onClick={isRenaming ? undefined : onSelect}
       role="button"
       tabIndex={0}
-      onKeyDown={(e) => { if (e.key === 'Enter' && !isRenaming) onSelect(); }}
+      onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && !isRenaming) { e.preventDefault(); onSelect(); } }}
     >
       {/* Running/approval left accent bar */}
       {isRunning && !hasPendingApproval && (
@@ -690,9 +691,10 @@ export function Sidebar({
       {/* Context menu overlay */}
       {menuState && menuSession && (
         <>
-          <div className="fixed inset-0 z-40" onClick={closeMenu} />
+          <div className="fixed inset-0 z-40" onClick={closeMenu} onKeyDown={(e) => { if (e.key === 'Escape') closeMenu(); }} />
           <div
             className="fixed z-50 w-40 rounded-lg border border-zinc-700 bg-zinc-900 py-1 shadow-xl"
+            role="menu"
             style={{ top: menuState.top, left: menuState.left }}
           >
             <ActionMenuItem

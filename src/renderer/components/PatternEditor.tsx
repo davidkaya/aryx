@@ -34,6 +34,7 @@ import {
   type WorkspaceToolingSettings,
 } from '@shared/domain/tooling';
 
+import { ToggleSwitch } from '@renderer/components/ui';
 import { addAgentNodeToGraph } from '@renderer/lib/patternGraph';
 import { PatternGraphCanvas } from './pattern-graph/PatternGraphCanvas';
 import { PatternGraphInspector } from './pattern-graph/PatternGraphInspector';
@@ -482,24 +483,6 @@ export function PatternEditor({
         </div>
       </div>
     </div>
-  );
-}
-
-/* ── Toggle switch ─────────────────────────────────────────── */
-
-function ToggleSwitch({ enabled }: { enabled: boolean }) {
-  return (
-    <span
-      className={`relative inline-flex h-[18px] w-[32px] shrink-0 items-center rounded-full transition-colors ${
-        enabled ? 'bg-indigo-500' : 'bg-zinc-700'
-      }`}
-    >
-      <span
-        className={`inline-block size-[14px] rounded-full bg-white shadow-sm transition-transform ${
-          enabled ? 'translate-x-[16px]' : 'translate-x-[2px]'
-        }`}
-      />
-    </span>
   );
 }
 

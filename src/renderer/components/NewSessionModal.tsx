@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Star, X } from 'lucide-react';
 
 import type { PatternDefinition } from '@shared/domain/pattern';
@@ -45,14 +45,23 @@ export function NewSessionModal({
     }
   }, [availablePatterns, patternId]);
 
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (e.key === 'Escape') onClose();
+  }, [onClose]);
+
+  useEffect(() => {
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [handleKeyDown]);
+
   const canCreate = projectId && patternId;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="new-session-title">
       <div className="w-full max-w-md rounded-xl border border-zinc-800 bg-zinc-900 shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-zinc-800 px-5 py-4">
-          <h2 className="text-[13px] font-semibold text-zinc-100">New Session</h2>
+          <h2 id="new-session-title" className="text-[13px] font-semibold text-zinc-100">New Session</h2>
           <button
             className="flex size-7 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-300"
             onClick={onClose}

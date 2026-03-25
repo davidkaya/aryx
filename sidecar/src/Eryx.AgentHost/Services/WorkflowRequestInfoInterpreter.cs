@@ -8,47 +8,25 @@ namespace Eryx.AgentHost.Services;
 
 internal static class WorkflowRequestInfoInterpreter
 {
+    private const string HandoffActivityType = "handoff";
+    private const string ToolCallingActivityType = "tool-calling";
+    private const string CodeInterpreterToolName = "code interpreter";
+    private const string ImageGenerationToolName = "image generation";
+
     public static AgentActivityEventDto? TryCreateActivityFromRequest(
         RunTurnCommandDto command,
         RequestInfoEvent requestInfo,
         AgentIdentity? activeAgent,
         ConcurrentDictionary<string, string> toolNamesByCallId)
     {
-        if (TryGetHandoffTarget(command.Pattern, requestInfo, out AgentIdentity handoffAgent))
+        RequestInterpretation interpretation = InterpretRequest(command.Pattern, requestInfo);
+        return interpretation switch
         {
-            return new AgentActivityEventDto
-            {
-                Type = "agent-activity",
-                RequestId = command.RequestId,
-                SessionId = command.SessionId,
-                ActivityType = "handoff",
-                AgentId = handoffAgent.AgentId,
-                AgentName = handoffAgent.AgentName,
-                SourceAgentId = activeAgent?.AgentId,
-                SourceAgentName = activeAgent?.AgentName,
-            };
-        }
-
-        if (!activeAgent.HasValue
-            || !TryGetToolRequestInfo(requestInfo, out string toolName, out string? toolCallId))
-        {
-            return null;
-        }
-
-        if (!string.IsNullOrWhiteSpace(toolCallId))
-        {
-            toolNamesByCallId[toolCallId] = toolName;
-        }
-
-        return new AgentActivityEventDto
-        {
-            Type = "agent-activity",
-            RequestId = command.RequestId,
-            SessionId = command.SessionId,
-            ActivityType = "tool-calling",
-            AgentId = activeAgent.Value.AgentId,
-            AgentName = activeAgent.Value.AgentName,
-            ToolName = toolName,
+            HandoffRequestInterpretation handoff =>
+                CreateHandoffActivity(command, handoff.TargetAgent, activeAgent),
+            ToolRequestInterpretation tool when activeAgent.HasValue =>
+                CreateToolCallingActivity(command, activeAgent.Value, tool, toolNamesByCallId),
+            _ => null,
         };
     }
 
@@ -56,17 +34,71 @@ internal static class WorkflowRequestInfoInterpreter
         RunTurnCommandDto command,
         RequestInfoEvent requestInfo)
     {
-        if (!string.Equals(command.Pattern.Mode, "handoff", StringComparison.OrdinalIgnoreCase))
+        return string.Equals(command.Pattern.Mode, "handoff", StringComparison.OrdinalIgnoreCase)
+            && InterpretRequest(command.Pattern, requestInfo) is UnknownRequestInterpretation;
+    }
+
+    private static AgentActivityEventDto CreateHandoffActivity(
+        RunTurnCommandDto command,
+        AgentIdentity handoffAgent,
+        AgentIdentity? activeAgent)
+    {
+        return new AgentActivityEventDto
         {
-            return false;
+            Type = "agent-activity",
+            RequestId = command.RequestId,
+            SessionId = command.SessionId,
+            ActivityType = HandoffActivityType,
+            AgentId = handoffAgent.AgentId,
+            AgentName = handoffAgent.AgentName,
+            SourceAgentId = activeAgent?.AgentId,
+            SourceAgentName = activeAgent?.AgentName,
+        };
+    }
+
+    private static AgentActivityEventDto CreateToolCallingActivity(
+        RunTurnCommandDto command,
+        AgentIdentity activeAgent,
+        ToolRequestInterpretation tool,
+        ConcurrentDictionary<string, string> toolNamesByCallId)
+    {
+        TrackToolCallId(toolNamesByCallId, tool.ToolCallId, tool.ToolName);
+
+        return new AgentActivityEventDto
+        {
+            Type = "agent-activity",
+            RequestId = command.RequestId,
+            SessionId = command.SessionId,
+            ActivityType = ToolCallingActivityType,
+            AgentId = activeAgent.AgentId,
+            AgentName = activeAgent.AgentName,
+            ToolName = tool.ToolName,
+        };
+    }
+
+    private static void TrackToolCallId(
+        ConcurrentDictionary<string, string> toolNamesByCallId,
+        string? toolCallId,
+        string toolName)
+    {
+        if (toolCallId is not null)
+        {
+            toolNamesByCallId[toolCallId] = toolName;
+        }
+    }
+
+    private static RequestInterpretation InterpretRequest(
+        PatternDefinitionDto pattern,
+        RequestInfoEvent requestInfo)
+    {
+        if (TryGetHandoffTarget(pattern, requestInfo, out AgentIdentity handoffAgent))
+        {
+            return new HandoffRequestInterpretation(handoffAgent);
         }
 
-        if (TryGetHandoffTarget(command.Pattern, requestInfo, out _))
-        {
-            return false;
-        }
-
-        return !TryGetToolRequestInfo(requestInfo, out _, out _);
+        return TryGetToolRequestInfo(requestInfo, out string toolName, out string? toolCallId)
+            ? new ToolRequestInterpretation(toolName, toolCallId)
+            : new UnknownRequestInterpretation();
     }
 
     private static bool TryGetHandoffTarget(
@@ -75,6 +107,7 @@ internal static class WorkflowRequestInfoInterpreter
         out AgentIdentity agent)
     {
         agent = default;
+
         object? handoffValue = requestInfo.Request.Data.As<object>();
         if (handoffValue is null)
         {
@@ -99,12 +132,8 @@ internal static class WorkflowRequestInfoInterpreter
         out string toolName,
         out string? toolCallId)
     {
-        if (TryGetStableToolRequestInfo(requestInfo.Request.Data, out toolName, out toolCallId))
-        {
-            return true;
-        }
-
-        return TryGetEvaluationToolRequestInfo(requestInfo.Request.Data, out toolName, out toolCallId);
+        return TryGetStableToolRequestInfo(requestInfo.Request.Data, out toolName, out toolCallId)
+            || TryGetEvaluationToolRequestInfo(requestInfo.Request.Data, out toolName, out toolCallId);
     }
 
     private static bool TryGetStableToolRequestInfo(
@@ -135,19 +164,19 @@ internal static class WorkflowRequestInfoInterpreter
                 ?? NormalizeOptionalString(mcpToolCall.ServerName)
                 ?? string.Empty;
             toolCallId = NormalizeOptionalString(mcpToolCall.CallId);
-            return !string.IsNullOrWhiteSpace(toolName);
+            return toolName.Length > 0;
         }
 
         if (requestData.Is<CodeInterpreterToolCallContent>(out CodeInterpreterToolCallContent? codeInterpreterToolCall))
         {
-            toolName = "code interpreter";
+            toolName = CodeInterpreterToolName;
             toolCallId = NormalizeOptionalString(codeInterpreterToolCall.CallId);
             return true;
         }
 
         if (requestData.Is<ImageGenerationToolCallContent>())
         {
-            toolName = "image generation";
+            toolName = ImageGenerationToolName;
             toolCallId = null;
             return true;
         }
@@ -167,6 +196,14 @@ internal static class WorkflowRequestInfoInterpreter
         string json = JsonSerializer.Serialize(handoffValue, handoffValue.GetType());
         return JsonSerializer.Deserialize<WorkflowRequestHandoffPayload>(json);
     }
+
+    private abstract record RequestInterpretation;
+
+    private sealed record HandoffRequestInterpretation(AgentIdentity TargetAgent) : RequestInterpretation;
+
+    private sealed record ToolRequestInterpretation(string ToolName, string? ToolCallId) : RequestInterpretation;
+
+    private sealed record UnknownRequestInterpretation : RequestInterpretation;
 }
 
 internal sealed class WorkflowRequestHandoffPayload

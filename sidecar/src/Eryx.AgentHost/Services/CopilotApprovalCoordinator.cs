@@ -6,6 +6,11 @@ namespace Eryx.AgentHost.Services;
 
 internal sealed class CopilotApprovalCoordinator
 {
+    private const string ApprovedDecision = "approved";
+    private const string RejectedDecision = "rejected";
+    private const string ToolCallApprovalKind = "tool-call";
+    private const string WebFetchToolName = "web_fetch";
+
     private readonly ConcurrentDictionary<string, PendingApprovalRequest> _pendingApprovals = new(StringComparer.Ordinal);
 
     public Task ResolveApprovalAsync(
@@ -14,27 +19,13 @@ internal sealed class CopilotApprovalCoordinator
     {
         ArgumentNullException.ThrowIfNull(command);
 
-        if (string.IsNullOrWhiteSpace(command.ApprovalId))
-        {
-            throw new InvalidOperationException("Approval ID is required.");
-        }
-
-        if (!_pendingApprovals.TryGetValue(command.ApprovalId, out PendingApprovalRequest? pending))
-        {
-            throw new InvalidOperationException($"Approval \"{command.ApprovalId}\" is not pending.");
-        }
-
-        PermissionRequestResultKind decision = command.Decision.Trim().ToLowerInvariant() switch
-        {
-            "approved" => PermissionRequestResultKind.Approved,
-            "rejected" => PermissionRequestResultKind.DeniedInteractivelyByUser,
-            _ => throw new InvalidOperationException(
-                $"Unsupported approval decision \"{command.Decision}\"."),
-        };
+        string approvalId = RequireApprovalId(command.ApprovalId);
+        PendingApprovalRequest pending = GetPendingApproval(approvalId);
+        PermissionRequestResultKind decision = ParseDecision(command.Decision);
 
         if (!pending.Decision.TrySetResult(decision))
         {
-            throw new InvalidOperationException($"Approval \"{command.ApprovalId}\" is no longer pending.");
+            throw new InvalidOperationException($"Approval \"{approvalId}\" is no longer pending.");
         }
 
         return Task.CompletedTask;
@@ -49,33 +40,27 @@ internal sealed class CopilotApprovalCoordinator
         Func<ApprovalRequestedEventDto, Task> onApproval,
         CancellationToken cancellationToken)
     {
-        TryGetApprovalToolName(request, toolNamesByCallId, out string? toolName);
-
+        string? toolName = ResolveApprovalToolName(request, toolNamesByCallId);
         if (!RequiresToolCallApproval(command.Pattern.ApprovalPolicy, agent.Id, toolName))
         {
-            return new PermissionRequestResult
-            {
-                Kind = PermissionRequestResultKind.Approved,
-            };
+            return CreateApprovalResult(PermissionRequestResultKind.Approved);
         }
 
-        string approvalId = CreateApprovalRequestId();
-        TaskCompletionSource<PermissionRequestResultKind> decisionSource =
-            new(TaskCreationOptions.RunContinuationsAsynchronously);
-        PendingApprovalRequest pending = new(
-            command.RequestId,
-            command.SessionId,
-            approvalId,
-            decisionSource);
-
-        if (!_pendingApprovals.TryAdd(approvalId, pending))
+        PendingApprovalRequest pending = CreatePendingApproval(command);
+        if (!_pendingApprovals.TryAdd(pending.ApprovalId, pending))
         {
-            throw new InvalidOperationException($"Approval \"{approvalId}\" is already pending.");
+            throw new InvalidOperationException($"Approval \"{pending.ApprovalId}\" is already pending.");
         }
 
         try
         {
-            await onApproval(BuildPermissionApprovalEvent(command, agent, request, invocation, approvalId, toolName))
+            await onApproval(BuildPermissionApprovalEvent(
+                    command,
+                    agent,
+                    request,
+                    invocation,
+                    pending.ApprovalId,
+                    toolName))
                 .ConfigureAwait(false);
 
             using CancellationTokenRegistration registration = cancellationToken.Register(
@@ -84,17 +69,14 @@ internal sealed class CopilotApprovalCoordinator
                     ((TaskCompletionSource<PermissionRequestResultKind>)state!)
                         .TrySetCanceled();
                 },
-                decisionSource);
+                pending.Decision);
 
-            PermissionRequestResultKind decision = await decisionSource.Task.ConfigureAwait(false);
-            return new PermissionRequestResult
-            {
-                Kind = decision,
-            };
+            PermissionRequestResultKind decision = await pending.Decision.Task.ConfigureAwait(false);
+            return CreateApprovalResult(decision);
         }
         finally
         {
-            _pendingApprovals.TryRemove(approvalId, out _);
+            _pendingApprovals.TryRemove(pending.ApprovalId, out _);
         }
     }
 
@@ -110,14 +92,10 @@ internal sealed class CopilotApprovalCoordinator
             ? "tool access"
             : request.Kind.Trim();
         string agentName = string.IsNullOrWhiteSpace(agent.Name) ? agent.Id : agent.Name;
-        string? sessionId = string.IsNullOrWhiteSpace(invocation.SessionId)
-            ? null
-            : invocation.SessionId.Trim();
-        string? normalizedToolName = string.IsNullOrWhiteSpace(toolName)
-            ? null
-            : toolName.Trim();
-        string? requestedUrl = request is PermissionRequestUrl urlRequest && !string.IsNullOrWhiteSpace(urlRequest.Url)
-            ? urlRequest.Url.Trim()
+        string? sessionId = NormalizeOptionalString(invocation.SessionId);
+        string? normalizedToolName = NormalizeOptionalString(toolName);
+        string? requestedUrl = request is PermissionRequestUrl urlRequest
+            ? NormalizeOptionalString(urlRequest.Url)
             : null;
         string title = normalizedToolName is null
             ? $"Approve {permissionKind}"
@@ -146,9 +124,9 @@ internal sealed class CopilotApprovalCoordinator
             RequestId = command.RequestId,
             SessionId = command.SessionId,
             ApprovalId = approvalId,
-            ApprovalKind = "tool-call",
-            AgentId = string.IsNullOrWhiteSpace(agent.Id) ? null : agent.Id,
-            AgentName = string.IsNullOrWhiteSpace(agentName) ? null : agentName,
+            ApprovalKind = ToolCallApprovalKind,
+            AgentId = NormalizeOptionalString(agent.Id),
+            AgentName = NormalizeOptionalString(agentName),
             ToolName = normalizedToolName,
             PermissionKind = permissionKind,
             Title = title,
@@ -166,40 +144,14 @@ internal sealed class CopilotApprovalCoordinator
             return false;
         }
 
-        bool matchesCheckpoint = false;
-        foreach (ApprovalCheckpointRuleDto rule in approvalPolicy.Rules)
-        {
-            if (!string.Equals(rule.Kind, "tool-call", StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            if (rule.AgentIds.Count == 0)
-            {
-                matchesCheckpoint = true;
-                break;
-            }
-
-            if (rule.AgentIds.Any(candidate =>
-                    string.Equals(candidate, agentId, StringComparison.OrdinalIgnoreCase)))
-            {
-                matchesCheckpoint = true;
-                break;
-            }
-        }
-
-        if (!matchesCheckpoint)
+        if (!HasMatchingToolCallCheckpoint(approvalPolicy.Rules, agentId))
         {
             return false;
         }
 
-        if (string.IsNullOrWhiteSpace(toolName))
-        {
-            return true;
-        }
-
-        return !approvalPolicy.AutoApprovedToolNames.Any(candidate =>
-            string.Equals(candidate, toolName, StringComparison.OrdinalIgnoreCase));
+        return string.IsNullOrWhiteSpace(toolName)
+            || !approvalPolicy.AutoApprovedToolNames.Any(candidate =>
+                string.Equals(candidate, toolName, StringComparison.OrdinalIgnoreCase));
     }
 
     internal static bool TryGetApprovalToolName(
@@ -207,49 +159,147 @@ internal sealed class CopilotApprovalCoordinator
         IReadOnlyDictionary<string, string>? toolNamesByCallId,
         out string? toolName)
     {
-        toolName = request switch
-        {
-            PermissionRequestMcp mcp when !string.IsNullOrWhiteSpace(mcp.ToolName) => mcp.ToolName.Trim(),
-            PermissionRequestCustomTool customTool when !string.IsNullOrWhiteSpace(customTool.ToolName) => customTool.ToolName.Trim(),
-            PermissionRequestHook hook when !string.IsNullOrWhiteSpace(hook.ToolName) => hook.ToolName.Trim(),
-            _ => null,
-        };
-
-        if (!string.IsNullOrWhiteSpace(toolName))
-        {
-            return true;
-        }
-
-        string? toolCallId = NormalizeOptionalString(GetStringProperty(request, "ToolCallId"));
-        if (toolCallId is not null
-            && toolNamesByCallId is not null
-            && toolNamesByCallId.TryGetValue(toolCallId, out string? resolvedToolName)
-            && !string.IsNullOrWhiteSpace(resolvedToolName))
-        {
-            toolName = resolvedToolName.Trim();
-            return true;
-        }
-
-        toolName = request switch
-        {
-            PermissionRequestUrl => "web_fetch",
-            _ => null,
-        };
-
-        return !string.IsNullOrWhiteSpace(toolName);
+        toolName = ResolveApprovalToolName(request, toolNamesByCallId);
+        return toolName is not null;
     }
 
     internal static bool TryGetApprovalToolName(PermissionRequest request, out string? toolName)
         => TryGetApprovalToolName(request, toolNamesByCallId: null, out toolName);
 
+    private static bool HasMatchingToolCallCheckpoint(
+        IReadOnlyList<ApprovalCheckpointRuleDto> rules,
+        string agentId)
+    {
+        foreach (ApprovalCheckpointRuleDto rule in rules)
+        {
+            if (!string.Equals(rule.Kind, ToolCallApprovalKind, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (rule.AgentIds.Count == 0
+                || rule.AgentIds.Any(candidate =>
+                    string.Equals(candidate, agentId, StringComparison.OrdinalIgnoreCase)))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static PendingApprovalRequest CreatePendingApproval(RunTurnCommandDto command)
+    {
+        return new PendingApprovalRequest(
+            command.RequestId,
+            command.SessionId,
+            CreateApprovalRequestId(),
+            new TaskCompletionSource<PermissionRequestResultKind>(TaskCreationOptions.RunContinuationsAsynchronously));
+    }
+
+    private static PermissionRequestResult CreateApprovalResult(PermissionRequestResultKind decision)
+    {
+        return new PermissionRequestResult
+        {
+            Kind = decision,
+        };
+    }
+
+    private static string? ResolveApprovalToolName(
+        PermissionRequest request,
+        IReadOnlyDictionary<string, string>? toolNamesByCallId)
+    {
+        return GetDirectToolName(request)
+            ?? ResolveToolNameFromLookup(request, toolNamesByCallId)
+            ?? GetFallbackToolName(request);
+    }
+
+    private static string? GetDirectToolName(PermissionRequest request)
+    {
+        return request switch
+        {
+            PermissionRequestMcp mcp => NormalizeOptionalString(mcp.ToolName),
+            PermissionRequestCustomTool customTool => NormalizeOptionalString(customTool.ToolName),
+            PermissionRequestHook hook => NormalizeOptionalString(hook.ToolName),
+            _ => null,
+        };
+    }
+
+    private static string? ResolveToolNameFromLookup(
+        PermissionRequest request,
+        IReadOnlyDictionary<string, string>? toolNamesByCallId)
+    {
+        if (toolNamesByCallId is null)
+        {
+            return null;
+        }
+
+        string? toolCallId = GetToolCallId(request);
+        if (toolCallId is null
+            || !toolNamesByCallId.TryGetValue(toolCallId, out string? resolvedToolName))
+        {
+            return null;
+        }
+
+        return NormalizeOptionalString(resolvedToolName);
+    }
+
+    private static string? GetToolCallId(PermissionRequest request)
+    {
+        return request switch
+        {
+            PermissionRequestShell shell => NormalizeOptionalString(shell.ToolCallId),
+            PermissionRequestWrite write => NormalizeOptionalString(write.ToolCallId),
+            PermissionRequestRead read => NormalizeOptionalString(read.ToolCallId),
+            PermissionRequestMcp mcp => NormalizeOptionalString(mcp.ToolCallId),
+            PermissionRequestUrl url => NormalizeOptionalString(url.ToolCallId),
+            PermissionRequestMemory memory => NormalizeOptionalString(memory.ToolCallId),
+            PermissionRequestCustomTool customTool => NormalizeOptionalString(customTool.ToolCallId),
+            PermissionRequestHook hook => NormalizeOptionalString(hook.ToolCallId),
+            _ => null,
+        };
+    }
+
+    private static string? GetFallbackToolName(PermissionRequest request)
+    {
+        return request switch
+        {
+            PermissionRequestUrl => WebFetchToolName,
+            _ => null,
+        };
+    }
+
+    private PendingApprovalRequest GetPendingApproval(string approvalId)
+    {
+        if (_pendingApprovals.TryGetValue(approvalId, out PendingApprovalRequest? pending))
+        {
+            return pending;
+        }
+
+        throw new InvalidOperationException($"Approval \"{approvalId}\" is not pending.");
+    }
+
+    private static string RequireApprovalId(string? approvalId)
+    {
+        string? normalizedApprovalId = NormalizeOptionalString(approvalId);
+        return normalizedApprovalId
+            ?? throw new InvalidOperationException("Approval ID is required.");
+    }
+
+    private static PermissionRequestResultKind ParseDecision(string? decision)
+    {
+        return NormalizeOptionalString(decision)?.ToLowerInvariant() switch
+        {
+            ApprovedDecision => PermissionRequestResultKind.Approved,
+            RejectedDecision => PermissionRequestResultKind.DeniedInteractivelyByUser,
+            _ => throw new InvalidOperationException(
+                $"Unsupported approval decision \"{decision}\"."),
+        };
+    }
+
     private static string CreateApprovalRequestId()
     {
         return $"approval-{Guid.NewGuid():N}";
-    }
-
-    private static string? GetStringProperty(object? instance, string propertyName)
-    {
-        return instance?.GetType().GetProperty(propertyName)?.GetValue(instance) as string;
     }
 
     private static string? NormalizeOptionalString(string? value)

@@ -757,6 +757,8 @@ public sealed class CopilotWorkflowRunnerTests
             ["tool-call-url"] = "web_fetch",
             ["tool-call-shell"] = "shell",
             ["tool-call-read"] = "view",
+            ["tool-call-write"] = "write_file",
+            ["tool-call-memory"] = "store_memory",
         };
 
         Assert.True(
@@ -802,6 +804,34 @@ public sealed class CopilotWorkflowRunnerTests
                 toolNamesByCallId,
                 out string? readToolName));
         Assert.Equal("view", readToolName);
+
+        Assert.True(
+            CopilotApprovalCoordinator.TryGetApprovalToolName(
+                new PermissionRequestWrite
+                {
+                    Kind = "write",
+                    ToolCallId = "tool-call-write",
+                    Intention = "Update a file",
+                    FileName = "README.md",
+                    Diff = "@@ -1 +1 @@",
+                },
+                toolNamesByCallId,
+                out string? writeToolName));
+        Assert.Equal("write_file", writeToolName);
+
+        Assert.True(
+            CopilotApprovalCoordinator.TryGetApprovalToolName(
+                new PermissionRequestMemory
+                {
+                    Kind = "memory",
+                    ToolCallId = "tool-call-memory",
+                    Subject = "repo conventions",
+                    Fact = "Use Bun for script execution.",
+                    Citations = "package.json",
+                },
+                toolNamesByCallId,
+                out string? memoryToolName));
+        Assert.Equal("store_memory", memoryToolName);
     }
 
     [Fact]

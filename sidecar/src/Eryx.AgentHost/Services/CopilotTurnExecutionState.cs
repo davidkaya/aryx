@@ -89,7 +89,7 @@ internal sealed class CopilotTurnExecutionState
         return messageId ?? $"{_command.RequestId}-delta-{_fallbackMessageIndex++}";
     }
 
-    public (string MessageId, string AuthorName, string Content) AppendDelta(
+    public TranscriptSegment AppendDelta(
         string messageId,
         string authorName,
         string delta)
@@ -117,7 +117,7 @@ internal sealed class CopilotTurnExecutionState
         IReadOnlyList<ChatMessage> inputMessages)
     {
         List<ChatMessage> newMessages = WorkflowTranscriptProjector.SelectNewOutputMessages(allMessages, inputMessages);
-        CompletedMessages = WorkflowTranscriptProjector.ProjectCompletedMessages(
+        CompletedMessages = WorkflowTranscriptProjector.ProjectCompletedMessagesFromSegments(
             _command,
             newMessages,
             _transcriptBuffer.Snapshot(),
@@ -128,7 +128,7 @@ internal sealed class CopilotTurnExecutionState
     {
         if (CompletedMessages.Count == 0 && _transcriptBuffer.Count > 0)
         {
-            CompletedMessages = WorkflowTranscriptProjector.ProjectCompletedMessages(
+            CompletedMessages = WorkflowTranscriptProjector.ProjectCompletedMessagesFromSegments(
                 _command,
                 [],
                 _transcriptBuffer.Snapshot(),

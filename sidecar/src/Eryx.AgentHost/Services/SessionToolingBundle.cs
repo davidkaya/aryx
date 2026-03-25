@@ -6,6 +6,9 @@ namespace Eryx.AgentHost.Services;
 
 internal sealed class SessionToolingBundle : IAsyncDisposable
 {
+    private const string LocalTransport = "local";
+    private const string WildcardToolName = "*";
+
     private readonly List<IAsyncDisposable> _disposables = [];
 
     private SessionToolingBundle(
@@ -26,16 +29,8 @@ internal sealed class SessionToolingBundle : IAsyncDisposable
         CancellationToken cancellationToken)
     {
         Dictionary<string, object> mcpServers = BuildMcpServerConfigurations(tooling?.McpServers ?? []);
-        List<IAsyncDisposable> disposables = [];
-        List<AIFunction> tools = [];
-
-        foreach (RunTurnLspProfileConfigDto profile in tooling?.LspProfiles ?? [])
-        {
-            LspToolSession lspSession = await LspToolSession.StartAsync(profile, projectPath, cancellationToken)
-                .ConfigureAwait(false);
-            disposables.Add(lspSession);
-            tools.AddRange(lspSession.Tools);
-        }
+        (List<AIFunction> tools, List<IAsyncDisposable> disposables) =
+            await BuildLspToolingAsync(tooling?.LspProfiles ?? [], projectPath, cancellationToken).ConfigureAwait(false);
 
         SessionToolingBundle bundle = new(mcpServers, tools);
         bundle._disposables.AddRange(disposables);
@@ -57,42 +52,81 @@ internal sealed class SessionToolingBundle : IAsyncDisposable
 
         foreach (RunTurnMcpServerConfigDto server in servers)
         {
-            string serverName = string.IsNullOrWhiteSpace(server.Name) ? server.Id : server.Name.Trim();
-            List<string> tools = server.Tools.Count == 0 ? ["*"] : server.Tools.ToList();
-
-            if (string.Equals(server.Transport, "local", StringComparison.OrdinalIgnoreCase))
-            {
-                if (string.IsNullOrWhiteSpace(server.Command))
-                {
-                    throw new InvalidOperationException($"MCP server \"{serverName}\" is missing a command.");
-                }
-
-                configurations[serverName] = new McpLocalServerConfig
-                {
-                    Type = "local",
-                    Timeout = server.TimeoutMs,
-                    Command = server.Command,
-                    Args = server.Args?.ToList() ?? [],
-                    Cwd = string.IsNullOrWhiteSpace(server.Cwd) ? null : server.Cwd,
-                    Tools = tools,
-                };
-                continue;
-            }
-
-            if (string.IsNullOrWhiteSpace(server.Url))
-            {
-                throw new InvalidOperationException($"MCP server \"{serverName}\" is missing a URL.");
-            }
-
-            configurations[serverName] = new McpRemoteServerConfig
-            {
-                Type = server.Transport,
-                Timeout = server.TimeoutMs,
-                Url = server.Url,
-                Tools = tools,
-            };
+            configurations[ResolveServerName(server)] = CreateServerConfiguration(server);
         }
 
         return configurations;
+    }
+
+    private static async Task<(List<AIFunction> Tools, List<IAsyncDisposable> Disposables)> BuildLspToolingAsync(
+        IReadOnlyList<RunTurnLspProfileConfigDto> profiles,
+        string projectPath,
+        CancellationToken cancellationToken)
+    {
+        List<AIFunction> tools = [];
+        List<IAsyncDisposable> disposables = [];
+
+        foreach (RunTurnLspProfileConfigDto profile in profiles)
+        {
+            LspToolSession session = await LspToolSession.StartAsync(profile, projectPath, cancellationToken)
+                .ConfigureAwait(false);
+            disposables.Add(session);
+            tools.AddRange(session.Tools);
+        }
+
+        return (tools, disposables);
+    }
+
+    private static object CreateServerConfiguration(RunTurnMcpServerConfigDto server)
+    {
+        return string.Equals(server.Transport, LocalTransport, StringComparison.OrdinalIgnoreCase)
+            ? CreateLocalServerConfiguration(server)
+            : CreateRemoteServerConfiguration(server);
+    }
+
+    private static McpLocalServerConfig CreateLocalServerConfiguration(RunTurnMcpServerConfigDto server)
+    {
+        string serverName = ResolveServerName(server);
+        if (string.IsNullOrWhiteSpace(server.Command))
+        {
+            throw new InvalidOperationException($"MCP server \"{serverName}\" is missing a command.");
+        }
+
+        return new McpLocalServerConfig
+        {
+            Type = LocalTransport,
+            Timeout = server.TimeoutMs,
+            Command = server.Command,
+            Args = server.Args?.ToList() ?? [],
+            Cwd = string.IsNullOrWhiteSpace(server.Cwd) ? null : server.Cwd,
+            Tools = ResolveTools(server),
+        };
+    }
+
+    private static McpRemoteServerConfig CreateRemoteServerConfiguration(RunTurnMcpServerConfigDto server)
+    {
+        string serverName = ResolveServerName(server);
+        if (string.IsNullOrWhiteSpace(server.Url))
+        {
+            throw new InvalidOperationException($"MCP server \"{serverName}\" is missing a URL.");
+        }
+
+        return new McpRemoteServerConfig
+        {
+            Type = server.Transport,
+            Timeout = server.TimeoutMs,
+            Url = server.Url,
+            Tools = ResolveTools(server),
+        };
+    }
+
+    private static string ResolveServerName(RunTurnMcpServerConfigDto server)
+    {
+        return string.IsNullOrWhiteSpace(server.Name) ? server.Id : server.Name.Trim();
+    }
+
+    private static List<string> ResolveTools(RunTurnMcpServerConfigDto server)
+    {
+        return server.Tools.Count == 0 ? [WildcardToolName] : server.Tools.ToList();
     }
 }

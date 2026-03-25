@@ -4,6 +4,12 @@ using Microsoft.Extensions.AI;
 
 namespace Eryx.AgentHost.Services;
 
+internal readonly record struct TranscriptSegment(string MessageId, string AuthorName, string Content)
+{
+    public static TranscriptSegment FromTuple((string MessageId, string AuthorName, string Content) segment)
+        => new(segment.MessageId, segment.AuthorName, segment.Content);
+}
+
 internal static class WorkflowTranscriptProjector
 {
     public static ChatMessage ToChatMessage(ChatMessageDto message)
@@ -29,68 +35,107 @@ internal static class WorkflowTranscriptProjector
         IReadOnlyList<(string MessageId, string AuthorName, string Content)> segments,
         AgentIdentity? fallbackAgent = null)
     {
-        List<ChatMessageDto> mapped = [];
+        return ProjectCompletedMessagesFromSegments(
+            command,
+            newMessages,
+            segments.Select(TranscriptSegment.FromTuple).ToList(),
+            fallbackAgent);
+    }
+
+    internal static List<ChatMessageDto> ProjectCompletedMessagesFromSegments(
+        RunTurnCommandDto command,
+        IReadOnlyList<ChatMessage> newMessages,
+        IReadOnlyList<TranscriptSegment> segments,
+        AgentIdentity? fallbackAgent = null)
+    {
+        List<ChatMessageDto> projectedMessages = [];
         int fallbackOutputIndex = 0;
         string createdAt = DateTimeOffset.UtcNow.ToString("O");
-        List<(string MessageId, string AuthorName, string Content)> preparedSegments =
-            PrepareSegmentsForProjection(command.Pattern, segments);
-        List<(string MessageId, string AuthorName, string Content)> remainingSegments = preparedSegments.ToList();
+        List<TranscriptSegment> preparedSegments = PrepareSegmentsForProjection(command.Pattern, segments);
+        List<TranscriptSegment> remainingSegments = preparedSegments.ToList();
         List<ChatMessage> assistantMessages = newMessages.Where(message => message.Role != ChatRole.User).ToList();
 
         for (int messageIndex = 0; messageIndex < assistantMessages.Count; messageIndex++)
         {
             ChatMessage message = assistantMessages[messageIndex];
-            (string MessageId, string AuthorName, string Content)? segment = TryMatchSegment(
+            TranscriptSegment? matchedSegment = TryMatchSegment(
                 message,
                 remainingSegments,
                 assistantMessages.Count - messageIndex,
                 command.Pattern,
                 fallbackAgent);
-            string content = message.Text ?? segment?.Content ?? string.Empty;
+            string content = message.Text ?? matchedSegment?.Content ?? string.Empty;
             if (string.IsNullOrWhiteSpace(content))
             {
                 continue;
             }
 
-            if (segment.HasValue)
+            if (matchedSegment.HasValue)
             {
-                remainingSegments.Remove(segment.Value);
+                remainingSegments.Remove(matchedSegment.Value);
             }
 
             fallbackOutputIndex++;
-
-            mapped.Add(new ChatMessageDto
-            {
-                Id = segment?.MessageId ?? $"{command.RequestId}-final-{fallbackOutputIndex}",
-                Role = message.Role == ChatRole.System ? "system" : "assistant",
-                AuthorName = ResolveProjectedAuthorName(
-                    command.Pattern,
-                    message.AuthorName,
-                    segment?.AuthorName,
-                    fallbackAgent),
-                Content = content,
-                CreatedAt = createdAt,
-            });
+            projectedMessages.Add(CreateProjectedMessage(
+                command,
+                message,
+                matchedSegment,
+                fallbackAgent,
+                createdAt,
+                fallbackOutputIndex,
+                content));
         }
 
-        if (mapped.Count == 0 && preparedSegments.Count > 0)
+        if (projectedMessages.Count == 0 && preparedSegments.Count > 0)
         {
-            mapped.AddRange(preparedSegments.Select(segment => new ChatMessageDto
-            {
-                Id = segment.MessageId,
-                Role = "assistant",
-                AuthorName = AgentIdentityResolver.ResolveDisplayAuthorName(command.Pattern, segment.AuthorName),
-                Content = segment.Content,
-                CreatedAt = createdAt,
-            }));
+            projectedMessages.AddRange(preparedSegments.Select(segment =>
+                CreateProjectedMessageFromSegment(command, segment, createdAt)));
         }
 
-        return mapped;
+        return projectedMessages;
     }
 
-    private static List<(string MessageId, string AuthorName, string Content)> PrepareSegmentsForProjection(
+    private static ChatMessageDto CreateProjectedMessage(
+        RunTurnCommandDto command,
+        ChatMessage message,
+        TranscriptSegment? matchedSegment,
+        AgentIdentity? fallbackAgent,
+        string createdAt,
+        int fallbackOutputIndex,
+        string content)
+    {
+        return new ChatMessageDto
+        {
+            Id = matchedSegment?.MessageId ?? $"{command.RequestId}-final-{fallbackOutputIndex}",
+            Role = message.Role == ChatRole.System ? "system" : "assistant",
+            AuthorName = ResolveProjectedAuthorName(
+                command.Pattern,
+                message.AuthorName,
+                matchedSegment?.AuthorName,
+                fallbackAgent),
+            Content = content,
+            CreatedAt = createdAt,
+        };
+    }
+
+    private static ChatMessageDto CreateProjectedMessageFromSegment(
+        RunTurnCommandDto command,
+        TranscriptSegment segment,
+        string createdAt)
+    {
+        return new ChatMessageDto
+        {
+            Id = segment.MessageId,
+            Role = "assistant",
+            AuthorName = AgentIdentityResolver.ResolveDisplayAuthorName(command.Pattern, segment.AuthorName),
+            Content = segment.Content,
+            CreatedAt = createdAt,
+        };
+    }
+
+    private static List<TranscriptSegment> PrepareSegmentsForProjection(
         PatternDefinitionDto pattern,
-        IReadOnlyList<(string MessageId, string AuthorName, string Content)> segments)
+        IReadOnlyList<TranscriptSegment> segments)
     {
         if (!string.Equals(pattern.Mode, "concurrent", StringComparison.Ordinal)
             || segments.Count <= 1)
@@ -101,12 +146,12 @@ internal static class WorkflowTranscriptProjector
         // Agent Framework concurrent workflows aggregate the last message emitted by each agent.
         // Collapse streamed segments to the most recent segment per author, preserving the order
         // in which those authors most recently completed so positional fallback stays aligned.
-        Dictionary<string, ((string MessageId, string AuthorName, string Content) Segment, int LastIndex)> latestSegmentByAuthor =
+        Dictionary<string, (TranscriptSegment Segment, int LastIndex)> latestSegmentByAuthor =
             new(StringComparer.Ordinal);
 
         for (int index = 0; index < segments.Count; index++)
         {
-            (string MessageId, string AuthorName, string Content) segment = segments[index];
+            TranscriptSegment segment = segments[index];
             string authorKey = AgentIdentityResolver.ResolveDisplayAuthorName(pattern, segment.AuthorName);
             latestSegmentByAuthor[authorKey] = (segment, index);
         }
@@ -117,9 +162,9 @@ internal static class WorkflowTranscriptProjector
             .ToList();
     }
 
-    private static (string MessageId, string AuthorName, string Content)? TryMatchSegment(
+    private static TranscriptSegment? TryMatchSegment(
         ChatMessage message,
-        IReadOnlyList<(string MessageId, string AuthorName, string Content)> remainingSegments,
+        IReadOnlyList<TranscriptSegment> remainingSegments,
         int remainingMessageCount,
         PatternDefinitionDto pattern,
         AgentIdentity? fallbackAgent)
@@ -145,7 +190,7 @@ internal static class WorkflowTranscriptProjector
                             AgentIdentityResolver.ResolveDisplayAuthorName(pattern, segment.AuthorName),
                             resolvedAuthorName,
                             StringComparison.Ordinal),
-                    out (string MessageId, string AuthorName, string Content) authorMatchedSegment))
+                    out TranscriptSegment authorMatchedSegment))
             {
                 return authorMatchedSegment;
             }
@@ -153,7 +198,7 @@ internal static class WorkflowTranscriptProjector
             if (TryFindSegment(
                     remainingSegments,
                     segment => string.Equals(segment.Content, messageText, StringComparison.Ordinal),
-                    out (string MessageId, string AuthorName, string Content) contentMatchedSegment))
+                    out TranscriptSegment contentMatchedSegment))
             {
                 return contentMatchedSegment;
             }
@@ -169,7 +214,7 @@ internal static class WorkflowTranscriptProjector
                         AgentIdentityResolver.ResolveDisplayAuthorName(pattern, segment.AuthorName),
                         fallbackAgent.Value.AgentName,
                         StringComparison.Ordinal),
-                    out (string MessageId, string AuthorName, string Content) fallbackMatchedSegment))
+                    out TranscriptSegment fallbackMatchedSegment))
             {
                 return fallbackMatchedSegment;
             }
@@ -183,11 +228,11 @@ internal static class WorkflowTranscriptProjector
     }
 
     private static bool TryFindSegment(
-        IReadOnlyList<(string MessageId, string AuthorName, string Content)> segments,
-        Func<(string MessageId, string AuthorName, string Content), bool> predicate,
-        out (string MessageId, string AuthorName, string Content) matchedSegment)
+        IReadOnlyList<TranscriptSegment> segments,
+        Func<TranscriptSegment, bool> predicate,
+        out TranscriptSegment matchedSegment)
     {
-        foreach ((string MessageId, string AuthorName, string Content) segment in segments)
+        foreach (TranscriptSegment segment in segments)
         {
             if (predicate(segment))
             {
@@ -201,13 +246,13 @@ internal static class WorkflowTranscriptProjector
     }
 
     private static bool TryFindLastSegment(
-        IReadOnlyList<(string MessageId, string AuthorName, string Content)> segments,
-        Func<(string MessageId, string AuthorName, string Content), bool> predicate,
-        out (string MessageId, string AuthorName, string Content) matchedSegment)
+        IReadOnlyList<TranscriptSegment> segments,
+        Func<TranscriptSegment, bool> predicate,
+        out TranscriptSegment matchedSegment)
     {
         for (int index = segments.Count - 1; index >= 0; index--)
         {
-            (string MessageId, string AuthorName, string Content) segment = segments[index];
+            TranscriptSegment segment = segments[index];
             if (predicate(segment))
             {
                 matchedSegment = segment;
@@ -303,42 +348,42 @@ internal static class WorkflowTranscriptProjector
 
 internal sealed class StreamingTranscriptBuffer
 {
-    private readonly List<StreamingSegment> _segments = [];
+    private readonly List<BufferedTranscriptSegment> _segments = [];
 
     public int Count => _segments.Count;
 
-    public (string MessageId, string AuthorName, string Content) AppendDelta(
+    public TranscriptSegment AppendDelta(
         string messageId,
         string authorName,
         string delta)
     {
-        StreamingSegment segment = GetOrCreateSegment(messageId, authorName);
+        BufferedTranscriptSegment segment = GetOrCreateSegment(messageId, authorName);
         segment.SetContent(StreamingTextMerger.Merge(segment.Content.ToString(), delta));
         segment.SetAuthorName(authorName);
         return segment.ToSnapshot();
     }
 
-    public IReadOnlyList<(string MessageId, string AuthorName, string Content)> Snapshot()
+    public IReadOnlyList<TranscriptSegment> Snapshot()
     {
         return _segments.Select(segment => segment.ToSnapshot()).ToList();
     }
 
-    private StreamingSegment GetOrCreateSegment(string messageId, string authorName)
+    private BufferedTranscriptSegment GetOrCreateSegment(string messageId, string authorName)
     {
-        StreamingSegment? existing = _segments.LastOrDefault(segment => segment.MessageId == messageId);
+        BufferedTranscriptSegment? existing = _segments.LastOrDefault(segment => segment.MessageId == messageId);
         if (existing is not null)
         {
             return existing;
         }
 
-        StreamingSegment created = new(messageId, authorName);
+        BufferedTranscriptSegment created = new(messageId, authorName);
         _segments.Add(created);
         return created;
     }
 
-    private sealed class StreamingSegment
+    private sealed class BufferedTranscriptSegment
     {
-        public StreamingSegment(string messageId, string authorName)
+        public BufferedTranscriptSegment(string messageId, string authorName)
         {
             MessageId = messageId;
             AuthorName = authorName;
@@ -361,9 +406,9 @@ internal sealed class StreamingTranscriptBuffer
             AuthorName = value;
         }
 
-        public (string MessageId, string AuthorName, string Content) ToSnapshot()
+        public TranscriptSegment ToSnapshot()
         {
-            return (MessageId, AuthorName, Content.ToString());
+            return new TranscriptSegment(MessageId, AuthorName, Content.ToString());
         }
     }
 }

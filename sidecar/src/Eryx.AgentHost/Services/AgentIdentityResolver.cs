@@ -7,25 +7,17 @@ internal readonly record struct AgentIdentity(string AgentId, string AgentName);
 
 internal static class AgentIdentityResolver
 {
+    private const string GenericAssistantIdentifier = "assistant";
+
     public static bool TryResolveKnownAgentIdentity(
         PatternDefinitionDto pattern,
         string? agentIdentifier,
         out AgentIdentity agent)
     {
         agent = default;
-        if (string.IsNullOrWhiteSpace(agentIdentifier))
-        {
-            return false;
-        }
 
-        PatternAgentDefinitionDto? match = FindKnownAgent(pattern, agentIdentifier);
-        if (match is null
-            && IsGenericAssistantIdentifier(agentIdentifier)
-            && pattern.Agents.Count == 1)
-        {
-            match = pattern.Agents[0];
-        }
-
+        PatternAgentDefinitionDto? match = FindKnownAgent(pattern, agentIdentifier)
+            ?? ResolveSingleAgentAssistantAlias(pattern, agentIdentifier);
         if (match is null)
         {
             return false;
@@ -62,30 +54,12 @@ internal static class AgentIdentityResolver
         string? agentName)
     {
         PatternAgentDefinitionDto? match = FindKnownAgent(pattern, agentId)
-            ?? FindKnownAgent(pattern, agentName);
+            ?? FindKnownAgent(pattern, agentName)
+            ?? ResolveSingleAgentAssistantAlias(pattern, agentId, agentName);
 
-        if (match is null
-            && pattern.Agents.Count == 1
-            && (IsGenericAssistantIdentifier(agentId) || IsGenericAssistantIdentifier(agentName)))
-        {
-            match = pattern.Agents[0];
-        }
-
-        if (match is not null)
-        {
-            return ToAgentIdentity(match);
-        }
-
-        string resolvedAgentId = !string.IsNullOrWhiteSpace(agentId)
-            ? agentId
-            : agentName ?? "agent";
-
-        if (!string.IsNullOrWhiteSpace(agentName))
-        {
-            return new AgentIdentity(resolvedAgentId, agentName);
-        }
-
-        return new AgentIdentity(resolvedAgentId, resolvedAgentId);
+        return match is not null
+            ? ToAgentIdentity(match)
+            : CreateFallbackIdentity(agentId, agentName);
     }
 
     public static string ResolveDisplayAuthorName(
@@ -113,7 +87,24 @@ internal static class AgentIdentityResolver
             return fallbackIdentifier;
         }
 
-        return "assistant";
+        return GenericAssistantIdentifier;
+    }
+
+    internal static bool IsGenericAssistantIdentifier(string? candidate)
+    {
+        return string.Equals(
+            NormalizeComparisonKey(candidate),
+            GenericAssistantIdentifier,
+            StringComparison.Ordinal);
+    }
+
+    private static PatternAgentDefinitionDto? ResolveSingleAgentAssistantAlias(
+        PatternDefinitionDto pattern,
+        params string?[] agentIdentifiers)
+    {
+        return pattern.Agents.Count == 1 && agentIdentifiers.Any(IsGenericAssistantIdentifier)
+            ? pattern.Agents[0]
+            : null;
     }
 
     private static PatternAgentDefinitionDto? FindKnownAgent(PatternDefinitionDto pattern, string? candidate)
@@ -126,6 +117,18 @@ internal static class AgentIdentityResolver
         return new AgentIdentity(
             agent.Id,
             string.IsNullOrWhiteSpace(agent.Name) ? agent.Id : agent.Name);
+    }
+
+    private static AgentIdentity CreateFallbackIdentity(string? agentId, string? agentName)
+    {
+        string resolvedAgentId = !string.IsNullOrWhiteSpace(agentId)
+            ? agentId
+            : agentName ?? "agent";
+        string resolvedAgentName = !string.IsNullOrWhiteSpace(agentName)
+            ? agentName
+            : resolvedAgentId;
+
+        return new AgentIdentity(resolvedAgentId, resolvedAgentName);
     }
 
     private static bool MatchesAgent(PatternAgentDefinitionDto agent, string? candidate)
@@ -144,7 +147,6 @@ internal static class AgentIdentityResolver
         string normalizedCandidate = NormalizeComparisonKey(candidate);
         string normalizedId = NormalizeComparisonKey(agent.Id);
         string normalizedName = NormalizeComparisonKey(agent.Name);
-
         if (normalizedCandidate.Length == 0)
         {
             return false;
@@ -156,24 +158,11 @@ internal static class AgentIdentityResolver
             return true;
         }
 
-        if (normalizedId.Length > 0
-            && normalizedCandidate.EndsWith(normalizedId, StringComparison.Ordinal))
-        {
-            return true;
-        }
-
         return normalizedId.Length > 0
             && normalizedName.Length > 0
-            && normalizedCandidate.Contains(normalizedId, StringComparison.Ordinal)
-            && normalizedCandidate.Contains(normalizedName, StringComparison.Ordinal);
-    }
-
-    internal static bool IsGenericAssistantIdentifier(string? candidate)
-    {
-        return string.Equals(
-            NormalizeComparisonKey(candidate),
-            "assistant",
-            StringComparison.Ordinal);
+            && (normalizedCandidate.EndsWith(normalizedId, StringComparison.Ordinal)
+                || normalizedCandidate.Contains(normalizedId, StringComparison.Ordinal)
+                    && normalizedCandidate.Contains(normalizedName, StringComparison.Ordinal));
     }
 
     private static string NormalizeComparisonKey(string? value)

@@ -4,6 +4,11 @@ namespace Eryx.AgentHost.Services;
 
 internal static partial class StreamingTextMerger
 {
+    private const double SnapshotReplacementMinLengthRatio = 0.6;
+    private const int SnapshotReplacementMinTokenCount = 3;
+    private const double SnapshotReplacementSharedTokenRatio = 0.5;
+    private const string CharactersThatDoNotNeedLeadingSpace = "([{/\"'`";
+
     public static string Merge(string current, string incoming)
     {
         if (string.IsNullOrEmpty(current))
@@ -16,21 +21,10 @@ internal static partial class StreamingTextMerger
             return current;
         }
 
-        if (incoming.StartsWith(current, StringComparison.Ordinal)
-            || incoming.Contains(current, StringComparison.Ordinal))
+        if (TryMergeSnapshotVariants(current, incoming, out string merged)
+            || TryMergeByOverlap(current, incoming, out merged))
         {
-            return incoming;
-        }
-
-        if (current.Contains(incoming, StringComparison.Ordinal))
-        {
-            return current;
-        }
-
-        int overlap = ComputeSuffixPrefixOverlap(current, incoming);
-        if (overlap > 0)
-        {
-            return current + incoming[overlap..];
+            return merged;
         }
 
         if (ShouldReplaceWithSnapshot(current, incoming))
@@ -38,22 +32,51 @@ internal static partial class StreamingTextMerger
             return incoming;
         }
 
-        return AppendWithNaturalBoundary(current, incoming);
+        return current + ResolveBoundarySeparator(current, incoming) + incoming;
     }
 
-    private static string AppendWithNaturalBoundary(string current, string incoming)
+    private static bool TryMergeSnapshotVariants(string current, string incoming, out string merged)
+    {
+        if (incoming.StartsWith(current, StringComparison.Ordinal)
+            || incoming.Contains(current, StringComparison.Ordinal))
+        {
+            merged = incoming;
+            return true;
+        }
+
+        if (current.Contains(incoming, StringComparison.Ordinal))
+        {
+            merged = current;
+            return true;
+        }
+
+        merged = string.Empty;
+        return false;
+    }
+
+    private static bool TryMergeByOverlap(string current, string incoming, out string merged)
+    {
+        int overlapLength = ComputeSuffixPrefixOverlap(current, incoming);
+        if (overlapLength == 0)
+        {
+            merged = string.Empty;
+            return false;
+        }
+
+        merged = current + incoming[overlapLength..];
+        return true;
+    }
+
+    private static string ResolveBoundarySeparator(string current, string incoming)
     {
         if (ShouldInsertNewlineBoundary(current, incoming))
         {
-            return current + "\n" + incoming;
+            return "\n";
         }
 
-        if (ShouldInsertSpaceBoundary(current, incoming))
-        {
-            return current + " " + incoming;
-        }
-
-        return current + incoming;
+        return ShouldInsertSpaceBoundary(current, incoming)
+            ? " "
+            : string.Empty;
     }
 
     private static int ComputeSuffixPrefixOverlap(string current, string incoming)
@@ -72,40 +95,48 @@ internal static partial class StreamingTextMerger
 
     private static bool ShouldReplaceWithSnapshot(string current, string incoming)
     {
-        if (incoming.Length < Math.Floor(current.Length * 0.6))
+        if (!HasViableSnapshotLength(current, incoming))
         {
             return false;
         }
 
         HashSet<string> currentTokens = Tokenize(current).ToHashSet(StringComparer.Ordinal);
         HashSet<string> incomingTokens = Tokenize(incoming).ToHashSet(StringComparer.Ordinal);
-        if (currentTokens.Count < 3 || incomingTokens.Count < 3)
+        if (!HasEnoughTokensForSnapshotComparison(currentTokens, incomingTokens))
         {
             return false;
         }
 
-        int shared = incomingTokens.Count(token => currentTokens.Contains(token));
-        return shared / (double)Math.Min(currentTokens.Count, incomingTokens.Count) >= 0.5;
+        int sharedTokenCount = incomingTokens.Count(token => currentTokens.Contains(token));
+        double sharedTokenRatio = sharedTokenCount / (double)Math.Min(currentTokens.Count, incomingTokens.Count);
+        return sharedTokenRatio >= SnapshotReplacementSharedTokenRatio;
+    }
+
+    private static bool HasViableSnapshotLength(string current, string incoming)
+    {
+        return incoming.Length >= Math.Floor(current.Length * SnapshotReplacementMinLengthRatio);
+    }
+
+    private static bool HasEnoughTokensForSnapshotComparison(
+        HashSet<string> currentTokens,
+        HashSet<string> incomingTokens)
+    {
+        return currentTokens.Count >= SnapshotReplacementMinTokenCount
+            && incomingTokens.Count >= SnapshotReplacementMinTokenCount;
     }
 
     private static bool ShouldInsertNewlineBoundary(string current, string incoming)
     {
-        if (current.EndsWith('\n'))
-        {
-            return false;
-        }
-
-        return MarkdownBlockPrefixRegex().IsMatch(incoming.TrimStart());
+        return !current.EndsWith('\n')
+            && MarkdownBlockPrefixRegex().IsMatch(incoming.TrimStart());
     }
 
     private static bool ShouldInsertSpaceBoundary(string current, string incoming)
     {
-        char lastChar = current[^1];
-        char firstChar = incoming[0];
-
-        if (char.IsWhiteSpace(lastChar)
-            || char.IsWhiteSpace(firstChar)
-            || "([{/\"'`".Contains(lastChar))
+        char lastCharacter = current[^1];
+        char firstCharacter = incoming[0];
+        if (HasExistingBoundary(lastCharacter, firstCharacter)
+            || CharactersThatDoNotNeedLeadingSpace.Contains(lastCharacter))
         {
             return false;
         }
@@ -115,13 +146,24 @@ internal static partial class StreamingTextMerger
             return false;
         }
 
-        if (MarkdownInlinePrefixRegex().IsMatch(incoming)
-            || char.IsUpper(firstChar)
-            || char.IsDigit(firstChar))
-        {
-            return true;
-        }
+        return StartsLikeASeparatedInlineFragment(firstCharacter, incoming)
+            || LooksLikeWordBoundary(current, incoming);
+    }
 
+    private static bool HasExistingBoundary(char lastCharacter, char firstCharacter)
+    {
+        return char.IsWhiteSpace(lastCharacter) || char.IsWhiteSpace(firstCharacter);
+    }
+
+    private static bool StartsLikeASeparatedInlineFragment(char firstCharacter, string incoming)
+    {
+        return MarkdownInlinePrefixRegex().IsMatch(incoming)
+            || char.IsUpper(firstCharacter)
+            || char.IsDigit(firstCharacter);
+    }
+
+    private static bool LooksLikeWordBoundary(string current, string incoming)
+    {
         string[] currentTokens = Tokenize(current).ToArray();
         string[] incomingTokens = Tokenize(incoming).ToArray();
         string firstIncomingToken = incomingTokens.FirstOrDefault() ?? string.Empty;

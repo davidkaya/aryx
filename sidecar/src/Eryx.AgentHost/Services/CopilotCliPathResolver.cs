@@ -6,7 +6,9 @@ namespace Eryx.AgentHost.Services;
 internal static class CopilotCliPathResolver
 {
     private const string CopilotCommandName = "copilot";
+    private const string DefaultWindowsCommandProcessor = "cmd.exe";
     private const string DefaultWindowsPathExtensions = ".COM;.EXE;.BAT;.CMD";
+
     private static readonly string[] BlockedCliEnvironmentPrefixes = ["BUN_", "COPILOT_", "ELECTRON_", "NODE_", "NPM_"];
 
     public static CopilotClientOptions CreateClientOptions()
@@ -68,21 +70,14 @@ internal static class CopilotCliPathResolver
         ArgumentNullException.ThrowIfNull(environmentVariables);
 
         Dictionary<string, string> sanitizedEnvironment = new(StringComparer.OrdinalIgnoreCase);
-
         foreach (KeyValuePair<string, string?> entry in environmentVariables)
         {
-            if (string.IsNullOrWhiteSpace(entry.Key) || entry.Value is null)
+            if (ShouldSkipEnvironmentEntry(entry))
             {
                 continue;
             }
 
-            string normalizedKey = entry.Key.ToUpperInvariant();
-            if (BlockedCliEnvironmentPrefixes.Any(prefix => normalizedKey.StartsWith(prefix, StringComparison.Ordinal)))
-            {
-                continue;
-            }
-
-            sanitizedEnvironment[entry.Key] = entry.Value;
+            sanitizedEnvironment[entry.Key] = entry.Value!;
         }
 
         return sanitizedEnvironment;
@@ -97,13 +92,27 @@ internal static class CopilotCliPathResolver
             return new CopilotCliLaunch(cliPath, []);
         }
 
-        string launchPath = string.IsNullOrWhiteSpace(commandProcessorPath)
-            ? "cmd.exe"
-            : commandProcessorPath;
-
         return new CopilotCliLaunch(
-            launchPath,
+            ResolveCommandProcessorPath(commandProcessorPath),
             ["/d", "/s", "/c", CopilotCommandName]);
+    }
+
+    private static bool ShouldSkipEnvironmentEntry(KeyValuePair<string, string?> entry)
+    {
+        if (string.IsNullOrWhiteSpace(entry.Key) || entry.Value is null)
+        {
+            return true;
+        }
+
+        string normalizedKey = entry.Key.ToUpperInvariant();
+        return BlockedCliEnvironmentPrefixes.Any(prefix => normalizedKey.StartsWith(prefix, StringComparison.Ordinal));
+    }
+
+    private static string ResolveCommandProcessorPath(string? commandProcessorPath)
+    {
+        return string.IsNullOrWhiteSpace(commandProcessorPath)
+            ? DefaultWindowsCommandProcessor
+            : commandProcessorPath;
     }
 
     private static string? ResolveCliPath(
@@ -112,18 +121,7 @@ internal static class CopilotCliPathResolver
         bool isWindows,
         Func<string, bool> fileExists)
     {
-        if (string.IsNullOrWhiteSpace(pathValue))
-        {
-            return null;
-        }
-
-        StringComparer comparer = isWindows ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
-
-        foreach (string directory in pathValue
-            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(segment => segment.Trim('"'))
-            .Where(segment => !string.IsNullOrWhiteSpace(segment))
-            .Distinct(comparer))
+        foreach (string directory in EnumerateDistinctSearchDirectories(pathValue, isWindows))
         {
             foreach (string candidateName in GetCandidateFileNames(pathExtValue, isWindows))
             {
@@ -136,6 +134,24 @@ internal static class CopilotCliPathResolver
         }
 
         return null;
+    }
+
+    private static IEnumerable<string> EnumerateDistinctSearchDirectories(string? pathValue, bool isWindows)
+    {
+        if (string.IsNullOrWhiteSpace(pathValue))
+        {
+            yield break;
+        }
+
+        StringComparer comparer = isWindows ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+        foreach (string directory in pathValue
+            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(segment => segment.Trim('"'))
+            .Where(segment => !string.IsNullOrWhiteSpace(segment))
+            .Distinct(comparer))
+        {
+            yield return directory;
+        }
     }
 
     private static IEnumerable<string> GetCandidateFileNames(string? pathExtValue, bool isWindows)

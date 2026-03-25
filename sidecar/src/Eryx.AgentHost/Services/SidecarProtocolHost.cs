@@ -9,6 +9,11 @@ namespace Eryx.AgentHost.Services;
 
 public sealed class SidecarProtocolHost
 {
+    private const string DescribeCapabilitiesCommandType = "describe-capabilities";
+    private const string ValidatePatternCommandType = "validate-pattern";
+    private const string RunTurnCommandType = "run-turn";
+    private const string ResolveApprovalCommandType = "resolve-approval";
+
     private static readonly string[] AuthenticationErrorIndicators =
     [
         "login",
@@ -26,6 +31,7 @@ public sealed class SidecarProtocolHost
     private readonly PatternValidator _patternValidator;
     private readonly ITurnWorkflowRunner _workflowRunner;
     private readonly JsonSerializerOptions _jsonOptions;
+    private readonly IReadOnlyDictionary<string, Func<CommandContext, Task>> _commandHandlers;
     private readonly SemaphoreSlim _writeLock = new(1, 1);
     private readonly ConcurrentDictionary<string, Task> _inFlight = new(StringComparer.Ordinal);
 
@@ -47,6 +53,13 @@ public sealed class SidecarProtocolHost
             DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
             PropertyNameCaseInsensitive = true,
         };
+        _commandHandlers = new Dictionary<string, Func<CommandContext, Task>>(StringComparer.Ordinal)
+        {
+            [DescribeCapabilitiesCommandType] = HandleDescribeCapabilitiesAsync,
+            [ValidatePatternCommandType] = HandleValidatePatternAsync,
+            [RunTurnCommandType] = HandleRunTurnAsync,
+            [ResolveApprovalCommandType] = HandleResolveApprovalAsync,
+        };
     }
 
     public async Task RunAsync(TextReader input, TextWriter output, CancellationToken cancellationToken)
@@ -65,17 +78,9 @@ public sealed class SidecarProtocolHost
             }
 
             SidecarCommandEnvelope envelope = DeserializeEnvelope(line);
-            Task task = HandleCommandAsync(line, envelope, output, cancellationToken);
-            _inFlight[envelope.RequestId] = task;
-            _ = task.ContinueWith(
-                _ =>
-                {
-                    _inFlight.TryRemove(envelope.RequestId, out Task? removedTask);
-                    return removedTask is not null;
-                },
-                CancellationToken.None,
-                TaskContinuationOptions.None,
-                TaskScheduler.Default);
+            TrackInFlightRequest(
+                envelope.RequestId,
+                HandleCommandAsync(line, envelope, output, cancellationToken));
         }
 
         await Task.WhenAll(_inFlight.Values).ConfigureAwait(false);
@@ -87,87 +92,122 @@ public sealed class SidecarProtocolHost
             ?? throw new InvalidOperationException("Could not deserialize sidecar command envelope.");
     }
 
+    private void TrackInFlightRequest(string requestId, Task task)
+    {
+        _inFlight[requestId] = task;
+        _ = task.ContinueWith(
+            _ =>
+            {
+                _inFlight.TryRemove(requestId, out Task? removedTask);
+                return removedTask is not null;
+            },
+            CancellationToken.None,
+            TaskContinuationOptions.None,
+            TaskScheduler.Default);
+    }
+
     private async Task HandleCommandAsync(
         string rawCommand,
         SidecarCommandEnvelope envelope,
         TextWriter output,
         CancellationToken cancellationToken)
     {
+        CommandContext context = new(rawCommand, envelope, output, cancellationToken);
+
         try
         {
-            switch (envelope.Type)
-            {
-                case "describe-capabilities":
-                    await WriteAsync(output, new CapabilitiesEventDto
-                    {
-                        Type = "capabilities",
-                        RequestId = envelope.RequestId,
-                        Capabilities = await _capabilitiesProvider(cancellationToken).ConfigureAwait(false),
-                    }, cancellationToken).ConfigureAwait(false);
-                    break;
-
-                case "validate-pattern":
-                    ValidatePatternCommandDto validateCommand =
-                        JsonSerializer.Deserialize<ValidatePatternCommandDto>(rawCommand, _jsonOptions)
-                        ?? throw new InvalidOperationException("Could not deserialize validate-pattern command.");
-
-                    await WriteAsync(output, new PatternValidationEventDto
-                    {
-                        Type = "pattern-validation",
-                        RequestId = envelope.RequestId,
-                        Issues = _patternValidator.Validate(validateCommand.Pattern),
-                    }, cancellationToken).ConfigureAwait(false);
-                    break;
-
-                case "run-turn":
-                    RunTurnCommandDto runTurnCommand =
-                        JsonSerializer.Deserialize<RunTurnCommandDto>(rawCommand, _jsonOptions)
-                        ?? throw new InvalidOperationException("Could not deserialize run-turn command.");
-
-                    IReadOnlyList<ChatMessageDto> messages = await _workflowRunner.RunTurnAsync(
-                        runTurnCommand,
-                        delta => WriteAsync(output, delta, cancellationToken),
-                        activity => WriteAsync(output, activity, cancellationToken),
-                        approval => WriteAsync(output, approval, cancellationToken),
-                        cancellationToken).ConfigureAwait(false);
-
-                    await WriteAsync(output, new TurnCompleteEventDto
-                    {
-                        Type = "turn-complete",
-                        RequestId = envelope.RequestId,
-                        SessionId = runTurnCommand.SessionId,
-                        Messages = messages,
-                    }, cancellationToken).ConfigureAwait(false);
-                    break;
-
-                case "resolve-approval":
-                    ResolveApprovalCommandDto resolveApprovalCommand =
-                        JsonSerializer.Deserialize<ResolveApprovalCommandDto>(rawCommand, _jsonOptions)
-                        ?? throw new InvalidOperationException("Could not deserialize resolve-approval command.");
-
-                    await _workflowRunner.ResolveApprovalAsync(resolveApprovalCommand, cancellationToken)
-                        .ConfigureAwait(false);
-                    break;
-
-                default:
-                    throw new NotSupportedException($"Unknown sidecar command type '{envelope.Type}'.");
-            }
-
-            await WriteAsync(output, new CommandCompleteEventDto
-            {
-                Type = "command-complete",
-                RequestId = envelope.RequestId,
-            }, cancellationToken).ConfigureAwait(false);
+            await ExecuteCommandAsync(context).ConfigureAwait(false);
+            await WriteCommandCompleteAsync(context).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
-            await WriteAsync(output, new CommandErrorEventDto
-            {
-                Type = "command-error",
-                RequestId = envelope.RequestId,
-                Message = ex.Message,
-            }, cancellationToken).ConfigureAwait(false);
+            await WriteCommandErrorAsync(context, ex.Message).ConfigureAwait(false);
         }
+    }
+
+    private Task ExecuteCommandAsync(CommandContext context)
+    {
+        if (_commandHandlers.TryGetValue(context.Envelope.Type, out Func<CommandContext, Task>? handler))
+        {
+            return handler(context);
+        }
+
+        throw new NotSupportedException($"Unknown sidecar command type '{context.Envelope.Type}'.");
+    }
+
+    private async Task HandleDescribeCapabilitiesAsync(CommandContext context)
+    {
+        await WriteAsync(context.Output, new CapabilitiesEventDto
+        {
+            Type = "capabilities",
+            RequestId = context.Envelope.RequestId,
+            Capabilities = await _capabilitiesProvider(context.CancellationToken).ConfigureAwait(false),
+        }, context.CancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task HandleValidatePatternAsync(CommandContext context)
+    {
+        ValidatePatternCommandDto command = DeserializeCommand<ValidatePatternCommandDto>(context);
+
+        await WriteAsync(context.Output, new PatternValidationEventDto
+        {
+            Type = "pattern-validation",
+            RequestId = context.Envelope.RequestId,
+            Issues = _patternValidator.Validate(command.Pattern),
+        }, context.CancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task HandleRunTurnAsync(CommandContext context)
+    {
+        RunTurnCommandDto command = DeserializeCommand<RunTurnCommandDto>(context);
+        IReadOnlyList<ChatMessageDto> messages = await _workflowRunner.RunTurnAsync(
+                command,
+                delta => WriteAsync(context.Output, delta, context.CancellationToken),
+                activity => WriteAsync(context.Output, activity, context.CancellationToken),
+                approval => WriteAsync(context.Output, approval, context.CancellationToken),
+                context.CancellationToken)
+            .ConfigureAwait(false);
+
+        await WriteAsync(context.Output, new TurnCompleteEventDto
+        {
+            Type = "turn-complete",
+            RequestId = context.Envelope.RequestId,
+            SessionId = command.SessionId,
+            Messages = messages,
+        }, context.CancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task HandleResolveApprovalAsync(CommandContext context)
+    {
+        ResolveApprovalCommandDto command = DeserializeCommand<ResolveApprovalCommandDto>(context);
+        await _workflowRunner.ResolveApprovalAsync(command, context.CancellationToken).ConfigureAwait(false);
+    }
+
+    private TCommand DeserializeCommand<TCommand>(CommandContext context)
+        where TCommand : SidecarCommandEnvelope
+    {
+        return JsonSerializer.Deserialize<TCommand>(context.RawCommand, _jsonOptions)
+            ?? throw new InvalidOperationException(
+                $"Could not deserialize {context.Envelope.Type} command.");
+    }
+
+    private Task WriteCommandCompleteAsync(CommandContext context)
+    {
+        return WriteAsync(context.Output, new CommandCompleteEventDto
+        {
+            Type = "command-complete",
+            RequestId = context.Envelope.RequestId,
+        }, context.CancellationToken);
+    }
+
+    private Task WriteCommandErrorAsync(CommandContext context, string message)
+    {
+        return WriteAsync(context.Output, new CommandErrorEventDto
+        {
+            Type = "command-error",
+            RequestId = context.Envelope.RequestId,
+            Message = message,
+        }, context.CancellationToken);
     }
 
     private async Task WriteAsync(TextWriter output, object payload, CancellationToken cancellationToken)
@@ -187,30 +227,28 @@ public sealed class SidecarProtocolHost
 
     private static async Task<SidecarCapabilitiesDto> BuildCapabilitiesAsync(CancellationToken cancellationToken)
     {
-        IReadOnlyList<SidecarModelCapabilityDto> models = [];
-        IReadOnlyList<SidecarRuntimeToolDto> runtimeTools = [];
-        CopilotCliContext cliContext;
-        SidecarConnectionDiagnosticsDto connection;
-        SidecarCopilotCliVersionDiagnosticsDto? cliVersion = null;
-        SidecarCopilotAccountDiagnosticsDto? account = null;
-
         try
         {
-            cliContext = CopilotCliPathResolver.ResolveCliContext();
+            CopilotCliContext cliContext = CopilotCliPathResolver.ResolveCliContext();
+            CapabilityProbeResult probe = await ProbeCapabilitiesAsync(cliContext, cancellationToken).ConfigureAwait(false);
+            return CreateCapabilities(probe.Models, probe.RuntimeTools, probe.Connection);
         }
         catch (Exception exception)
         {
-            connection = CreateMissingCliDiagnostics(exception);
+            SidecarConnectionDiagnosticsDto connection = CreateMissingCliDiagnostics(exception);
             Console.Error.WriteLine($"[eryx sidecar] {connection.Summary} {exception.Message}");
-
-            return new SidecarCapabilitiesDto
-            {
-                Modes = BuildModeCapabilities(),
-                Models = models,
-                Connection = connection,
-            };
+            return CreateCapabilities([], [], connection);
         }
+    }
 
+    private static async Task<CapabilityProbeResult> ProbeCapabilitiesAsync(
+        CopilotCliContext cliContext,
+        CancellationToken cancellationToken)
+    {
+        IReadOnlyList<SidecarModelCapabilityDto> models = [];
+        IReadOnlyList<SidecarRuntimeToolDto> runtimeTools = [];
+        SidecarCopilotAccountDiagnosticsDto? account = null;
+        SidecarCopilotCliVersionDiagnosticsDto? cliVersion = null;
         Task<SidecarCopilotCliVersionDiagnosticsDto> cliVersionTask =
             CopilotConnectionMetadataResolver.GetCliVersionDiagnosticsAsync(cliContext, cancellationToken);
 
@@ -224,29 +262,37 @@ public sealed class SidecarProtocolHost
             GetAuthStatusResponse? authStatus =
                 await CopilotConnectionMetadataResolver.TryGetAuthStatusAsync(client, cancellationToken).ConfigureAwait(false);
             account = await CopilotConnectionMetadataResolver.CreateAccountDiagnosticsAsync(
-                authStatus,
-                cliContext.Environment,
-                cancellationToken).ConfigureAwait(false);
+                    authStatus,
+                    cliContext.Environment,
+                    cancellationToken)
+                .ConfigureAwait(false);
 
             models = await ListAvailableModelsAsync(client, cancellationToken).ConfigureAwait(false);
-            try
-            {
-                runtimeTools = await ListAvailableRuntimeToolsAsync(client, cancellationToken).ConfigureAwait(false);
-            }
-            catch (Exception exception)
-            {
-                Console.Error.WriteLine($"[eryx sidecar] Failed to list available Copilot runtime tools: {exception.Message}");
-            }
+            runtimeTools = await TryListAvailableRuntimeToolsAsync(client, cancellationToken).ConfigureAwait(false);
             cliVersion = await cliVersionTask.ConfigureAwait(false);
-            connection = CreateReadyConnectionDiagnostics(cliContext.CliPath, models.Count, cliVersion, account);
+
+            return new CapabilityProbeResult(
+                models,
+                runtimeTools,
+                CreateReadyConnectionDiagnostics(cliContext.CliPath, models.Count, cliVersion, account));
         }
         catch (Exception exception)
         {
             cliVersion = await cliVersionTask.ConfigureAwait(false);
-            connection = CreateFailureConnectionDiagnostics(cliContext.CliPath, exception, cliVersion, account);
             Console.Error.WriteLine($"[eryx sidecar] Failed to list available Copilot models: {exception.Message}");
-        }
 
+            return new CapabilityProbeResult(
+                models,
+                runtimeTools,
+                CreateFailureConnectionDiagnostics(cliContext.CliPath, exception, cliVersion, account));
+        }
+    }
+
+    private static SidecarCapabilitiesDto CreateCapabilities(
+        IReadOnlyList<SidecarModelCapabilityDto> models,
+        IReadOnlyList<SidecarRuntimeToolDto> runtimeTools,
+        SidecarConnectionDiagnosticsDto connection)
+    {
         return new SidecarCapabilitiesDto
         {
             Modes = BuildModeCapabilities(),
@@ -293,6 +339,21 @@ public sealed class SidecarProtocolHost
             })
             .OrderBy(model => model.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
+    }
+
+    private static async Task<IReadOnlyList<SidecarRuntimeToolDto>> TryListAvailableRuntimeToolsAsync(
+        CopilotClient client,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await ListAvailableRuntimeToolsAsync(client, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            Console.Error.WriteLine($"[eryx sidecar] Failed to list available Copilot runtime tools: {exception.Message}");
+            return [];
+        }
     }
 
     private static async Task<IReadOnlyList<SidecarRuntimeToolDto>> ListAvailableRuntimeToolsAsync(
@@ -388,4 +449,15 @@ public sealed class SidecarProtocolHost
 
         return "copilot-error";
     }
+
+    private sealed record CommandContext(
+        string RawCommand,
+        SidecarCommandEnvelope Envelope,
+        TextWriter Output,
+        CancellationToken CancellationToken);
+
+    private sealed record CapabilityProbeResult(
+        IReadOnlyList<SidecarModelCapabilityDto> Models,
+        IReadOnlyList<SidecarRuntimeToolDto> RuntimeTools,
+        SidecarConnectionDiagnosticsDto Connection);
 }

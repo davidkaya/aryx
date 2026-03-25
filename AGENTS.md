@@ -47,7 +47,44 @@ These instructions apply to any automated or semi-automated agent working in thi
 - Apply the same quality bar to feature work. Think through scope, edge cases, integration points, and long-term maintainability before implementing.
 - When adding or updating dependencies, use the latest stable version available. If a non-latest version is required for compatibility, document the reason explicitly in the change.
 
-## 5. Frontend conventions (renderer)
+## 5. Backend conventions (sidecar / C#)
+
+These rules apply to all backend work under `sidecar\src` and `sidecar\tests`.
+
+### Design and decomposition
+
+- Keep backend code organized around clear responsibilities. Separate protocol handling, orchestration/workflow coordination, domain validation, external tool/process integration, and projection/mapping logic instead of blending them into one class or method.
+- Prefer small, single-purpose methods over long procedural flows. If a method starts handling parsing, validation, state mutation, output formatting, and error handling together, split it.
+- When a backend class grows multiple behavioral branches, prefer extracting focused helpers or internal collaborators rather than adding more nested conditionals.
+- Reuse shared helpers for normalization, lookup, mapping, and repeated heuristics. Do not duplicate string cleanup, identifier resolution, event shaping, or path/tool resolution logic across services.
+
+### Contracts and protocol safety
+
+- Preserve public behavior and wire contracts by default. Refactors must not silently change DTO shapes, event ordering, command names, approval semantics, or serialized field names unless the task explicitly requires it.
+- Keep protocol-related literals, decision names, activity types, and command/event types explicit and easy to audit. Avoid scattering the same backend protocol rules across unrelated methods.
+- Prefer type-safe handling over reflection, loosely typed object plumbing, or stringly-typed branching when a direct C# model or pattern match is available.
+
+### State, concurrency, and error handling
+
+- Keep mutable state narrow and intentional. Shared state should be minimized, local when possible, and thread-safe when it must be shared.
+- Make state transitions explicit. For backend coordination code, prefer code that makes ownership, lifecycle, and pending/completed/error states obvious on first read.
+- Do not swallow backend exceptions unless the behavior intentionally converts them into diagnostics, protocol errors, or user-facing status. When you intentionally catch and continue, keep the fallback explicit and consistent.
+- Avoid hidden side effects. Methods that mutate state, enqueue work, emit protocol events, or call external processes should read clearly as doing so.
+
+### Clean backend implementation rules
+
+- Avoid monolithic switch statements or giant orchestration methods when the branches can be cleanly dispatched through named helpers or handler maps.
+- Keep heuristics and transformation rules named and localized. For parsing, transcript projection, merge behavior, and similar logic, extract the decision points into clearly named helpers.
+- Do not leave dead branches, unused helpers, commented-out backend code, or temporary diagnostics behind.
+- Prefer maintainable defaults over clever shortcuts. Backend code should optimize for debuggability, explicitness, and operational safety.
+
+### Backend tests
+
+- Every backend refactor must preserve or improve backend test coverage. If you replace internal mechanics, update the tests so the behavioral contract stays protected.
+- Add focused regression tests for edge cases when refactors replace brittle logic, remove reflection, centralize heuristics, or change internal dispatch structure.
+- Keep backend test setup readable. Prefer small builders/factories/helpers over repetitive inline setup once the same object graphs appear in multiple tests.
+
+## 6. Frontend conventions (renderer)
 
 ### Component organization
 
@@ -108,7 +145,7 @@ Every interactive component must include basic accessibility:
 - Feature sub-components are imported directly by path: `import { InlinePills } from '@renderer/components/chat/InlinePills'`.
 - Use `@renderer/` and `@shared/` path aliases; do not use relative paths that cross directory boundaries (e.g. `../../shared/`).
 
-## 6. Repository workflow expectations
+## 7. Repository workflow expectations
 
 - Use Bun for dependency management and script execution.
 - Prefer repository-local tooling over global machine state whenever possible.
@@ -117,14 +154,14 @@ Every interactive component must include basic accessibility:
 - Always commit completed repository changes before handing work off. If unrelated pre-existing changes are present in the worktree, stop and ask the user how to proceed before creating the commit.
 - Do not mark work as done until both the implementation and its verification are complete.
 
-## 7. Validation checklist
+## 8. Validation checklist
 
 Before every commit, run the following in order:
 
-1. `bun run typecheck` — TypeScript compilation (must pass with zero errors)
-2. `bun test` — unit tests (all tests must pass)
-3. `bun run build` — full Electron + sidecar build (must succeed)
+1. If the change touches backend C# code, run `bun run sidecar:test`.
+2. If the change touches frontend or shared TypeScript code, run `bun run typecheck` and `bun test`.
+3. Run the relevant build for the surfaces you changed. For full application changes, run `bun run build`. For backend-only work, `bun run sidecar:build` is the minimum required build validation.
 
-If the change touches sidecar C# code, also run `bun run sidecar:test`.
+When a change spans both frontend and backend, run the full validation path: `bun run typecheck`, `bun test`, `bun run sidecar:test`, and `bun run build`.
 
 Do not commit if any step fails. Fix the issue first.

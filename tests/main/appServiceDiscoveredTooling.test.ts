@@ -11,8 +11,8 @@ const TIMESTAMP = '2026-03-25T00:00:00.000Z';
 mock.module('electron', () => ({
   app: {
     isPackaged: false,
-    getAppPath: () => 'C:\\workspace\\personal\\repositories\\eryx',
-    getPath: () => 'C:\\workspace\\personal\\repositories\\eryx\\tests\\fixtures',
+    getAppPath: () => 'C:\\workspace\\personal\\repositories\\aryx',
+    getPath: () => 'C:\\workspace\\personal\\repositories\\aryx\\tests\\fixtures',
   },
   dialog: {
     showOpenDialog: async () => ({ canceled: true, filePaths: [] }),
@@ -30,7 +30,7 @@ mock.module('keytar', () => ({
   },
 }));
 
-const { EryxAppService } = await import('@main/EryxAppService');
+const { AryxAppService } = await import('@main/AryxAppService');
 
 function createProject(overrides?: Partial<ProjectRecord>): ProjectRecord {
   return {
@@ -63,8 +63,8 @@ function createService(
   options?: {
     captureRunTurn?: (command: RunTurnCommand) => void;
   },
-): InstanceType<typeof EryxAppService> {
-  const service = new EryxAppService();
+): InstanceType<typeof AryxAppService> {
+  const service = new AryxAppService();
   const internals = service as unknown as Record<string, unknown>;
   internals.loadWorkspace = async () => workspace;
   internals.persistAndBroadcast = async (nextWorkspace: WorkspaceState) => nextWorkspace;
@@ -97,7 +97,7 @@ function createService(
   return service;
 }
 
-describe('EryxAppService discovered tooling', () => {
+describe('AryxAppService discovered tooling', () => {
   test('allows project-discovered MCP servers to be accepted and used in project sessions', async () => {
     const workspace = createWorkspaceSeed();
     const pattern = workspace.patterns.find((candidate) => candidate.mode === 'single');

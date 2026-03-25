@@ -45,7 +45,7 @@ const spawnedProcesses: FakeChildProcess[] = [];
 mock.module('electron', () => ({
   app: {
     isPackaged: false,
-    getAppPath: () => 'C:\\workspace\\personal\\repositories\\eryx',
+    getAppPath: () => 'C:\\workspace\\personal\\repositories\\aryx',
   },
 }));
 

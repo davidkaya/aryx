@@ -14,7 +14,7 @@ afterEach(async () => {
 });
 
 async function createTempDirectory(): Promise<string> {
-  const directory = await mkdtemp(join(tmpdir(), 'eryx-config-scanner-'));
+  const directory = await mkdtemp(join(tmpdir(), 'aryx-config-scanner-'));
   temporaryPaths.push(directory);
   return directory;
 }

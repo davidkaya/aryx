@@ -1,15 +1,15 @@
 import { app, BrowserWindow } from 'electron';
 
 import { registerIpcHandlers } from '@main/ipc/registerIpcHandlers';
-import { EryxAppService } from '@main/EryxAppService';
+import { AryxAppService } from '@main/AryxAppService';
 import { createMainWindow } from '@main/windows/createMainWindow';
 import { applyTitleBarTheme } from '@main/windows/titleBarTheme';
 
 let mainWindow: BrowserWindow | undefined;
-let appService: EryxAppService | undefined;
+let appService: AryxAppService | undefined;
 
 async function bootstrap(): Promise<void> {
-  appService = new EryxAppService();
+  appService = new AryxAppService();
 
   mainWindow = createMainWindow();
   registerIpcHandlers(mainWindow, appService);

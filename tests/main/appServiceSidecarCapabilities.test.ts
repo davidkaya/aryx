@@ -5,8 +5,8 @@ import type { SidecarCapabilities } from '@shared/contracts/sidecar';
 mock.module('electron', () => ({
   app: {
     isPackaged: false,
-    getAppPath: () => 'C:\\workspace\\personal\\repositories\\eryx',
-    getPath: () => 'C:\\workspace\\personal\\repositories\\eryx\\tests\\fixtures',
+    getAppPath: () => 'C:\\workspace\\personal\\repositories\\aryx',
+    getPath: () => 'C:\\workspace\\personal\\repositories\\aryx\\tests\\fixtures',
   },
   dialog: {
     showOpenDialog: async () => ({ canceled: true, filePaths: [] }),
@@ -24,7 +24,7 @@ mock.module('keytar', () => ({
   },
 }));
 
-const { EryxAppService } = await import('@main/EryxAppService');
+const { AryxAppService } = await import('@main/AryxAppService');
 
 const SIDECAR_STOPPED_BEFORE_COMPLETION_MESSAGE =
   'The .NET sidecar was stopped before the command completed.';
@@ -49,7 +49,7 @@ const CAPABILITIES_FIXTURE: SidecarCapabilities = {
 };
 
 function setSidecar(
-  service: InstanceType<typeof EryxAppService>,
+  service: InstanceType<typeof AryxAppService>,
   describeCapabilities: () => Promise<SidecarCapabilities>,
 ): void {
   (
@@ -74,9 +74,9 @@ function createDeferred<T>() {
   return { promise, resolve };
 }
 
-describe('EryxAppService sidecar capabilities', () => {
+describe('AryxAppService sidecar capabilities', () => {
   test('retries describe-capabilities after an intentional sidecar stop', async () => {
-    const service = new EryxAppService();
+    const service = new AryxAppService();
     let attempts = 0;
 
     setSidecar(service, async () => {
@@ -93,7 +93,7 @@ describe('EryxAppService sidecar capabilities', () => {
   });
 
   test('coalesces concurrent capability requests while the cache is empty', async () => {
-    const service = new EryxAppService();
+    const service = new AryxAppService();
     const deferred = createDeferred<SidecarCapabilities>();
     let calls = 0;
 

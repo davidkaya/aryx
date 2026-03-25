@@ -7,8 +7,8 @@ describe('resolveSidecarProcess', () => {
     expect(
       resolveSidecarProcess({
         isPackaged: false,
-        appPath: 'C:\\workspace\\personal\\repositories\\eryx',
-        resourcesPath: 'C:\\workspace\\personal\\repositories\\eryx\\resources',
+        appPath: 'C:\\workspace\\personal\\repositories\\aryx',
+        resourcesPath: 'C:\\workspace\\personal\\repositories\\aryx\\resources',
         platform: 'win32',
       }),
     ).toEqual({
@@ -16,11 +16,11 @@ describe('resolveSidecarProcess', () => {
       args: [
         'run',
         '--project',
-        'C:\\workspace\\personal\\repositories\\eryx\\sidecar\\src\\Aryx.AgentHost\\Aryx.AgentHost.csproj',
+        'C:\\workspace\\personal\\repositories\\aryx\\sidecar\\src\\Aryx.AgentHost\\Aryx.AgentHost.csproj',
         '--',
         '--stdio',
       ],
-      cwd: 'C:\\workspace\\personal\\repositories\\eryx',
+      cwd: 'C:\\workspace\\personal\\repositories\\aryx',
     });
   });
 
@@ -28,14 +28,14 @@ describe('resolveSidecarProcess', () => {
     expect(
       resolveSidecarProcess({
         isPackaged: true,
-        appPath: 'C:\\workspace\\personal\\repositories\\eryx\\release\\win-unpacked\\resources\\app',
-        resourcesPath: 'C:\\workspace\\personal\\repositories\\eryx\\release\\win-unpacked\\resources',
+        appPath: 'C:\\workspace\\personal\\repositories\\aryx\\release\\win-unpacked\\resources\\app',
+        resourcesPath: 'C:\\workspace\\personal\\repositories\\aryx\\release\\win-unpacked\\resources',
         platform: 'win32',
       }),
     ).toEqual({
-      command: 'C:\\workspace\\personal\\repositories\\eryx\\release\\win-unpacked\\resources\\sidecar\\Aryx.AgentHost.exe',
+      command: 'C:\\workspace\\personal\\repositories\\aryx\\release\\win-unpacked\\resources\\sidecar\\Aryx.AgentHost.exe',
       args: ['--stdio'],
-      cwd: 'C:\\workspace\\personal\\repositories\\eryx\\release\\win-unpacked\\resources\\sidecar',
+      cwd: 'C:\\workspace\\personal\\repositories\\aryx\\release\\win-unpacked\\resources\\sidecar',
     });
   });
 

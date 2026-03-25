@@ -24,10 +24,10 @@ import type {
 import type { QuerySessionsInput } from '@shared/domain/sessionLibrary';
 import type { AppearanceTheme } from '@shared/domain/tooling';
 
-import { EryxAppService } from '@main/EryxAppService';
+import { AryxAppService } from '@main/AryxAppService';
 import { applyTitleBarTheme } from '@main/windows/titleBarTheme';
 
-export function registerIpcHandlers(window: BrowserWindow, service: EryxAppService): void {
+export function registerIpcHandlers(window: BrowserWindow, service: AryxAppService): void {
   ipcMain.handle(ipcChannels.describeSidecarCapabilities, () => service.describeSidecarCapabilities());
   ipcMain.handle(ipcChannels.refreshSidecarCapabilities, () => service.refreshSidecarCapabilities());
   ipcMain.handle(ipcChannels.loadWorkspace, () => service.loadWorkspace());

@@ -6,10 +6,10 @@ describe('resolveWindowIconPath', () => {
   test('uses the Windows ico asset from the platform-specific icon directory', () => {
     expect(
       resolveWindowIconPath({
-        appPath: 'C:\\workspace\\personal\\repositories\\eryx',
+        appPath: 'C:\\workspace\\personal\\repositories\\aryx',
         platform: 'win32',
       }),
-    ).toBe('C:\\workspace\\personal\\repositories\\eryx\\assets\\icons\\windows\\icon.ico');
+    ).toBe('C:\\workspace\\personal\\repositories\\aryx\\assets\\icons\\windows\\icon.ico');
   });
 
   test('uses the macOS icns asset on Darwin', () => {

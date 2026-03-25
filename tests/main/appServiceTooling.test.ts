@@ -7,13 +7,13 @@ import type { SessionRecord } from '@shared/domain/session';
 import { createWorkspaceSeed, type WorkspaceState } from '@shared/domain/workspace';
 
 const TIMESTAMP = '2026-03-25T00:00:00.000Z';
-const SCRATCHPAD_PATH = 'C:\\workspace\\personal\\repositories\\eryx\\scratchpad';
+const SCRATCHPAD_PATH = 'C:\\workspace\\personal\\repositories\\aryx\\scratchpad';
 
 mock.module('electron', () => ({
   app: {
     isPackaged: false,
-    getAppPath: () => 'C:\\workspace\\personal\\repositories\\eryx',
-    getPath: () => 'C:\\workspace\\personal\\repositories\\eryx\\tests\\fixtures',
+    getAppPath: () => 'C:\\workspace\\personal\\repositories\\aryx',
+    getPath: () => 'C:\\workspace\\personal\\repositories\\aryx\\tests\\fixtures',
   },
   dialog: {
     showOpenDialog: async () => ({ canceled: true, filePaths: [] }),
@@ -31,7 +31,7 @@ mock.module('keytar', () => ({
   },
 }));
 
-const { EryxAppService } = await import('@main/EryxAppService');
+const { AryxAppService } = await import('@main/AryxAppService');
 
 function createWorkspaceFixture(): {
   workspace: WorkspaceState;
@@ -70,7 +70,7 @@ function createWorkspaceFixture(): {
         transport: 'local',
         command: 'node',
         args: ['server.js', '--stdio'],
-        cwd: 'C:\\workspace\\personal\\repositories\\eryx',
+        cwd: 'C:\\workspace\\personal\\repositories\\aryx',
         tools: ['git.status'],
         timeoutMs: 1500,
         createdAt: TIMESTAMP,
@@ -101,8 +101,8 @@ function createService(
     captureRunTurn?: (command: RunTurnCommand) => void;
     knownApprovalToolNames?: string[];
   },
-): InstanceType<typeof EryxAppService> {
-  const service = new EryxAppService();
+): InstanceType<typeof AryxAppService> {
+  const service = new AryxAppService();
   const internals = service as unknown as Record<string, unknown>;
   internals.loadWorkspace = async () => workspace;
   internals.persistAndBroadcast = async (nextWorkspace: WorkspaceState) => nextWorkspace;
@@ -135,7 +135,7 @@ function createService(
   return service;
 }
 
-describe('EryxAppService scratchpad tooling support', () => {
+describe('AryxAppService scratchpad tooling support', () => {
   test('allows scratchpad sessions to save MCP and LSP selections', async () => {
     const { workspace, pattern, session } = createWorkspaceFixture();
     const service = createService(workspace, pattern);
@@ -189,7 +189,7 @@ describe('EryxAppService scratchpad tooling support', () => {
             transport: 'local',
             command: 'node',
             args: ['server.js', '--stdio'],
-            cwd: 'C:\\workspace\\personal\\repositories\\eryx',
+            cwd: 'C:\\workspace\\personal\\repositories\\aryx',
             tools: ['git.status'],
             timeoutMs: 1500,
           },

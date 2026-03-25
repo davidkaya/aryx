@@ -138,7 +138,7 @@ function isSidecarStoppedBeforeCompletionError(error: unknown): error is Error {
   return error instanceof Error && error.message === SIDECAR_STOPPED_BEFORE_COMPLETION_MESSAGE;
 }
 
-export class EryxAppService extends EventEmitter<AppServiceEvents> {
+export class AryxAppService extends EventEmitter<AppServiceEvents> {
   private readonly workspaceRepository = new WorkspaceRepository();
   private readonly sidecar = new SidecarClient();
   private readonly secretStore = new SecretStore();

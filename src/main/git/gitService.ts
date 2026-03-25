@@ -1,4 +1,4 @@
-import * as childProcessModule from 'node:child_process';
+import { createRequire } from 'node:module';
 import { promisify } from 'node:util';
 
 import type { ProjectGitChangeSummary, ProjectGitCommitSummary, ProjectGitContext } from '@shared/domain/project';
@@ -6,27 +6,9 @@ import { nowIso } from '@shared/utils/ids';
 
 type ExecFileException = import('node:child_process').ExecFileException;
 
-type ChildProcessModuleLike = {
-  readonly execFile?: typeof childProcessModule.execFile;
-  readonly default?: {
-    readonly execFile?: typeof childProcessModule.execFile;
-  };
-};
-
-export function resolveExecFileForInterop(
-  module: ChildProcessModuleLike,
-): typeof childProcessModule.execFile {
-  const execFile = module.execFile ?? module.default?.execFile;
-  if (typeof execFile !== 'function') {
-    throw new Error('node:child_process execFile is unavailable.');
-  }
-
-  return execFile;
-}
-
-const execFileAsync = promisify(
-  resolveExecFileForInterop(childProcessModule as ChildProcessModuleLike),
-);
+const require = createRequire(import.meta.url);
+const { execFile } = require('node:child_process') as typeof import('node:child_process');
+const execFileAsync = promisify(execFile);
 const GIT_TIMEOUT_MS = 5_000;
 
 type GitCommandRunner = (projectPath: string, args: string[]) => Promise<string>;

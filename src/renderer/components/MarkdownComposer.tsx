@@ -21,29 +21,6 @@ import {
   $convertToMarkdownString,
 } from '@lexical/markdown';
 import { $isCodeNode, $createCodeNode, CodeNode } from '@lexical/code';
-
-// Prism must be on `globalThis` before @lexical/code-prism initializes its
-// tokenizer reference.  Vite's dev-mode esbuild CJS shim can race the global
-// assignment, so we force it here before importing the module.
-import Prism from 'prismjs';
-import 'prismjs/components/prism-clike';
-import 'prismjs/components/prism-javascript';
-import 'prismjs/components/prism-markup';
-import 'prismjs/components/prism-markdown';
-import 'prismjs/components/prism-c';
-import 'prismjs/components/prism-css';
-import 'prismjs/components/prism-objectivec';
-import 'prismjs/components/prism-sql';
-import 'prismjs/components/prism-python';
-import 'prismjs/components/prism-rust';
-import 'prismjs/components/prism-swift';
-import 'prismjs/components/prism-typescript';
-import 'prismjs/components/prism-java';
-import 'prismjs/components/prism-cpp';
-if (typeof globalThis !== 'undefined') {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (globalThis as any).Prism = Prism;
-}
 import { registerCodeHighlighting } from '@lexical/code-prism';
 import {
   $isListNode,

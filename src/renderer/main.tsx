@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 
+import '@renderer/lib/prismSetup';
 import App from '@renderer/App';
 import '@renderer/styles.css';
 

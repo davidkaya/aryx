@@ -21,7 +21,7 @@ jobs:
         include:
           - os: windows-latest
             label: Windows
-          - os: macos-13
+          - os: macos-15-intel
             label: macOS
           - os: ubuntu-latest
             label: Linux
@@ -95,7 +95,7 @@ jobs:
           - os: windows-latest
             label: Windows
             asset_path: release/Aryx-windows-x64.zip
-          - os: macos-13
+          - os: macos-15-intel
             label: macOS
             asset_path: release/Aryx-macos-x64.zip
           - os: ubuntu-latest

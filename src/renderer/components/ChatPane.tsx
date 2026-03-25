@@ -1,7 +1,8 @@
-import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, ArrowUp, Bot, Check, ChevronDown, Circle, GitBranch, Loader2, RotateCcw, Server, ShieldAlert, ShieldCheck, Sparkles, User, X } from 'lucide-react';
 
 import { MarkdownContent } from '@renderer/components/MarkdownContent';
+import { MarkdownComposer, type MarkdownComposerHandle } from '@renderer/components/MarkdownComposer';
 import { getAssistantMessagePhase } from '@renderer/lib/messagePhase';
 import { ProviderIcon } from '@renderer/components/ProviderIcons';
 import type { ApprovalDecision, PendingApprovalRecord } from '@shared/domain/approval';
@@ -16,7 +17,6 @@ import {
 import { reasoningEffortOptions, type PatternDefinition, type ReasoningEffort } from '@shared/domain/pattern';
 import { isScratchpadProject, type ProjectRecord } from '@shared/domain/project';
 import { resolveSessionToolingSelection, type SessionRecord } from '@shared/domain/session';
-import { hasMeaningfulChatMessageContent, prepareChatMessageContent } from '@shared/utils/chatMessage';
 import {
   listApprovalToolDefinitions,
   type ApprovalToolDefinition,
@@ -677,13 +677,13 @@ export function ChatPane({
   onUpdateSessionTooling,
   onUpdateSessionApprovalSettings,
 }: ChatPaneProps) {
-  const [input, setInput] = useState('');
+  const [hasComposerContent, setHasComposerContent] = useState(false);
   const [configError, setConfigError] = useState<string>();
   const [approvalError, setApprovalError] = useState<string>();
   const [isResolvingApproval, setIsResolvingApproval] = useState(false);
   const [isUpdatingScratchpadConfig, setIsUpdatingScratchpadConfig] = useState(false);
   const transcriptRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const composerRef = useRef<MarkdownComposerHandle>(null);
 
   const isSessionBusy = session.status === 'running';
   const pendingApproval = session.pendingApproval?.status === 'pending' ? session.pendingApproval : undefined;
@@ -695,7 +695,7 @@ export function ChatPane({
   const supportedEfforts = getSupportedReasoningEfforts(selectedModel);
   const scratchpadReasoningEffort = resolveReasoningEffort(selectedModel, primaryAgent?.reasoningEffort);
   const isComposerDisabled = isSessionBusy || isUpdatingScratchpadConfig;
-  const canSubmitInput = hasMeaningfulChatMessageContent(input) && !isComposerDisabled;
+  const canSubmitInput = hasComposerContent && !isComposerDisabled;
 
   const toolSelection = useMemo(() => resolveSessionToolingSelection(session), [session]);
   const mcpServers = toolingSettings.mcpServers;
@@ -730,11 +730,8 @@ export function ChatPane({
     setIsUpdatingScratchpadConfig(false);
   }, [session.id]);
 
-  async function handleSubmit() {
-    const text = prepareChatMessageContent(input);
-    if (!text || isComposerDisabled) return;
-    setInput('');
-    await onSend(text);
+  function handleComposerSubmit(content: string) {
+    void onSend(content);
   }
 
   async function handleScratchpadConfigChange(config: {
@@ -776,13 +773,6 @@ export function ChatPane({
       setApprovalError(error instanceof Error ? error.message : String(error));
     } finally {
       setIsResolvingApproval(false);
-    }
-  }
-
-  function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    if (event.key === 'Enter' && !event.shiftKey) {
-      event.preventDefault();
-      void handleSubmit();
     }
   }
 
@@ -1024,11 +1014,11 @@ export function ChatPane({
           )}
 
           <div className="relative rounded-xl border border-zinc-700 bg-zinc-900 transition-colors focus-within:border-indigo-500/50">
-            <textarea
-              className="auto-resize-textarea block w-full resize-none bg-transparent px-4 py-3 pr-12 text-[14px] text-zinc-100 placeholder-zinc-600 outline-none"
+            <MarkdownComposer
+              ref={composerRef}
               disabled={isComposerDisabled}
-              onChange={(event) => setInput(event.target.value)}
-              onKeyDown={handleKeyDown}
+              onContentChange={setHasComposerContent}
+              onSubmit={handleComposerSubmit}
               placeholder={
                 pendingApproval
                   ? 'Awaiting approval...'
@@ -1038,9 +1028,6 @@ export function ChatPane({
                       ? 'Saving scratchpad settings...'
                       : 'Message...'
               }
-              ref={textareaRef}
-              rows={1}
-              value={input}
             />
             <button
               className={`absolute bottom-2 right-2 flex size-8 items-center justify-center rounded-lg transition ${
@@ -1049,7 +1036,7 @@ export function ChatPane({
                   : 'bg-zinc-800 text-zinc-600'
               }`}
               disabled={!canSubmitInput}
-              onClick={() => void handleSubmit()}
+              onClick={() => composerRef.current?.submit()}
               type="button"
             >
               {isSessionBusy ? (

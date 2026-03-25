@@ -47,7 +47,68 @@ These instructions apply to any automated or semi-automated agent working in thi
 - Apply the same quality bar to feature work. Think through scope, edge cases, integration points, and long-term maintainability before implementing.
 - When adding or updating dependencies, use the latest stable version available. If a non-latest version is required for compatibility, document the reason explicitly in the change.
 
-## 5. Repository workflow expectations
+## 5. Frontend conventions (renderer)
+
+### Component organization
+
+The renderer follows a feature-based directory structure under `src/renderer/components/`:
+
+```
+components/
+  ui/            → Shared UI primitives (ToggleSwitch, FormField, TextInput, etc.)
+  chat/          → Chat feature components (InlinePills, ApprovalBanner, ThinkingDots)
+  settings/      → Settings feature components (McpServerEditor, LspProfileEditor, ToolingEditorShell)
+  pattern-graph/ → Pattern graph visualization
+  *.tsx          → Top-level page/panel components (ChatPane, Sidebar, PatternEditor, etc.)
+```
+
+When adding new components:
+
+- If it is a **reusable, domain-agnostic UI primitive** (button, input, toggle, callout), put it in `components/ui/` and re-export from `components/ui/index.ts`.
+- If it is a **feature-specific sub-component** extracted from a larger component, put it in the matching feature directory (`chat/`, `settings/`, etc.). Create the directory if it does not exist yet.
+- If it is a **top-level screen or panel**, it stays directly in `components/`.
+- Keep component files under ~300 lines. When a file exceeds that, extract sub-components or helper hooks into the appropriate feature directory.
+
+### Custom hooks
+
+Custom hooks live in `src/renderer/hooks/`. Each hook gets its own file. Current hooks:
+
+- `useClickOutside` — shared click-outside-to-dismiss behavior
+- `useAppHooks` — app-level state hooks (`useTheme`, `useSidecarCapabilities`)
+
+When extracting repeated stateful patterns, create a new hook here rather than duplicating `useEffect`/`useRef` logic across components.
+
+### Lib utilities
+
+Pure helper functions (no React imports) live in `src/renderer/lib/`. Current modules include `settingsHelpers.ts` (mutation/string helpers), `chatMarkdown.tsx`, `markdownEditor.ts`, `patternGraph.ts`, and others.
+
+Keep a clear boundary: `lib/` for pure logic and data transforms, `hooks/` for React-aware stateful patterns, `components/` for rendered elements.
+
+### State and rendering
+
+- Stabilize callbacks passed as props with `useCallback`. Stabilize computed objects with `useMemo` when the consumer uses reference equality (e.g. inside `useEffect` dependency arrays or when passed to memoized children).
+- Do not over-memoize. Simple, cheap computations do not need `useMemo`.
+- Prefer lifting shared state into the nearest common parent rather than duplicating it across siblings.
+
+### Accessibility
+
+Every interactive component must include basic accessibility:
+
+- Modals and dialogs: `role="dialog"`, `aria-modal="true"`, `aria-labelledby`, Escape-to-close.
+- Dropdowns and popovers: `aria-expanded`, `aria-haspopup`, `role="listbox"` / `role="option"` as appropriate.
+- Context menus: `role="menu"`, `role="menuitem"`, Escape-to-close.
+- Toggle buttons: `aria-pressed`.
+- Clickable non-button elements: must be keyboard-activatable with both Enter and Space.
+- Alerts and status regions: `role="alert"` or `aria-live`.
+- Loading indicators: `aria-label` describing the state.
+
+### Imports and barrel exports
+
+- Import shared UI primitives via the barrel: `import { ToggleSwitch, FormField } from '@renderer/components/ui'`.
+- Feature sub-components are imported directly by path: `import { InlinePills } from '@renderer/components/chat/InlinePills'`.
+- Use `@renderer/` and `@shared/` path aliases; do not use relative paths that cross directory boundaries (e.g. `../../shared/`).
+
+## 6. Repository workflow expectations
 
 - Use Bun for dependency management and script execution.
 - Prefer repository-local tooling over global machine state whenever possible.
@@ -55,3 +116,15 @@ These instructions apply to any automated or semi-automated agent working in thi
 - Keep changes focused and reviewable. Avoid mixing unrelated concerns into a single change.
 - Always commit completed repository changes before handing work off. If unrelated pre-existing changes are present in the worktree, stop and ask the user how to proceed before creating the commit.
 - Do not mark work as done until both the implementation and its verification are complete.
+
+## 7. Validation checklist
+
+Before every commit, run the following in order:
+
+1. `bun run typecheck` — TypeScript compilation (must pass with zero errors)
+2. `bun test` — unit tests (all tests must pass)
+3. `bun run build` — full Electron + sidecar build (must succeed)
+
+If the change touches sidecar C# code, also run `bun run sidecar:test`.
+
+Do not commit if any step fails. Fix the issue first.

@@ -14,8 +14,9 @@ internal static class AgentInstructionComposer
         string workspaceGuidance = string.Equals(workspaceKind, "scratchpad", StringComparison.OrdinalIgnoreCase)
             ? """
               You are operating in scratchpad mode.
-              Treat this session as pure ad-hoc Q&A rather than repository automation.
-              Do not inspect, modify, create, or delete files, and do not behave as though you are working inside a user project.
+              Treat this session as ad-hoc work inside the scratchpad workspace rather than repository automation against a connected user project.
+              You may use the available tools and files inside the scratchpad workspace when they help answer the request.
+              Do not assume there is a connected repository, checked-out branch, or project-specific context unless the user provides it in the conversation.
               Answer conversationally and focus on the user's question directly.
               """
             : string.Empty;

@@ -119,8 +119,9 @@ public sealed class AgentInstructionComposerTests
             workspaceKind: "scratchpad");
 
         Assert.Contains("scratchpad mode", instructions, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("pure ad-hoc Q&A", instructions, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("Do not inspect, modify, create, or delete files", instructions, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("ad-hoc work inside the scratchpad workspace", instructions, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("use the available tools and files inside the scratchpad workspace", instructions, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Do not inspect, modify, create, or delete files", instructions, StringComparison.OrdinalIgnoreCase);
     }
 
     private static PatternAgentDefinitionDto CreateAgent(string id, string name, string instructions)

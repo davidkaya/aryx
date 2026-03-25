@@ -369,7 +369,7 @@ export function ChatPane({
           )}
 
           {/* Session config pills — tool & approval controls */}
-          {!isScratchpad && (hasConfigurableTools || hasToolCallApproval) && (
+          {(hasConfigurableTools || hasToolCallApproval) && (
             <div className="mb-2 flex items-center gap-2">
               {hasConfigurableTools && onUpdateSessionTooling && (
                 <InlineToolsPill

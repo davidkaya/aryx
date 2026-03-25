@@ -263,7 +263,7 @@ This lets the application treat tooling as reusable workspace capability while s
 
 ### Project awareness
 
-Project-backed sessions can carry repository context such as branch and dirty state, while scratchpad sessions stay lightweight. This keeps the architecture grounded in real codebases without forcing every conversation to be project-heavy.
+Project-backed sessions can carry repository context such as branch and dirty state, while scratchpad sessions omit git context but still support MCP, LSP, and runtime tooling. Both session kinds share the same tooling selection and approval model. This keeps the architecture grounded in real codebases without forcing every conversation to be project-heavy, while still letting scratchpad sessions leverage configured tools when useful.
 
 ### Execution observability
 

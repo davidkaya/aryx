@@ -63,7 +63,7 @@ export function InlineModelPill({
       <button
         aria-expanded={open}
         aria-haspopup="listbox"
-        className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[12px] font-medium transition ${
+        className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] font-medium transition ${
           open
             ? 'border-indigo-500/40 bg-indigo-500/10 text-indigo-300'
             : 'border-zinc-700/60 bg-zinc-800/40 text-zinc-400 hover:border-zinc-600 hover:text-zinc-300'
@@ -72,9 +72,9 @@ export function InlineModelPill({
         onClick={() => setOpen(!open)}
         type="button"
       >
-        {provider && <ProviderIcon provider={provider} className="size-3" />}
-        <span className="max-w-[140px] truncate">{displayName}</span>
-        <ChevronDown className={`size-3 transition ${open ? 'rotate-180' : ''}`} />
+        {provider && <ProviderIcon provider={provider} className="size-2.5" />}
+        <span className="max-w-[120px] truncate">{displayName}</span>
+        <ChevronDown className={`size-2.5 transition ${open ? 'rotate-180' : ''}`} />
       </button>
 
       {open && !disabled && (
@@ -154,8 +154,8 @@ export function InlineThinkingPill({
 
   if (supportedEfforts && supportedEfforts.length === 0) {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-md border border-zinc-800/40 bg-zinc-800/20 px-2 py-1 text-[12px] text-zinc-600">
-        <Sparkles className="size-3" />
+      <span className="inline-flex items-center gap-1 rounded-md border border-zinc-800/40 bg-zinc-800/20 px-1.5 py-0.5 text-[11px] text-zinc-600">
+        <Sparkles className="size-2.5" />
         N/A
       </span>
     );
@@ -168,7 +168,7 @@ export function InlineThinkingPill({
       <button
         aria-expanded={open}
         aria-haspopup="listbox"
-        className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[12px] font-medium transition ${
+        className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] font-medium transition ${
           open
             ? 'border-indigo-500/40 bg-indigo-500/10 text-indigo-300'
             : 'border-zinc-700/60 bg-zinc-800/40 text-zinc-400 hover:border-zinc-600 hover:text-zinc-300'
@@ -177,9 +177,9 @@ export function InlineThinkingPill({
         onClick={() => setOpen(!open)}
         type="button"
       >
-        <Sparkles className="size-3" />
+        <Sparkles className="size-2.5" />
         <span>{currentLabel}</span>
-        <ChevronDown className={`size-3 transition ${open ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`size-2.5 transition ${open ? 'rotate-180' : ''}`} />
       </button>
 
       {open && !disabled && (
@@ -230,7 +230,7 @@ export function InlineToolsPill({
       <button
         aria-expanded={open}
         aria-haspopup="listbox"
-        className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[12px] font-medium transition ${
+        className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] font-medium transition ${
           open
             ? 'border-indigo-500/40 bg-indigo-500/10 text-indigo-300'
             : 'border-zinc-700/60 bg-zinc-800/40 text-zinc-400 hover:border-zinc-600 hover:text-zinc-300'
@@ -239,9 +239,9 @@ export function InlineToolsPill({
         onClick={() => setOpen(!open)}
         type="button"
       >
-        <Server className="size-3" />
+        <Server className="size-2.5" />
         <span>{enabledCount}/{totalCount} tools</span>
-        <ChevronDown className={`size-3 transition ${open ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`size-2.5 transition ${open ? 'rotate-180' : ''}`} />
       </button>
 
       {open && !disabled && (
@@ -340,7 +340,7 @@ export function InlineApprovalPill({
       <button
         aria-expanded={open}
         aria-haspopup="listbox"
-        className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[12px] font-medium transition ${
+        className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] font-medium transition ${
           open
             ? 'border-indigo-500/40 bg-indigo-500/10 text-indigo-300'
             : isOverridden
@@ -351,9 +351,9 @@ export function InlineApprovalPill({
         onClick={() => setOpen(!open)}
         type="button"
       >
-        <ShieldCheck className="size-3" />
+        <ShieldCheck className="size-2.5" />
         <span>{effectiveAutoApproved.size}/{approvalTools.length} auto-approved</span>
-        <ChevronDown className={`size-3 transition ${open ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`size-2.5 transition ${open ? 'rotate-180' : ''}`} />
       </button>
 
       {open && !disabled && (

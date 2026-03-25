@@ -147,10 +147,10 @@ textarea {
 }
 
 .markdown-composer-editable {
-  min-height: 40px;
+  min-height: 52px;
   max-height: 200px;
   overflow-y: auto;
-  padding: 8px 48px 8px 16px;
+  padding: 10px 48px 10px 16px;
   font-size: 14px;
   line-height: 1.6;
   color: #f4f4f5;
@@ -165,7 +165,7 @@ textarea {
 
 .markdown-composer-placeholder {
   position: absolute;
-  top: 8px;
+  top: 10px;
   left: 16px;
   font-size: 14px;
   line-height: 1.6;
@@ -227,10 +227,11 @@ textarea {
 
 /* Code block */
 .mc-code-block {
+  display: block;
   background: rgba(24, 24, 27, 0.8);
   border: 1px solid #27272a;
   border-radius: 6px;
-  padding: 8px 12px;
+  padding: 6px 10px;
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
   font-size: 0.9em;
   white-space: pre-wrap;

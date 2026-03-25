@@ -284,10 +284,10 @@ function ToolbarPlugin({ disabled }: { disabled: boolean }) {
         p.selectEnd();
       } else {
         const code = $createCodeNode();
-        const textNode = $createTextNode(topElement.getTextContent());
-        code.append(textNode);
+        const text = topElement.getTextContent();
+        if (text) code.append($createTextNode(text));
         topElement.replace(code);
-        textNode.select(0, 0);
+        code.select();
       }
     });
   }, [editor]);

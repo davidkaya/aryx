@@ -10,6 +10,8 @@
   --color-accent: #6366f1;
   --color-accent-hover: #818cf8;
   --color-accent-muted: rgba(99, 102, 241, 0.15);
+  --text-pill: 0.5rem;
+  --text-pill--line-height: 1;
 }
 
 :root {
@@ -24,13 +26,6 @@
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-}
-
-/* ── Inline pill trigger buttons ────────────────────────────── */
-
-.pill-trigger {
-  font-size: 0.5rem;
-  line-height: 1;
 }
 
 /* ── Light mode colour overrides ────────────────────────────── */

@@ -1,22 +1,16 @@
 import { useCallback } from 'react';
-import { ClipboardList, Play, X } from 'lucide-react';
+import { ClipboardList, X } from 'lucide-react';
 
 import { MarkdownContent } from '@renderer/components/MarkdownContent';
 import type { PendingPlanReviewRecord } from '@shared/domain/planReview';
 
 export function PlanReviewBanner({
   planReview,
-  onImplement,
   onDismiss,
 }: {
   planReview: PendingPlanReviewRecord;
-  onImplement: (planReview: PendingPlanReviewRecord) => void;
   onDismiss: (planReview: PendingPlanReviewRecord) => void;
 }) {
-  const handleImplement = useCallback(() => {
-    onImplement(planReview);
-  }, [planReview, onImplement]);
-
   const handleDismiss = useCallback(() => {
     onDismiss(planReview);
   }, [planReview, onDismiss]);
@@ -63,26 +57,14 @@ export function PlanReviewBanner({
               <MarkdownContent content={planReview.planContent} />
             </div>
           )}
-        </div>
-      </div>
 
-      {/* Actions */}
-      <div className="mt-3 flex items-center gap-2">
-        <button
-          className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3.5 py-1.5 text-[12px] font-medium text-white transition hover:bg-emerald-500"
-          onClick={handleImplement}
-          type="button"
-        >
-          <Play className="size-3" />
-          Implement this plan
-        </button>
-        <button
-          className="rounded-lg border border-zinc-600 px-3.5 py-1.5 text-[12px] font-medium text-zinc-300 transition hover:border-zinc-500 hover:bg-zinc-800 hover:text-white"
-          onClick={handleDismiss}
-          type="button"
-        >
-          Dismiss
-        </button>
+          {/* Guidance */}
+          <p className="mt-3 text-[12px] leading-relaxed text-zinc-400">
+            Send a follow-up message to proceed — e.g.{' '}
+            <span className="text-zinc-300">&quot;implement the plan&quot;</span>,{' '}
+            <span className="text-zinc-300">&quot;adjust step 3&quot;</span>, or ask for a different approach.
+          </p>
+        </div>
       </div>
     </div>
   );

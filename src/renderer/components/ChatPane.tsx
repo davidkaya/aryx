@@ -130,12 +130,6 @@ export function ChatPane({
     void onSend(content);
   }
 
-  function handleImplementPlan() {
-    if (!pendingPlanReview) return;
-    onDismissPlanReview?.();
-    void onSend('Implement the plan.');
-  }
-
   function handleDismissPlan() {
     onDismissPlanReview?.();
   }
@@ -399,7 +393,6 @@ export function ChatPane({
             <div className="mb-3">
               <PlanReviewBanner
                 onDismiss={handleDismissPlan}
-                onImplement={handleImplementPlan}
                 planReview={pendingPlanReview}
               />
             </div>
@@ -425,22 +418,6 @@ export function ChatPane({
                   isOverridden={isApprovalOverridden}
                   onUpdate={onUpdateSessionApprovalSettings}
                 />
-              )}
-              {onSetInteractionMode && (
-                <button
-                  aria-pressed={isPlanMode}
-                  className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-[11px] font-medium transition ${
-                    isPlanMode
-                      ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25'
-                      : 'border-zinc-700 text-zinc-400 hover:border-zinc-600 hover:text-zinc-300'
-                  }`}
-                  disabled={isComposerDisabled}
-                  onClick={() => onSetInteractionMode(isPlanMode ? 'interactive' : 'plan')}
-                  type="button"
-                >
-                  <ClipboardList className="size-3" />
-                  Plan
-                </button>
               )}
               {primaryAgent && (
                 <div className="ml-auto flex items-center gap-2">
@@ -521,32 +498,63 @@ export function ChatPane({
                             : 'Message...'
               }
             >
-              <button
-                className={`absolute bottom-2 right-2 flex size-8 items-center justify-center rounded-lg transition ${
-                  isSessionBusy
-                    ? 'bg-red-600/80 text-white hover:bg-red-500'
-                    : canSubmitInput
-                      ? 'bg-indigo-600 text-white hover:bg-indigo-500'
-                      : 'bg-zinc-800 text-zinc-600'
-                }`}
-                disabled={!canSubmitInput && !isSessionBusy}
-                onClick={() => {
-                  if (isSessionBusy) {
-                    onCancelTurn?.();
-                  } else {
-                    composerRef.current?.submit();
-                  }
-                }}
-                type="button"
-                aria-label={isSessionBusy ? 'Stop generating' : 'Send message'}
-              >
-                {isSessionBusy ? (
-                  <Square className="size-3.5" fill="currentColor" />
-                ) : (
-                  <ArrowUp className="size-4" />
+              <div className="absolute bottom-2 right-2 flex items-center gap-1">
+                {/* Plan mode toggle */}
+                {onSetInteractionMode && !isSessionBusy && (
+                  <button
+                    aria-label={isPlanMode ? 'Switch to interactive mode' : 'Switch to plan mode'}
+                    aria-pressed={isPlanMode}
+                    className={`flex size-8 items-center justify-center rounded-lg transition ${
+                      isPlanMode
+                        ? 'bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/30'
+                        : 'text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300'
+                    }`}
+                    disabled={isComposerDisabled}
+                    onClick={() => onSetInteractionMode(isPlanMode ? 'interactive' : 'plan')}
+                    type="button"
+                  >
+                    <ClipboardList className="size-3.5" />
+                  </button>
                 )}
-              </button>
+
+                {/* Send / Stop button */}
+                <button
+                  className={`flex size-8 items-center justify-center rounded-lg transition ${
+                    isSessionBusy
+                      ? 'bg-red-600/80 text-white hover:bg-red-500'
+                      : canSubmitInput
+                        ? isPlanMode
+                          ? 'bg-emerald-600 text-white hover:bg-emerald-500'
+                          : 'bg-indigo-600 text-white hover:bg-indigo-500'
+                        : 'bg-zinc-800 text-zinc-600'
+                  }`}
+                  disabled={!canSubmitInput && !isSessionBusy}
+                  onClick={() => {
+                    if (isSessionBusy) {
+                      onCancelTurn?.();
+                    } else {
+                      composerRef.current?.submit();
+                    }
+                  }}
+                  type="button"
+                  aria-label={isSessionBusy ? 'Stop generating' : isPlanMode ? 'Send as plan request' : 'Send message'}
+                >
+                  {isSessionBusy ? (
+                    <Square className="size-3.5" fill="currentColor" />
+                  ) : (
+                    <ArrowUp className="size-4" />
+                  )}
+                </button>
+              </div>
             </MarkdownComposer>
+            {isPlanMode && !isSessionBusy && (
+              <div className="flex items-center gap-1.5 px-3 pb-1.5 pt-0.5">
+                <div className="size-1.5 rounded-full bg-emerald-500" />
+                <span className="text-[10px] font-medium text-emerald-400/80">
+                  Plan mode — the agent will propose a plan instead of implementing
+                </span>
+              </div>
+            )}
           </div>
         </div>
       </div>

@@ -62,13 +62,13 @@ async function readVersion(): Promise<string> {
   return packageJson.version;
 }
 
-// --- Windows: NSIS installer ---
+// --- Windows: Inno Setup installer ---
 
-async function resolveNsisPath(): Promise<string> {
+async function resolveInnoSetupCompilerPath(): Promise<string> {
   const candidates = [
-    'C:\\Program Files (x86)\\NSIS\\makensis.exe',
-    'C:\\Program Files\\NSIS\\makensis.exe',
-    'makensis',
+    'C:\\Program Files (x86)\\Inno Setup 6\\ISCC.exe',
+    'C:\\Program Files\\Inno Setup 6\\ISCC.exe',
+    'iscc',
   ];
 
   for (const candidate of candidates) {
@@ -77,21 +77,25 @@ async function resolveNsisPath(): Promise<string> {
     }
   }
 
-  return 'makensis';
+  return 'iscc';
 }
 
 async function createWindowsInstaller(version: string): Promise<void> {
-  const nsisScript = join(installerAssetsDirectory, 'windows.nsi');
-  const makensisPath = await resolveNsisPath();
+  const issScript = join(installerAssetsDirectory, 'windows.iss');
+  const isccPath = await resolveInnoSetupCompilerPath();
+  const outputFilename = releaseTarget.installerAssetName.replace(/\.exe$/, '');
+  const iconPath = join(repositoryRoot, 'assets', 'icons', 'windows', 'icon.ico');
 
   await runCommand(
-    makensisPath,
+    isccPath,
     [
       `/DPRODUCT_NAME=${productName}`,
       `/DPRODUCT_VERSION=${version}`,
       `/DSOURCE_DIR=${packagedAppDirectory}`,
-      `/DOUTPUT_PATH=${installerOutputPath}`,
-      nsisScript,
+      `/DOUTPUT_DIR=${releaseRootDirectory}`,
+      `/DOUTPUT_FILENAME=${outputFilename}`,
+      `/DICON_PATH=${iconPath}`,
+      issScript,
     ],
     repositoryRoot,
   );

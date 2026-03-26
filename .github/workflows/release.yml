@@ -131,10 +131,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libsecret-1-dev
 
-      - name: Install NSIS
+      - name: Install Inno Setup
         if: runner.os == 'Windows'
         shell: pwsh
-        run: choco install nsis -y --no-progress
+        run: choco install innosetup -y --no-progress
 
       - name: Install dependencies
         run: bun install --frozen-lockfile

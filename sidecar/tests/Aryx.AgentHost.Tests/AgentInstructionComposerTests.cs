@@ -124,6 +124,33 @@ public sealed class AgentInstructionComposerTests
         Assert.DoesNotContain("Do not inspect, modify, create, or delete files", instructions, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void Compose_AddsPlanModeGuidanceWhenRequested()
+    {
+        PatternDefinitionDto pattern = new()
+        {
+            Id = "pattern-single",
+            Name = "Single",
+            Mode = "single",
+            Availability = "available",
+        };
+        PatternAgentDefinitionDto agent = CreateAgent(
+            id: "agent-primary",
+            name: "Primary Agent",
+            instructions: "You are a helpful assistant.");
+
+        string instructions = AgentInstructionComposer.Compose(
+            pattern,
+            agent,
+            agentIndex: 0,
+            interactionMode: "plan");
+
+        Assert.Contains("operating in plan mode", instructions, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("produce a concrete implementation plan", instructions, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("exit_plan_mode", instructions, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Do not continue into implementation", instructions, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static PatternAgentDefinitionDto CreateAgent(string id, string name, string instructions)
     {
         return new PatternAgentDefinitionDto

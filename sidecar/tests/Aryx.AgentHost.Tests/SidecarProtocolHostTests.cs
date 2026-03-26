@@ -113,7 +113,7 @@ public sealed class SidecarProtocolHostTests
     {
         SidecarProtocolHost host = new(
             new PatternValidator(),
-            new FakeWorkflowRunner(async (command, onDelta, onActivity, onApproval, onUserInput, cancellationToken) =>
+            new FakeWorkflowRunner(async (command, onDelta, onActivity, onApproval, onUserInput, onExitPlanMode, cancellationToken) =>
             {
                 await onActivity(new AgentActivityEventDto
                 {
@@ -233,11 +233,48 @@ public sealed class SidecarProtocolHostTests
     }
 
     [Fact]
+    public async Task RunTurnCommand_DeserializesInteractionMode()
+    {
+        string? capturedMode = null;
+        SidecarProtocolHost host = new(
+            new PatternValidator(),
+            new FakeWorkflowRunner(async (command, onDelta, onActivity, onApproval, onUserInput, onExitPlanMode, cancellationToken) =>
+            {
+                capturedMode = command.Mode;
+                return [];
+            }));
+
+        await RunHostAsync(
+            new RunTurnCommandDto
+            {
+                Type = "run-turn",
+                RequestId = "turn-plan",
+                SessionId = "session-1",
+                ProjectPath = "C:\\workspace\\project",
+                Mode = "plan",
+                Pattern = new PatternDefinitionDto
+                {
+                    Id = "pattern-1",
+                    Name = "Single Agent",
+                    Mode = "single",
+                    Availability = "available",
+                    Agents =
+                    [
+                        CreateAgent(name: "Primary"),
+                    ],
+                },
+            },
+            host);
+
+        Assert.Equal("plan", capturedMode);
+    }
+
+    [Fact]
     public async Task RunTurnCommand_ReturnsApprovalEvents()
     {
         SidecarProtocolHost host = new(
             new PatternValidator(),
-            new FakeWorkflowRunner(async (command, onDelta, onActivity, onApproval, onUserInput, cancellationToken) =>
+            new FakeWorkflowRunner(async (command, onDelta, onActivity, onApproval, onUserInput, onExitPlanMode, cancellationToken) =>
             {
                 await onApproval(new ApprovalRequestedEventDto
                 {
@@ -315,7 +352,7 @@ public sealed class SidecarProtocolHostTests
     {
         SidecarProtocolHost host = new(
             new PatternValidator(),
-            new FakeWorkflowRunner(async (command, onDelta, onActivity, onApproval, onUserInput, cancellationToken) =>
+            new FakeWorkflowRunner(async (command, onDelta, onActivity, onApproval, onUserInput, onExitPlanMode, cancellationToken) =>
             {
                 await onUserInput(new UserInputRequestedEventDto
                 {
@@ -384,11 +421,86 @@ public sealed class SidecarProtocolHostTests
     }
 
     [Fact]
+    public async Task RunTurnCommand_ReturnsExitPlanModeEvents()
+    {
+        SidecarProtocolHost host = new(
+            new PatternValidator(),
+            new FakeWorkflowRunner(async (command, onDelta, onActivity, onApproval, onUserInput, onExitPlanMode, cancellationToken) =>
+            {
+                await onExitPlanMode(new ExitPlanModeRequestedEventDto
+                {
+                    Type = "exit-plan-mode-requested",
+                    RequestId = command.RequestId,
+                    SessionId = command.SessionId,
+                    ExitPlanId = "exit-plan-1",
+                    AgentId = "agent-1",
+                    AgentName = "Primary",
+                    Summary = "Proposed implementation plan",
+                    PlanContent = "1. Inspect\n2. Change\n3. Validate",
+                    Actions = ["interactive", "autopilot"],
+                    RecommendedAction = "interactive",
+                });
+
+                return [];
+            }));
+
+        IReadOnlyList<JsonElement> events = await RunHostAsync(
+            new RunTurnCommandDto
+            {
+                Type = "run-turn",
+                RequestId = "turn-plan-mode",
+                SessionId = "session-1",
+                ProjectPath = "C:\\workspace\\project",
+                Mode = "plan",
+                Pattern = new PatternDefinitionDto
+                {
+                    Id = "pattern-1",
+                    Name = "Single Agent",
+                    Mode = "single",
+                    Availability = "available",
+                    Agents =
+                    [
+                        CreateAgent(name: "Primary"),
+                    ],
+                },
+            },
+            host);
+
+        Assert.Collection(
+            events,
+            exitPlanEvent =>
+            {
+                Assert.Equal("exit-plan-mode-requested", exitPlanEvent.GetProperty("type").GetString());
+                Assert.Equal("turn-plan-mode", exitPlanEvent.GetProperty("requestId").GetString());
+                Assert.Equal("exit-plan-1", exitPlanEvent.GetProperty("exitPlanId").GetString());
+                Assert.Equal("Primary", exitPlanEvent.GetProperty("agentName").GetString());
+                Assert.Equal("Proposed implementation plan", exitPlanEvent.GetProperty("summary").GetString());
+                Assert.Equal("1. Inspect\n2. Change\n3. Validate", exitPlanEvent.GetProperty("planContent").GetString());
+                string[] actions = exitPlanEvent.GetProperty("actions")
+                    .EnumerateArray()
+                    .Select(action => action.GetString() ?? string.Empty)
+                    .ToArray();
+                Assert.Equal(["interactive", "autopilot"], actions);
+                Assert.Equal("interactive", exitPlanEvent.GetProperty("recommendedAction").GetString());
+            },
+            completionEvent =>
+            {
+                Assert.Equal("turn-complete", completionEvent.GetProperty("type").GetString());
+                Assert.False(completionEvent.GetProperty("cancelled").GetBoolean());
+            },
+            commandCompleteEvent =>
+            {
+                Assert.Equal("command-complete", commandCompleteEvent.GetProperty("type").GetString());
+                Assert.Equal("turn-plan-mode", commandCompleteEvent.GetProperty("requestId").GetString());
+            });
+    }
+
+    [Fact]
     public async Task CancelTurnCommand_CancelsInProgressTurnAndCompletesBothCommands()
     {
         SidecarProtocolHost host = new(
             new PatternValidator(),
-            new FakeWorkflowRunner(async (command, onDelta, onActivity, onApproval, onUserInput, cancellationToken) =>
+            new FakeWorkflowRunner(async (command, onDelta, onActivity, onApproval, onUserInput, onExitPlanMode, cancellationToken) =>
             {
                 await Task.Delay(Timeout.Infinite, cancellationToken);
                 return [];
@@ -436,7 +548,7 @@ public sealed class SidecarProtocolHostTests
     {
         SidecarProtocolHost host = new(
             new PatternValidator(),
-            new FakeWorkflowRunner(async (command, onDelta, onActivity, onApproval, onUserInput, cancellationToken) => []));
+            new FakeWorkflowRunner(async (command, onDelta, onActivity, onApproval, onUserInput, onExitPlanMode, cancellationToken) => []));
 
         await RunHostAsync(CreateRunTurnCommand(requestId: "turn-completed"), host);
 
@@ -459,7 +571,7 @@ public sealed class SidecarProtocolHostTests
         SidecarProtocolHost host = new(
             new PatternValidator(),
             new FakeWorkflowRunner(
-                handler: async (command, onDelta, onActivity, onApproval, onUserInput, cancellationToken) => [],
+                handler: async (command, onDelta, onActivity, onApproval, onUserInput, onExitPlanMode, cancellationToken) => [],
                 resolveApprovalHandler: (command, cancellationToken) =>
                 {
                     captured = command;
@@ -490,7 +602,7 @@ public sealed class SidecarProtocolHostTests
         SidecarProtocolHost host = new(
             new PatternValidator(),
             new FakeWorkflowRunner(
-                handler: async (command, onDelta, onActivity, onApproval, onUserInput, cancellationToken) => [],
+                handler: async (command, onDelta, onActivity, onApproval, onUserInput, onExitPlanMode, cancellationToken) => [],
                 resolveUserInputHandler: (command, cancellationToken) =>
                 {
                     captured = command;
@@ -517,7 +629,7 @@ public sealed class SidecarProtocolHostTests
     }
 
     [Fact]
-    public void MapRuntimeTools_ExcludesInternalToolsAndDeduplicatesByName()
+    public void MapRuntimeTools_ExcludesOnlyInternalMetaToolsAndDeduplicatesByName()
     {
         IReadOnlyList<SidecarRuntimeToolDto> runtimeTools = SidecarProtocolHost.MapRuntimeTools(
         [
@@ -553,10 +665,20 @@ public sealed class SidecarProtocolHostTests
             },
         ]);
 
-        SidecarRuntimeToolDto runtimeTool = Assert.Single(runtimeTools);
-        Assert.Equal("web_fetch", runtimeTool.Id);
-        Assert.Equal("web_fetch", runtimeTool.Label);
-        Assert.Equal("Fetch content from the web.", runtimeTool.Description);
+        Assert.Collection(
+            runtimeTools,
+            exitPlanTool =>
+            {
+                Assert.Equal("exit_plan_mode", exitPlanTool.Id);
+                Assert.Equal("exit_plan_mode", exitPlanTool.Label);
+                Assert.Equal("Exit plan mode.", exitPlanTool.Description);
+            },
+            runtimeTool =>
+            {
+                Assert.Equal("web_fetch", runtimeTool.Id);
+                Assert.Equal("web_fetch", runtimeTool.Label);
+                Assert.Equal("Fetch content from the web.", runtimeTool.Description);
+            });
     }
 
     [Fact]
@@ -626,9 +748,9 @@ public sealed class SidecarProtocolHostTests
         string eventType,
         string requestId)
     {
-        return Assert.Single(events.Where(evt =>
+        return Assert.Single(events, evt =>
             evt.GetProperty("type").GetString() == eventType
-            && evt.GetProperty("requestId").GetString() == requestId));
+            && evt.GetProperty("requestId").GetString() == requestId);
     }
 
     private static SidecarProtocolHost CreateHostForTests()
@@ -770,6 +892,7 @@ public sealed class SidecarProtocolHostTests
             Func<AgentActivityEventDto, Task>,
             Func<ApprovalRequestedEventDto, Task>,
             Func<UserInputRequestedEventDto, Task>,
+            Func<ExitPlanModeRequestedEventDto, Task>,
             CancellationToken,
             Task<IReadOnlyList<ChatMessageDto>>> _handler;
         private readonly Func<ResolveApprovalCommandDto, CancellationToken, Task> _resolveApprovalHandler;
@@ -782,6 +905,7 @@ public sealed class SidecarProtocolHostTests
                 Func<AgentActivityEventDto, Task>,
                 Func<ApprovalRequestedEventDto, Task>,
                 Func<UserInputRequestedEventDto, Task>,
+                Func<ExitPlanModeRequestedEventDto, Task>,
                 CancellationToken,
                 Task<IReadOnlyList<ChatMessageDto>>> handler,
             Func<ResolveApprovalCommandDto, CancellationToken, Task>? resolveApprovalHandler = null,
@@ -798,9 +922,10 @@ public sealed class SidecarProtocolHostTests
             Func<AgentActivityEventDto, Task> onActivity,
             Func<ApprovalRequestedEventDto, Task> onApproval,
             Func<UserInputRequestedEventDto, Task> onUserInput,
+            Func<ExitPlanModeRequestedEventDto, Task> onExitPlanMode,
             CancellationToken cancellationToken)
         {
-            return _handler(command, onDelta, onActivity, onApproval, onUserInput, cancellationToken);
+            return _handler(command, onDelta, onActivity, onApproval, onUserInput, onExitPlanMode, cancellationToken);
         }
 
         public Task ResolveApprovalAsync(

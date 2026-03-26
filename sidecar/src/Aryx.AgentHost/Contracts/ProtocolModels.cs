@@ -161,6 +161,7 @@ public sealed class RunTurnCommandDto : SidecarCommandEnvelope
     public string SessionId { get; init; } = string.Empty;
     public string ProjectPath { get; init; } = string.Empty;
     public string WorkspaceKind { get; init; } = "project";
+    public string Mode { get; init; } = "interactive";
     public PatternDefinitionDto Pattern { get; init; } = new();
     public IReadOnlyList<ChatMessageDto> Messages { get; init; } = [];
     public RunTurnToolingConfigDto? Tooling { get; init; }
@@ -306,6 +307,18 @@ public sealed class UserInputRequestedEventDto : SidecarEventDto
     public string Question { get; init; } = string.Empty;
     public IReadOnlyList<string>? Choices { get; init; }
     public bool? AllowFreeform { get; init; }
+}
+
+public sealed class ExitPlanModeRequestedEventDto : SidecarEventDto
+{
+    public string SessionId { get; init; } = string.Empty;
+    public string ExitPlanId { get; init; } = string.Empty;
+    public string? AgentId { get; init; }
+    public string? AgentName { get; init; }
+    public string Summary { get; init; } = string.Empty;
+    public string PlanContent { get; init; } = string.Empty;
+    public IReadOnlyList<string>? Actions { get; init; }
+    public string? RecommendedAction { get; init; }
 }
 
 public sealed class CommandErrorEventDto : SidecarEventDto

@@ -8,7 +8,8 @@ internal static class AgentInstructionComposer
         PatternDefinitionDto pattern,
         PatternAgentDefinitionDto agent,
         int agentIndex,
-        string workspaceKind = "project")
+        string workspaceKind = "project",
+        string interactionMode = "interactive")
     {
         string baseInstructions = agent.Instructions.Trim();
         string workspaceGuidance = string.Equals(workspaceKind, "scratchpad", StringComparison.OrdinalIgnoreCase)
@@ -18,6 +19,14 @@ internal static class AgentInstructionComposer
               You may use the available tools and files inside the scratchpad workspace when they help answer the request.
               Do not assume there is a connected repository, checked-out branch, or project-specific context unless the user provides it in the conversation.
               Answer conversationally and focus on the user's question directly.
+              """
+            : string.Empty;
+        string planModeGuidance = string.Equals(interactionMode, "plan", StringComparison.OrdinalIgnoreCase)
+            ? """
+              You are operating in plan mode.
+              Your job in this phase is to analyze the request, identify constraints, and produce a concrete implementation plan instead of carrying out the implementation.
+              Once the plan is ready, call the built-in `exit_plan_mode` tool so the host can present the plan for review.
+              Do not continue into implementation, file edits, builds, or tests after producing the plan unless the user explicitly asks to leave plan mode and proceed.
               """
             : string.Empty;
 
@@ -37,12 +46,12 @@ internal static class AgentInstructionComposer
                   Focus on refining the answer already in progress.
                   """;
 
-            return JoinInstructionBlocks(baseInstructions, workspaceGuidance, groupChatGuidance);
+            return JoinInstructionBlocks(baseInstructions, workspaceGuidance, planModeGuidance, groupChatGuidance);
         }
 
         if (!string.Equals(pattern.Mode, "handoff", StringComparison.OrdinalIgnoreCase))
         {
-            return JoinInstructionBlocks(baseInstructions, workspaceGuidance);
+            return JoinInstructionBlocks(baseInstructions, workspaceGuidance, planModeGuidance);
         }
 
         string runtimeGuidance = agentIndex == 0
@@ -60,7 +69,7 @@ internal static class AgentInstructionComposer
               Do not push the actual work back to triage unless you are blocked or the request is clearly outside your specialty.
               """;
 
-        return JoinInstructionBlocks(baseInstructions, workspaceGuidance, runtimeGuidance);
+        return JoinInstructionBlocks(baseInstructions, workspaceGuidance, planModeGuidance, runtimeGuidance);
     }
 
     private static string JoinInstructionBlocks(params string[] blocks)

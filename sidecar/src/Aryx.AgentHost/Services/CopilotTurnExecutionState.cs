@@ -24,6 +24,8 @@ internal sealed class CopilotTurnExecutionState
 
     public List<ChatMessageDto> CompletedMessages { get; private set; } = [];
 
+    public bool HasPendingExitPlanModeRequest { get; private set; }
+
     public async Task EmitThinkingIfNeeded(
         AgentIdentity agent,
         Func<AgentActivityEventDto, Task> onActivity)
@@ -72,6 +74,10 @@ internal sealed class CopilotTurnExecutionState
                 RecordObservedAgentForMessage(agent, assistantMessage.Data!.MessageId);
                 break;
             case AssistantReasoningDeltaEvent:
+                ActiveAgent = agent;
+                break;
+            case ExitPlanModeRequestedEvent:
+                HasPendingExitPlanModeRequest = true;
                 ActiveAgent = agent;
                 break;
         }

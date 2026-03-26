@@ -50,7 +50,12 @@ internal sealed class CopilotAgentBundle : IAsyncDisposable
                 ReasoningEffort = definition.ReasoningEffort,
                 SystemMessage = new SystemMessageConfig
                 {
-                    Content = AgentInstructionComposer.Compose(command.Pattern, definition, agentIndex, command.WorkspaceKind),
+                    Content = AgentInstructionComposer.Compose(
+                        command.Pattern,
+                        definition,
+                        agentIndex,
+                        command.WorkspaceKind,
+                        command.Mode),
                 },
                 WorkingDirectory = command.ProjectPath,
                 OnPermissionRequest = (request, invocation) => onPermissionRequest(definition, request, invocation),

@@ -21,7 +21,6 @@ public sealed class SidecarProtocolHost
         AskUserToolName,
         "report_intent",
         "task_complete",
-        "exit_plan_mode",
     };
 
     private static readonly string[] AuthenticationErrorIndicators =
@@ -189,6 +188,7 @@ public sealed class SidecarProtocolHost
                     activity => WriteAsync(context.Output, activity, turnCancellation.Token),
                     approval => WriteAsync(context.Output, approval, turnCancellation.Token),
                     userInput => WriteAsync(context.Output, userInput, turnCancellation.Token),
+                    exitPlanMode => WriteAsync(context.Output, exitPlanMode, turnCancellation.Token),
                     turnCancellation.Token)
                 .ConfigureAwait(false);
 

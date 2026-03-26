@@ -1,4 +1,5 @@
 using Aryx.AgentHost.Contracts;
+using GitHub.Copilot.SDK;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
 
@@ -9,6 +10,7 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
     private readonly PatternValidator _patternValidator;
     private readonly CopilotApprovalCoordinator _approvalCoordinator = new();
     private readonly CopilotUserInputCoordinator _userInputCoordinator = new();
+    private readonly CopilotExitPlanModeCoordinator _exitPlanModeCoordinator = new();
 
     public CopilotWorkflowRunner(PatternValidator patternValidator)
     {
@@ -21,6 +23,7 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
         Func<AgentActivityEventDto, Task> onActivity,
         Func<ApprovalRequestedEventDto, Task> onApproval,
         Func<UserInputRequestedEventDto, Task> onUserInput,
+        Func<ExitPlanModeRequestedEventDto, Task> onExitPlanMode,
         CancellationToken cancellationToken)
     {
         PatternValidationIssueDto? validationError = _patternValidator.Validate(command.Pattern).FirstOrDefault();
@@ -30,42 +33,68 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
         }
 
         CopilotTurnExecutionState state = new(command);
-        await using CopilotAgentBundle bundle = await CopilotAgentBundle.CreateAsync(
-            command,
-            (agent, request, invocation) => _approvalCoordinator.RequestApprovalAsync(
-                command,
-                agent,
-                request,
-                invocation,
-                state.ToolNamesByCallId,
-                onApproval,
-                cancellationToken),
-            (agent, request, invocation) => _userInputCoordinator.RequestUserInputAsync(
-                command,
-                agent,
-                request,
-                invocation,
-                onUserInput,
-                cancellationToken),
-            (agent, sessionEvent) => state.ObserveSessionEvent(agent, sessionEvent),
-            cancellationToken);
-        Workflow workflow = bundle.BuildWorkflow(command.Pattern);
-        List<ChatMessage> inputMessages = command.Messages.Select(WorkflowTranscriptProjector.ToChatMessage).ToList();
+        using CancellationTokenSource runCancellation =
+            CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
-        await using StreamingRun run = await InProcessExecution.RunStreamingAsync(workflow, inputMessages).ConfigureAwait(false);
-        await run.TrySendMessageAsync(new TurnToken(emitEvents: true)).ConfigureAwait(false);
-
-        await foreach (WorkflowEvent evt in run.WatchStreamAsync(cancellationToken).ConfigureAwait(false))
+        try
         {
-            bool shouldEndTurn = await HandleWorkflowEventAsync(command, evt, inputMessages, state, onDelta, onActivity)
-                .ConfigureAwait(false);
-            if (shouldEndTurn)
-            {
-                break;
-            }
-        }
+            await using CopilotAgentBundle bundle = await CopilotAgentBundle.CreateAsync(
+                command,
+                (agent, request, invocation) => _approvalCoordinator.RequestApprovalAsync(
+                    command,
+                    agent,
+                    request,
+                    invocation,
+                    state.ToolNamesByCallId,
+                    onApproval,
+                    runCancellation.Token),
+                (agent, request, invocation) => _userInputCoordinator.RequestUserInputAsync(
+                    command,
+                    agent,
+                    request,
+                    invocation,
+                    onUserInput,
+                    runCancellation.Token),
+                (agent, sessionEvent) =>
+                {
+                    state.ObserveSessionEvent(agent, sessionEvent);
+                    if (sessionEvent is ExitPlanModeRequestedEvent exitPlanModeRequested)
+                    {
+                        _exitPlanModeCoordinator.RecordExitPlanModeRequest(command, agent, exitPlanModeRequested);
+                        runCancellation.Cancel();
+                    }
+                },
+                runCancellation.Token);
+            Workflow workflow = bundle.BuildWorkflow(command.Pattern);
+            List<ChatMessage> inputMessages = command.Messages.Select(WorkflowTranscriptProjector.ToChatMessage).ToList();
 
-        return state.FinalizeCompletedMessages();
+            await using StreamingRun run = await InProcessExecution.RunStreamingAsync(workflow, inputMessages).ConfigureAwait(false);
+            await run.TrySendMessageAsync(new TurnToken(emitEvents: true)).ConfigureAwait(false);
+
+            await foreach (WorkflowEvent evt in run.WatchStreamAsync(runCancellation.Token).ConfigureAwait(false))
+            {
+                bool shouldEndTurn = await HandleWorkflowEventAsync(command, evt, inputMessages, state, onDelta, onActivity)
+                    .ConfigureAwait(false);
+                if (shouldEndTurn)
+                {
+                    break;
+                }
+            }
+
+            return state.FinalizeCompletedMessages();
+        }
+        catch (OperationCanceledException) when (runCancellation.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        {
+            ExitPlanModeRequestedEventDto? exitPlanModeEvent =
+                _exitPlanModeCoordinator.ConsumePendingRequest(command.RequestId);
+            if (exitPlanModeEvent is null || !state.HasPendingExitPlanModeRequest)
+            {
+                throw;
+            }
+
+            await onExitPlanMode(exitPlanModeEvent).ConfigureAwait(false);
+            return state.FinalizeCompletedMessages();
+        }
     }
 
     public Task ResolveApprovalAsync(

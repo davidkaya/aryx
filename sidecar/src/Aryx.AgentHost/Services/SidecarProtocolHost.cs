@@ -16,6 +16,13 @@ public sealed class SidecarProtocolHost
     private const string ResolveApprovalCommandType = "resolve-approval";
     private const string ResolveUserInputCommandType = "resolve-user-input";
     private const string AskUserToolName = "ask_user";
+    private static readonly HashSet<string> ExcludedRuntimeToolNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        AskUserToolName,
+        "report_intent",
+        "task_complete",
+        "exit_plan_mode",
+    };
 
     private static readonly string[] AuthenticationErrorIndicators =
     [
@@ -460,7 +467,7 @@ public sealed class SidecarProtocolHost
     {
         string? toolName = string.IsNullOrWhiteSpace(tool.Name) ? null : tool.Name.Trim();
         return toolName is not null
-            && !string.Equals(toolName, AskUserToolName, StringComparison.OrdinalIgnoreCase);
+            && !ExcludedRuntimeToolNames.Contains(toolName);
     }
 
     private static bool IsReasoningEffort(string? value)

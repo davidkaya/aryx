@@ -517,7 +517,7 @@ public sealed class SidecarProtocolHostTests
     }
 
     [Fact]
-    public void MapRuntimeTools_ExcludesAskUserAndDeduplicatesByName()
+    public void MapRuntimeTools_ExcludesInternalToolsAndDeduplicatesByName()
     {
         IReadOnlyList<SidecarRuntimeToolDto> runtimeTools = SidecarProtocolHost.MapRuntimeTools(
         [
@@ -525,6 +525,21 @@ public sealed class SidecarProtocolHostTests
             {
                 Name = "ask_user",
                 Description = "Ask the user a question.",
+            },
+            new Tool
+            {
+                Name = "report_intent",
+                Description = "Report current intent.",
+            },
+            new Tool
+            {
+                Name = "task_complete",
+                Description = "Signal task completion.",
+            },
+            new Tool
+            {
+                Name = "exit_plan_mode",
+                Description = "Exit plan mode.",
             },
             new Tool
             {

@@ -177,6 +177,13 @@ public sealed class ResolveApprovalCommandDto : SidecarCommandEnvelope
     public string Decision { get; init; } = string.Empty;
 }
 
+public sealed class ResolveUserInputCommandDto : SidecarCommandEnvelope
+{
+    public string UserInputId { get; init; } = string.Empty;
+    public string Answer { get; init; } = string.Empty;
+    public bool WasFreeform { get; init; }
+}
+
 public sealed class RunTurnToolingConfigDto
 {
     public IReadOnlyList<RunTurnMcpServerConfigDto> McpServers { get; init; } = [];
@@ -288,6 +295,17 @@ public sealed class ApprovalRequestedEventDto : SidecarEventDto
     public string Title { get; init; } = string.Empty;
     public string? Detail { get; init; }
     public PermissionDetailDto? PermissionDetail { get; init; }
+}
+
+public sealed class UserInputRequestedEventDto : SidecarEventDto
+{
+    public string SessionId { get; init; } = string.Empty;
+    public string UserInputId { get; init; } = string.Empty;
+    public string? AgentId { get; init; }
+    public string? AgentName { get; init; }
+    public string Question { get; init; } = string.Empty;
+    public IReadOnlyList<string>? Choices { get; init; }
+    public bool? AllowFreeform { get; init; }
 }
 
 public sealed class CommandErrorEventDto : SidecarEventDto

@@ -14,6 +14,8 @@ public sealed class SidecarProtocolHost
     private const string RunTurnCommandType = "run-turn";
     private const string CancelTurnCommandType = "cancel-turn";
     private const string ResolveApprovalCommandType = "resolve-approval";
+    private const string ResolveUserInputCommandType = "resolve-user-input";
+    private const string AskUserToolName = "ask_user";
 
     private static readonly string[] AuthenticationErrorIndicators =
     [
@@ -62,6 +64,7 @@ public sealed class SidecarProtocolHost
             [RunTurnCommandType] = HandleRunTurnAsync,
             [CancelTurnCommandType] = HandleCancelTurnAsync,
             [ResolveApprovalCommandType] = HandleResolveApprovalAsync,
+            [ResolveUserInputCommandType] = HandleResolveUserInputAsync,
         };
     }
 
@@ -178,6 +181,7 @@ public sealed class SidecarProtocolHost
                     delta => WriteAsync(context.Output, delta, turnCancellation.Token),
                     activity => WriteAsync(context.Output, activity, turnCancellation.Token),
                     approval => WriteAsync(context.Output, approval, turnCancellation.Token),
+                    userInput => WriteAsync(context.Output, userInput, turnCancellation.Token),
                     turnCancellation.Token)
                 .ConfigureAwait(false);
 
@@ -229,6 +233,12 @@ public sealed class SidecarProtocolHost
     {
         ResolveApprovalCommandDto command = DeserializeCommand<ResolveApprovalCommandDto>(context);
         await _workflowRunner.ResolveApprovalAsync(command, context.CancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task HandleResolveUserInputAsync(CommandContext context)
+    {
+        ResolveUserInputCommandDto command = DeserializeCommand<ResolveUserInputCommandDto>(context);
+        await _workflowRunner.ResolveUserInputAsync(command, context.CancellationToken).ConfigureAwait(false);
     }
 
     private TCommand DeserializeCommand<TCommand>(CommandContext context)
@@ -427,7 +437,13 @@ public sealed class SidecarProtocolHost
         CancellationToken cancellationToken)
     {
         ToolsListResult result = await client.Rpc.Tools.ListAsync(null!, cancellationToken).ConfigureAwait(false);
-        return result.Tools
+        return MapRuntimeTools(result.Tools);
+    }
+
+    internal static IReadOnlyList<SidecarRuntimeToolDto> MapRuntimeTools(IEnumerable<Tool> tools)
+    {
+        return tools
+            .Where(ShouldIncludeRuntimeTool)
             .Where(tool => !string.IsNullOrWhiteSpace(tool.Name))
             .Select(tool => new SidecarRuntimeToolDto
             {
@@ -438,6 +454,13 @@ public sealed class SidecarProtocolHost
             .DistinctBy(tool => tool.Id, StringComparer.OrdinalIgnoreCase)
             .OrderBy(tool => tool.Label, StringComparer.OrdinalIgnoreCase)
             .ToList();
+    }
+
+    private static bool ShouldIncludeRuntimeTool(Tool tool)
+    {
+        string? toolName = string.IsNullOrWhiteSpace(tool.Name) ? null : tool.Name.Trim();
+        return toolName is not null
+            && !string.Equals(toolName, AskUserToolName, StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsReasoningEffort(string? value)

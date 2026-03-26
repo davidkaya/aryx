@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Aryx.AgentHost.Contracts;
 using Aryx.AgentHost.Services;
+using GitHub.Copilot.SDK.Rpc;
 
 namespace Aryx.AgentHost.Tests;
 
@@ -112,7 +113,7 @@ public sealed class SidecarProtocolHostTests
     {
         SidecarProtocolHost host = new(
             new PatternValidator(),
-            new FakeWorkflowRunner(async (command, onDelta, onActivity, onApproval, cancellationToken) =>
+            new FakeWorkflowRunner(async (command, onDelta, onActivity, onApproval, onUserInput, cancellationToken) =>
             {
                 await onActivity(new AgentActivityEventDto
                 {
@@ -236,7 +237,7 @@ public sealed class SidecarProtocolHostTests
     {
         SidecarProtocolHost host = new(
             new PatternValidator(),
-            new FakeWorkflowRunner(async (command, onDelta, onActivity, onApproval, cancellationToken) =>
+            new FakeWorkflowRunner(async (command, onDelta, onActivity, onApproval, onUserInput, cancellationToken) =>
             {
                 await onApproval(new ApprovalRequestedEventDto
                 {
@@ -310,11 +311,84 @@ public sealed class SidecarProtocolHostTests
     }
 
     [Fact]
+    public async Task RunTurnCommand_ReturnsUserInputEvents()
+    {
+        SidecarProtocolHost host = new(
+            new PatternValidator(),
+            new FakeWorkflowRunner(async (command, onDelta, onActivity, onApproval, onUserInput, cancellationToken) =>
+            {
+                await onUserInput(new UserInputRequestedEventDto
+                {
+                    Type = "user-input-requested",
+                    RequestId = command.RequestId,
+                    SessionId = command.SessionId,
+                    UserInputId = "user-input-1",
+                    AgentId = "agent-1",
+                    AgentName = "Primary",
+                    Question = "What should I do next?",
+                    Choices = ["Continue", "Stop"],
+                    AllowFreeform = true,
+                });
+
+                return [];
+            }));
+
+        IReadOnlyList<JsonElement> events = await RunHostAsync(
+            new RunTurnCommandDto
+            {
+                Type = "run-turn",
+                RequestId = "turn-user-input",
+                SessionId = "session-1",
+                ProjectPath = "C:\\workspace\\project",
+                Pattern = new PatternDefinitionDto
+                {
+                    Id = "pattern-1",
+                    Name = "Single Agent",
+                    Mode = "single",
+                    Availability = "available",
+                    Agents =
+                    [
+                        CreateAgent(name: "Primary"),
+                    ],
+                },
+            },
+            host);
+
+        Assert.Collection(
+            events,
+            userInputEvent =>
+            {
+                Assert.Equal("user-input-requested", userInputEvent.GetProperty("type").GetString());
+                Assert.Equal("turn-user-input", userInputEvent.GetProperty("requestId").GetString());
+                Assert.Equal("session-1", userInputEvent.GetProperty("sessionId").GetString());
+                Assert.Equal("user-input-1", userInputEvent.GetProperty("userInputId").GetString());
+                Assert.Equal("Primary", userInputEvent.GetProperty("agentName").GetString());
+                Assert.Equal("What should I do next?", userInputEvent.GetProperty("question").GetString());
+                string[] choices = userInputEvent.GetProperty("choices")
+                    .EnumerateArray()
+                    .Select(choice => choice.GetString() ?? string.Empty)
+                    .ToArray();
+                Assert.Equal(["Continue", "Stop"], choices);
+                Assert.True(userInputEvent.GetProperty("allowFreeform").GetBoolean());
+            },
+            completionEvent =>
+            {
+                Assert.Equal("turn-complete", completionEvent.GetProperty("type").GetString());
+                Assert.False(completionEvent.GetProperty("cancelled").GetBoolean());
+            },
+            commandCompleteEvent =>
+            {
+                Assert.Equal("command-complete", commandCompleteEvent.GetProperty("type").GetString());
+                Assert.Equal("turn-user-input", commandCompleteEvent.GetProperty("requestId").GetString());
+            });
+    }
+
+    [Fact]
     public async Task CancelTurnCommand_CancelsInProgressTurnAndCompletesBothCommands()
     {
         SidecarProtocolHost host = new(
             new PatternValidator(),
-            new FakeWorkflowRunner(async (command, onDelta, onActivity, onApproval, cancellationToken) =>
+            new FakeWorkflowRunner(async (command, onDelta, onActivity, onApproval, onUserInput, cancellationToken) =>
             {
                 await Task.Delay(Timeout.Infinite, cancellationToken);
                 return [];
@@ -362,7 +436,7 @@ public sealed class SidecarProtocolHostTests
     {
         SidecarProtocolHost host = new(
             new PatternValidator(),
-            new FakeWorkflowRunner(async (command, onDelta, onActivity, onApproval, cancellationToken) => []));
+            new FakeWorkflowRunner(async (command, onDelta, onActivity, onApproval, onUserInput, cancellationToken) => []));
 
         await RunHostAsync(CreateRunTurnCommand(requestId: "turn-completed"), host);
 
@@ -385,7 +459,7 @@ public sealed class SidecarProtocolHostTests
         SidecarProtocolHost host = new(
             new PatternValidator(),
             new FakeWorkflowRunner(
-                handler: async (command, onDelta, onActivity, onApproval, cancellationToken) => [],
+                handler: async (command, onDelta, onActivity, onApproval, onUserInput, cancellationToken) => [],
                 resolveApprovalHandler: (command, cancellationToken) =>
                 {
                     captured = command;
@@ -407,6 +481,67 @@ public sealed class SidecarProtocolHostTests
         Assert.Equal("approval-command-1", completionEvent.GetProperty("requestId").GetString());
         Assert.Equal("approval-1", captured?.ApprovalId);
         Assert.Equal("approved", captured?.Decision);
+    }
+
+    [Fact]
+    public async Task ResolveUserInputCommand_DelegatesToWorkflowRunnerAndCompletes()
+    {
+        ResolveUserInputCommandDto? captured = null;
+        SidecarProtocolHost host = new(
+            new PatternValidator(),
+            new FakeWorkflowRunner(
+                handler: async (command, onDelta, onActivity, onApproval, onUserInput, cancellationToken) => [],
+                resolveUserInputHandler: (command, cancellationToken) =>
+                {
+                    captured = command;
+                    return Task.CompletedTask;
+                }));
+
+        IReadOnlyList<JsonElement> events = await RunHostAsync(
+            new ResolveUserInputCommandDto
+            {
+                Type = "resolve-user-input",
+                RequestId = "user-input-command-1",
+                UserInputId = "user-input-1",
+                Answer = "Continue",
+                WasFreeform = false,
+            },
+            host);
+
+        JsonElement completionEvent = Assert.Single(events);
+        Assert.Equal("command-complete", completionEvent.GetProperty("type").GetString());
+        Assert.Equal("user-input-command-1", completionEvent.GetProperty("requestId").GetString());
+        Assert.Equal("user-input-1", captured?.UserInputId);
+        Assert.Equal("Continue", captured?.Answer);
+        Assert.False(captured?.WasFreeform);
+    }
+
+    [Fact]
+    public void MapRuntimeTools_ExcludesAskUserAndDeduplicatesByName()
+    {
+        IReadOnlyList<SidecarRuntimeToolDto> runtimeTools = SidecarProtocolHost.MapRuntimeTools(
+        [
+            new Tool
+            {
+                Name = "ask_user",
+                Description = "Ask the user a question.",
+            },
+            new Tool
+            {
+                Name = " web_fetch ",
+                Description = " Fetch content from the web. ",
+            },
+            new Tool
+            {
+                Name = "WEB_FETCH",
+                Description = "Duplicate entry",
+            },
+        ]);
+
+        SidecarRuntimeToolDto runtimeTool = Assert.Single(runtimeTools);
+        Assert.Equal("web_fetch", runtimeTool.Id);
+        Assert.Equal("web_fetch", runtimeTool.Label);
+        Assert.Equal("Fetch content from the web.", runtimeTool.Description);
     }
 
     [Fact]
@@ -619,9 +754,11 @@ public sealed class SidecarProtocolHostTests
             Func<TurnDeltaEventDto, Task>,
             Func<AgentActivityEventDto, Task>,
             Func<ApprovalRequestedEventDto, Task>,
+            Func<UserInputRequestedEventDto, Task>,
             CancellationToken,
             Task<IReadOnlyList<ChatMessageDto>>> _handler;
         private readonly Func<ResolveApprovalCommandDto, CancellationToken, Task> _resolveApprovalHandler;
+        private readonly Func<ResolveUserInputCommandDto, CancellationToken, Task> _resolveUserInputHandler;
 
         public FakeWorkflowRunner(
             Func<
@@ -629,12 +766,15 @@ public sealed class SidecarProtocolHostTests
                 Func<TurnDeltaEventDto, Task>,
                 Func<AgentActivityEventDto, Task>,
                 Func<ApprovalRequestedEventDto, Task>,
+                Func<UserInputRequestedEventDto, Task>,
                 CancellationToken,
                 Task<IReadOnlyList<ChatMessageDto>>> handler,
-            Func<ResolveApprovalCommandDto, CancellationToken, Task>? resolveApprovalHandler = null)
+            Func<ResolveApprovalCommandDto, CancellationToken, Task>? resolveApprovalHandler = null,
+            Func<ResolveUserInputCommandDto, CancellationToken, Task>? resolveUserInputHandler = null)
         {
             _handler = handler;
             _resolveApprovalHandler = resolveApprovalHandler ?? ((_, _) => Task.CompletedTask);
+            _resolveUserInputHandler = resolveUserInputHandler ?? ((_, _) => Task.CompletedTask);
         }
 
         public Task<IReadOnlyList<ChatMessageDto>> RunTurnAsync(
@@ -642,9 +782,10 @@ public sealed class SidecarProtocolHostTests
             Func<TurnDeltaEventDto, Task> onDelta,
             Func<AgentActivityEventDto, Task> onActivity,
             Func<ApprovalRequestedEventDto, Task> onApproval,
+            Func<UserInputRequestedEventDto, Task> onUserInput,
             CancellationToken cancellationToken)
         {
-            return _handler(command, onDelta, onActivity, onApproval, cancellationToken);
+            return _handler(command, onDelta, onActivity, onApproval, onUserInput, cancellationToken);
         }
 
         public Task ResolveApprovalAsync(
@@ -652,6 +793,13 @@ public sealed class SidecarProtocolHostTests
             CancellationToken cancellationToken)
         {
             return _resolveApprovalHandler(command, cancellationToken);
+        }
+
+        public Task ResolveUserInputAsync(
+            ResolveUserInputCommandDto command,
+            CancellationToken cancellationToken)
+        {
+            return _resolveUserInputHandler(command, cancellationToken);
         }
     }
 }

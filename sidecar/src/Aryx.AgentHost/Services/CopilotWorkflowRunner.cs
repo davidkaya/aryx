@@ -8,6 +8,7 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
 {
     private readonly PatternValidator _patternValidator;
     private readonly CopilotApprovalCoordinator _approvalCoordinator = new();
+    private readonly CopilotUserInputCoordinator _userInputCoordinator = new();
 
     public CopilotWorkflowRunner(PatternValidator patternValidator)
     {
@@ -19,6 +20,7 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
         Func<TurnDeltaEventDto, Task> onDelta,
         Func<AgentActivityEventDto, Task> onActivity,
         Func<ApprovalRequestedEventDto, Task> onApproval,
+        Func<UserInputRequestedEventDto, Task> onUserInput,
         CancellationToken cancellationToken)
     {
         PatternValidationIssueDto? validationError = _patternValidator.Validate(command.Pattern).FirstOrDefault();
@@ -37,6 +39,13 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
                 invocation,
                 state.ToolNamesByCallId,
                 onApproval,
+                cancellationToken),
+            (agent, request, invocation) => _userInputCoordinator.RequestUserInputAsync(
+                command,
+                agent,
+                request,
+                invocation,
+                onUserInput,
                 cancellationToken),
             (agent, sessionEvent) => state.ObserveSessionEvent(agent, sessionEvent),
             cancellationToken);
@@ -64,6 +73,13 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
         CancellationToken cancellationToken)
     {
         return _approvalCoordinator.ResolveApprovalAsync(command, cancellationToken);
+    }
+
+    public Task ResolveUserInputAsync(
+        ResolveUserInputCommandDto command,
+        CancellationToken cancellationToken)
+    {
+        return _userInputCoordinator.ResolveUserInputAsync(command, cancellationToken);
     }
 
     private static async Task<bool> HandleWorkflowEventAsync(

@@ -1,7 +1,9 @@
 import { constants } from 'node:fs';
-import { access, chmod, cp, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { access, chmod, cp, mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import { createPackageWithOptions } from '@electron/asar';
 
 import {
   macBundleIdentifier,
@@ -160,6 +162,13 @@ async function copyApplicationPayload(
   ]);
 
   await copyRuntimeDependencies(packagedAppDirectory, dependencyNames);
+
+  const asarPath = join(outputResourcesDirectory, 'app.asar');
+  await createPackageWithOptions(packagedAppDirectory, asarPath, {
+    unpack: '**/*.node',
+  });
+  await rm(packagedAppDirectory, { recursive: true });
+
   return manifest;
 }
 
@@ -195,12 +204,46 @@ async function applyMacMetadata(appBundleDirectory: string, version: string): Pr
   await cp(macosIconPath, join(appBundleDirectory, 'Contents', 'Resources', 'icon.icns'));
 }
 
+async function stripUnneededElectronFiles(electronOutputDirectory: string): Promise<void> {
+  const filesToRemove = ['LICENSES.chromium.html', 'LICENSE'];
+  const resourcesToRemove = ['default_app.asar'];
+  await Promise.all([
+    ...filesToRemove.map((file) => rm(join(electronOutputDirectory, file), { force: true })),
+    ...resourcesToRemove.map((file) =>
+      rm(join(electronOutputDirectory, 'resources', file), { force: true }),
+    ),
+  ]);
+
+  const localesDirectory = join(electronOutputDirectory, 'locales');
+  if (await pathExists(localesDirectory)) {
+    const localeFiles = await readdir(localesDirectory);
+    await Promise.all(
+      localeFiles
+        .filter((file) => file !== 'en-US.pak')
+        .map((file) => rm(join(localesDirectory, file))),
+    );
+  }
+}
+
+async function stripMacElectronFiles(resourcesDirectory: string): Promise<void> {
+  await rm(join(resourcesDirectory, 'LICENSES.chromium.html'), { force: true });
+
+  const entries = await readdir(resourcesDirectory);
+  const unusedLproj = entries.filter(
+    (entry) => entry.endsWith('.lproj') && entry !== 'en.lproj',
+  );
+  await Promise.all(
+    unusedLproj.map((dir) => rm(join(resourcesDirectory, dir), { recursive: true })),
+  );
+}
+
 async function packageWindows(dependencyNames: string[]): Promise<void> {
   const packagedExecutablePath = join(outputDirectory, `${productName}.exe`);
   const packagedAppDirectory = join(outputDirectory, 'resources', 'app');
   const outputResourcesDirectory = join(outputDirectory, 'resources');
 
   await cp(electronDistributionDirectory, outputDirectory, { recursive: true });
+  await stripUnneededElectronFiles(outputDirectory);
   await rename(join(outputDirectory, 'electron.exe'), packagedExecutablePath);
   await copyApplicationPayload(packagedAppDirectory, outputResourcesDirectory, dependencyNames);
 
@@ -219,6 +262,7 @@ async function packageMac(dependencyNames: string[]): Promise<void> {
   const outputResourcesDirectory = join(appBundleDirectory, 'Contents', 'Resources');
 
   await cp(electronDistributionDirectory, appBundleDirectory, { recursive: true });
+  await stripMacElectronFiles(join(appBundleDirectory, 'Contents', 'Resources'));
   const manifest = await copyApplicationPayload(packagedAppDirectory, outputResourcesDirectory, dependencyNames);
   await applyMacMetadata(appBundleDirectory, manifest.version);
   await ensureExecutable(join(outputResourcesDirectory, 'sidecar', releaseTarget.sidecarExecutableName));
@@ -236,6 +280,7 @@ async function packageLinux(dependencyNames: string[]): Promise<void> {
   const chromeSandboxPath = join(outputDirectory, 'chrome-sandbox');
 
   await cp(electronDistributionDirectory, outputDirectory, { recursive: true });
+  await stripUnneededElectronFiles(outputDirectory);
   await rename(join(outputDirectory, 'electron'), packagedExecutablePath);
   await ensureExecutable(packagedExecutablePath);
   await copyApplicationPayload(packagedAppDirectory, outputResourcesDirectory, dependencyNames);

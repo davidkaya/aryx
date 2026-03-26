@@ -17,6 +17,7 @@ describe('run turn pending helpers', () => {
       onActivity: () => undefined,
       onApproval: () => undefined,
       onUserInput: () => undefined,
+      onExitPlanMode: () => undefined,
       errored: false,
     };
 
@@ -40,6 +41,7 @@ describe('run turn pending helpers', () => {
       onActivity: () => undefined,
       onApproval: () => undefined,
       onUserInput: () => undefined,
+      onExitPlanMode: () => undefined,
       errored: false,
     };
 

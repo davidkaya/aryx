@@ -68,12 +68,15 @@ export interface ValidatePatternCommand {
   pattern: PatternDefinition;
 }
 
+export type InteractionMode = 'interactive' | 'plan';
+
 export interface RunTurnCommand {
   type: 'run-turn';
   requestId: string;
   sessionId: string;
   projectPath: string;
   workspaceKind?: 'project' | 'scratchpad';
+  mode?: InteractionMode;
   pattern: PatternDefinition;
   messages: ChatMessageRecord[];
   tooling?: RunTurnToolingConfig;
@@ -241,6 +244,19 @@ export interface UserInputRequestedEvent {
   allowFreeform?: boolean;
 }
 
+export interface ExitPlanModeRequestedEvent {
+  type: 'exit-plan-mode-requested';
+  requestId: string;
+  sessionId: string;
+  exitPlanId: string;
+  agentId?: string;
+  agentName?: string;
+  summary: string;
+  planContent: string;
+  actions?: string[];
+  recommendedAction?: string;
+}
+
 export interface CommandErrorEvent {
   type: 'command-error';
   requestId: string;
@@ -260,5 +276,6 @@ export type SidecarEvent =
   | AgentActivityEvent
   | ApprovalRequestedEvent
   | UserInputRequestedEvent
+  | ExitPlanModeRequestedEvent
   | CommandErrorEvent
   | CommandCompleteEvent;

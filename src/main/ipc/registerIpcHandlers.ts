@@ -7,6 +7,7 @@ import type {
   CreateSessionInput,
   ResolveProjectDiscoveredToolingInput,
   ResolveWorkspaceDiscoveredToolingInput,
+  DismissSessionPlanReviewInput,
   DuplicateSessionInput,
   RenameSessionInput,
   RescanProjectConfigsInput,
@@ -18,6 +19,7 @@ import type {
   SendSessionMessageInput,
   SetPatternFavoriteInput,
   SetSessionArchivedInput,
+  SetSessionInteractionModeInput,
   SetSessionPinnedInput,
   UpdateSessionApprovalSettingsInput,
   UpdateSessionToolingInput,
@@ -113,6 +115,12 @@ export function registerIpcHandlers(window: BrowserWindow, service: AryxAppServi
   );
   ipcMain.handle(ipcChannels.resolveSessionUserInput, (_event, input: ResolveSessionUserInputInput) =>
     service.resolveSessionUserInput(input.sessionId, input.userInputId, input.answer, input.wasFreeform),
+  );
+  ipcMain.handle(ipcChannels.setSessionInteractionMode, (_event, input: SetSessionInteractionModeInput) =>
+    service.setSessionInteractionMode(input.sessionId, input.mode),
+  );
+  ipcMain.handle(ipcChannels.dismissSessionPlanReview, (_event, input: DismissSessionPlanReviewInput) =>
+    service.dismissSessionPlanReview(input.sessionId),
   );
   ipcMain.handle(
     ipcChannels.updateSessionModelConfig,

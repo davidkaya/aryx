@@ -10,6 +10,7 @@ import type {
   SidecarEvent,
   TurnDeltaEvent,
   UserInputRequestedEvent,
+  ExitPlanModeRequestedEvent,
   ValidatePatternCommand,
   RunTurnCommand,
 } from '@shared/contracts/sidecar';
@@ -102,8 +103,9 @@ export class SidecarClient {
     onActivity: (event: AgentActivityEvent) => void | Promise<void>,
     onApproval: (event: ApprovalRequestedEvent) => void | Promise<void>,
     onUserInput: (event: UserInputRequestedEvent) => void | Promise<void>,
+    onExitPlanMode: (event: ExitPlanModeRequestedEvent) => void | Promise<void>,
   ): Promise<ChatMessageRecord[]> {
-    return this.dispatch<ChatMessageRecord[]>(command, onDelta, onActivity, onApproval, onUserInput);
+    return this.dispatch<ChatMessageRecord[]>(command, onDelta, onActivity, onApproval, onUserInput, onExitPlanMode);
   }
 
   async resolveUserInput(userInputId: string, answer: string, wasFreeform: boolean): Promise<void> {
@@ -218,6 +220,7 @@ export class SidecarClient {
     onActivity?: (event: AgentActivityEvent) => void | Promise<void>,
     onApproval?: (event: ApprovalRequestedEvent) => void | Promise<void>,
     onUserInput?: (event: UserInputRequestedEvent) => void | Promise<void>,
+    onExitPlanMode?: (event: ExitPlanModeRequestedEvent) => void | Promise<void>,
   ): Promise<TResult> {
     const state = await this.ensureProcess();
 
@@ -232,6 +235,7 @@ export class SidecarClient {
           onActivity: onActivity ?? (() => undefined),
           onApproval: onApproval ?? (() => undefined),
           onUserInput: onUserInput ?? (() => undefined),
+          onExitPlanMode: onExitPlanMode ?? (() => undefined),
           errored: false,
         });
       } else if (command.type === 'validate-pattern') {
@@ -327,6 +331,11 @@ export class SidecarClient {
       case 'user-input-requested':
         if (pending.kind === 'run-turn' && shouldHandleRunTurnEvent(pending)) {
           this.invokeRunTurnHandler(event.requestId, pending, () => pending.onUserInput(event));
+        }
+        return;
+      case 'exit-plan-mode-requested':
+        if (pending.kind === 'run-turn' && shouldHandleRunTurnEvent(pending)) {
+          this.invokeRunTurnHandler(event.requestId, pending, () => pending.onExitPlanMode(event));
         }
         return;
       case 'turn-complete':

@@ -253,6 +253,12 @@ export default function App() {
           onResolveUserInput={(userInputId, answer, wasFreeform) =>
             api.resolveSessionUserInput({ sessionId: selectedSession.id, userInputId, answer, wasFreeform })
           }
+          onSetInteractionMode={(mode) => {
+            void api.setSessionInteractionMode({ sessionId: selectedSession.id, mode });
+          }}
+          onDismissPlanReview={() => {
+            void api.dismissSessionPlanReview({ sessionId: selectedSession.id });
+          }}
           onUpdateSessionModelConfig={(config) =>
             api.updateSessionModelConfig({
               sessionId: selectedSession.id,

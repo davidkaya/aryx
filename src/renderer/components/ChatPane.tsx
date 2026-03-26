@@ -1,14 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, ArrowUp, Bot, Circle, GitBranch, Loader2, MessageCircleQuestion, ShieldAlert, Square, User } from 'lucide-react';
+import { AlertCircle, ArrowUp, Bot, Circle, ClipboardList, GitBranch, Loader2, MessageCircleQuestion, ShieldAlert, Square, User } from 'lucide-react';
 
 import { MarkdownContent } from '@renderer/components/MarkdownContent';
 import { MarkdownComposer, type MarkdownComposerHandle } from '@renderer/components/MarkdownComposer';
 import { ApprovalBanner, QueuedApprovalsList } from '@renderer/components/chat/ApprovalBanner';
+import { PlanReviewBanner } from '@renderer/components/chat/PlanReviewBanner';
 import { UserInputBanner } from '@renderer/components/chat/UserInputBanner';
 import { InlineApprovalPill, InlineModelPill, InlineThinkingPill, InlineToolsPill } from '@renderer/components/chat/InlinePills';
 import { ThinkingDots } from '@renderer/components/chat/ThinkingDots';
 import { getAssistantMessagePhase } from '@renderer/lib/messagePhase';
 import type { ApprovalDecision } from '@shared/domain/approval';
+import type { InteractionMode } from '@shared/contracts/sidecar';
 import {
   findModel,
   getSupportedReasoningEfforts,
@@ -38,6 +40,8 @@ interface ChatPaneProps {
   onCancelTurn?: () => void;
   onResolveApproval?: (approvalId: string, decision: ApprovalDecision) => Promise<unknown>;
   onResolveUserInput?: (userInputId: string, answer: string, wasFreeform: boolean) => Promise<unknown>;
+  onSetInteractionMode?: (mode: InteractionMode) => void;
+  onDismissPlanReview?: () => void;
   onUpdateSessionModelConfig?: (config: {
     model: string;
     reasoningEffort?: ReasoningEffort;
@@ -57,6 +61,8 @@ export function ChatPane({
   onCancelTurn,
   onResolveApproval,
   onResolveUserInput,
+  onSetInteractionMode,
+  onDismissPlanReview,
   onUpdateSessionModelConfig,
   onUpdateSessionTooling,
   onUpdateSessionApprovalSettings,
@@ -75,6 +81,9 @@ export function ChatPane({
   const queuedApprovals = (session.pendingApprovalQueue ?? []).filter((a) => a.status === 'pending');
   const totalPendingCount = (pendingApproval ? 1 : 0) + queuedApprovals.length;
   const pendingUserInput = session.pendingUserInput?.status === 'pending' ? session.pendingUserInput : undefined;
+  const pendingPlanReview = session.pendingPlanReview?.status === 'pending' ? session.pendingPlanReview : undefined;
+  const interactionMode: InteractionMode = session.interactionMode ?? 'interactive';
+  const isPlanMode = interactionMode === 'plan';
   const isScratchpad = isScratchpadProject(project);
   const isSingleAgent = pattern.agents.length === 1;
   const primaryAgent = pattern.agents[0];
@@ -119,6 +128,16 @@ export function ChatPane({
 
   function handleComposerSubmit(content: string) {
     void onSend(content);
+  }
+
+  function handleImplementPlan() {
+    if (!pendingPlanReview) return;
+    onDismissPlanReview?.();
+    void onSend('Implement the plan.');
+  }
+
+  function handleDismissPlan() {
+    onDismissPlanReview?.();
   }
 
   async function handleSessionModelConfigChange(config: {
@@ -375,6 +394,17 @@ export function ChatPane({
             </div>
           )}
 
+          {/* Plan review banner */}
+          {pendingPlanReview && (
+            <div className="mb-3">
+              <PlanReviewBanner
+                onDismiss={handleDismissPlan}
+                onImplement={handleImplementPlan}
+                planReview={pendingPlanReview}
+              />
+            </div>
+          )}
+
           {/* Session config pills — tools/approval left, model/reasoning right */}
           {isSingleAgent && (
             <div className="mb-2 flex items-center gap-2">
@@ -395,6 +425,22 @@ export function ChatPane({
                   isOverridden={isApprovalOverridden}
                   onUpdate={onUpdateSessionApprovalSettings}
                 />
+              )}
+              {onSetInteractionMode && (
+                <button
+                  aria-pressed={isPlanMode}
+                  className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-[11px] font-medium transition ${
+                    isPlanMode
+                      ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25'
+                      : 'border-zinc-700 text-zinc-400 hover:border-zinc-600 hover:text-zinc-300'
+                  }`}
+                  disabled={isComposerDisabled}
+                  onClick={() => onSetInteractionMode(isPlanMode ? 'interactive' : 'plan')}
+                  type="button"
+                >
+                  <ClipboardList className="size-3" />
+                  Plan
+                </button>
               )}
               {primaryAgent && (
                 <div className="ml-auto flex items-center gap-2">
@@ -464,11 +510,15 @@ export function ChatPane({
                   ? 'Awaiting approval...'
                   : pendingUserInput
                     ? 'Awaiting your input above...'
-                    : isSessionBusy
-                      ? 'Waiting for response...'
-                      : isUpdatingSessionModelConfig
-                        ? 'Saving model settings...'
-                        : 'Message...'
+                    : pendingPlanReview
+                      ? 'Review the plan above...'
+                      : isSessionBusy
+                        ? 'Waiting for response...'
+                        : isUpdatingSessionModelConfig
+                          ? 'Saving model settings...'
+                          : isPlanMode
+                            ? 'Describe what to plan...'
+                            : 'Message...'
               }
             >
               <button

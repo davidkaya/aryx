@@ -12,6 +12,8 @@ import {
 } from '@shared/domain/approval';
 import type { SessionRunRecord } from '@shared/domain/runTimeline';
 import type { PendingUserInputRecord } from '@shared/domain/userInput';
+import type { PendingPlanReviewRecord } from '@shared/domain/planReview';
+import type { InteractionMode } from '@shared/contracts/sidecar';
 
 export type ChatRole = 'system' | 'user' | 'assistant';
 export type SessionStatus = 'idle' | 'running' | 'error';
@@ -42,6 +44,7 @@ export interface SessionRecord {
   status: SessionStatus;
   isPinned?: boolean;
   isArchived?: boolean;
+  interactionMode?: InteractionMode;
   messages: ChatMessageRecord[];
   lastError?: string;
   sessionModelConfig?: SessionModelConfig;
@@ -50,6 +53,7 @@ export interface SessionRecord {
   pendingApproval?: PendingApprovalRecord;
   pendingApprovalQueue?: PendingApprovalRecord[];
   pendingUserInput?: PendingUserInputRecord;
+  pendingPlanReview?: PendingPlanReviewRecord;
   runs: SessionRunRecord[];
 }
 

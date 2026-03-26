@@ -1,6 +1,7 @@
 import type {
   AgentActivityEvent,
   ApprovalRequestedEvent,
+  ExitPlanModeRequestedEvent,
   TurnDeltaEvent,
   UserInputRequestedEvent,
 } from '@shared/contracts/sidecar';
@@ -14,6 +15,7 @@ export interface RunTurnPendingCommand {
   onActivity: (event: AgentActivityEvent) => void | Promise<void>;
   onApproval: (event: ApprovalRequestedEvent) => void | Promise<void>;
   onUserInput: (event: UserInputRequestedEvent) => void | Promise<void>;
+  onExitPlanMode: (event: ExitPlanModeRequestedEvent) => void | Promise<void>;
   errored: boolean;
 }
 

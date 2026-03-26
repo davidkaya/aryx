@@ -1,5 +1,5 @@
 import type { ApprovalDecision } from '@shared/domain/approval';
-import type { SidecarCapabilities } from '@shared/contracts/sidecar';
+import type { SidecarCapabilities, InteractionMode } from '@shared/contracts/sidecar';
 import type { PatternDefinition, ReasoningEffort } from '@shared/domain/pattern';
 import type { ProjectRecord } from '@shared/domain/project';
 import type { QuerySessionsInput, SessionQueryResult } from '@shared/domain/sessionLibrary';
@@ -107,6 +107,15 @@ export interface UpdateSessionApprovalSettingsInput {
   autoApprovedToolNames?: string[];
 }
 
+export interface SetSessionInteractionModeInput {
+  sessionId: string;
+  mode: InteractionMode;
+}
+
+export interface DismissSessionPlanReviewInput {
+  sessionId: string;
+}
+
 export interface ElectronApi {
   describeSidecarCapabilities(): Promise<SidecarCapabilities>;
   refreshSidecarCapabilities(): Promise<SidecarCapabilities>;
@@ -134,6 +143,8 @@ export interface ElectronApi {
   cancelSessionTurn(input: CancelSessionTurnInput): Promise<void>;
   resolveSessionApproval(input: ResolveSessionApprovalInput): Promise<WorkspaceState>;
   resolveSessionUserInput(input: ResolveSessionUserInputInput): Promise<WorkspaceState>;
+  setSessionInteractionMode(input: SetSessionInteractionModeInput): Promise<WorkspaceState>;
+  dismissSessionPlanReview(input: DismissSessionPlanReviewInput): Promise<WorkspaceState>;
   updateSessionModelConfig(input: UpdateSessionModelConfigInput): Promise<WorkspaceState>;
   querySessions(input: QuerySessionsInput): Promise<SessionQueryResult[]>;
   selectProject(projectId?: string): Promise<WorkspaceState>;

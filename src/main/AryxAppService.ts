@@ -7,6 +7,7 @@ import electron from 'electron';
 import type {
   AgentActivityEvent,
   ApprovalRequestedEvent,
+  ExitPlanModeRequestedEvent,
   RunTurnToolingConfig,
   SidecarCapabilities,
   TurnDeltaEvent,
@@ -584,6 +585,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     session.title = resolveSessionTitle(session, effectivePattern, session.messages);
     session.status = 'running';
     session.lastError = undefined;
+    session.pendingPlanReview = undefined;
     session.updatedAt = occurredAt;
     session.runs = [
       createSessionRunRecord({
@@ -613,6 +615,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
           sessionId: session.id,
           projectPath: project.path,
           workspaceKind,
+          mode: session.interactionMode ?? 'interactive',
           pattern: effectivePattern,
           messages: session.messages,
           tooling: this.buildRunTurnToolingConfig(workspace, session),
@@ -630,6 +633,9 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
         async (event) => {
           await this.handleUserInputRequested(workspace, session.id, requestId, event, (answer, wasFreeform) =>
             this.sidecar.resolveUserInput(event.userInputId, answer, wasFreeform));
+        },
+        async (event) => {
+          await this.handleExitPlanModeRequested(workspace, session.id, event);
         },
       );
 
@@ -840,6 +846,29 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
       model: normalizedModel,
       reasoningEffort: resolveReasoningEffort(selectedModel, reasoningEffort),
     };
+    session.updatedAt = nowIso();
+
+    return this.persistAndBroadcast(workspace);
+  }
+
+  async setSessionInteractionMode(
+    sessionId: string,
+    mode: 'interactive' | 'plan',
+  ): Promise<WorkspaceState> {
+    const workspace = await this.loadWorkspace();
+    const session = this.requireSession(workspace, sessionId);
+
+    session.interactionMode = mode === 'interactive' ? undefined : mode;
+    session.updatedAt = nowIso();
+
+    return this.persistAndBroadcast(workspace);
+  }
+
+  async dismissSessionPlanReview(sessionId: string): Promise<WorkspaceState> {
+    const workspace = await this.loadWorkspace();
+    const session = this.requireSession(workspace, sessionId);
+
+    session.pendingPlanReview = undefined;
     session.updatedAt = nowIso();
 
     return this.persistAndBroadcast(workspace);
@@ -1180,6 +1209,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     session.status = 'idle';
     session.lastError = undefined;
     session.pendingUserInput = undefined;
+    session.pendingPlanReview = undefined;
     session.updatedAt = completedAt;
     const completedRun = this.updateSessionRun(session, requestId, (run) =>
       completeSessionRunRecord(run, completedAt));
@@ -1211,6 +1241,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     session.status = 'idle';
     session.lastError = undefined;
     session.pendingUserInput = undefined;
+    session.pendingPlanReview = undefined;
     session.updatedAt = cancelledAt;
     const cancelledRun = this.updateSessionRun(session, requestId, (run) =>
       cancelSessionRunRecord(run, cancelledAt));
@@ -1281,6 +1312,30 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
       requestId: _requestId,
       resolve,
     });
+
+    await this.persistAndBroadcast(workspace);
+  }
+
+  private async handleExitPlanModeRequested(
+    workspace: WorkspaceState,
+    sessionId: string,
+    event: ExitPlanModeRequestedEvent,
+  ): Promise<void> {
+    const session = this.requireSession(workspace, sessionId);
+    const requestedAt = nowIso();
+
+    session.pendingPlanReview = {
+      id: event.exitPlanId,
+      status: 'pending',
+      agentId: event.agentId,
+      agentName: event.agentName,
+      summary: event.summary,
+      planContent: event.planContent,
+      actions: event.actions,
+      recommendedAction: event.recommendedAction,
+      requestedAt,
+    };
+    session.updatedAt = requestedAt;
 
     await this.persistAndBroadcast(workspace);
   }

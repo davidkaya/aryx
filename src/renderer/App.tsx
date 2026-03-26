@@ -250,6 +250,9 @@ export default function App() {
           onResolveApproval={(approvalId, decision) =>
             api.resolveSessionApproval({ sessionId: selectedSession.id, approvalId, decision })
           }
+          onResolveUserInput={(userInputId, answer, wasFreeform) =>
+            api.resolveSessionUserInput({ sessionId: selectedSession.id, userInputId, answer, wasFreeform })
+          }
           onUpdateSessionModelConfig={(config) =>
             api.updateSessionModelConfig({
               sessionId: selectedSession.id,

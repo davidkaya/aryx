@@ -9,6 +9,7 @@ import type {
   SidecarCapabilities,
   SidecarEvent,
   TurnDeltaEvent,
+  UserInputRequestedEvent,
   ValidatePatternCommand,
   RunTurnCommand,
 } from '@shared/contracts/sidecar';
@@ -41,6 +42,12 @@ type PendingCommand =
   | ({
       processId: number;
       kind: 'resolve-approval';
+      resolve: () => void;
+      reject: (error: Error) => void;
+    })
+  | ({
+      processId: number;
+      kind: 'resolve-user-input';
       resolve: () => void;
       reject: (error: Error) => void;
     })
@@ -94,8 +101,19 @@ export class SidecarClient {
     onDelta: (event: TurnDeltaEvent) => void | Promise<void>,
     onActivity: (event: AgentActivityEvent) => void | Promise<void>,
     onApproval: (event: ApprovalRequestedEvent) => void | Promise<void>,
+    onUserInput: (event: UserInputRequestedEvent) => void | Promise<void>,
   ): Promise<ChatMessageRecord[]> {
-    return this.dispatch<ChatMessageRecord[]>(command, onDelta, onActivity, onApproval);
+    return this.dispatch<ChatMessageRecord[]>(command, onDelta, onActivity, onApproval, onUserInput);
+  }
+
+  async resolveUserInput(userInputId: string, answer: string, wasFreeform: boolean): Promise<void> {
+    return this.dispatch<void>({
+      type: 'resolve-user-input',
+      requestId: `user-input-${Date.now()}`,
+      userInputId,
+      answer,
+      wasFreeform,
+    });
   }
 
   async resolveApproval(approvalId: string, decision: ApprovalDecision): Promise<void> {
@@ -199,6 +217,7 @@ export class SidecarClient {
     onDelta?: (event: TurnDeltaEvent) => void | Promise<void>,
     onActivity?: (event: AgentActivityEvent) => void | Promise<void>,
     onApproval?: (event: ApprovalRequestedEvent) => void | Promise<void>,
+    onUserInput?: (event: UserInputRequestedEvent) => void | Promise<void>,
   ): Promise<TResult> {
     const state = await this.ensureProcess();
 
@@ -212,6 +231,7 @@ export class SidecarClient {
           onDelta: onDelta ?? (() => undefined),
           onActivity: onActivity ?? (() => undefined),
           onApproval: onApproval ?? (() => undefined),
+          onUserInput: onUserInput ?? (() => undefined),
           errored: false,
         });
       } else if (command.type === 'validate-pattern') {
@@ -225,6 +245,13 @@ export class SidecarClient {
         this.pending.set(command.requestId, {
           processId: state.id,
           kind: 'resolve-approval',
+          resolve: resolve as () => void,
+          reject,
+        });
+      } else if (command.type === 'resolve-user-input') {
+        this.pending.set(command.requestId, {
+          processId: state.id,
+          kind: 'resolve-user-input',
           resolve: resolve as () => void,
           reject,
         });
@@ -297,6 +324,11 @@ export class SidecarClient {
           this.invokeRunTurnHandler(event.requestId, pending, () => pending.onApproval(event));
         }
         return;
+      case 'user-input-requested':
+        if (pending.kind === 'run-turn' && shouldHandleRunTurnEvent(pending)) {
+          this.invokeRunTurnHandler(event.requestId, pending, () => pending.onUserInput(event));
+        }
+        return;
       case 'turn-complete':
         if (pending.kind === 'run-turn') {
           if (shouldHandleRunTurnEvent(pending)) {
@@ -318,7 +350,7 @@ export class SidecarClient {
         this.pending.delete(event.requestId);
         return;
       case 'command-complete':
-        if (pending.kind === 'resolve-approval' || pending.kind === 'cancel-turn') {
+        if (pending.kind === 'resolve-approval' || pending.kind === 'resolve-user-input' || pending.kind === 'cancel-turn') {
           pending.resolve();
           this.pending.delete(event.requestId);
         } else if (pending.kind !== 'run-turn' || pending.errored) {

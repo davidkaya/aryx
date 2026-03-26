@@ -26,6 +26,7 @@ export const ipcChannels = {
   sendSessionMessage: 'sessions:send-message',
   cancelSessionTurn: 'sessions:cancel-turn',
   resolveSessionApproval: 'sessions:resolve-approval',
+  resolveSessionUserInput: 'sessions:resolve-user-input',
   querySessions: 'sessions:query',
   updateSessionModelConfig: 'sessions:update-model-config',
   selectProject: 'selection:project',

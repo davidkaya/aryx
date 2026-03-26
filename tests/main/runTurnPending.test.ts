@@ -16,6 +16,7 @@ describe('run turn pending helpers', () => {
       onDelta: () => undefined,
       onActivity: () => undefined,
       onApproval: () => undefined,
+      onUserInput: () => undefined,
       errored: false,
     };
 
@@ -38,6 +39,7 @@ describe('run turn pending helpers', () => {
       onDelta: () => undefined,
       onActivity: () => undefined,
       onApproval: () => undefined,
+      onUserInput: () => undefined,
       errored: false,
     };
 

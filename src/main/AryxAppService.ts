@@ -10,6 +10,7 @@ import type {
   RunTurnToolingConfig,
   SidecarCapabilities,
   TurnDeltaEvent,
+  UserInputRequestedEvent,
 } from '@shared/contracts/sidecar';
 import {
   buildAvailableModelCatalog,
@@ -120,6 +121,12 @@ type PendingApprovalHandle = {
   resolve: (decision: ApprovalDecision) => void | Promise<void>;
 };
 
+type PendingUserInputHandle = {
+  sessionId: string;
+  requestId: string;
+  resolve: (answer: string, wasFreeform: boolean) => void | Promise<void>;
+};
+
 type DiscoveredToolingResolution = 'accept' | 'dismiss';
 
 function isBuiltinPattern(patternId: string): boolean {
@@ -147,6 +154,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
   private readonly gitService = new GitService();
   private readonly configScanner = new ConfigScannerRegistry();
   private readonly pendingApprovalHandles = new Map<string, PendingApprovalHandle>();
+  private readonly pendingUserInputHandles = new Map<string, PendingUserInputHandle>();
   private workspace?: WorkspaceState;
   private sidecarCapabilities?: SidecarCapabilities;
   private sidecarCapabilitiesPromise?: Promise<SidecarCapabilities>;
@@ -619,6 +627,10 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
           await this.handleApprovalRequested(workspace, session.id, requestId, event, (decision) =>
             this.sidecar.resolveApproval(event.approvalId, decision));
         },
+        async (event) => {
+          await this.handleUserInputRequested(workspace, session.id, requestId, event, (answer, wasFreeform) =>
+            this.sidecar.resolveUserInput(event.userInputId, answer, wasFreeform));
+        },
       );
 
       await this.awaitFinalResponseApproval(workspace, session.id, requestId, effectivePattern, responseMessages);
@@ -734,6 +746,59 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
       if (failedRun) {
         this.emitRunUpdated(sessionId, failedAt, failedRun);
       }
+
+      await this.persistAndBroadcast(workspace);
+      throw error;
+    }
+
+    return result;
+  }
+
+  async resolveSessionUserInput(
+    sessionId: string,
+    userInputId: string,
+    answer: string,
+    wasFreeform: boolean,
+  ): Promise<WorkspaceState> {
+    const workspace = await this.loadWorkspace();
+    const session = this.requireSession(workspace, sessionId);
+    const pending = session.pendingUserInput;
+    if (!pending || pending.id !== userInputId) {
+      throw new Error(`User input "${userInputId}" is not pending for session "${sessionId}".`);
+    }
+
+    const handle = this.pendingUserInputHandles.get(userInputId);
+    if (!handle || handle.sessionId !== sessionId) {
+      throw new Error(`User input "${userInputId}" is no longer active. Restart the run and try again.`);
+    }
+
+    const answeredAt = nowIso();
+    session.pendingUserInput = {
+      ...pending,
+      status: 'answered',
+      answer,
+      answeredAt,
+    };
+    session.updatedAt = answeredAt;
+
+    const result = await this.persistAndBroadcast(workspace);
+    this.pendingUserInputHandles.delete(userInputId);
+
+    try {
+      await Promise.resolve(handle.resolve(answer, wasFreeform));
+      session.pendingUserInput = undefined;
+      await this.persistAndBroadcast(workspace);
+    } catch (error) {
+      session.status = 'error';
+      session.lastError = error instanceof Error ? error.message : String(error);
+      session.updatedAt = nowIso();
+
+      this.emitSessionEvent({
+        sessionId,
+        kind: 'error',
+        occurredAt: session.updatedAt,
+        error: session.lastError,
+      });
 
       await this.persistAndBroadcast(workspace);
       throw error;
@@ -1114,6 +1179,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     const completedAt = nowIso();
     session.status = 'idle';
     session.lastError = undefined;
+    session.pendingUserInput = undefined;
     session.updatedAt = completedAt;
     const completedRun = this.updateSessionRun(session, requestId, (run) =>
       completeSessionRunRecord(run, completedAt));
@@ -1144,6 +1210,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     const cancelledAt = nowIso();
     session.status = 'idle';
     session.lastError = undefined;
+    session.pendingUserInput = undefined;
     session.updatedAt = cancelledAt;
     const cancelledRun = this.updateSessionRun(session, requestId, (run) =>
       cancelSessionRunRecord(run, cancelledAt));
@@ -1185,6 +1252,37 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     if (updatedRun) {
       this.emitRunUpdated(sessionId, pendingApproval.requestedAt, updatedRun);
     }
+  }
+
+  private async handleUserInputRequested(
+    workspace: WorkspaceState,
+    sessionId: string,
+    _requestId: string,
+    event: UserInputRequestedEvent,
+    resolve: (answer: string, wasFreeform: boolean) => void | Promise<void>,
+  ): Promise<void> {
+    const session = this.requireSession(workspace, sessionId);
+    const requestedAt = nowIso();
+
+    session.pendingUserInput = {
+      id: event.userInputId,
+      status: 'pending',
+      agentId: event.agentId,
+      agentName: event.agentName,
+      question: event.question,
+      choices: event.choices,
+      allowFreeform: event.allowFreeform ?? true,
+      requestedAt,
+    };
+    session.updatedAt = requestedAt;
+
+    this.pendingUserInputHandles.set(event.userInputId, {
+      sessionId,
+      requestId: _requestId,
+      resolve,
+    });
+
+    await this.persistAndBroadcast(workspace);
   }
 
   private createPendingApprovalFromSidecarEvent(event: ApprovalRequestedEvent): PendingApprovalRecord {

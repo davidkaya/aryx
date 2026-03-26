@@ -36,6 +36,13 @@ export interface ResolveSessionApprovalInput {
   decision: ApprovalDecision;
 }
 
+export interface ResolveSessionUserInputInput {
+  sessionId: string;
+  userInputId: string;
+  answer: string;
+  wasFreeform: boolean;
+}
+
 export interface UpdateSessionModelConfigInput {
   sessionId: string;
   model: string;
@@ -126,6 +133,7 @@ export interface ElectronApi {
   sendSessionMessage(input: SendSessionMessageInput): Promise<void>;
   cancelSessionTurn(input: CancelSessionTurnInput): Promise<void>;
   resolveSessionApproval(input: ResolveSessionApprovalInput): Promise<WorkspaceState>;
+  resolveSessionUserInput(input: ResolveSessionUserInputInput): Promise<WorkspaceState>;
   updateSessionModelConfig(input: UpdateSessionModelConfigInput): Promise<WorkspaceState>;
   querySessions(input: QuerySessionsInput): Promise<SessionQueryResult[]>;
   selectProject(projectId?: string): Promise<WorkspaceState>;

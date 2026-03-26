@@ -11,6 +11,7 @@ import {
   type SessionApprovalSettings,
 } from '@shared/domain/approval';
 import type { SessionRunRecord } from '@shared/domain/runTimeline';
+import type { PendingUserInputRecord } from '@shared/domain/userInput';
 
 export type ChatRole = 'system' | 'user' | 'assistant';
 export type SessionStatus = 'idle' | 'running' | 'error';
@@ -48,6 +49,7 @@ export interface SessionRecord {
   approvalSettings?: SessionApprovalSettings;
   pendingApproval?: PendingApprovalRecord;
   pendingApprovalQueue?: PendingApprovalRecord[];
+  pendingUserInput?: PendingUserInputRecord;
   runs: SessionRunRecord[];
 }
 

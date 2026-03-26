@@ -1,4 +1,9 @@
-import type { AgentActivityEvent, ApprovalRequestedEvent, TurnDeltaEvent } from '@shared/contracts/sidecar';
+import type {
+  AgentActivityEvent,
+  ApprovalRequestedEvent,
+  TurnDeltaEvent,
+  UserInputRequestedEvent,
+} from '@shared/contracts/sidecar';
 import type { ChatMessageRecord } from '@shared/domain/session';
 
 export interface RunTurnPendingCommand {
@@ -8,6 +13,7 @@ export interface RunTurnPendingCommand {
   onDelta: (event: TurnDeltaEvent) => void | Promise<void>;
   onActivity: (event: AgentActivityEvent) => void | Promise<void>;
   onApproval: (event: ApprovalRequestedEvent) => void | Promise<void>;
+  onUserInput: (event: UserInputRequestedEvent) => void | Promise<void>;
   errored: boolean;
 }
 

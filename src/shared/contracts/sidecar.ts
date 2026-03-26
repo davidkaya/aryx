@@ -92,12 +92,21 @@ export interface ResolveApprovalCommand {
   decision: ApprovalDecision;
 }
 
+export interface ResolveUserInputCommand {
+  type: 'resolve-user-input';
+  requestId: string;
+  userInputId: string;
+  answer: string;
+  wasFreeform: boolean;
+}
+
 export type SidecarCommand =
   | DescribeCapabilitiesCommand
   | ValidatePatternCommand
   | RunTurnCommand
   | CancelTurnCommand
-  | ResolveApprovalCommand;
+  | ResolveApprovalCommand
+  | ResolveUserInputCommand;
 
 export interface RunTurnLocalMcpServerConfig {
   id: string;
@@ -220,6 +229,18 @@ export interface ApprovalRequestedEvent {
   permissionDetail?: PermissionDetail;
 }
 
+export interface UserInputRequestedEvent {
+  type: 'user-input-requested';
+  requestId: string;
+  sessionId: string;
+  userInputId: string;
+  agentId?: string;
+  agentName?: string;
+  question: string;
+  choices?: string[];
+  allowFreeform?: boolean;
+}
+
 export interface CommandErrorEvent {
   type: 'command-error';
   requestId: string;
@@ -238,5 +259,6 @@ export type SidecarEvent =
   | TurnCompleteEvent
   | AgentActivityEvent
   | ApprovalRequestedEvent
+  | UserInputRequestedEvent
   | CommandErrorEvent
   | CommandCompleteEvent;

@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, ArrowUp, Bot, Circle, GitBranch, Loader2, ShieldAlert, Square, User } from 'lucide-react';
+import { AlertCircle, ArrowUp, Bot, Circle, GitBranch, Loader2, MessageCircleQuestion, ShieldAlert, Square, User } from 'lucide-react';
 
 import { MarkdownContent } from '@renderer/components/MarkdownContent';
 import { MarkdownComposer, type MarkdownComposerHandle } from '@renderer/components/MarkdownComposer';
 import { ApprovalBanner, QueuedApprovalsList } from '@renderer/components/chat/ApprovalBanner';
+import { UserInputBanner } from '@renderer/components/chat/UserInputBanner';
 import { InlineApprovalPill, InlineModelPill, InlineThinkingPill, InlineToolsPill } from '@renderer/components/chat/InlinePills';
 import { ThinkingDots } from '@renderer/components/chat/ThinkingDots';
 import { getAssistantMessagePhase } from '@renderer/lib/messagePhase';
@@ -36,6 +37,7 @@ interface ChatPaneProps {
   onSend: (content: string) => Promise<void>;
   onCancelTurn?: () => void;
   onResolveApproval?: (approvalId: string, decision: ApprovalDecision) => Promise<unknown>;
+  onResolveUserInput?: (userInputId: string, answer: string, wasFreeform: boolean) => Promise<unknown>;
   onUpdateSessionModelConfig?: (config: {
     model: string;
     reasoningEffort?: ReasoningEffort;
@@ -54,6 +56,7 @@ export function ChatPane({
   onSend,
   onCancelTurn,
   onResolveApproval,
+  onResolveUserInput,
   onUpdateSessionModelConfig,
   onUpdateSessionTooling,
   onUpdateSessionApprovalSettings,
@@ -62,6 +65,7 @@ export function ChatPane({
   const [configError, setConfigError] = useState<string>();
   const [approvalError, setApprovalError] = useState<string>();
   const [isResolvingApproval, setIsResolvingApproval] = useState(false);
+  const [isSubmittingUserInput, setIsSubmittingUserInput] = useState(false);
   const [isUpdatingSessionModelConfig, setIsUpdatingSessionModelConfig] = useState(false);
   const transcriptRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<MarkdownComposerHandle>(null);
@@ -70,6 +74,7 @@ export function ChatPane({
   const pendingApproval = session.pendingApproval?.status === 'pending' ? session.pendingApproval : undefined;
   const queuedApprovals = (session.pendingApprovalQueue ?? []).filter((a) => a.status === 'pending');
   const totalPendingCount = (pendingApproval ? 1 : 0) + queuedApprovals.length;
+  const pendingUserInput = session.pendingUserInput?.status === 'pending' ? session.pendingUserInput : undefined;
   const isScratchpad = isScratchpadProject(project);
   const isSingleAgent = pattern.agents.length === 1;
   const primaryAgent = pattern.agents[0];
@@ -158,6 +163,20 @@ export function ChatPane({
     }
   }
 
+  async function handleResolveUserInput(answer: string, wasFreeform: boolean) {
+    if (!pendingUserInput || !onResolveUserInput || isSubmittingUserInput) return;
+
+    setIsSubmittingUserInput(true);
+
+    try {
+      await onResolveUserInput(pendingUserInput.id, answer, wasFreeform);
+    } catch {
+      // User input errors are non-critical; the turn will fail and show the error status
+    } finally {
+      setIsSubmittingUserInput(false);
+    }
+  }
+
   return (
     <div className="flex h-full flex-col">
       {/* Header — extra top padding clears the title bar overlay zone */}
@@ -194,14 +213,20 @@ export function ChatPane({
                 )}
               </div>
             )}
-            {isSessionBusy && !pendingApproval && <span className="size-2 animate-pulse rounded-full bg-blue-400" />}
+            {pendingUserInput && !pendingApproval && (
+              <div className="flex items-center gap-1.5 text-[12px] font-medium text-blue-400">
+                <MessageCircleQuestion className="size-3.5" />
+                Awaiting your input
+              </div>
+            )}
+            {isSessionBusy && !pendingApproval && !pendingUserInput && <span className="size-2 animate-pulse rounded-full bg-blue-400" />}
             {session.status === 'error' && (
               <div className="flex items-center gap-1.5 text-[12px] text-red-400">
                 <AlertCircle className="size-3.5" />
                 Error
               </div>
             )}
-            {session.status === 'idle' && !pendingApproval && session.messages.length > 0 && (
+            {session.status === 'idle' && !pendingApproval && !pendingUserInput && session.messages.length > 0 && (
               <span className="text-[12px] text-zinc-600">
                 {session.messages.length} message{session.messages.length === 1 ? '' : 's'}
               </span>
@@ -339,6 +364,17 @@ export function ChatPane({
             </div>
           )}
 
+          {/* Pending user input banner */}
+          {pendingUserInput && (
+            <div className="mb-3">
+              <UserInputBanner
+                isSubmitting={isSubmittingUserInput}
+                onSubmit={(answer, wasFreeform) => void handleResolveUserInput(answer, wasFreeform)}
+                userInput={pendingUserInput}
+              />
+            </div>
+          )}
+
           {/* Session config pills — tools/approval left, model/reasoning right */}
           {isSingleAgent && (
             <div className="mb-2 flex items-center gap-2">
@@ -426,11 +462,13 @@ export function ChatPane({
               placeholder={
                 pendingApproval
                   ? 'Awaiting approval...'
-                  : isSessionBusy
-                    ? 'Waiting for response...'
-                    : isUpdatingSessionModelConfig
-                      ? 'Saving model settings...'
-                      : 'Message...'
+                  : pendingUserInput
+                    ? 'Awaiting your input above...'
+                    : isSessionBusy
+                      ? 'Waiting for response...'
+                      : isUpdatingSessionModelConfig
+                        ? 'Saving model settings...'
+                        : 'Message...'
               }
             >
               <button

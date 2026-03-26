@@ -11,6 +11,7 @@ import type {
   RenameSessionInput,
   RescanProjectConfigsInput,
   ResolveSessionApprovalInput,
+  ResolveSessionUserInputInput,
   SaveLspProfileInput,
   SaveMcpServerInput,
   SavePatternInput,
@@ -109,6 +110,9 @@ export function registerIpcHandlers(window: BrowserWindow, service: AryxAppServi
   );
   ipcMain.handle(ipcChannels.resolveSessionApproval, (_event, input: ResolveSessionApprovalInput) =>
     service.resolveSessionApproval(input.sessionId, input.approvalId, input.decision),
+  );
+  ipcMain.handle(ipcChannels.resolveSessionUserInput, (_event, input: ResolveSessionUserInputInput) =>
+    service.resolveSessionUserInput(input.sessionId, input.userInputId, input.answer, input.wasFreeform),
   );
   ipcMain.handle(
     ipcChannels.updateSessionModelConfig,

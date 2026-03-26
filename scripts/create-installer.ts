@@ -86,19 +86,13 @@ async function createWindowsInstaller(version: string): Promise<void> {
   const outputFilename = releaseTarget.installerAssetName.replace(/\.exe$/, '');
   const iconPath = join(repositoryRoot, 'assets', 'icons', 'windows', 'icon.ico');
 
-  await runCommand(
-    isccPath,
-    [
-      `/DPRODUCT_NAME=${productName}`,
-      `/DPRODUCT_VERSION=${version}`,
-      `/DSOURCE_DIR=${packagedAppDirectory}`,
-      `/DOUTPUT_DIR=${releaseRootDirectory}`,
-      `/DOUTPUT_FILENAME=${outputFilename}`,
-      `/DICON_PATH=${iconPath}`,
-      issScript,
-    ],
-    repositoryRoot,
-  );
+  process.env.ARYX_BUILD_VERSION = version;
+  process.env.ARYX_BUILD_SOURCE_DIR = packagedAppDirectory;
+  process.env.ARYX_BUILD_OUTPUT_DIR = releaseRootDirectory;
+  process.env.ARYX_BUILD_OUTPUT_FILENAME = outputFilename;
+  process.env.ARYX_BUILD_ICON_PATH = iconPath;
+
+  await runCommand(isccPath, [issScript], repositoryRoot);
 }
 
 // --- macOS: DMG disk image ---

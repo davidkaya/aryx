@@ -1,26 +1,27 @@
 ; Inno Setup script for Aryx
-; Metadata values are passed via /D preprocessor defines from the build script.
+; Dynamic values are read from environment variables set by the build script.
 
-#ifndef PRODUCT_NAME
-  #define PRODUCT_NAME "Aryx"
-#endif
-#ifndef PRODUCT_VERSION
-  #define PRODUCT_VERSION "0.0.0"
-#endif
-#ifndef PRODUCT_PUBLISHER
-  #define PRODUCT_PUBLISHER "David Kaya"
-#endif
-#ifndef SOURCE_DIR
-  #error "SOURCE_DIR must be defined (path to the packaged app directory)."
-#endif
-#ifndef OUTPUT_DIR
-  #error "OUTPUT_DIR must be defined (path to the output directory)."
-#endif
-#ifndef OUTPUT_FILENAME
-  #error "OUTPUT_FILENAME must be defined (output installer filename without extension)."
-#endif
+#define PRODUCT_NAME "Aryx"
+#define PRODUCT_PUBLISHER "David Kaya"
+#define PRODUCT_VERSION GetEnv("ARYX_BUILD_VERSION")
+#define SOURCE_DIR GetEnv("ARYX_BUILD_SOURCE_DIR")
+#define OUTPUT_DIR GetEnv("ARYX_BUILD_OUTPUT_DIR")
+#define OUTPUT_FILENAME GetEnv("ARYX_BUILD_OUTPUT_FILENAME")
+#define ICON_PATH GetEnv("ARYX_BUILD_ICON_PATH")
 
-#ifndef ICON_PATH
+#if PRODUCT_VERSION == ""
+  #error "ARYX_BUILD_VERSION environment variable must be set."
+#endif
+#if SOURCE_DIR == ""
+  #error "ARYX_BUILD_SOURCE_DIR environment variable must be set."
+#endif
+#if OUTPUT_DIR == ""
+  #error "ARYX_BUILD_OUTPUT_DIR environment variable must be set."
+#endif
+#if OUTPUT_FILENAME == ""
+  #error "ARYX_BUILD_OUTPUT_FILENAME environment variable must be set."
+#endif
+#if ICON_PATH == ""
   #define ICON_PATH SOURCE_DIR + "\" + PRODUCT_NAME + ".exe"
 #endif
 

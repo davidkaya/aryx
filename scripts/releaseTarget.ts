@@ -11,6 +11,7 @@ export interface ReleaseTarget {
   readonly dotnetRuntime: `${string}-${SupportedArch}`;
   readonly outputDirectoryName: string;
   readonly archiveBaseName: string;
+  readonly installerAssetName: string;
   readonly sidecarExecutableName: string;
   readonly packagedExecutableName?: string;
   readonly appBundleName?: string;
@@ -43,6 +44,7 @@ export function resolveReleaseTarget(
         dotnetRuntime: `win-${supportedArch}`,
         outputDirectoryName: archiveBaseName,
         archiveBaseName,
+        installerAssetName: `${archiveBaseName}-setup.exe`,
         sidecarExecutableName: 'Aryx.AgentHost.exe',
         packagedExecutableName: `${productName}.exe`,
       };
@@ -58,6 +60,7 @@ export function resolveReleaseTarget(
         dotnetRuntime: `osx-${supportedArch}`,
         outputDirectoryName: archiveBaseName,
         archiveBaseName,
+        installerAssetName: `${archiveBaseName}.dmg`,
         sidecarExecutableName: 'Aryx.AgentHost',
         appBundleName: `${productName}.app`,
       };
@@ -73,6 +76,7 @@ export function resolveReleaseTarget(
         dotnetRuntime: `linux-${supportedArch}`,
         outputDirectoryName: archiveBaseName,
         archiveBaseName,
+        installerAssetName: `aryx-linux-${supportedArch}.deb`,
         sidecarExecutableName: 'Aryx.AgentHost',
         packagedExecutableName: productName,
       };

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Aryx
+Comment=Copilot-powered agent workflow orchestrator
+Exec=/opt/aryx/Aryx %U
+Icon=aryx
+Terminal=false
+Type=Application
+Categories=Development;
+StartupWMClass=Aryx

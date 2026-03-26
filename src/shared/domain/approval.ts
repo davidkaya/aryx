@@ -1,3 +1,5 @@
+import type { PermissionDetail } from '@shared/contracts/sidecar';
+
 export type ApprovalCheckpointKind = 'tool-call' | 'final-response';
 export type ApprovalStatus = 'pending' | 'approved' | 'rejected';
 export type ApprovalDecision = Exclude<ApprovalStatus, 'pending'>;
@@ -35,6 +37,7 @@ export interface PendingApprovalRecord {
   title: string;
   detail?: string;
   messages?: PendingApprovalMessageRecord[];
+  permissionDetail?: PermissionDetail;
 }
 
 export interface PendingApprovalState {
@@ -290,6 +293,7 @@ export function normalizePendingApproval(
     title,
     detail: normalizeOptionalString(approval?.detail),
     messages: normalizePendingApprovalMessages(approval?.messages),
+    permissionDetail: approval?.permissionDetail,
   };
 }
 

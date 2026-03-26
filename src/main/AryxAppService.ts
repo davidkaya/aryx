@@ -1199,6 +1199,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
       permissionKind: event.permissionKind,
       title: event.title,
       detail: event.detail,
+      permissionDetail: event.permissionDetail,
     };
   }
 

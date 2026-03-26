@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Bot, Check, ChevronDown, Loader2, ShieldAlert, ShieldCheck, X } from 'lucide-react';
 
 import { MarkdownContent } from '@renderer/components/MarkdownContent';
+import { permissionDetailSummary, PermissionDetailView } from '@renderer/components/chat/PermissionDetailView';
 import type { ApprovalDecision, PendingApprovalRecord } from '@shared/domain/approval';
 
 /* ── ApprovalBanner ────────────────────────────────────────── */
@@ -47,9 +48,11 @@ export function ApprovalBanner({
             {approval.permissionKind && <span>Permission: <span className="text-zinc-300">{approval.permissionKind}</span></span>}
           </div>
 
-          {approval.detail && (
-            <p className="mt-1.5 text-[12px] leading-relaxed text-zinc-400">{approval.detail}</p>
-          )}
+          {approval.permissionDetail
+            ? <PermissionDetailView detail={approval.permissionDetail} />
+            : approval.detail && (
+              <p className="mt-1.5 text-[12px] leading-relaxed text-zinc-400">{approval.detail}</p>
+            )}
         </div>
       </div>
 
@@ -134,7 +137,9 @@ export function QueuedApprovalsList({ approvals }: { approvals: PendingApprovalR
                 key={approval.id}
               >
                 <ShieldAlert className="size-3 shrink-0 text-zinc-600" />
-                <span className="min-w-0 flex-1 truncate text-[11px] text-zinc-400">{approval.title}</span>
+                <span className="min-w-0 flex-1 truncate text-[11px] text-zinc-400">
+                  {(approval.permissionDetail && permissionDetailSummary(approval.permissionDetail)) || approval.title}
+                </span>
                 <span className="shrink-0 rounded-full bg-zinc-800 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wider text-zinc-500">
                   {kindLabel}
                 </span>

@@ -181,6 +181,30 @@ export interface AgentActivityEvent {
   toolName?: string;
 }
 
+export interface PermissionDetail {
+  kind: string;
+  intention?: string;
+  command?: string;
+  warning?: string;
+  possiblePaths?: string[];
+  possibleUrls?: string[];
+  hasWriteFileRedirection?: boolean;
+  fileName?: string;
+  diff?: string;
+  newFileContents?: string;
+  path?: string;
+  serverName?: string;
+  toolTitle?: string;
+  args?: Record<string, unknown>;
+  readOnly?: boolean;
+  url?: string;
+  subject?: string;
+  fact?: string;
+  citations?: string;
+  toolDescription?: string;
+  hookMessage?: string;
+}
+
 export interface ApprovalRequestedEvent {
   type: 'approval-requested';
   requestId: string;
@@ -193,6 +217,7 @@ export interface ApprovalRequestedEvent {
   permissionKind?: string;
   title: string;
   detail?: string;
+  permissionDetail?: PermissionDetail;
 }
 
 export interface CommandErrorEvent {

@@ -5,6 +5,7 @@ import {
   cp,
   mkdir,
   readFile,
+  rename,
   symlink,
   writeFile,
 } from 'node:fs/promises';
@@ -107,29 +108,25 @@ async function createMacInstaller(): Promise<void> {
   const appBundlePath = join(packagedAppDirectory, appBundleName);
   const createDmg = join(repositoryRoot, 'node_modules', '.bin', 'create-dmg');
 
-  try {
-    await runCommand(
-      createDmg,
-      [
-        '--overwrite',
-        '--window-size', '600', '400',
-        '--icon-size', '100',
-        '--icon', appBundleName, '150', '200',
-        '--app-drop-link', '450', '200',
-        installerOutputPath,
-        appBundlePath,
-      ],
-      repositoryRoot,
-    );
-  } catch {
-    // create-dmg exits with code 2 when code signing fails (expected without
-    // a Developer ID certificate) but still produces a valid DMG. Check
-    // whether the output file was created before treating this as an error.
-    if (!(await pathExists(installerOutputPath))) {
-      throw new Error('Failed to create DMG — output file was not produced.');
-    }
+  // create-dmg outputs to the destination directory with a generated filename.
+  // We use --no-version-in-filename so the output is "<AppName>.dmg", then
+  // rename it to the expected installer asset name.
+  await runCommand(
+    createDmg,
+    [
+      '--overwrite',
+      '--no-version-in-filename',
+      '--no-code-sign',
+      appBundlePath,
+      releaseRootDirectory,
+    ],
+    repositoryRoot,
+  );
 
-    console.log('DMG created (code signing skipped — ad-hoc only).');
+  // Rename from the generated name ("Aryx.dmg") to the platform-specific asset name
+  const generatedDmgPath = join(releaseRootDirectory, `${productName}.dmg`);
+  if (generatedDmgPath !== installerOutputPath) {
+    await rename(generatedDmgPath, installerOutputPath);
   }
 }
 

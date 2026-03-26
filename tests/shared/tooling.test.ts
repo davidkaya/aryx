@@ -4,6 +4,7 @@ import {
   listApprovalToolDefinitions,
   normalizeWorkspaceSettings,
   resolveProjectToolingSettings,
+  resolveToolLabel,
   resolveWorkspaceToolingSettings,
   validateLspProfileDefinition,
   validateMcpServerDefinition,
@@ -206,8 +207,7 @@ describe('tooling settings helpers', () => {
 
     expect(tools).toContainEqual({
       id: 'web_fetch',
-      label: 'web_fetch',
-      description: 'Fetch content from a URL.',
+      label: 'Fetch web content',
       kind: 'builtin',
       providerIds: ['builtin:web_fetch'],
       providerNames: ['Built-in'],
@@ -249,6 +249,41 @@ describe('tooling settings helpers', () => {
       providerNames: ['Built-in'],
     });
     expect(tools.some((tool) => tool.id === 'web_fetch')).toBe(false);
+  });
+
+  test('resolves human-readable labels from the tool metadata registry', () => {
+    expect(resolveToolLabel('bash')).toBe('Execute shell commands');
+    expect(resolveToolLabel('read_bash')).toBe('Read shell output');
+    expect(resolveToolLabel('web_fetch')).toBe('Fetch web content');
+    expect(resolveToolLabel('fetch_copilot_cli_documentation')).toBe('Fetch CLI docs');
+    expect(resolveToolLabel('glob')).toBe('Find files by pattern');
+    expect(resolveToolLabel('lsp')).toBe('Language server');
+  });
+
+  test('passes through unknown tool IDs as labels', () => {
+    expect(resolveToolLabel('my_custom_tool')).toBe('my_custom_tool');
+    expect(resolveToolLabel('')).toBe('');
+  });
+
+  test('fallback catalog includes all standard non-internal tools with friendly labels', () => {
+    const tools = listApprovalToolDefinitions({ mcpServers: [], lspProfiles: [] });
+    const builtinTools = tools.filter((t) => t.kind === 'builtin');
+
+    expect(builtinTools.length).toBeGreaterThanOrEqual(20);
+    expect(builtinTools.some((t) => t.id === 'bash')).toBe(true);
+    expect(builtinTools.some((t) => t.id === 'web_fetch')).toBe(true);
+    expect(builtinTools.some((t) => t.id === 'task')).toBe(true);
+    expect(builtinTools.some((t) => t.id === 'store_memory')).toBe(true);
+
+    // Labels should be human-readable, not raw IDs
+    const bashTool = builtinTools.find((t) => t.id === 'bash');
+    expect(bashTool?.label).toBe('Execute shell commands');
+
+    // Internal tools should not appear in the fallback
+    expect(builtinTools.some((t) => t.id === 'ask_user')).toBe(false);
+    expect(builtinTools.some((t) => t.id === 'report_intent')).toBe(false);
+    expect(builtinTools.some((t) => t.id === 'task_complete')).toBe(false);
+    expect(builtinTools.some((t) => t.id === 'exit_plan_mode')).toBe(false);
   });
 
   test('resolves workspace and project tooling with accepted discovered MCP servers', () => {

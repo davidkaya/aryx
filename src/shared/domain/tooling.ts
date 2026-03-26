@@ -89,15 +89,82 @@ const lspApprovalOperations = [
   { suffix: 'references', label: 'References' },
 ] as const;
 
+// Human-readable labels for built-in runtime tools.
+// Both bash and powershell variants are included for forward compatibility.
+const builtinToolLabels: ReadonlyMap<string, string> = new Map([
+  // Shell tools
+  ['bash', 'Execute shell commands'],
+  ['powershell', 'Execute shell commands'],
+  ['read_bash', 'Read shell output'],
+  ['read_powershell', 'Read shell output'],
+  ['write_bash', 'Write shell input'],
+  ['write_powershell', 'Write shell input'],
+  ['stop_bash', 'Stop shell session'],
+  ['stop_powershell', 'Stop shell session'],
+  ['list_bash', 'List shell sessions'],
+  ['list_powershell', 'List shell sessions'],
+  // File tools
+  ['view', 'View files'],
+  ['create', 'Create files'],
+  ['edit', 'Edit files'],
+  ['apply_patch', 'Apply patch'],
+  // Search tools
+  ['grep', 'Search file contents'],
+  ['rg', 'Search file contents'],
+  ['glob', 'Find files by pattern'],
+  // Agent tools
+  ['task', 'Run sub-agent'],
+  ['read_agent', 'Read agent results'],
+  ['list_agents', 'List agents'],
+  // Web tools
+  ['web_fetch', 'Fetch web content'],
+  ['web_search', 'Search the web'],
+  // Other tools
+  ['skill', 'Invoke skill'],
+  ['show_file', 'Show file'],
+  ['fetch_copilot_cli_documentation', 'Fetch CLI docs'],
+  ['update_todo', 'Update checklist'],
+  ['store_memory', 'Store memory'],
+  ['sql', 'Query session data'],
+  ['lsp', 'Language server'],
+]);
+
+export function resolveToolLabel(toolId: string): string {
+  return builtinToolLabels.get(toolId) ?? toolId;
+}
+
 // Fallback runtime tools used before sidecar capabilities are loaded or when the
 // CLI cannot report its built-in tool catalog dynamically.
 const fallbackRuntimeApprovalTools: ReadonlyArray<RuntimeToolDefinition> = [
-  { id: 'glob', label: 'glob', description: 'Match files by glob pattern.' },
-  { id: 'lsp', label: 'lsp', description: 'Query configured language servers.' },
-  { id: 'rg', label: 'rg', description: 'Search file contents with ripgrep.' },
-  { id: 'view', label: 'view', description: 'Read files and list directories.' },
-  { id: 'web_fetch', label: 'web_fetch', description: 'Fetch content from a URL.' },
-  { id: 'web_search', label: 'web_search', description: 'Search the web for current information.' },
+  // Shell tools (bash variants — SDK reports these on all platforms)
+  { id: 'bash', label: 'Execute shell commands' },
+  { id: 'read_bash', label: 'Read shell output' },
+  { id: 'write_bash', label: 'Write shell input' },
+  { id: 'stop_bash', label: 'Stop shell session' },
+  { id: 'list_bash', label: 'List shell sessions' },
+  // File tools
+  { id: 'view', label: 'View files' },
+  { id: 'create', label: 'Create files' },
+  { id: 'edit', label: 'Edit files' },
+  { id: 'apply_patch', label: 'Apply patch' },
+  // Search tools
+  { id: 'grep', label: 'Search file contents' },
+  { id: 'glob', label: 'Find files by pattern' },
+  // Agent tools
+  { id: 'task', label: 'Run sub-agent' },
+  { id: 'read_agent', label: 'Read agent results' },
+  { id: 'list_agents', label: 'List agents' },
+  // Web tools
+  { id: 'web_fetch', label: 'Fetch web content' },
+  { id: 'web_search', label: 'Search the web' },
+  // Other tools
+  { id: 'skill', label: 'Invoke skill' },
+  { id: 'show_file', label: 'Show file' },
+  { id: 'fetch_copilot_cli_documentation', label: 'Fetch CLI docs' },
+  { id: 'update_todo', label: 'Update checklist' },
+  { id: 'store_memory', label: 'Store memory' },
+  { id: 'sql', label: 'Query session data' },
+  { id: 'lsp', label: 'Language server' },
 ];
 
 export function createWorkspaceSettings(): WorkspaceSettings {
@@ -171,7 +238,7 @@ export function listApprovalToolDefinitions(
   for (const tool of runtimeApprovalTools) {
     registerApprovalTool(toolsById, {
       id: tool.id,
-      label: tool.label,
+      label: resolveToolLabel(tool.id),
       description: tool.description,
       kind: 'builtin',
       providerId: `builtin:${tool.id}`,

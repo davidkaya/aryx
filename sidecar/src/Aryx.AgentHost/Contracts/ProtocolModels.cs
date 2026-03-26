@@ -251,6 +251,31 @@ public sealed class AgentActivityEventDto : SidecarEventDto
     public string? ToolName { get; init; }
 }
 
+public sealed class PermissionDetailDto
+{
+    public string Kind { get; init; } = string.Empty;
+    public string? Intention { get; init; }
+    public string? Command { get; init; }
+    public string? Warning { get; init; }
+    public IReadOnlyList<string>? PossiblePaths { get; init; }
+    public IReadOnlyList<string>? PossibleUrls { get; init; }
+    public bool? HasWriteFileRedirection { get; init; }
+    public string? FileName { get; init; }
+    public string? Diff { get; init; }
+    public string? NewFileContents { get; init; }
+    public string? Path { get; init; }
+    public string? ServerName { get; init; }
+    public string? ToolTitle { get; init; }
+    public object? Args { get; init; }
+    public bool? ReadOnly { get; init; }
+    public string? Url { get; init; }
+    public string? Subject { get; init; }
+    public string? Fact { get; init; }
+    public string? Citations { get; init; }
+    public string? ToolDescription { get; init; }
+    public string? HookMessage { get; init; }
+}
+
 public sealed class ApprovalRequestedEventDto : SidecarEventDto
 {
     public string SessionId { get; init; } = string.Empty;
@@ -262,6 +287,7 @@ public sealed class ApprovalRequestedEventDto : SidecarEventDto
     public string? PermissionKind { get; init; }
     public string Title { get; init; } = string.Empty;
     public string? Detail { get; init; }
+    public PermissionDetailDto? PermissionDetail { get; init; }
 }
 
 public sealed class CommandErrorEventDto : SidecarEventDto

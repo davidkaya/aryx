@@ -249,6 +249,13 @@ public sealed class SidecarProtocolHostTests
                     AgentName = "Primary",
                     PermissionKind = "tool access",
                     Title = "Approve tool access",
+                    PermissionDetail = new PermissionDetailDto
+                    {
+                        Kind = "shell",
+                        Command = "git status",
+                        Intention = "Inspect repository state",
+                        PossiblePaths = ["README.md"],
+                    },
                 });
 
                 return [];
@@ -284,6 +291,11 @@ public sealed class SidecarProtocolHostTests
                 Assert.Equal("approval-1", approvalEvent.GetProperty("approvalId").GetString());
                 Assert.Equal("tool-call", approvalEvent.GetProperty("approvalKind").GetString());
                 Assert.Equal("Approve tool access", approvalEvent.GetProperty("title").GetString());
+                JsonElement permissionDetail = approvalEvent.GetProperty("permissionDetail");
+                Assert.Equal("shell", permissionDetail.GetProperty("kind").GetString());
+                Assert.Equal("git status", permissionDetail.GetProperty("command").GetString());
+                Assert.Equal("Inspect repository state", permissionDetail.GetProperty("intention").GetString());
+                Assert.Equal("README.md", Assert.Single(permissionDetail.GetProperty("possiblePaths").EnumerateArray()).GetString());
             },
             completionEvent =>
             {

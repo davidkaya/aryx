@@ -10,6 +10,14 @@ internal sealed class CopilotApprovalCoordinator
     private const string RejectedDecision = "rejected";
     private const string ToolCallApprovalKind = "tool-call";
     private const string WebFetchToolName = "web_fetch";
+    private const string ShellPermissionKind = "shell";
+    private const string WritePermissionKind = "write";
+    private const string ReadPermissionKind = "read";
+    private const string McpPermissionKind = "mcp";
+    private const string UrlPermissionKind = "url";
+    private const string MemoryPermissionKind = "memory";
+    private const string CustomToolPermissionKind = "custom-tool";
+    private const string HookPermissionKind = "hook";
 
     private readonly ConcurrentDictionary<string, PendingApprovalRequest> _pendingApprovals = new(StringComparer.Ordinal);
 
@@ -131,6 +139,77 @@ internal sealed class CopilotApprovalCoordinator
             PermissionKind = permissionKind,
             Title = title,
             Detail = detail,
+            PermissionDetail = BuildPermissionDetail(request),
+        };
+    }
+
+    internal static PermissionDetailDto BuildPermissionDetail(PermissionRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        return request switch
+        {
+            PermissionRequestShell shell => new PermissionDetailDto
+            {
+                Kind = ShellPermissionKind,
+                Intention = NormalizeOptionalString(shell.Intention),
+                Command = NormalizeOptionalString(shell.FullCommandText),
+                Warning = NormalizeOptionalString(shell.Warning),
+                PossiblePaths = NormalizeOptionalStringList(shell.PossiblePaths),
+                PossibleUrls = NormalizeOptionalStringList(shell.PossibleUrls.Select(static candidate => candidate.Url)),
+                HasWriteFileRedirection = shell.HasWriteFileRedirection,
+            },
+            PermissionRequestWrite write => new PermissionDetailDto
+            {
+                Kind = WritePermissionKind,
+                Intention = NormalizeOptionalString(write.Intention),
+                FileName = NormalizeOptionalString(write.FileName),
+                Diff = NormalizeOptionalString(write.Diff),
+                NewFileContents = NormalizeOptionalString(write.NewFileContents),
+            },
+            PermissionRequestRead read => new PermissionDetailDto
+            {
+                Kind = ReadPermissionKind,
+                Intention = NormalizeOptionalString(read.Intention),
+                Path = NormalizeOptionalString(read.Path),
+            },
+            PermissionRequestMcp mcp => new PermissionDetailDto
+            {
+                Kind = McpPermissionKind,
+                ServerName = NormalizeOptionalString(mcp.ServerName),
+                ToolTitle = NormalizeOptionalString(mcp.ToolTitle),
+                Args = mcp.Args,
+                ReadOnly = mcp.ReadOnly,
+            },
+            PermissionRequestUrl url => new PermissionDetailDto
+            {
+                Kind = UrlPermissionKind,
+                Intention = NormalizeOptionalString(url.Intention),
+                Url = NormalizeOptionalString(url.Url),
+            },
+            PermissionRequestMemory memory => new PermissionDetailDto
+            {
+                Kind = MemoryPermissionKind,
+                Subject = NormalizeOptionalString(memory.Subject),
+                Fact = NormalizeOptionalString(memory.Fact),
+                Citations = NormalizeOptionalString(memory.Citations),
+            },
+            PermissionRequestCustomTool customTool => new PermissionDetailDto
+            {
+                Kind = CustomToolPermissionKind,
+                ToolDescription = NormalizeOptionalString(customTool.ToolDescription),
+                Args = customTool.Args,
+            },
+            PermissionRequestHook hook => new PermissionDetailDto
+            {
+                Kind = HookPermissionKind,
+                Args = hook.ToolArgs,
+                HookMessage = NormalizeOptionalString(hook.HookMessage),
+            },
+            _ => new PermissionDetailDto
+            {
+                Kind = NormalizeOptionalString(request.Kind) ?? "unknown",
+            },
         };
     }
 
@@ -305,6 +384,17 @@ internal sealed class CopilotApprovalCoordinator
     private static string? NormalizeOptionalString(string? value)
     {
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    private static IReadOnlyList<string>? NormalizeOptionalStringList(IEnumerable<string?> values)
+    {
+        List<string> normalized = values
+            .Select(NormalizeOptionalString)
+            .Where(static value => value is not null)
+            .Cast<string>()
+            .ToList();
+
+        return normalized.Count > 0 ? normalized : null;
     }
 
     private sealed record PendingApprovalRequest(

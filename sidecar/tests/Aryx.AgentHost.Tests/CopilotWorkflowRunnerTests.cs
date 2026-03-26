@@ -876,6 +876,9 @@ public sealed class CopilotWorkflowRunnerTests
         Assert.Equal("lsp_ts_hover", approvalEvent.ToolName);
         Assert.Equal("Approve lsp_ts_hover", approvalEvent.Title);
         Assert.Contains("tool \"lsp_ts_hover\"", approvalEvent.Detail);
+        Assert.NotNull(approvalEvent.PermissionDetail);
+        Assert.Equal("custom-tool", approvalEvent.PermissionDetail!.Kind);
+        Assert.Equal("Hover information", approvalEvent.PermissionDetail.ToolDescription);
     }
 
     [Fact]
@@ -907,6 +910,197 @@ public sealed class CopilotWorkflowRunnerTests
         Assert.Contains("url permission", approvalEvent.Detail);
         Assert.Contains("tool \"web_fetch\"", approvalEvent.Detail);
         Assert.Contains("https://example.com/docs", approvalEvent.Detail);
+        Assert.NotNull(approvalEvent.PermissionDetail);
+        Assert.Equal("url", approvalEvent.PermissionDetail!.Kind);
+        Assert.Equal("Fetch the requested page", approvalEvent.PermissionDetail.Intention);
+        Assert.Equal("https://example.com/docs", approvalEvent.PermissionDetail.Url);
+    }
+
+    [Fact]
+    public void BuildPermissionDetail_ExtractsShellRequestData()
+    {
+        PermissionDetailDto detail = CopilotApprovalCoordinator.BuildPermissionDetail(
+            new PermissionRequestShell
+            {
+                Kind = "shell",
+                ToolCallId = "tool-call-shell",
+                FullCommandText = "curl https://example.com/docs > docs.json",
+                Intention = "Fetch documentation with curl",
+                Commands =
+                [
+                    new PermissionRequestShellCommandsItem
+                    {
+                        Identifier = "curl",
+                        ReadOnly = true,
+                    },
+                ],
+                PossiblePaths = ["docs.json"],
+                PossibleUrls =
+                [
+                    new PermissionRequestShellPossibleUrlsItem
+                    {
+                        Url = "https://example.com/docs",
+                    },
+                ],
+                HasWriteFileRedirection = true,
+                CanOfferSessionApproval = false,
+                Warning = "Downloads remote content and writes it to disk.",
+            });
+
+        Assert.Equal("shell", detail.Kind);
+        Assert.Equal("curl https://example.com/docs > docs.json", detail.Command);
+        Assert.Equal("Fetch documentation with curl", detail.Intention);
+        Assert.Equal("Downloads remote content and writes it to disk.", detail.Warning);
+        Assert.Equal(["docs.json"], detail.PossiblePaths);
+        Assert.Equal(["https://example.com/docs"], detail.PossibleUrls);
+        Assert.True(detail.HasWriteFileRedirection);
+    }
+
+    [Fact]
+    public void BuildPermissionDetail_ExtractsWriteRequestData()
+    {
+        PermissionDetailDto detail = CopilotApprovalCoordinator.BuildPermissionDetail(
+            new PermissionRequestWrite
+            {
+                Kind = "write",
+                ToolCallId = "tool-call-write",
+                Intention = "Update README guidance",
+                FileName = "README.md",
+                Diff = "@@ -1 +1 @@\n-Hello\n+Hello world",
+                NewFileContents = "# README",
+            });
+
+        Assert.Equal("write", detail.Kind);
+        Assert.Equal("Update README guidance", detail.Intention);
+        Assert.Equal("README.md", detail.FileName);
+        Assert.Equal("@@ -1 +1 @@\n-Hello\n+Hello world", detail.Diff);
+        Assert.Equal("# README", detail.NewFileContents);
+    }
+
+    [Fact]
+    public void BuildPermissionDetail_ExtractsReadRequestData()
+    {
+        PermissionDetailDto detail = CopilotApprovalCoordinator.BuildPermissionDetail(
+            new PermissionRequestRead
+            {
+                Kind = "read",
+                ToolCallId = "tool-call-read",
+                Intention = "Inspect the README",
+                Path = "README.md",
+            });
+
+        Assert.Equal("read", detail.Kind);
+        Assert.Equal("Inspect the README", detail.Intention);
+        Assert.Equal("README.md", detail.Path);
+    }
+
+    [Fact]
+    public void BuildPermissionDetail_ExtractsMcpRequestData()
+    {
+        PermissionDetailDto detail = CopilotApprovalCoordinator.BuildPermissionDetail(
+            new PermissionRequestMcp
+            {
+                Kind = "mcp",
+                ToolCallId = "tool-call-mcp",
+                ServerName = "Git MCP",
+                ToolName = "git.status",
+                ToolTitle = "Git Status",
+                Args = new Dictionary<string, object?>
+                {
+                    ["path"] = ".",
+                },
+                ReadOnly = true,
+            });
+
+        Assert.Equal("mcp", detail.Kind);
+        Assert.Equal("Git MCP", detail.ServerName);
+        Assert.Equal("Git Status", detail.ToolTitle);
+        Assert.True(detail.ReadOnly);
+
+        Dictionary<string, object?> args = Assert.IsType<Dictionary<string, object?>>(detail.Args);
+        Assert.Equal(".", args["path"]);
+    }
+
+    [Fact]
+    public void BuildPermissionDetail_ExtractsUrlRequestData()
+    {
+        PermissionDetailDto detail = CopilotApprovalCoordinator.BuildPermissionDetail(
+            new PermissionRequestUrl
+            {
+                Kind = "url",
+                ToolCallId = "tool-call-url",
+                Intention = "Fetch the requested page",
+                Url = "https://example.com/docs",
+            });
+
+        Assert.Equal("url", detail.Kind);
+        Assert.Equal("Fetch the requested page", detail.Intention);
+        Assert.Equal("https://example.com/docs", detail.Url);
+    }
+
+    [Fact]
+    public void BuildPermissionDetail_ExtractsMemoryRequestData()
+    {
+        PermissionDetailDto detail = CopilotApprovalCoordinator.BuildPermissionDetail(
+            new PermissionRequestMemory
+            {
+                Kind = "memory",
+                ToolCallId = "tool-call-memory",
+                Subject = "repo conventions",
+                Fact = "Use Bun for script execution.",
+                Citations = "package.json",
+            });
+
+        Assert.Equal("memory", detail.Kind);
+        Assert.Equal("repo conventions", detail.Subject);
+        Assert.Equal("Use Bun for script execution.", detail.Fact);
+        Assert.Equal("package.json", detail.Citations);
+    }
+
+    [Fact]
+    public void BuildPermissionDetail_ExtractsCustomToolRequestData()
+    {
+        PermissionDetailDto detail = CopilotApprovalCoordinator.BuildPermissionDetail(
+            new PermissionRequestCustomTool
+            {
+                Kind = "custom tool",
+                ToolName = "lsp_ts_hover",
+                ToolDescription = "Hover information",
+                Args = new Dictionary<string, object?>
+                {
+                    ["file"] = "src/index.ts",
+                    ["line"] = 12,
+                },
+            });
+
+        Assert.Equal("custom-tool", detail.Kind);
+        Assert.Equal("Hover information", detail.ToolDescription);
+
+        Dictionary<string, object?> args = Assert.IsType<Dictionary<string, object?>>(detail.Args);
+        Assert.Equal("src/index.ts", args["file"]);
+        Assert.Equal(12, args["line"]);
+    }
+
+    [Fact]
+    public void BuildPermissionDetail_ExtractsHookRequestData()
+    {
+        PermissionDetailDto detail = CopilotApprovalCoordinator.BuildPermissionDetail(
+            new PermissionRequestHook
+            {
+                Kind = "hook",
+                ToolName = "web_fetch",
+                ToolArgs = new Dictionary<string, object?>
+                {
+                    ["url"] = "https://example.com",
+                },
+                HookMessage = "Review required before fetch",
+            });
+
+        Assert.Equal("hook", detail.Kind);
+        Assert.Equal("Review required before fetch", detail.HookMessage);
+
+        Dictionary<string, object?> args = Assert.IsType<Dictionary<string, object?>>(detail.Args);
+        Assert.Equal("https://example.com", args["url"]);
     }
 
     [Fact]

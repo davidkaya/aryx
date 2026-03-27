@@ -311,6 +311,229 @@ export function createDefaultPatternGraph(
   }
 }
 
+function sortAgentNodesByOrder(nodes: ReadonlyArray<PatternGraphNode>): PatternGraphNode[] {
+  return nodes
+    .filter((node) => node.kind === 'agent')
+    .slice()
+    .sort((left, right) =>
+      (left.order ?? Number.MAX_SAFE_INTEGER) - (right.order ?? Number.MAX_SAFE_INTEGER)
+      || left.id.localeCompare(right.id));
+}
+
+function renumberAgentOrders(nodes: ReadonlyArray<PatternGraphNode>): PatternGraphNode[] {
+  const orders = new Map(sortAgentNodesByOrder(nodes).map((node, index) => [node.id, index]));
+  return nodes.map((node) =>
+    node.kind === 'agent'
+      ? { ...node, order: orders.get(node.id) ?? node.order ?? 0 }
+      : node);
+}
+
+function getNextAgentNodePosition(graph: PatternGraph): PatternGraphPosition {
+  const existingAgentNodes = getAgentNodes(graph);
+  const maxY = existingAgentNodes.reduce((max, node) => Math.max(max, node.position.y), 0);
+  const avgX = existingAgentNodes.length > 0
+    ? Math.round(existingAgentNodes.reduce((sum, node) => sum + node.position.x, 0) / existingAgentNodes.length)
+    : 400;
+
+  return {
+    x: avgX,
+    y: maxY + 120,
+  };
+}
+
+function addUniqueEdge(
+  edges: ReadonlyArray<PatternGraphEdge>,
+  source: string | undefined,
+  target: string | undefined,
+): PatternGraphEdge[] {
+  if (!source || !target || edges.some((edge) => edge.source === source && edge.target === target)) {
+    return [...edges];
+  }
+
+  return [...edges, createEdge(source, target)];
+}
+
+function removeEdgesConnectedToNode(
+  edges: ReadonlyArray<PatternGraphEdge>,
+  nodeId: string,
+): PatternGraphEdge[] {
+  return edges.filter((edge) => edge.source !== nodeId && edge.target !== nodeId);
+}
+
+function findAgentNode(graph: PatternGraph, agentId: string): PatternGraphNode | undefined {
+  return graph.nodes.find((node) => node.kind === 'agent' && node.agentId === agentId);
+}
+
+function resolveEntryAgentNodeId(graph: PatternGraph): string | undefined {
+  const { outgoing } = buildAdjacency(graph);
+  const agentNodeIds = new Set(getAgentNodes(graph).map((node) => node.id));
+  const directEntry = (outgoing.get(SYSTEM_NODE_IDS.userInput) ?? [])
+    .map((edge) => edge.target)
+    .find((nodeId) => agentNodeIds.has(nodeId));
+
+  return directEntry ?? sortAgentNodesByOrder(graph.nodes)[0]?.id;
+}
+
+function hasAgentToAgentRoute(graph: PatternGraph): boolean {
+  const agentNodeIds = new Set(getAgentNodes(graph).map((node) => node.id));
+  return graph.edges.some((edge) =>
+    agentNodeIds.has(edge.source)
+    && agentNodeIds.has(edge.target)
+    && edge.source !== edge.target);
+}
+
+export function addAgentToGraph(
+  graph: PatternGraph,
+  mode: OrchestrationMode,
+  agent: PatternAgentDefinition,
+): PatternGraph {
+  if (mode === 'single') {
+    throw new Error('Single-agent chat requires exactly one agent.');
+  }
+
+  if (findAgentNode(graph, agent.id)) {
+    return graph;
+  }
+
+  const existingAgentNodes = sortAgentNodesByOrder(graph.nodes);
+  const newNode = createAgentNode(
+    agent,
+    existingAgentNodes.length,
+    getNextAgentNodePosition(graph),
+  );
+  let nextEdges = [...graph.edges];
+
+  switch (mode) {
+    case 'sequential':
+    case 'magentic': {
+      const outputNode = getNodeByKind(graph, 'user-output');
+      const inputNode = getNodeByKind(graph, 'user-input');
+      const { incoming } = buildAdjacency(graph);
+      const previousNodeId = (outputNode ? incoming.get(outputNode.id)?.[0]?.source : undefined)
+        ?? existingAgentNodes[existingAgentNodes.length - 1]?.id
+        ?? inputNode?.id;
+
+      if (outputNode && previousNodeId) {
+        nextEdges = nextEdges.filter((edge) => !(edge.source === previousNodeId && edge.target === outputNode.id));
+        nextEdges = addUniqueEdge(nextEdges, previousNodeId, newNode.id);
+        nextEdges = addUniqueEdge(nextEdges, newNode.id, outputNode.id);
+      }
+      break;
+    }
+    case 'concurrent': {
+      const distributorNode = getNodeByKind(graph, 'distributor');
+      const collectorNode = getNodeByKind(graph, 'collector');
+      nextEdges = addUniqueEdge(nextEdges, distributorNode?.id, newNode.id);
+      nextEdges = addUniqueEdge(nextEdges, newNode.id, collectorNode?.id);
+      break;
+    }
+    case 'handoff': {
+      const inputNode = getNodeByKind(graph, 'user-input');
+      const outputNode = getNodeByKind(graph, 'user-output');
+      const entryNodeId = resolveEntryAgentNodeId(graph);
+
+      if (entryNodeId) {
+        nextEdges = addUniqueEdge(nextEdges, entryNodeId, newNode.id);
+        nextEdges = addUniqueEdge(nextEdges, newNode.id, entryNodeId);
+      } else {
+        nextEdges = addUniqueEdge(nextEdges, inputNode?.id, newNode.id);
+      }
+
+      nextEdges = addUniqueEdge(nextEdges, newNode.id, outputNode?.id);
+      break;
+    }
+    case 'group-chat': {
+      const orchestratorNode = getNodeByKind(graph, 'orchestrator');
+      nextEdges = addUniqueEdge(nextEdges, orchestratorNode?.id, newNode.id);
+      nextEdges = addUniqueEdge(nextEdges, newNode.id, orchestratorNode?.id);
+      break;
+    }
+    default:
+      break;
+  }
+
+  return {
+    nodes: renumberAgentOrders([...graph.nodes, newNode]),
+    edges: nextEdges,
+  };
+}
+
+export function removeAgentFromGraph(
+  graph: PatternGraph,
+  mode: OrchestrationMode,
+  agentId: string,
+): PatternGraph {
+  const nodeToRemove = findAgentNode(graph, agentId);
+  if (!nodeToRemove) {
+    return graph;
+  }
+
+  const originalAgentNodes = sortAgentNodesByOrder(graph.nodes);
+  if (mode === 'single' && originalAgentNodes.length <= 1) {
+    throw new Error('Single-agent chat requires exactly one agent.');
+  }
+
+  const { incoming, outgoing } = buildAdjacency(graph);
+  const removedWasEntry = (outgoing.get(SYSTEM_NODE_IDS.userInput) ?? []).some(
+    (edge) => edge.target === nodeToRemove.id,
+  );
+  const remainingNodes = graph.nodes.filter((node) => node.id !== nodeToRemove.id);
+  let nextEdges = removeEdgesConnectedToNode(graph.edges, nodeToRemove.id);
+
+  switch (mode) {
+    case 'sequential':
+    case 'magentic': {
+      const predecessorId = incoming.get(nodeToRemove.id)?.[0]?.source;
+      const successorId = outgoing.get(nodeToRemove.id)?.[0]?.target;
+      nextEdges = addUniqueEdge(
+        nextEdges,
+        predecessorId && predecessorId !== nodeToRemove.id ? predecessorId : undefined,
+        successorId && successorId !== nodeToRemove.id ? successorId : undefined,
+      );
+      break;
+    }
+    case 'handoff': {
+      const remainingGraph: PatternGraph = { nodes: remainingNodes, edges: nextEdges };
+      const remainingAgentNodes = sortAgentNodesByOrder(remainingNodes);
+      const outputNode = getNodeByKind(remainingGraph, 'user-output');
+      const entryNodeId = resolveEntryAgentNodeId(remainingGraph) ?? remainingAgentNodes[0]?.id;
+
+      if (entryNodeId) {
+        const { outgoing: remainingOutgoing, incoming: remainingIncoming } = buildAdjacency(remainingGraph);
+        if ((remainingOutgoing.get(SYSTEM_NODE_IDS.userInput)?.length ?? 0) === 0) {
+          nextEdges = addUniqueEdge(nextEdges, SYSTEM_NODE_IDS.userInput, entryNodeId);
+        }
+
+        if (removedWasEntry || (remainingIncoming.get(outputNode?.id ?? '')?.length ?? 0) === 0) {
+          nextEdges = addUniqueEdge(nextEdges, entryNodeId, outputNode?.id);
+        }
+
+        if (remainingAgentNodes.length > 1 && (removedWasEntry || !hasAgentToAgentRoute(remainingGraph))) {
+          for (const specialistNode of remainingAgentNodes) {
+            if (specialistNode.id === entryNodeId) {
+              continue;
+            }
+
+            nextEdges = addUniqueEdge(nextEdges, entryNodeId, specialistNode.id);
+            nextEdges = addUniqueEdge(nextEdges, specialistNode.id, entryNodeId);
+            nextEdges = addUniqueEdge(nextEdges, specialistNode.id, outputNode?.id);
+          }
+        }
+      }
+      break;
+    }
+    case 'concurrent':
+    case 'group-chat':
+    default:
+      break;
+  }
+
+  return {
+    nodes: renumberAgentOrders(remainingNodes),
+    edges: nextEdges,
+  };
+}
+
 export function resolvePatternGraph(pattern: PatternDefinition): PatternGraph {
   return pattern.graph ?? createDefaultPatternGraph(pattern);
 }

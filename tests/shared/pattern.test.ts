@@ -1,13 +1,27 @@
 import { describe, expect, test } from 'bun:test';
 
 import {
+  addAgentToGraph,
   createBuiltinPatterns,
+  removeAgentFromGraph,
   resolvePatternGraph,
   syncPatternGraph,
+  type PatternAgentDefinition,
   validatePatternDefinition,
 } from '@shared/domain/pattern';
 
 const BUILTIN_TIMESTAMP = '2026-03-22T00:00:00.000Z';
+
+function createAgent(id: string, name = `Agent ${id}`): PatternAgentDefinition {
+  return {
+    id,
+    name,
+    description: `${name} description`,
+    instructions: `${name} instructions`,
+    model: 'gpt-5.4',
+    reasoningEffort: 'medium',
+  };
+}
 
 describe('pattern validation', () => {
   test('builtin patterns are valid except explicitly unavailable modes', () => {
@@ -238,6 +252,261 @@ describe('pattern validation', () => {
       expect.objectContaining({
         source: 'agent-node-agent-sequential-final',
         target: 'system-user-output',
+      }),
+    );
+  });
+
+  test('addAgentToGraph appends a new sequential agent before user output', () => {
+    const sequential = createBuiltinPatterns(BUILTIN_TIMESTAMP).find(
+      (pattern) => pattern.mode === 'sequential',
+    );
+
+    expect(sequential).toBeDefined();
+
+    const updatedGraph = addAgentToGraph(
+      resolvePatternGraph(sequential!),
+      sequential!.mode,
+      createAgent('agent-sequential-final', 'Final Reviewer'),
+    );
+
+    expect(updatedGraph.nodes.filter((node) => node.kind === 'agent')).toHaveLength(4);
+    expect(updatedGraph.edges).toContainEqual(
+      expect.objectContaining({
+        source: 'agent-node-agent-sequential-reviewer',
+        target: 'agent-node-agent-sequential-final',
+      }),
+    );
+    expect(updatedGraph.edges).toContainEqual(
+      expect.objectContaining({
+        source: 'agent-node-agent-sequential-final',
+        target: 'system-user-output',
+      }),
+    );
+    expect(updatedGraph.edges).not.toContainEqual(
+      expect.objectContaining({
+        source: 'agent-node-agent-sequential-reviewer',
+        target: 'system-user-output',
+      }),
+    );
+  });
+
+  test('addAgentToGraph wires concurrent agents between the distributor and collector', () => {
+    const concurrent = createBuiltinPatterns(BUILTIN_TIMESTAMP).find(
+      (pattern) => pattern.mode === 'concurrent',
+    );
+
+    expect(concurrent).toBeDefined();
+
+    const updatedGraph = addAgentToGraph(
+      resolvePatternGraph(concurrent!),
+      concurrent!.mode,
+      createAgent('agent-concurrent-final', 'Final Implementer'),
+    );
+
+    expect(updatedGraph.edges).toContainEqual(
+      expect.objectContaining({
+        source: 'system-distributor',
+        target: 'agent-node-agent-concurrent-final',
+      }),
+    );
+    expect(updatedGraph.edges).toContainEqual(
+      expect.objectContaining({
+        source: 'agent-node-agent-concurrent-final',
+        target: 'system-collector',
+      }),
+    );
+  });
+
+  test('addAgentToGraph wires handoff specialists to the entry agent and output', () => {
+    const handoff = createBuiltinPatterns(BUILTIN_TIMESTAMP).find(
+      (pattern) => pattern.mode === 'handoff',
+    );
+
+    expect(handoff).toBeDefined();
+
+    const updatedGraph = addAgentToGraph(
+      resolvePatternGraph(handoff!),
+      handoff!.mode,
+      createAgent('agent-handoff-docs', 'Docs Specialist'),
+    );
+
+    expect(updatedGraph.edges).toContainEqual(
+      expect.objectContaining({
+        source: 'agent-node-agent-handoff-triage',
+        target: 'agent-node-agent-handoff-docs',
+      }),
+    );
+    expect(updatedGraph.edges).toContainEqual(
+      expect.objectContaining({
+        source: 'agent-node-agent-handoff-docs',
+        target: 'agent-node-agent-handoff-triage',
+      }),
+    );
+    expect(updatedGraph.edges).toContainEqual(
+      expect.objectContaining({
+        source: 'agent-node-agent-handoff-docs',
+        target: 'system-user-output',
+      }),
+    );
+  });
+
+  test('addAgentToGraph wires group-chat agents to the orchestrator', () => {
+    const groupChat = createBuiltinPatterns(BUILTIN_TIMESTAMP).find(
+      (pattern) => pattern.mode === 'group-chat',
+    );
+
+    expect(groupChat).toBeDefined();
+
+    const updatedGraph = addAgentToGraph(
+      resolvePatternGraph(groupChat!),
+      groupChat!.mode,
+      createAgent('agent-group-editor', 'Editor'),
+    );
+
+    expect(updatedGraph.edges).toContainEqual(
+      expect.objectContaining({
+        source: 'system-orchestrator',
+        target: 'agent-node-agent-group-editor',
+      }),
+    );
+    expect(updatedGraph.edges).toContainEqual(
+      expect.objectContaining({
+        source: 'agent-node-agent-group-editor',
+        target: 'system-orchestrator',
+      }),
+    );
+  });
+
+  test('addAgentToGraph rejects additions in single-agent mode', () => {
+    const single = createBuiltinPatterns(BUILTIN_TIMESTAMP).find(
+      (pattern) => pattern.mode === 'single',
+    );
+
+    expect(single).toBeDefined();
+    expect(() =>
+      addAgentToGraph(resolvePatternGraph(single!), single!.mode, createAgent('agent-extra', 'Extra Agent')))
+      .toThrow('Single-agent chat requires exactly one agent.');
+  });
+
+  test('removeAgentFromGraph stitches linear gaps and re-numbers remaining agent orders', () => {
+    const sequential = createBuiltinPatterns(BUILTIN_TIMESTAMP).find(
+      (pattern) => pattern.mode === 'sequential',
+    );
+
+    expect(sequential).toBeDefined();
+
+    const updatedGraph = removeAgentFromGraph(
+      resolvePatternGraph(sequential!),
+      sequential!.mode,
+      'agent-sequential-builder',
+    );
+
+    expect(updatedGraph.edges).toContainEqual(
+      expect.objectContaining({
+        source: 'agent-node-agent-sequential-analyst',
+        target: 'agent-node-agent-sequential-reviewer',
+      }),
+    );
+    expect(updatedGraph.edges).not.toContainEqual(
+      expect.objectContaining({
+        source: 'agent-node-agent-sequential-analyst',
+        target: 'agent-node-agent-sequential-builder',
+      }),
+    );
+    expect(updatedGraph.edges).not.toContainEqual(
+      expect.objectContaining({
+        source: 'agent-node-agent-sequential-builder',
+        target: 'agent-node-agent-sequential-reviewer',
+      }),
+    );
+    expect(
+      updatedGraph.nodes
+        .filter((node) => node.kind === 'agent')
+        .map((node) => node.order),
+    ).toEqual([0, 1]);
+  });
+
+  test('removeAgentFromGraph cleans up concurrent fan-out and fan-in edges', () => {
+    const concurrent = createBuiltinPatterns(BUILTIN_TIMESTAMP).find(
+      (pattern) => pattern.mode === 'concurrent',
+    );
+
+    expect(concurrent).toBeDefined();
+
+    const updatedGraph = removeAgentFromGraph(
+      resolvePatternGraph(concurrent!),
+      concurrent!.mode,
+      'agent-concurrent-product',
+    );
+
+    expect(updatedGraph.nodes.some((node) => node.agentId === 'agent-concurrent-product')).toBe(false);
+    expect(updatedGraph.edges.some((edge) => edge.target === 'agent-node-agent-concurrent-product')).toBe(false);
+    expect(updatedGraph.edges.some((edge) => edge.source === 'agent-node-agent-concurrent-product')).toBe(false);
+  });
+
+  test('removeAgentFromGraph rewires a removed handoff entry agent to the next specialist', () => {
+    const handoff = createBuiltinPatterns(BUILTIN_TIMESTAMP).find(
+      (pattern) => pattern.mode === 'handoff',
+    );
+
+    expect(handoff).toBeDefined();
+
+    const updatedGraph = removeAgentFromGraph(
+      resolvePatternGraph(handoff!),
+      handoff!.mode,
+      'agent-handoff-triage',
+    );
+
+    expect(updatedGraph.edges).toContainEqual(
+      expect.objectContaining({
+        source: 'system-user-input',
+        target: 'agent-node-agent-handoff-ux',
+      }),
+    );
+    expect(updatedGraph.edges).toContainEqual(
+      expect.objectContaining({
+        source: 'agent-node-agent-handoff-ux',
+        target: 'system-user-output',
+      }),
+    );
+    expect(updatedGraph.edges).toContainEqual(
+      expect.objectContaining({
+        source: 'agent-node-agent-handoff-ux',
+        target: 'agent-node-agent-handoff-runtime',
+      }),
+    );
+    expect(updatedGraph.edges).toContainEqual(
+      expect.objectContaining({
+        source: 'agent-node-agent-handoff-runtime',
+        target: 'agent-node-agent-handoff-ux',
+      }),
+    );
+  });
+
+  test('removeAgentFromGraph preserves orchestrator routes for the remaining group-chat agents', () => {
+    const groupChat = createBuiltinPatterns(BUILTIN_TIMESTAMP).find(
+      (pattern) => pattern.mode === 'group-chat',
+    );
+
+    expect(groupChat).toBeDefined();
+
+    const updatedGraph = removeAgentFromGraph(
+      resolvePatternGraph(groupChat!),
+      groupChat!.mode,
+      'agent-group-reviewer',
+    );
+
+    expect(updatedGraph.nodes.some((node) => node.agentId === 'agent-group-reviewer')).toBe(false);
+    expect(updatedGraph.edges).toContainEqual(
+      expect.objectContaining({
+        source: 'system-orchestrator',
+        target: 'agent-node-agent-group-writer',
+      }),
+    );
+    expect(updatedGraph.edges).toContainEqual(
+      expect.objectContaining({
+        source: 'agent-node-agent-group-writer',
+        target: 'system-orchestrator',
       }),
     );
   });

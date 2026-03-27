@@ -345,7 +345,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
   async savePattern(pattern: PatternDefinition): Promise<WorkspaceState> {
     const workspace = await this.loadWorkspace();
     const knownApprovalToolNames = await this.listKnownApprovalToolNames(workspace);
-    const synchronizedPattern = syncPatternGraph(pattern);
+    const synchronizedPattern = pattern.graph ? pattern : syncPatternGraph(pattern);
     const issues = validatePatternDefinition(
       synchronizedPattern,
       knownApprovalToolNames,

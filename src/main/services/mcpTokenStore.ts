@@ -49,14 +49,20 @@ function normalizeUrl(url: string): string {
 }
 
 /**
- * Constructs a well-known URL per RFC 9728 Section 3.
- * The `.well-known/{suffix}` segment is inserted between the origin and the path.
+ * Constructs well-known URL candidates for a given base URL.
+ * Returns the RFC 9728 compliant URL first (inserted after origin),
+ * then the appended fallback (some servers use this instead).
  *
- * Example: `buildWellKnownUrl('https://api.example.com/mcp/', 'oauth-protected-resource')`
- *   → `https://api.example.com/.well-known/oauth-protected-resource/mcp/`
+ * RFC 9728: `https://example.com/.well-known/oauth-protected-resource/mcp/`
+ * Fallback: `https://example.com/mcp/.well-known/oauth-protected-resource`
  */
 export function buildWellKnownUrl(baseUrl: string, wellKnownSuffix: string): string {
   const parsed = new URL(baseUrl);
   const path = parsed.pathname === '/' ? '' : parsed.pathname;
   return `${parsed.origin}/.well-known/${wellKnownSuffix}${path}`;
+}
+
+export function buildWellKnownUrlFallback(baseUrl: string, wellKnownSuffix: string): string {
+  const base = baseUrl.replace(/\/+$/, '');
+  return `${base}/.well-known/${wellKnownSuffix}`;
 }

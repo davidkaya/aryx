@@ -5,7 +5,7 @@ import { shell } from 'electron';
 
 import type { McpOauthStaticClientConfig } from '@shared/domain/mcpAuth';
 
-import { storeToken, buildWellKnownUrl, type McpOAuthToken } from './mcpTokenStore';
+import { storeToken, buildWellKnownUrl, buildWellKnownUrlFallback, type McpOAuthToken } from './mcpTokenStore';
 
 /* ── Public API ──────────────────────────────────────────────── */
 
@@ -27,20 +27,14 @@ export interface McpOAuthFlowResult {
  */
 export async function requiresOAuth(serverUrl: string): Promise<boolean> {
   try {
-    const prmUrl = buildWellKnownUrl(serverUrl, 'oauth-protected-resource');
-    console.log(`[aryx oauth] Checking PRM at ${prmUrl}…`);
-    const prmResponse = await fetch(prmUrl, {
-      signal: AbortSignal.timeout(5_000),
-    });
-
-    if (!prmResponse.ok) {
-      console.log(`[aryx oauth] PRM returned ${prmResponse.status} — no OAuth needed`);
+    const metadata = await fetchWellKnownMetadata(serverUrl, 'oauth-protected-resource');
+    if (!metadata) {
+      console.log(`[aryx oauth] No PRM found for ${serverUrl}`);
       return false;
     }
 
-    const metadata = await prmResponse.json();
-    const hasAuthServers = Array.isArray(metadata?.authorization_servers) && metadata.authorization_servers.length > 0;
-    console.log(`[aryx oauth] PRM found: authorization_servers=${hasAuthServers}`);
+    const hasAuthServers = Array.isArray(metadata.authorization_servers) && metadata.authorization_servers.length > 0;
+    console.log(`[aryx oauth] PRM found for ${serverUrl}: authorization_servers=${hasAuthServers}`);
     return hasAuthServers;
   } catch (err) {
     console.warn(`[aryx oauth] Probe failed for ${serverUrl}:`, err instanceof Error ? err.message : err);
@@ -121,16 +115,43 @@ interface AuthServerMetadata {
   scopes_supported?: string[];
 }
 
-async function discoverAuthorizationServer(serverUrl: string): Promise<string> {
-  const prmUrl = buildWellKnownUrl(serverUrl, 'oauth-protected-resource');
+/**
+ * Tries to fetch a well-known metadata document from a base URL.
+ * Attempts the RFC 9728 compliant path first (inserted after origin),
+ * then falls back to the appended path (used by some servers).
+ * Returns the parsed JSON or undefined if neither endpoint responds.
+ */
+async function fetchWellKnownMetadata(baseUrl: string, suffix: string): Promise<Record<string, unknown> | undefined> {
+  const rfcUrl = buildWellKnownUrl(baseUrl, suffix);
+  const fallbackUrl = buildWellKnownUrlFallback(baseUrl, suffix);
+  const urls = rfcUrl === fallbackUrl ? [rfcUrl] : [rfcUrl, fallbackUrl];
 
-  const response = await fetch(prmUrl);
-  if (!response.ok) {
-    throw new Error(`Protected Resource Metadata discovery failed: ${response.status} ${response.statusText}`);
+  for (const url of urls) {
+    try {
+      console.log(`[aryx oauth] Trying well-known at ${url}…`);
+      const response = await fetch(url, { signal: AbortSignal.timeout(5_000) });
+      if (response.ok) {
+        const data = await response.json();
+        console.log(`[aryx oauth] Found well-known metadata at ${url}`);
+        return data;
+      }
+      console.log(`[aryx oauth] ${url} returned ${response.status}`);
+    } catch {
+      console.log(`[aryx oauth] ${url} unreachable`);
+    }
   }
 
-  const metadata: ProtectedResourceMetadata = await response.json();
-  const authServer = metadata.authorization_servers?.[0];
+  return undefined;
+}
+
+async function discoverAuthorizationServer(serverUrl: string): Promise<string> {
+  const metadata = await fetchWellKnownMetadata(serverUrl, 'oauth-protected-resource');
+  if (!metadata) {
+    throw new Error('Protected Resource Metadata discovery failed: no well-known endpoint found');
+  }
+
+  const prm = metadata as unknown as ProtectedResourceMetadata;
+  const authServer = prm.authorization_servers?.[0];
   if (!authServer) {
     throw new Error('No authorization server found in Protected Resource Metadata');
   }
@@ -139,19 +160,17 @@ async function discoverAuthorizationServer(serverUrl: string): Promise<string> {
 }
 
 async function fetchAuthServerMetadata(authServerUrl: string): Promise<AuthServerMetadata> {
-  const metadataUrl = buildWellKnownUrl(authServerUrl, 'oauth-authorization-server');
-
-  const response = await fetch(metadataUrl);
-  if (!response.ok) {
-    throw new Error(`Authorization Server Metadata fetch failed: ${response.status} ${response.statusText}`);
+  const metadata = await fetchWellKnownMetadata(authServerUrl, 'oauth-authorization-server');
+  if (!metadata) {
+    throw new Error('Authorization Server Metadata fetch failed: no well-known endpoint found');
   }
 
-  const metadata: AuthServerMetadata = await response.json();
-  if (!metadata.authorization_endpoint || !metadata.token_endpoint) {
+  const asMeta = metadata as unknown as AuthServerMetadata;
+  if (!asMeta.authorization_endpoint || !asMeta.token_endpoint) {
     throw new Error('Authorization server metadata is missing required endpoints');
   }
 
-  return metadata;
+  return asMeta;
 }
 
 /* ── Dynamic Client Registration (RFC 7591) ──────────────────── */

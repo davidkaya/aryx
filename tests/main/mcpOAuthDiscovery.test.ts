@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 
-import { buildWellKnownUrl } from '@main/services/mcpTokenStore';
+import { buildWellKnownUrl, buildWellKnownUrlFallback } from '@main/services/mcpTokenStore';
 
 describe('buildWellKnownUrl', () => {
   test('inserts well-known segment after origin for URL with path', () => {
@@ -31,5 +31,22 @@ describe('buildWellKnownUrl', () => {
   test('preserves path without trailing slash', () => {
     expect(buildWellKnownUrl('https://example.com/mcp', 'oauth-protected-resource'))
       .toBe('https://example.com/.well-known/oauth-protected-resource/mcp');
+  });
+});
+
+describe('buildWellKnownUrlFallback', () => {
+  test('appends well-known segment to the full URL path', () => {
+    expect(buildWellKnownUrlFallback('https://icm-mcp-prod.azure-api.net/v1/', 'oauth-protected-resource'))
+      .toBe('https://icm-mcp-prod.azure-api.net/v1/.well-known/oauth-protected-resource');
+  });
+
+  test('handles URL without trailing slash', () => {
+    expect(buildWellKnownUrlFallback('https://example.com/mcp', 'oauth-protected-resource'))
+      .toBe('https://example.com/mcp/.well-known/oauth-protected-resource');
+  });
+
+  test('handles origin-only URL', () => {
+    expect(buildWellKnownUrlFallback('https://auth.example.com/', 'oauth-authorization-server'))
+      .toBe('https://auth.example.com/.well-known/oauth-authorization-server');
   });
 });

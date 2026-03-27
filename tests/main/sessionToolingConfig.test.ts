@@ -5,6 +5,7 @@ import {
   validateSessionToolingSelectionIds,
 } from '@main/sessionToolingConfig';
 import type { SessionToolingSelection, WorkspaceToolingSettings } from '@shared/domain/tooling';
+import type { RunTurnRemoteMcpServerConfig } from '@shared/contracts/sidecar';
 
 const TIMESTAMP = '2026-03-25T00:00:00.000Z';
 
@@ -157,7 +158,7 @@ describe('session tooling config helpers', () => {
       () => 'my-token',
     );
 
-    expect(config?.mcpServers[0].headers).toEqual({
+    expect((config?.mcpServers[0] as RunTurnRemoteMcpServerConfig).headers).toEqual({
       'X-Custom': 'value',
       Authorization: 'Bearer my-token',
     });
@@ -170,6 +171,6 @@ describe('session tooling config helpers', () => {
       () => undefined,
     );
 
-    expect(config?.mcpServers[0].headers).toEqual({ Authorization: 'Bearer token' });
+    expect((config?.mcpServers[0] as RunTurnRemoteMcpServerConfig).headers).toEqual({ Authorization: 'Bearer token' });
   });
 });

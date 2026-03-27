@@ -22,6 +22,32 @@ export interface McpOAuthFlowResult {
 }
 
 /**
+ * Probes an MCP server URL to determine if it requires OAuth authentication.
+ * Returns true if the server responds with 401 and has discoverable OAuth metadata.
+ */
+export async function requiresOAuth(serverUrl: string): Promise<boolean> {
+  try {
+    const response = await fetch(serverUrl, {
+      method: 'GET',
+      signal: AbortSignal.timeout(5_000),
+    });
+
+    if (response.status !== 401) {
+      return false;
+    }
+
+    const base = serverUrl.replace(/\/+$/, '');
+    const prmResponse = await fetch(`${base}/.well-known/oauth-protected-resource`, {
+      signal: AbortSignal.timeout(5_000),
+    });
+
+    return prmResponse.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Performs the full MCP OAuth 2.1 + PKCE flow:
  * 1. Discover protected resource metadata (RFC 9728)
  * 2. Fetch authorization server metadata (RFC 8414)

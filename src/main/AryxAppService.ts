@@ -86,6 +86,8 @@ import {
   type AppearanceTheme,
   type LspProfileDefinition,
   type McpServerDefinition,
+  type SessionToolingSelection,
+  type WorkspaceToolingSettings,
   normalizeLspProfileDefinition,
   normalizeMcpServerDefinition,
   normalizeSessionToolingSelection,
@@ -110,7 +112,7 @@ import {
   validateSessionToolingSelectionIds,
 } from '@main/sessionToolingConfig';
 import { getStoredToken } from '@main/services/mcpTokenStore';
-import { performMcpOAuthFlow } from '@main/services/mcpOAuthService';
+import { performMcpOAuthFlow, requiresOAuth } from '@main/services/mcpOAuthService';
 
 const { dialog, shell } = electron;
 
@@ -927,6 +929,41 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     return this.persistAndBroadcast(workspaceAfter);
   }
 
+  /**
+   * Proactively probes newly-enabled HTTP MCP servers for OAuth requirements.
+   * If a server returns 401 and has discoverable OAuth metadata, automatically
+   * triggers the OAuth flow (opens browser for consent) without user interaction.
+   */
+  private async probeAndAuthenticateHttpMcpServers(
+    sessionId: string,
+    tooling: WorkspaceToolingSettings,
+    selection: SessionToolingSelection,
+  ): Promise<void> {
+    const httpServers = selection.enabledMcpServerIds
+      .map((id) => tooling.mcpServers.find((s) => s.id === id))
+      .filter((s): s is McpServerDefinition => !!s && s.transport !== 'local')
+      .filter((s) => s.transport === 'http' || s.transport === 'sse');
+
+    for (const server of httpServers) {
+      if (server.transport === 'local') continue;
+      const existingToken = getStoredToken(server.url);
+      if (existingToken) continue;
+
+      try {
+        const needsAuth = await requiresOAuth(server.url);
+        if (!needsAuth) continue;
+
+        const result = await performMcpOAuthFlow({ serverUrl: server.url });
+
+        if (!result.success) {
+          console.warn(`[aryx oauth] Proactive auth failed for ${server.name}: ${result.error}`);
+        }
+      } catch (err) {
+        console.warn(`[aryx oauth] Proactive auth probe failed for ${server.name}:`, err);
+      }
+    }
+  }
+
   async updateSessionTooling(
     sessionId: string,
     enabledMcpServerIds: string[],
@@ -951,7 +988,16 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
 
     session.tooling = selection;
     session.updatedAt = nowIso();
-    return this.persistAndBroadcast(workspace);
+    const result = await this.persistAndBroadcast(workspace);
+
+    // Proactively authenticate HTTP MCP servers that need OAuth
+    void this.probeAndAuthenticateHttpMcpServers(
+      sessionId,
+      resolveProjectToolingSettings(workspace.settings, project.discoveredTooling),
+      selection,
+    );
+
+    return result;
   }
 
   async updateSessionApprovalSettings(

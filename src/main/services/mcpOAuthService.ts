@@ -58,27 +58,40 @@ export async function performMcpOAuthFlow(options: McpOAuthFlowOptions): Promise
   try {
     onStatusChange?.('discovering');
 
-    const authServerUrl = await discoverAuthorizationServer(serverUrl);
-    const metadata = await fetchAuthServerMetadata(authServerUrl);
+    const prm = await discoverProtectedResource(serverUrl);
+    const metadata = await fetchAuthServerMetadata(prm.authorizationServer);
 
     // Use explicit static config, fall back to the well-known GitHub Copilot client ID,
     // and only attempt dynamic registration as a last resort.
     const COPILOT_CLIENT_ID = 'aebc6443-996d-45c2-90f0-388ff96faa56';
+    const VSCODE_REDIRECT_URI = 'https://vscode.dev/redirect';
+
     const clientId = staticClientConfig?.clientId
       ?? (metadata.registration_endpoint
         ? await dynamicClientRegistration(metadata, serverUrl)
         : COPILOT_CLIENT_ID);
 
+    const useCopilotRedirect = clientId === COPILOT_CLIENT_ID;
+
     const { verifier, challenge } = generatePkceChallenge();
-    const { port, redirectUri, waitForCallback, close } = await startCallbackServer();
+    const { redirectUri: localRedirectUri, waitForCallback, close } = await startCallbackServer();
 
     try {
-      const scopes = metadata.scopes_supported?.join(' ') ?? '';
+      // Prefer PRM resource scopes (e.g. api://icmmcpapi-prod/mcp.tools), add offline_access.
+      // Fall back to auth server scopes_supported, then generic OIDC scopes.
+      const scopes = buildScopes(prm.resourceScopes, metadata.scopes_supported);
+
+      // When using the Copilot client ID, redirect through vscode.dev/redirect which
+      // reads the state parameter to find the local callback URL and forwards the code.
+      const redirectUri = useCopilotRedirect ? VSCODE_REDIRECT_URI : localRedirectUri;
+      const state = useCopilotRedirect ? localRedirectUri : randomBytes(16).toString('hex');
+
       const authUrl = buildAuthorizationUrl(metadata.authorization_endpoint, {
         clientId,
         redirectUri,
         codeChallenge: challenge,
         scope: scopes,
+        state,
       });
 
       onStatusChange?.('awaiting-consent');
@@ -105,11 +118,24 @@ export async function performMcpOAuthFlow(options: McpOAuthFlowOptions): Promise
   }
 }
 
+/**
+ * Builds the OAuth scope string.
+ * Priority: PRM resource scopes > auth server scopes > empty.
+ * Always appends offline_access for refresh token support.
+ */
+function buildScopes(resourceScopes?: string[], authServerScopes?: string[]): string {
+  const scopes = resourceScopes ?? authServerScopes ?? [];
+  const set = new Set(scopes);
+  set.add('offline_access');
+  return [...set].join(' ');
+}
+
 /* ── Discovery ───────────────────────────────────────────────── */
 
 interface ProtectedResourceMetadata {
   resource: string;
   authorization_servers?: string[];
+  scopes_supported?: string[];
 }
 
 interface AuthServerMetadata {
@@ -149,7 +175,12 @@ async function fetchWellKnownMetadata(baseUrl: string, suffix: string): Promise<
   return undefined;
 }
 
-async function discoverAuthorizationServer(serverUrl: string): Promise<string> {
+interface PrmDiscoveryResult {
+  authorizationServer: string;
+  resourceScopes?: string[];
+}
+
+async function discoverProtectedResource(serverUrl: string): Promise<PrmDiscoveryResult> {
   const metadata = await fetchWellKnownMetadata(serverUrl, 'oauth-protected-resource');
   if (!metadata) {
     throw new Error('Protected Resource Metadata discovery failed: no well-known endpoint found');
@@ -161,7 +192,7 @@ async function discoverAuthorizationServer(serverUrl: string): Promise<string> {
     throw new Error('No authorization server found in Protected Resource Metadata');
   }
 
-  return authServer;
+  return { authorizationServer: authServer, resourceScopes: prm.scopes_supported };
 }
 
 async function fetchAuthServerMetadata(authServerUrl: string): Promise<AuthServerMetadata> {
@@ -233,6 +264,7 @@ function buildAuthorizationUrl(
     redirectUri: string;
     codeChallenge: string;
     scope: string;
+    state: string;
   },
 ): string {
   const url = new URL(authorizationEndpoint);
@@ -244,7 +276,7 @@ function buildAuthorizationUrl(
   if (params.scope) {
     url.searchParams.set('scope', params.scope);
   }
-  url.searchParams.set('state', randomBytes(16).toString('hex'));
+  url.searchParams.set('state', params.state);
   return url.toString();
 }
 
@@ -269,16 +301,17 @@ function startCallbackServer(): Promise<CallbackServerHandle> {
     });
 
     const server: Server = createServer((req: IncomingMessage, res: ServerResponse) => {
-      if (!req.url?.startsWith('/callback')) {
+      const url = new URL(req.url ?? '/', `http://127.0.0.1`);
+      const code = url.searchParams.get('code');
+      const error = url.searchParams.get('error');
+      const errorDescription = url.searchParams.get('error_description');
+
+      // Ignore requests without code or error (e.g. favicon)
+      if (!code && !error) {
         res.writeHead(404);
         res.end();
         return;
       }
-
-      const url = new URL(req.url, `http://127.0.0.1`);
-      const code = url.searchParams.get('code');
-      const error = url.searchParams.get('error');
-      const errorDescription = url.searchParams.get('error_description');
 
       res.writeHead(200, { 'Content-Type': 'text/html' });
       if (code) {
@@ -308,7 +341,7 @@ function startCallbackServer(): Promise<CallbackServerHandle> {
 
       resolve({
         port: addr.port,
-        redirectUri: `http://127.0.0.1:${addr.port}/callback`,
+        redirectUri: `http://127.0.0.1:${addr.port}/`,
         waitForCallback: () => callbackPromise,
         close: () => server.close(),
       });

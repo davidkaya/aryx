@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Bot, Check, ChevronDown, Loader2, ShieldAlert, ShieldCheck, X } from 'lucide-react';
+import { Bot, Check, ChevronDown, Loader2, ShieldAlert, ShieldBan, ShieldCheck, X } from 'lucide-react';
 
 import { MarkdownContent } from '@renderer/components/MarkdownContent';
 import { permissionDetailSummary, PermissionDetailView } from '@renderer/components/chat/PermissionDetailView';
@@ -15,7 +15,7 @@ export function ApprovalBanner({
   total,
 }: {
   approval: PendingApprovalRecord;
-  onResolve: (decision: ApprovalDecision) => void;
+  onResolve: (decision: ApprovalDecision, alwaysApprove?: boolean) => void;
   isResolving: boolean;
   position?: number;
   total?: number;
@@ -23,6 +23,7 @@ export function ApprovalBanner({
   const kindLabel = approval.kind === 'final-response' ? 'Final response review' : 'Tool call approval';
   const hasMessages = approval.messages && approval.messages.length > 0;
   const showPosition = position !== undefined && total !== undefined && total > 1;
+  const canAlwaysApprove = approval.kind === 'tool-call' && !!approval.toolName;
 
   return (
     <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3" role="alert">
@@ -87,6 +88,19 @@ export function ApprovalBanner({
           {isResolving ? <Loader2 className="size-3 animate-spin" /> : <Check className="size-3" />}
           Approve
         </button>
+        {canAlwaysApprove && (
+          <button
+            aria-label={`Always approve ${approval.toolName}`}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600/20 px-3.5 py-1.5 text-[12px] font-medium text-emerald-300 transition hover:bg-emerald-600/30 disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={isResolving}
+            onClick={() => onResolve('approved', true)}
+            title={`Auto-approve "${approval.toolName}" for the rest of this session`}
+            type="button"
+          >
+            <ShieldBan className="size-3" />
+            Always approve
+          </button>
+        )}
         <button
           className="inline-flex items-center gap-1.5 rounded-lg bg-zinc-800 px-3.5 py-1.5 text-[12px] font-medium text-zinc-300 transition hover:bg-zinc-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
           disabled={isResolving}

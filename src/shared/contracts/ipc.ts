@@ -34,6 +34,7 @@ export interface ResolveSessionApprovalInput {
   sessionId: string;
   approvalId: string;
   decision: ApprovalDecision;
+  alwaysApprove?: boolean;
 }
 
 export interface ResolveSessionUserInputInput {

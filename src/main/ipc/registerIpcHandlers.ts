@@ -113,7 +113,7 @@ export function registerIpcHandlers(window: BrowserWindow, service: AryxAppServi
     service.cancelSessionTurn(input.sessionId),
   );
   ipcMain.handle(ipcChannels.resolveSessionApproval, (_event, input: ResolveSessionApprovalInput) =>
-    service.resolveSessionApproval(input.sessionId, input.approvalId, input.decision),
+    service.resolveSessionApproval(input.sessionId, input.approvalId, input.decision, input.alwaysApprove),
   );
   ipcMain.handle(ipcChannels.resolveSessionUserInput, (_event, input: ResolveSessionUserInputInput) =>
     service.resolveSessionUserInput(input.sessionId, input.userInputId, input.answer, input.wasFreeform),

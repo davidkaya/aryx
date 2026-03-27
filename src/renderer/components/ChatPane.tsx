@@ -39,7 +39,7 @@ interface ChatPaneProps {
   runtimeTools?: ReadonlyArray<RuntimeToolDefinition>;
   onSend: (content: string) => Promise<void>;
   onCancelTurn?: () => void;
-  onResolveApproval?: (approvalId: string, decision: ApprovalDecision) => Promise<unknown>;
+  onResolveApproval?: (approvalId: string, decision: ApprovalDecision, alwaysApprove?: boolean) => Promise<unknown>;
   onResolveUserInput?: (userInputId: string, answer: string, wasFreeform: boolean) => Promise<unknown>;
   onSetInteractionMode?: (mode: InteractionMode) => void;
   onDismissPlanReview?: () => void;
@@ -178,14 +178,14 @@ export function ChatPane({
     }
   }
 
-  async function handleResolveApproval(decision: ApprovalDecision) {
+  async function handleResolveApproval(decision: ApprovalDecision, alwaysApprove?: boolean) {
     if (!pendingApproval || !onResolveApproval || isResolvingApproval) return;
 
     setApprovalError(undefined);
     setIsResolvingApproval(true);
 
     try {
-      await onResolveApproval(pendingApproval.id, decision);
+      await onResolveApproval(pendingApproval.id, decision, alwaysApprove);
     } catch (error) {
       setApprovalError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -384,7 +384,7 @@ export function ChatPane({
               <ApprovalBanner
                 approval={pendingApproval}
                 isResolving={isResolvingApproval}
-                onResolve={(decision) => void handleResolveApproval(decision)}
+                onResolve={(decision, alwaysApprove) => void handleResolveApproval(decision, alwaysApprove)}
                 position={totalPendingCount > 1 ? 1 : undefined}
                 total={totalPendingCount > 1 ? totalPendingCount : undefined}
               />

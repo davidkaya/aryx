@@ -699,6 +699,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     sessionId: string,
     approvalId: string,
     decision: ApprovalDecision,
+    alwaysApprove?: boolean,
   ): Promise<WorkspaceState> {
     const workspace = await this.loadWorkspace();
     const session = this.requireSession(workspace, sessionId);
@@ -725,6 +726,13 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     const resolvedApproval = resolvePendingApproval(approval, decision, resolvedAt);
     this.setSessionPendingApprovalState(session, dequeuePendingApprovalState(session, approvalId));
     session.updatedAt = resolvedAt;
+
+    if (decision === 'approved' && alwaysApprove && approval.toolName) {
+      const existing = session.approvalSettings?.autoApprovedToolNames ?? [];
+      if (!existing.includes(approval.toolName)) {
+        session.approvalSettings = { autoApprovedToolNames: [...existing, approval.toolName] };
+      }
+    }
 
     const updatedRun = this.updateSessionRun(session, handle.requestId, (run) =>
       upsertRunApprovalEvent(run, resolvedApproval));

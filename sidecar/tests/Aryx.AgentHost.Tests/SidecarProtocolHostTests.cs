@@ -643,6 +643,7 @@ public sealed class SidecarProtocolHostTests
                 RequestId = "approval-command-1",
                 ApprovalId = "approval-1",
                 Decision = "approved",
+                AlwaysApprove = true,
             },
             host);
 
@@ -651,6 +652,7 @@ public sealed class SidecarProtocolHostTests
         Assert.Equal("approval-command-1", completionEvent.GetProperty("requestId").GetString());
         Assert.Equal("approval-1", captured?.ApprovalId);
         Assert.Equal("approved", captured?.Decision);
+        Assert.True(captured?.AlwaysApprove ?? false);
     }
 
     [Fact]

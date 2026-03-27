@@ -1315,6 +1315,170 @@ public sealed class CopilotWorkflowRunnerTests
     }
 
     [Fact]
+    public async Task RequestApprovalAsync_AlwaysApproveCachesRuntimeApprovalForCurrentTurn()
+    {
+        CopilotApprovalCoordinator coordinator = new();
+        ApprovalRequestedEventDto? firstApproval = null;
+        RunTurnCommandDto command = CreateApprovalCommand();
+
+        Task<PermissionRequestResult> firstPending = coordinator.RequestApprovalAsync(
+            command,
+            command.Pattern.Agents[0],
+            new PermissionRequestRead
+            {
+                Kind = "read",
+                ToolCallId = "tool-call-read-1",
+                Intention = "Inspect README guidance",
+                Path = "README.md",
+            },
+            new PermissionInvocation
+            {
+                SessionId = "copilot-session-1",
+            },
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["tool-call-read-1"] = "view",
+            },
+            approval =>
+            {
+                firstApproval = approval;
+                return Task.CompletedTask;
+            },
+            CancellationToken.None);
+
+        Assert.False(firstPending.IsCompleted);
+        Assert.NotNull(firstApproval);
+
+        await coordinator.ResolveApprovalAsync(
+            new ResolveApprovalCommandDto
+            {
+                ApprovalId = firstApproval!.ApprovalId,
+                Decision = "approved",
+                AlwaysApprove = true,
+            },
+            CancellationToken.None);
+
+        PermissionRequestResult firstResult = await firstPending;
+        Assert.Equal(PermissionRequestResultKind.Approved, firstResult.Kind);
+
+        bool sawSecondApproval = false;
+        PermissionRequestResult secondResult = await coordinator.RequestApprovalAsync(
+            command,
+            command.Pattern.Agents[0],
+            new PermissionRequestRead
+            {
+                Kind = "read",
+                ToolCallId = "tool-call-read-2",
+                Intention = "Inspect docs guidance",
+                Path = "docs\\guide.md",
+            },
+            new PermissionInvocation
+            {
+                SessionId = "copilot-session-1",
+            },
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["tool-call-read-2"] = "grep",
+            },
+            approval =>
+            {
+                sawSecondApproval = true;
+                return Task.CompletedTask;
+            },
+            CancellationToken.None);
+
+        Assert.False(sawSecondApproval);
+        Assert.Equal(PermissionRequestResultKind.Approved, secondResult.Kind);
+    }
+
+    [Fact]
+    public async Task RequestApprovalAsync_AlwaysApproveCacheDoesNotCarryAcrossTurnRequests()
+    {
+        CopilotApprovalCoordinator coordinator = new();
+        ApprovalRequestedEventDto? firstApproval = null;
+        RunTurnCommandDto firstCommand = CreateApprovalCommand();
+
+        Task<PermissionRequestResult> firstPending = coordinator.RequestApprovalAsync(
+            firstCommand,
+            firstCommand.Pattern.Agents[0],
+            new PermissionRequestRead
+            {
+                Kind = "read",
+                ToolCallId = "tool-call-read-1",
+                Intention = "Inspect README guidance",
+                Path = "README.md",
+            },
+            new PermissionInvocation
+            {
+                SessionId = "copilot-session-1",
+            },
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["tool-call-read-1"] = "view",
+            },
+            approval =>
+            {
+                firstApproval = approval;
+                return Task.CompletedTask;
+            },
+            CancellationToken.None);
+
+        Assert.NotNull(firstApproval);
+
+        await coordinator.ResolveApprovalAsync(
+            new ResolveApprovalCommandDto
+            {
+                ApprovalId = firstApproval!.ApprovalId,
+                Decision = "approved",
+                AlwaysApprove = true,
+            },
+            CancellationToken.None);
+
+        await firstPending;
+
+        ApprovalRequestedEventDto? secondApproval = null;
+        RunTurnCommandDto secondCommand = CreateApprovalCommand(requestId: "turn-2");
+        Task<PermissionRequestResult> secondPending = coordinator.RequestApprovalAsync(
+            secondCommand,
+            secondCommand.Pattern.Agents[0],
+            new PermissionRequestRead
+            {
+                Kind = "read",
+                ToolCallId = "tool-call-read-2",
+                Intention = "Inspect docs guidance",
+                Path = "docs\\guide.md",
+            },
+            new PermissionInvocation
+            {
+                SessionId = "copilot-session-1",
+            },
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["tool-call-read-2"] = "grep",
+            },
+            approval =>
+            {
+                secondApproval = approval;
+                return Task.CompletedTask;
+            },
+            CancellationToken.None);
+
+        Assert.False(secondPending.IsCompleted);
+        Assert.NotNull(secondApproval);
+
+        await coordinator.ResolveApprovalAsync(
+            new ResolveApprovalCommandDto
+            {
+                ApprovalId = secondApproval!.ApprovalId,
+                Decision = "approved",
+            },
+            CancellationToken.None);
+
+        PermissionRequestResult secondResult = await secondPending;
+        Assert.Equal(PermissionRequestResultKind.Approved, secondResult.Kind);
+    }
+
+    [Fact]
     public async Task ResolveApprovalAsync_RejectsUnknownApprovalIds()
     {
         CopilotApprovalCoordinator coordinator = new();
@@ -1390,11 +1554,11 @@ public sealed class CopilotWorkflowRunnerTests
             null!);
     }
 
-    private static RunTurnCommandDto CreateApprovalCommand()
+    private static RunTurnCommandDto CreateApprovalCommand(string requestId = "turn-1")
     {
         return new RunTurnCommandDto
         {
-            RequestId = "turn-1",
+            RequestId = requestId,
             SessionId = "session-1",
             Pattern = new PatternDefinitionDto
             {

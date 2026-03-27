@@ -111,6 +111,10 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
             await onExitPlanMode(exitPlanModeEvent).ConfigureAwait(false);
             return state.FinalizeCompletedMessages();
         }
+        finally
+        {
+            _approvalCoordinator.ClearRequestApprovals(command.RequestId);
+        }
     }
 
     private static async Task EmitPendingActivityEventsAsync(

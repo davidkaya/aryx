@@ -21,6 +21,7 @@ internal sealed class CopilotApprovalCoordinator
     private const string HookPermissionKind = "hook";
 
     private readonly ConcurrentDictionary<string, PendingApprovalRequest> _pendingApprovals = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, byte>> _requestApprovedTools = new(StringComparer.Ordinal);
 
     public Task ResolveApprovalAsync(
         ResolveApprovalCommandDto command,
@@ -37,6 +38,11 @@ internal sealed class CopilotApprovalCoordinator
             throw new InvalidOperationException($"Approval \"{approvalId}\" is no longer pending.");
         }
 
+        if (decision == PermissionRequestResultKind.Approved && command.AlwaysApprove)
+        {
+            CacheApprovedToolForRequest(pending.RequestId, pending.ApprovalCacheKey);
+        }
+
         return Task.CompletedTask;
     }
 
@@ -51,12 +57,14 @@ internal sealed class CopilotApprovalCoordinator
     {
         string? toolName = ResolveApprovalToolName(request, toolNamesByCallId);
         string? autoApprovedToolName = ResolveAutoApprovedToolName(request);
-        if (!RequiresToolCallApproval(command.Pattern.ApprovalPolicy, agent.Id, toolName, autoApprovedToolName))
+        string? approvalCacheKey = ResolveApprovalCacheKey(toolName, autoApprovedToolName);
+        if (IsToolApprovedForRequest(command.RequestId, approvalCacheKey)
+            || !RequiresToolCallApproval(command.Pattern.ApprovalPolicy, agent.Id, toolName, autoApprovedToolName))
         {
             return CreateApprovalResult(PermissionRequestResultKind.Approved);
         }
 
-        PendingApprovalRequest pending = CreatePendingApproval(command);
+        PendingApprovalRequest pending = CreatePendingApproval(command, approvalCacheKey);
         if (!_pendingApprovals.TryAdd(pending.ApprovalId, pending))
         {
             throw new InvalidOperationException($"Approval \"{pending.ApprovalId}\" is already pending.");
@@ -252,6 +260,17 @@ internal sealed class CopilotApprovalCoordinator
     internal static bool TryGetApprovalToolName(PermissionRequest request, out string? toolName)
         => TryGetApprovalToolName(request, toolNamesByCallId: null, out toolName);
 
+    internal void ClearRequestApprovals(string requestId)
+    {
+        string? normalizedRequestId = NormalizeOptionalString(requestId);
+        if (normalizedRequestId is null)
+        {
+            return;
+        }
+
+        _requestApprovedTools.TryRemove(normalizedRequestId, out _);
+    }
+
     private static bool HasMatchingToolCallCheckpoint(
         IReadOnlyList<ApprovalCheckpointRuleDto> rules,
         string agentId)
@@ -274,12 +293,15 @@ internal sealed class CopilotApprovalCoordinator
         return false;
     }
 
-    private static PendingApprovalRequest CreatePendingApproval(RunTurnCommandDto command)
+    private static PendingApprovalRequest CreatePendingApproval(
+        RunTurnCommandDto command,
+        string? approvalCacheKey)
     {
         return new PendingApprovalRequest(
             command.RequestId,
             command.SessionId,
             CreateApprovalRequestId(),
+            NormalizeOptionalString(approvalCacheKey),
             new TaskCompletionSource<PermissionRequestResultKind>(TaskCreationOptions.RunContinuationsAsynchronously));
     }
 
@@ -303,6 +325,14 @@ internal sealed class CopilotApprovalCoordinator
     private static string? ResolveAutoApprovedToolName(PermissionRequest request)
     {
         return GetFallbackToolName(request);
+    }
+
+    private static string? ResolveApprovalCacheKey(
+        string? toolName,
+        string? autoApprovedToolName)
+    {
+        return NormalizeOptionalString(autoApprovedToolName)
+            ?? NormalizeOptionalString(toolName);
     }
 
     private static string? GetDirectToolName(PermissionRequest request)
@@ -383,6 +413,34 @@ internal sealed class CopilotApprovalCoordinator
                 string.Equals(candidate, normalizedToolName, StringComparison.OrdinalIgnoreCase));
     }
 
+    private bool IsToolApprovedForRequest(string requestId, string? approvalCacheKey)
+    {
+        string? normalizedRequestId = NormalizeOptionalString(requestId);
+        string? normalizedApprovalCacheKey = NormalizeOptionalString(approvalCacheKey);
+        if (normalizedRequestId is null || normalizedApprovalCacheKey is null)
+        {
+            return false;
+        }
+
+        return _requestApprovedTools.TryGetValue(normalizedRequestId, out ConcurrentDictionary<string, byte>? approvedTools)
+            && approvedTools.ContainsKey(normalizedApprovalCacheKey);
+    }
+
+    private void CacheApprovedToolForRequest(string requestId, string? approvalCacheKey)
+    {
+        string? normalizedRequestId = NormalizeOptionalString(requestId);
+        string? normalizedApprovalCacheKey = NormalizeOptionalString(approvalCacheKey);
+        if (normalizedRequestId is null || normalizedApprovalCacheKey is null)
+        {
+            return;
+        }
+
+        ConcurrentDictionary<string, byte> approvedTools = _requestApprovedTools.GetOrAdd(
+            normalizedRequestId,
+            static _ => new ConcurrentDictionary<string, byte>(StringComparer.OrdinalIgnoreCase));
+        approvedTools.TryAdd(normalizedApprovalCacheKey, 0);
+    }
+
     private PendingApprovalRequest GetPendingApproval(string approvalId)
     {
         if (_pendingApprovals.TryGetValue(approvalId, out PendingApprovalRequest? pending))
@@ -436,5 +494,6 @@ internal sealed class CopilotApprovalCoordinator
         string RequestId,
         string SessionId,
         string ApprovalId,
+        string? ApprovalCacheKey,
         TaskCompletionSource<PermissionRequestResultKind> Decision);
 }

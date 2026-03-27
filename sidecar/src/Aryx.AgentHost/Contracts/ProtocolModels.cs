@@ -176,6 +176,7 @@ public sealed class ResolveApprovalCommandDto : SidecarCommandEnvelope
 {
     public string ApprovalId { get; init; } = string.Empty;
     public string Decision { get; init; } = string.Empty;
+    public bool AlwaysApprove { get; init; }
 }
 
 public sealed class ResolveUserInputCommandDto : SidecarCommandEnvelope

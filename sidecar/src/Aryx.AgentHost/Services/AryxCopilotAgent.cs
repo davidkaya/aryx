@@ -225,6 +225,16 @@ internal sealed class AryxCopilotAgent : AIAgent, IAsyncDisposable
                 continue;
             }
 
+            // Only project handoff tool calls as FunctionCallContent for the Agent Framework.
+            // Other tool calls (ask_user, MCP tools, etc.) are resolved by the Copilot SDK
+            // internally and must not be surfaced, because AIAgentHostExecutor tracks every
+            // FunctionCallContent as an outstanding request.  An unmatched request prevents
+            // the executor from emitting a TurnToken, which stalls group-chat advancement.
+            if (!IsHandoffToolName(toolRequest.Name))
+            {
+                continue;
+            }
+
             contents.Add(new FunctionCallContent(
                 toolRequest.ToolCallId,
                 toolRequest.Name,
@@ -232,6 +242,12 @@ internal sealed class AryxCopilotAgent : AIAgent, IAsyncDisposable
         }
 
         return contents;
+    }
+
+    private static bool IsHandoffToolName(string? name)
+    {
+        return !string.IsNullOrWhiteSpace(name)
+            && name.StartsWith(HandoffToolPrefix, StringComparison.Ordinal);
     }
 
     private async Task EnsureClientStartedAsync(CancellationToken cancellationToken)
@@ -344,8 +360,7 @@ internal sealed class AryxCopilotAgent : AIAgent, IAsyncDisposable
 
     private static bool IsHandoffDeclaration(AIFunctionDeclaration declaration)
     {
-        return !string.IsNullOrWhiteSpace(declaration.Name)
-            && declaration.Name.StartsWith(HandoffToolPrefix, StringComparison.Ordinal);
+        return IsHandoffToolName(declaration.Name);
     }
 
     private static AIFunction CreateInvokableHandoffFunction(AIFunctionDeclaration declaration)

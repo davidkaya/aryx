@@ -125,6 +125,24 @@ public sealed class CopilotAgentBundleTests
         Assert.Equal("frontend specialist", functionCall.Arguments["reasonForHandoff"]?.ToString());
     }
 
+    [Fact]
+    public void ConvertToolRequestsToFunctionCalls_SkipsNonHandoffToolCalls()
+    {
+        AssistantMessageDataToolRequestsItem[] toolRequests =
+        {
+            new() { ToolCallId = "call-001", Name = "ask_user" },
+            new() { ToolCallId = "call-002", Name = "web_fetch" },
+            new() { ToolCallId = "call-003", Name = "handoff_to_reviewer" },
+            new() { ToolCallId = "call-004", Name = "grep" },
+        };
+
+        IReadOnlyList<FunctionCallContent> result = AryxCopilotAgent.ConvertToolRequestsToFunctionCalls(toolRequests);
+
+        FunctionCallContent single = Assert.Single(result);
+        Assert.Equal("call-003", single.CallId);
+        Assert.Equal("handoff_to_reviewer", single.Name);
+    }
+
     private static AIFunction CreateTool()
     {
         ToolTarget target = new();

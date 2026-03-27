@@ -350,7 +350,10 @@ export default function App() {
         onSetTheme={(theme) => void api.setTheme(theme)}
         onOpenAppDataFolder={() => void api.openAppDataFolder()}
         onResetLocalWorkspace={async () => {
-          await api.resetLocalWorkspace();
+          const fresh = await api.resetLocalWorkspace();
+          setWorkspace(fresh);
+          setSessionActivities({});
+          setShowSettings(false);
         }}
         patterns={workspace.patterns}
         sidecarCapabilities={sidecarCapabilities}

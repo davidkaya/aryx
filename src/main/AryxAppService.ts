@@ -233,7 +233,9 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     this.sidecarCapabilitiesPromise = undefined;
     this.didScheduleInitialProjectGitRefresh = false;
 
-    return this.loadWorkspace();
+    const workspace = await this.loadWorkspace();
+    this.emit('workspace-updated', workspace);
+    return workspace;
   }
 
   async addProject(): Promise<WorkspaceState> {

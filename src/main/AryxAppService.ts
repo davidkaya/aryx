@@ -1009,16 +1009,24 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
       selection,
     );
 
+    const previousEnabledMcpServerIds = new Set(session.tooling?.enabledMcpServerIds ?? []);
     session.tooling = selection;
     session.updatedAt = nowIso();
     const result = await this.persistAndBroadcast(workspace);
 
-    // Proactively authenticate HTTP MCP servers that need OAuth
-    void this.probeAndAuthenticateHttpMcpServers(
-      sessionId,
-      resolveProjectToolingSettings(workspace.settings, project.discoveredTooling),
-      selection,
-    );
+    // Proactively authenticate only newly enabled HTTP MCP servers
+    const newlyEnabledIds = selection.enabledMcpServerIds.filter((id) => !previousEnabledMcpServerIds.has(id));
+    if (newlyEnabledIds.length > 0) {
+      const selectionForNewServers = normalizeSessionToolingSelection({
+        enabledMcpServerIds: newlyEnabledIds,
+        enabledLspProfileIds: [],
+      });
+      void this.probeAndAuthenticateHttpMcpServers(
+        sessionId,
+        resolveProjectToolingSettings(workspace.settings, project.discoveredTooling),
+        selectionForNewServers,
+      );
+    }
 
     return result;
   }

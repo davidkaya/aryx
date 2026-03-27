@@ -1,7 +1,8 @@
 using System.Reflection;
-using Microsoft.Agents.AI;
-using Aryx.AgentHost.Services;
+using System.Text.Json;
 using GitHub.Copilot.SDK;
+using Aryx.AgentHost.Services;
+using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
 namespace Aryx.AgentHost.Tests;
@@ -52,56 +53,76 @@ public sealed class CopilotAgentBundleTests
     }
 
     [Fact]
-    public void ApplyInitialHandoffEntryConstraints_DisablesCopilotToolsAndClearsSessionTooling()
+    public async Task CreateConfiguredSessionConfig_MergesInstructionsAndConvertsHandoffDeclarations()
     {
-        SessionConfig sessionConfig = new()
+        SessionConfig baseConfig = new()
         {
-            AvailableTools = ["glob", "view"],
-            ExcludedTools = ["edit"],
-            McpServers = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase)
+            Model = "gpt-5.4",
+            SystemMessage = new SystemMessageConfig
             {
-                ["Git MCP"] = new McpLocalServerConfig
-                {
-                    Type = "local",
-                    Command = "node",
-                },
+                Content = "Base instructions",
             },
             Tools = [CreateTool()],
         };
+        ChatClientAgentRunOptions options = new(new ChatOptions
+        {
+            Instructions = "Workflow handoff instructions",
+            Tools = [CreateHandoffDeclaration()],
+        });
 
-        CopilotAgentBundle.ApplyInitialHandoffEntryConstraints(sessionConfig);
+        SessionConfig effective = AryxCopilotAgent.CreateConfiguredSessionConfig(baseConfig, options);
 
-        Assert.Empty(sessionConfig.AvailableTools);
-        Assert.Null(sessionConfig.ExcludedTools);
-        Assert.Null(sessionConfig.McpServers);
-        Assert.Null(sessionConfig.Tools);
+        Assert.Equal("gpt-5.4", effective.Model);
+        Assert.Equal("Base instructions\n\nWorkflow handoff instructions", effective.SystemMessage?.Content);
+        Assert.Equal("Base instructions", baseConfig.SystemMessage?.Content);
+
+        AIFunction[] tools = Assert.IsAssignableFrom<IEnumerable<AIFunction>>(effective.Tools).ToArray();
+        Assert.Equal(2, tools.Length);
+        AIFunction handoffTool = Assert.Single(tools, tool => tool.Name == "handoff_to_1");
+        Assert.True(handoffTool.AdditionalProperties.TryGetValue("skip_permission", out object? skipPermission));
+        Assert.Equal(true, skipPermission);
+
+        object? result = await handoffTool.InvokeAsync(new AIFunctionArguments
+        {
+            ["reasonForHandoff"] = "UI specialist",
+        });
+
+        Assert.Equal("Transferred.", result?.ToString());
     }
 
     [Fact]
-    public void RequireInitialHandoffToolMode_RequiresAToolWhenHandoffToolsArePresent()
+    public void CreateConfiguredSessionConfig_RejectsUnsupportedRuntimeDeclarations()
     {
         ChatClientAgentRunOptions options = new(new ChatOptions
         {
-            Tools = [CreateHandoffTool(), CreateTool()],
+            Tools = [AIFunctionFactory.CreateDeclaration("route_elsewhere", "Unsupported declaration", CreateTool().JsonSchema)],
         });
 
-        ChatClientAgentRunOptions constrained = Assert.IsType<ChatClientAgentRunOptions>(
-            CopilotAgentBundle.RequireInitialHandoffToolMode(options));
-
-        Assert.NotSame(options, constrained);
-        Assert.Null(options.ChatOptions?.ToolMode);
-        Assert.Equal(ChatToolMode.RequireAny, constrained.ChatOptions?.ToolMode);
+        Assert.Throws<NotSupportedException>(() => AryxCopilotAgent.CreateConfiguredSessionConfig(new SessionConfig(), options));
     }
 
     [Fact]
-    public void RequireInitialHandoffToolMode_LeavesNonHandoffOptionsUnchanged()
+    public void ConvertToolRequestsToFunctionCalls_MapsCallIdsNamesAndArguments()
     {
-        ChatClientAgentRunOptions options = new(new ChatOptions
+        AssistantMessageDataToolRequestsItem[] toolRequests =
         {
-            Tools = [CreateTool()],
-        });
+            new()
+            {
+                ToolCallId = "call-123",
+                Name = "handoff_to_1",
+                Arguments = JsonSerializer.SerializeToElement(new Dictionary<string, object?>
+                {
+                    ["reasonForHandoff"] = "frontend specialist",
+                }),
+            },
+        };
 
-        Assert.Same(options, CopilotAgentBundle.RequireInitialHandoffToolMode(options));
+        FunctionCallContent functionCall = Assert.Single(AryxCopilotAgent.ConvertToolRequestsToFunctionCalls(toolRequests));
+
+        Assert.Equal("call-123", functionCall.CallId);
+        Assert.Equal("handoff_to_1", functionCall.Name);
+        Assert.NotNull(functionCall.Arguments);
+        Assert.Equal("frontend specialist", functionCall.Arguments["reasonForHandoff"]?.ToString());
     }
 
     private static AIFunction CreateTool()
@@ -120,15 +141,12 @@ public sealed class CopilotAgentBundleTests
             });
     }
 
-    private static AIFunction CreateHandoffTool()
+    private static AIFunctionDeclaration CreateHandoffDeclaration()
     {
-        return AIFunctionFactory.Create(
-            (string reasonForHandoff) => $"Handed off because {reasonForHandoff}.",
-            new AIFunctionFactoryOptions
-            {
-                Name = "handoff_to_1",
-                Description = "Transfer ownership to a specialist",
-            });
+        return AIFunctionFactory.CreateDeclaration(
+            "handoff_to_1",
+            "Transfer ownership to a specialist",
+            CreateTool().JsonSchema);
     }
 
     private sealed class ToolTarget

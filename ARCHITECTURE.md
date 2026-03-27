@@ -136,6 +136,8 @@ Patterns describe how agents collaborate. The architecture supports:
 
 Their runtime semantics follow the Agent Framework orchestration model: sequential and group chat preserve a visible shared conversation, concurrent aggregates multiple independent responses into one turn, and handoff turns can end once the active agent has responded and is waiting for the next user input.
 
+For Copilot-backed agents, Aryx uses a repo-local adapter around the Copilot SDK session layer so handoff routes still behave like Agent Framework handoffs. This is necessary because the upstream `GitHubCopilotAgent` does not currently project run-time handoff tool declarations into Copilot sessions or surface Copilot tool requests back as `FunctionCallContent` for the workflow runtime.
+
 Patterns are shared application data, not renderer-only configuration. That means the same pattern definition can drive validation, persistence, UI rendering, and sidecar execution.
 
 Patterns now persist an explicit graph-backed topology alongside the flat agent list. Agent nodes carry stable agent ids, ordering, and layout metadata, while system nodes such as user input/output, distributor, collector, and orchestrator make mode-specific flow visible in the saved contract.

@@ -9,6 +9,7 @@ internal sealed class CopilotTurnExecutionState
 {
     private readonly RunTurnCommandDto _command;
     private readonly HashSet<string> _startedAgents = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentQueue<AgentActivityEventDto> _pendingActivityEvents = new();
     private readonly ConcurrentQueue<McpOauthRequiredEventDto> _pendingMcpOauthRequests = new();
     private readonly ConcurrentDictionary<string, AgentIdentity> _observedAgentsByMessageId = new(StringComparer.Ordinal);
     private readonly StreamingTranscriptBuffer _transcriptBuffer = new();
@@ -31,22 +32,22 @@ internal sealed class CopilotTurnExecutionState
         AgentIdentity agent,
         Func<AgentActivityEventDto, Task> onActivity)
     {
-        ActiveAgent = agent;
-
-        if (!_startedAgents.Add(agent.AgentId))
+        AgentActivityEventDto? thinkingActivity = CreateThinkingActivityIfNeeded(agent);
+        if (thinkingActivity is null)
         {
             return;
         }
 
-        await onActivity(new AgentActivityEventDto
+        await onActivity(thinkingActivity).ConfigureAwait(false);
+    }
+
+    public void QueueThinkingIfNeeded(AgentIdentity agent)
+    {
+        AgentActivityEventDto? thinkingActivity = CreateThinkingActivityIfNeeded(agent);
+        if (thinkingActivity is not null)
         {
-            Type = "agent-activity",
-            RequestId = _command.RequestId,
-            SessionId = _command.SessionId,
-            ActivityType = "thinking",
-            AgentId = agent.AgentId,
-            AgentName = agent.AgentName,
-        }).ConfigureAwait(false);
+            _pendingActivityEvents.Enqueue(thinkingActivity);
+        }
     }
 
     public void ApplyActivity(AgentActivityEventDto activity)
@@ -70,12 +71,15 @@ internal sealed class CopilotTurnExecutionState
         {
             case AssistantMessageDeltaEvent messageDelta when !string.IsNullOrWhiteSpace(messageDelta.Data?.MessageId):
                 RecordObservedAgentForMessage(agent, messageDelta.Data!.MessageId);
+                QueueThinkingIfNeeded(agent);
                 break;
             case AssistantMessageEvent assistantMessage when !string.IsNullOrWhiteSpace(assistantMessage.Data?.MessageId):
                 RecordObservedAgentForMessage(agent, assistantMessage.Data!.MessageId);
+                QueueThinkingIfNeeded(agent);
                 break;
             case AssistantReasoningDeltaEvent:
                 ActiveAgent = agent;
+                QueueThinkingIfNeeded(agent);
                 break;
             case McpOauthRequiredEvent:
                 ActiveAgent = agent;
@@ -85,6 +89,17 @@ internal sealed class CopilotTurnExecutionState
                 ActiveAgent = agent;
                 break;
         }
+    }
+
+    public IReadOnlyList<AgentActivityEventDto> DrainPendingActivityEvents()
+    {
+        List<AgentActivityEventDto> pending = [];
+        while (_pendingActivityEvents.TryDequeue(out AgentActivityEventDto? activity))
+        {
+            pending.Add(activity);
+        }
+
+        return pending;
     }
 
     public void EnqueuePendingMcpOauthRequest(McpOauthRequiredEventDto request)
@@ -137,6 +152,26 @@ internal sealed class CopilotTurnExecutionState
     {
         ActiveAgent = agent;
         _observedAgentsByMessageId[messageId] = agent;
+    }
+
+    private AgentActivityEventDto? CreateThinkingActivityIfNeeded(AgentIdentity agent)
+    {
+        ActiveAgent = agent;
+
+        if (!_startedAgents.Add(agent.AgentId))
+        {
+            return null;
+        }
+
+        return new AgentActivityEventDto
+        {
+            Type = "agent-activity",
+            RequestId = _command.RequestId,
+            SessionId = _command.SessionId,
+            ActivityType = "thinking",
+            AgentId = agent.AgentId,
+            AgentName = agent.AgentName,
+        };
     }
 
     public void UpdateCompletedMessages(

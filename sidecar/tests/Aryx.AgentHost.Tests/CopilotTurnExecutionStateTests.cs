@@ -30,6 +30,71 @@ public sealed class CopilotTurnExecutionStateTests
     }
 
     [Fact]
+    public void ObserveSessionEvent_AssistantMessageDelta_QueuesThinkingActivity()
+    {
+        RunTurnCommandDto command = CreateCommand();
+        CopilotTurnExecutionState state = new(command);
+
+        state.ObserveSessionEvent(
+            command.Pattern.Agents[0],
+            SessionEvent.FromJson(
+                """
+                {
+                  "type": "assistant.message_delta",
+                  "data": {
+                    "messageId": "msg-1",
+                    "deltaContent": "Hello"
+                  },
+                  "id": "11111111-1111-1111-1111-111111111111",
+                  "timestamp": "2026-03-27T00:00:00Z"
+                }
+                """));
+
+        AgentActivityEventDto activity = Assert.Single(state.DrainPendingActivityEvents());
+        Assert.Equal("thinking", activity.ActivityType);
+        Assert.Equal("agent-1", activity.AgentId);
+        Assert.Equal("Primary", activity.AgentName);
+        Assert.True(state.TryResolveObservedAgentForMessage("msg-1", out AgentIdentity observedAgent));
+        Assert.Equal("agent-1", observedAgent.AgentId);
+    }
+
+    [Fact]
+    public async Task EmitThinkingIfNeeded_DoesNotDuplicateQueuedThinkingActivity()
+    {
+        RunTurnCommandDto command = CreateCommand();
+        CopilotTurnExecutionState state = new(command);
+
+        state.ObserveSessionEvent(
+            command.Pattern.Agents[0],
+            SessionEvent.FromJson(
+                """
+                {
+                  "type": "assistant.reasoning_delta",
+                  "data": {
+                    "reasoningId": "reasoning-1",
+                    "deltaContent": "Planning"
+                  },
+                  "id": "22222222-2222-2222-2222-222222222222",
+                  "timestamp": "2026-03-27T00:00:00Z"
+                }
+                """));
+
+        List<AgentActivityEventDto> activities = [.. state.DrainPendingActivityEvents()];
+
+        await state.EmitThinkingIfNeeded(
+            new AgentIdentity("agent-1", "Primary"),
+            activity =>
+            {
+                activities.Add(activity);
+                return Task.CompletedTask;
+            });
+
+        AgentActivityEventDto thinking = Assert.Single(activities);
+        Assert.Equal("thinking", thinking.ActivityType);
+        Assert.Equal("agent-1", thinking.AgentId);
+    }
+
+    [Fact]
     public void DrainPendingMcpOauthRequests_ReturnsQueuedRequestsAndClearsQueue()
     {
         RunTurnCommandDto command = CreateCommand();

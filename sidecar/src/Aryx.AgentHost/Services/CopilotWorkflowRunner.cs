@@ -1,3 +1,4 @@
+using System.Linq;
 using Aryx.AgentHost.Contracts;
 using GitHub.Copilot.SDK;
 using Microsoft.Agents.AI.Workflows;
@@ -7,6 +8,7 @@ namespace Aryx.AgentHost.Services;
 
 public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
 {
+    private const string HandoffFunctionPrefix = "handoff_to_";
     private readonly PatternValidator _patternValidator;
     private readonly CopilotApprovalCoordinator _approvalCoordinator = new();
     private readonly CopilotUserInputCoordinator _userInputCoordinator = new();
@@ -83,6 +85,7 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
             {
                 bool shouldEndTurn = await HandleWorkflowEventAsync(command, evt, inputMessages, state, onDelta, onActivity)
                     .ConfigureAwait(false);
+                await EmitPendingActivityEventsAsync(state, onActivity).ConfigureAwait(false);
                 await EmitPendingMcpOauthRequestsAsync(state, onMcpOAuthRequired).ConfigureAwait(false);
                 if (shouldEndTurn)
                 {
@@ -90,11 +93,13 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
                 }
             }
 
+            await EmitPendingActivityEventsAsync(state, onActivity).ConfigureAwait(false);
             await EmitPendingMcpOauthRequestsAsync(state, onMcpOAuthRequired).ConfigureAwait(false);
             return state.FinalizeCompletedMessages();
         }
         catch (OperationCanceledException) when (runCancellation.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
         {
+            await EmitPendingActivityEventsAsync(state, onActivity).ConfigureAwait(false);
             await EmitPendingMcpOauthRequestsAsync(state, onMcpOAuthRequired).ConfigureAwait(false);
             ExitPlanModeRequestedEventDto? exitPlanModeEvent =
                 _exitPlanModeCoordinator.ConsumePendingRequest(command.RequestId);
@@ -105,6 +110,16 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
 
             await onExitPlanMode(exitPlanModeEvent).ConfigureAwait(false);
             return state.FinalizeCompletedMessages();
+        }
+    }
+
+    private static async Task EmitPendingActivityEventsAsync(
+        CopilotTurnExecutionState state,
+        Func<AgentActivityEventDto, Task> onActivity)
+    {
+        foreach (AgentActivityEventDto activity in state.DrainPendingActivityEvents())
+        {
+            await onActivity(activity).ConfigureAwait(false);
         }
     }
 
@@ -140,13 +155,21 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
         Func<TurnDeltaEventDto, Task> onDelta,
         Func<AgentActivityEventDto, Task> onActivity)
     {
-        if (evt is ExecutorInvokedEvent invoked
-            && AgentIdentityResolver.TryResolveKnownAgentIdentity(
+        if (evt is ExecutorInvokedEvent invoked)
+        {
+            if (AgentIdentityResolver.TryResolveKnownAgentIdentity(
                 command.Pattern,
                 invoked.ExecutorId,
                 out AgentIdentity invokedAgent))
-        {
-            await state.EmitThinkingIfNeeded(invokedAgent, onActivity).ConfigureAwait(false);
+            {
+                TraceHandoff(command, $"Executor invoked: {invoked.ExecutorId} -> {invokedAgent.AgentName} ({invokedAgent.AgentId}).");
+                await state.EmitThinkingIfNeeded(invokedAgent, onActivity).ConfigureAwait(false);
+            }
+            else
+            {
+                TraceHandoff(command, $"Executor invoked without a known agent match: {invoked.ExecutorId}.");
+            }
+
             return false;
         }
 
@@ -160,11 +183,14 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
 
             if (activity is null)
             {
-                return WorkflowRequestInfoInterpreter.RequiresUserInputTurnBoundary(command, requestInfo);
+                bool requiresBoundary = WorkflowRequestInfoInterpreter.RequiresUserInputTurnBoundary(command, requestInfo);
+                TraceHandoff(
+                    command,
+                    $"Request info produced no activity for data type '{requestInfo.Request.Data.TypeId}'. Requires boundary: {requiresBoundary}.");
+                return requiresBoundary;
             }
 
-            state.ApplyActivity(activity);
-            await onActivity(activity).ConfigureAwait(false);
+            await EmitActivityAsync(command, state, activity, onActivity).ConfigureAwait(false);
             return false;
         }
 
@@ -174,14 +200,22 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
             return false;
         }
 
-        if (evt is ExecutorCompletedEvent completed
-            && AgentIdentityResolver.TryResolveObservedAgentIdentity(
+        if (evt is ExecutorCompletedEvent completed)
+        {
+            if (AgentIdentityResolver.TryResolveObservedAgentIdentity(
                 command.Pattern,
                 completed.ExecutorId,
                 state.ActiveAgent,
                 out AgentIdentity completedAgent))
-        {
-            state.ClearActiveAgentIfMatching(completedAgent);
+            {
+                TraceHandoff(command, $"Executor completed: {completed.ExecutorId} -> {completedAgent.AgentName} ({completedAgent.AgentId}).");
+                state.ClearActiveAgentIfMatching(completedAgent);
+            }
+            else
+            {
+                TraceHandoff(command, $"Executor completed without a known agent match: {completed.ExecutorId}.");
+            }
+
             return false;
         }
 
@@ -203,6 +237,12 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
     {
         AgentIdentity? updateAgent = null;
         string authorName = update.ExecutorId;
+        string[] handoffFunctionCalls = update.Update.Contents
+            .OfType<FunctionCallContent>()
+            .Select(content => content.Name)
+            .Where(IsHandoffFunctionName)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
         if (state.TryResolveObservedAgentForMessage(update.Update.MessageId, out AgentIdentity observedMessageAgent))
         {
             updateAgent = observedMessageAgent;
@@ -220,7 +260,20 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
 
         if (updateAgent.HasValue)
         {
+            if (handoffFunctionCalls.Length > 0)
+            {
+                TraceHandoff(
+                    command,
+                    $"Agent response update from {updateAgent.Value.AgentName} ({updateAgent.Value.AgentId}) requested handoff via {string.Join(", ", handoffFunctionCalls)}.");
+            }
+
             await state.EmitThinkingIfNeeded(updateAgent.Value, onActivity).ConfigureAwait(false);
+        }
+        else if (!string.IsNullOrEmpty(update.Update.Text) || handoffFunctionCalls.Length > 0)
+        {
+            TraceHandoff(
+                command,
+                $"Agent response update could not resolve agent for executor '{update.ExecutorId}' and message '{update.Update.MessageId ?? "<none>"}'.");
         }
 
         if (string.IsNullOrEmpty(update.Update.Text))
@@ -244,5 +297,46 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
             ContentDelta = update.Update.Text,
             Content = currentContent,
         }).ConfigureAwait(false);
+    }
+
+    private static async Task EmitActivityAsync(
+        RunTurnCommandDto command,
+        CopilotTurnExecutionState state,
+        AgentActivityEventDto activity,
+        Func<AgentActivityEventDto, Task> onActivity)
+    {
+        state.ApplyActivity(activity);
+        TraceHandoff(
+            command,
+            $"Activity emitted: {activity.ActivityType} -> {activity.AgentName ?? activity.AgentId ?? "<unknown>"}.");
+        await onActivity(activity).ConfigureAwait(false);
+
+        if (string.Equals(activity.ActivityType, "handoff", StringComparison.Ordinal)
+            && !string.IsNullOrWhiteSpace(activity.AgentId)
+            && !string.IsNullOrWhiteSpace(activity.AgentName))
+        {
+            TraceHandoff(
+                command,
+                $"Promoting handoff target to thinking: {activity.AgentName} ({activity.AgentId}).");
+            await state.EmitThinkingIfNeeded(
+                new AgentIdentity(activity.AgentId, activity.AgentName),
+                onActivity).ConfigureAwait(false);
+        }
+    }
+
+    private static bool IsHandoffFunctionName(string? candidate)
+    {
+        return !string.IsNullOrWhiteSpace(candidate)
+            && candidate.StartsWith(HandoffFunctionPrefix, StringComparison.Ordinal);
+    }
+
+    private static void TraceHandoff(RunTurnCommandDto command, string message)
+    {
+        if (!string.Equals(command.Pattern.Mode, "handoff", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        Console.Error.WriteLine($"[aryx handoff] {message}");
     }
 }

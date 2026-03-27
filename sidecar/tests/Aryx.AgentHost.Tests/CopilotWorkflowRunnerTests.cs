@@ -1,6 +1,10 @@
+using System.Reflection;
+using System.Runtime.CompilerServices;
 using Aryx.AgentHost.Contracts;
 using Aryx.AgentHost.Services;
 using GitHub.Copilot.SDK;
+using Microsoft.Agents.AI;
+using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
 
 namespace Aryx.AgentHost.Tests;
@@ -645,6 +649,9 @@ public sealed class CopilotWorkflowRunnerTests
         Assert.Equal("agent-handoff-ux", observedAgent.AgentId);
         Assert.Equal("UX Specialist", observedAgent.AgentName);
         Assert.Equal("agent-handoff-ux", state.ActiveAgent?.AgentId);
+        AgentActivityEventDto activity = Assert.Single(state.DrainPendingActivityEvents());
+        Assert.Equal("thinking", activity.ActivityType);
+        Assert.Equal("agent-handoff-ux", activity.AgentId);
     }
 
     [Fact]
@@ -668,6 +675,71 @@ public sealed class CopilotWorkflowRunnerTests
 
         Assert.Equal("agent-handoff-ux", state.ActiveAgent?.AgentId);
         Assert.Equal("UX Specialist", state.ActiveAgent?.AgentName);
+        AgentActivityEventDto activity = Assert.Single(state.DrainPendingActivityEvents());
+        Assert.Equal("thinking", activity.ActivityType);
+        Assert.Equal("agent-handoff-ux", activity.AgentId);
+    }
+
+    [Fact]
+    public async Task HandleWorkflowEventAsync_EmitsThinkingForHandoffTargets()
+    {
+        RunTurnCommandDto command = CreateHandoffCommand();
+        CopilotTurnExecutionState state = new(command);
+        state.ObserveSessionEvent(
+            CreateAgent("agent-handoff-triage", "Triage"),
+            SessionEvent.FromJson(
+                """
+                {
+                  "type": "assistant.reasoning_delta",
+                  "data": {
+                    "reasoningId": "reasoning-1",
+                    "deltaContent": "Delegating."
+                  },
+                  "id": "33333333-3333-3333-3333-333333333333",
+                  "timestamp": "2026-03-27T00:00:00Z"
+                }
+                """));
+        _ = state.DrainPendingActivityEvents();
+        RequestInfoEvent requestInfo = CreateRequestInfoEvent(
+            CreateHandoffTarget("agent-handoff-ux", "UX Specialist"));
+        List<AgentActivityEventDto> activities = [];
+
+        MethodInfo handleWorkflowEvent = typeof(CopilotWorkflowRunner).GetMethod(
+            "HandleWorkflowEventAsync",
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+        Task<bool> handleTask = (Task<bool>)handleWorkflowEvent.Invoke(
+            null,
+            [
+                command,
+                requestInfo,
+                Array.Empty<ChatMessage>(),
+                state,
+                (Func<TurnDeltaEventDto, Task>)(_ => Task.CompletedTask),
+                (Func<AgentActivityEventDto, Task>)(activity =>
+                {
+                    activities.Add(activity);
+                    return Task.CompletedTask;
+                }),
+            ])!;
+
+        bool shouldEndTurn = await handleTask;
+
+        Assert.False(shouldEndTurn);
+        Assert.Collection(
+            activities,
+            handoff =>
+            {
+                Assert.Equal("handoff", handoff.ActivityType);
+                Assert.Equal("agent-handoff-ux", handoff.AgentId);
+                Assert.Equal("UX Specialist", handoff.AgentName);
+                Assert.Equal("agent-handoff-triage", handoff.SourceAgentId);
+            },
+            thinking =>
+            {
+                Assert.Equal("thinking", thinking.ActivityType);
+                Assert.Equal("agent-handoff-ux", thinking.AgentId);
+                Assert.Equal("UX Specialist", thinking.AgentName);
+            });
     }
 
     [Fact]
@@ -1227,6 +1299,33 @@ public sealed class CopilotWorkflowRunnerTests
         };
     }
 
+    private static RequestInfoEvent CreateRequestInfoEvent(object payload)
+    {
+        RequestPort port = RequestPort.Create<object, object>("test-port");
+        ExternalRequest request = ExternalRequest.Create(port, payload, "request-1");
+        return new RequestInfoEvent(request);
+    }
+
+    private static object CreateHandoffTarget(string id, string name)
+    {
+        Type type = Type.GetType(
+            "Microsoft.Agents.AI.Workflows.Specialized.HandoffTarget, Microsoft.Agents.AI.Workflows",
+            throwOnError: true)!;
+        return Activator.CreateInstance(type, CreateChatClientAgent(id, name), "Handle the UX work.")!;
+    }
+
+    private static ChatClientAgent CreateChatClientAgent(string id, string name)
+    {
+        return new ChatClientAgent(
+            new StubChatClient(),
+            id,
+            name,
+            "Stub agent for handoff tests.",
+            [],
+            null!,
+            null!);
+    }
+
     private static RunTurnCommandDto CreateApprovalCommand()
     {
         return new RunTurnCommandDto
@@ -1257,5 +1356,34 @@ public sealed class CopilotWorkflowRunnerTests
                 ],
             },
         };
+    }
+
+    private sealed class StubChatClient : IChatClient
+    {
+        public Task<ChatResponse> GetResponseAsync(
+            IEnumerable<ChatMessage> messages,
+            ChatOptions? options,
+            CancellationToken cancellationToken)
+        {
+            throw new NotSupportedException();
+        }
+
+        public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+            IEnumerable<ChatMessage> messages,
+            ChatOptions? options,
+            [EnumeratorCancellation]
+            CancellationToken cancellationToken)
+        {
+            yield break;
+        }
+
+        public object? GetService(Type serviceType, object? serviceKey)
+        {
+            return null;
+        }
+
+        public void Dispose()
+        {
+        }
     }
 }

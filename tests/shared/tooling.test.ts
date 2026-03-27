@@ -228,7 +228,7 @@ describe('tooling settings helpers', () => {
     });
   });
 
-  test('prefers dynamically reported runtime tools over the fallback builtin catalog', () => {
+  test('always uses category-level builtins regardless of dynamically reported runtime tools', () => {
     const tools = listApprovalToolDefinitions(
       { mcpServers: [], lspProfiles: [] },
       [
@@ -240,15 +240,15 @@ describe('tooling settings helpers', () => {
       ],
     );
 
-    expect(tools).toContainEqual({
-      id: 'fetch',
-      label: 'fetch',
-      description: 'Dynamic runtime tool from Copilot CLI.',
-      kind: 'builtin',
-      providerIds: ['builtin:fetch'],
-      providerNames: ['Built-in'],
-    });
-    expect(tools.some((tool) => tool.id === 'web_fetch')).toBe(false);
+    // Category-level builtins must always be present
+    expect(tools.some((tool) => tool.id === 'read')).toBe(true);
+    expect(tools.some((tool) => tool.id === 'write')).toBe(true);
+    expect(tools.some((tool) => tool.id === 'shell')).toBe(true);
+    expect(tools.some((tool) => tool.id === 'web_fetch')).toBe(true);
+    expect(tools.some((tool) => tool.id === 'store_memory')).toBe(true);
+
+    // Dynamic individual tools do NOT appear in the approval list
+    expect(tools.some((tool) => tool.id === 'fetch')).toBe(false);
   });
 
   test('resolves human-readable labels from the tool metadata registry', () => {
@@ -268,36 +268,33 @@ describe('tooling settings helpers', () => {
     expect(resolveToolLabel('')).toBe('');
   });
 
-  test('fallback catalog includes all standard non-internal tools with friendly labels', () => {
+  test('fallback catalog uses 5 permission-category entries for built-in tools', () => {
     const tools = listApprovalToolDefinitions({ mcpServers: [], lspProfiles: [] });
     const builtinTools = tools.filter((t) => t.kind === 'builtin');
 
-    expect(builtinTools.length).toBeGreaterThanOrEqual(23);
-    expect(builtinTools.some((t) => t.id === 'bash')).toBe(true);
-    expect(builtinTools.some((t) => t.id === 'web_fetch')).toBe(true);
-    expect(builtinTools.some((t) => t.id === 'task')).toBe(true);
-    expect(builtinTools.some((t) => t.id === 'store_memory')).toBe(true);
+    expect(builtinTools.length).toBe(5);
 
-    // Permission-kind approval categories should be included
-    expect(builtinTools.some((t) => t.id === 'shell')).toBe(true);
+    // Permission-kind approval categories
     expect(builtinTools.some((t) => t.id === 'read')).toBe(true);
     expect(builtinTools.some((t) => t.id === 'write')).toBe(true);
+    expect(builtinTools.some((t) => t.id === 'shell')).toBe(true);
+    expect(builtinTools.some((t) => t.id === 'web_fetch')).toBe(true);
+    expect(builtinTools.some((t) => t.id === 'store_memory')).toBe(true);
 
     // Labels should be human-readable, not raw IDs
-    const bashTool = builtinTools.find((t) => t.id === 'bash');
-    expect(bashTool?.label).toBe('Execute shell commands');
-    const shellTool = builtinTools.find((t) => t.id === 'shell');
-    expect(shellTool?.label).toBe('Shell commands');
     const readTool = builtinTools.find((t) => t.id === 'read');
     expect(readTool?.label).toBe('Read files');
     const writeTool = builtinTools.find((t) => t.id === 'write');
     expect(writeTool?.label).toBe('Write files');
+    const shellTool = builtinTools.find((t) => t.id === 'shell');
+    expect(shellTool?.label).toBe('Shell commands');
 
-    // Internal tools should not appear in the fallback
-    expect(builtinTools.some((t) => t.id === 'ask_user')).toBe(false);
-    expect(builtinTools.some((t) => t.id === 'report_intent')).toBe(false);
-    expect(builtinTools.some((t) => t.id === 'task_complete')).toBe(false);
-    expect(builtinTools.some((t) => t.id === 'exit_plan_mode')).toBe(false);
+    // Individual tools should NOT appear in the approval list
+    expect(builtinTools.some((t) => t.id === 'bash')).toBe(false);
+    expect(builtinTools.some((t) => t.id === 'view')).toBe(false);
+    expect(builtinTools.some((t) => t.id === 'edit')).toBe(false);
+    expect(builtinTools.some((t) => t.id === 'grep')).toBe(false);
+    expect(builtinTools.some((t) => t.id === 'task')).toBe(false);
   });
 
   test('resolves workspace and project tooling with accepted discovered MCP servers', () => {

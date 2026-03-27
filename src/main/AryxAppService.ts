@@ -42,6 +42,7 @@ import {
   normalizeSessionApprovalSettings,
   pruneApprovalPolicyTools,
   pruneSessionApprovalSettings,
+  resolveApprovalToolKey,
   resolvePendingApproval,
   type ApprovalDecision,
   type PendingApprovalMessageRecord,
@@ -124,7 +125,7 @@ type AppServiceEvents = {
 type PendingApprovalHandle = {
   sessionId: string;
   requestId: string;
-  resolve: (decision: ApprovalDecision) => void | Promise<void>;
+  resolve: (decision: ApprovalDecision, alwaysApprove?: boolean) => void | Promise<void>;
 };
 
 type PendingUserInputHandle = {
@@ -635,8 +636,8 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
           await this.applyAgentActivity(workspace, session.id, requestId, event);
         },
         async (event) => {
-          await this.handleApprovalRequested(workspace, session.id, requestId, event, (decision) =>
-            this.sidecar.resolveApproval(event.approvalId, decision));
+          await this.handleApprovalRequested(workspace, session.id, requestId, event, (decision, alwaysApprove) =>
+            this.sidecar.resolveApproval(event.approvalId, decision, alwaysApprove));
         },
         async (event) => {
           await this.handleUserInputRequested(workspace, session.id, requestId, event, (answer, wasFreeform) =>
@@ -729,7 +730,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     this.setSessionPendingApprovalState(session, dequeuePendingApprovalState(session, approvalId));
     session.updatedAt = resolvedAt;
 
-    const approvalKey = approval.toolName ?? approval.permissionKind;
+    const approvalKey = resolveApprovalToolKey(approval.toolName, approval.permissionKind);
     if (decision === 'approved' && alwaysApprove && approvalKey) {
       const existing = session.approvalSettings?.autoApprovedToolNames ?? [];
       if (!existing.includes(approvalKey)) {
@@ -748,7 +749,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     this.pendingApprovalHandles.delete(approvalId);
 
     try {
-      await Promise.resolve(handle.resolve(decision));
+      await Promise.resolve(handle.resolve(decision, alwaysApprove));
     } catch (error) {
       const failedAt = nowIso();
       this.rejectPendingApprovals(
@@ -1396,7 +1397,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     sessionId: string,
     requestId: string,
     approval: ApprovalRequestedEvent | PendingApprovalRecord,
-    resolve: (decision: ApprovalDecision) => void | Promise<void>,
+    resolve: (decision: ApprovalDecision, alwaysApprove?: boolean) => void | Promise<void>,
   ): Promise<void> {
     const session = this.requireSession(workspace, sessionId);
     const pendingApproval =

@@ -3,7 +3,9 @@ import { Bot, Check, ChevronDown, Loader2, ShieldAlert, ShieldBan, ShieldCheck, 
 
 import { MarkdownContent } from '@renderer/components/MarkdownContent';
 import { permissionDetailSummary, PermissionDetailView } from '@renderer/components/chat/PermissionDetailView';
+import { resolveApprovalToolKey } from '@shared/domain/approval';
 import type { ApprovalDecision, PendingApprovalRecord } from '@shared/domain/approval';
+import { resolveToolLabel } from '@shared/domain/tooling';
 
 /* ── ApprovalBanner ────────────────────────────────────────── */
 
@@ -23,8 +25,9 @@ export function ApprovalBanner({
   const kindLabel = approval.kind === 'final-response' ? 'Final response review' : 'Tool call approval';
   const hasMessages = approval.messages && approval.messages.length > 0;
   const showPosition = position !== undefined && total !== undefined && total > 1;
-  const approvalToolKey = approval.toolName ?? approval.permissionKind;
+  const approvalToolKey = resolveApprovalToolKey(approval.toolName, approval.permissionKind);
   const canAlwaysApprove = approval.kind === 'tool-call' && !!approvalToolKey;
+  const approvalToolLabel = approvalToolKey ? resolveToolLabel(approvalToolKey) : undefined;
 
   return (
     <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3" role="alert">
@@ -91,11 +94,11 @@ export function ApprovalBanner({
         </button>
         {canAlwaysApprove && (
           <button
-            aria-label={`Always approve ${approvalToolKey}`}
+            aria-label={`Always approve ${approvalToolLabel}`}
             className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600/20 px-3.5 py-1.5 text-[12px] font-medium text-emerald-300 transition hover:bg-emerald-600/30 disabled:cursor-not-allowed disabled:opacity-50"
             disabled={isResolving}
             onClick={() => onResolve('approved', true)}
-            title={`Auto-approve "${approvalToolKey}" for the rest of this session`}
+            title={`Auto-approve "${approvalToolLabel}" for the rest of this session`}
             type="button"
           >
             <ShieldBan className="size-3" />

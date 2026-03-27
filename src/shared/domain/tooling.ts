@@ -137,42 +137,16 @@ export function resolveToolLabel(toolId: string): string {
   return builtinToolLabels.get(toolId) ?? toolId;
 }
 
-// Fallback runtime tools used before sidecar capabilities are loaded or when the
-// CLI cannot report its built-in tool catalog dynamically.
+// Fallback approval tool categories for runtime tools. The approval UI groups
+// built-in tools by permission category (read, write, shell, web, memory) rather
+// than listing 20+ individual tools, matching other coding agents (Copilot CLI,
+// Cline, Roo Code, etc.).
 const fallbackRuntimeApprovalTools: ReadonlyArray<RuntimeToolDefinition> = [
-  // Permission-kind approval categories (used by sidecar for runtime tool session approval)
-  { id: 'shell', label: 'Shell commands' },
   { id: 'read', label: 'Read files' },
   { id: 'write', label: 'Write files' },
-  // Shell tools (bash variants — SDK reports these on all platforms)
-  { id: 'bash', label: 'Execute shell commands' },
-  { id: 'read_bash', label: 'Read shell output' },
-  { id: 'write_bash', label: 'Write shell input' },
-  { id: 'stop_bash', label: 'Stop shell session' },
-  { id: 'list_bash', label: 'List shell sessions' },
-  // File tools
-  { id: 'view', label: 'View files' },
-  { id: 'create', label: 'Create files' },
-  { id: 'edit', label: 'Edit files' },
-  { id: 'apply_patch', label: 'Apply patch' },
-  // Search tools
-  { id: 'grep', label: 'Search file contents' },
-  { id: 'glob', label: 'Find files by pattern' },
-  // Agent tools
-  { id: 'task', label: 'Run sub-agent' },
-  { id: 'read_agent', label: 'Read agent results' },
-  { id: 'list_agents', label: 'List agents' },
-  // Web tools
-  { id: 'web_fetch', label: 'Fetch web content' },
-  { id: 'web_search', label: 'Search the web' },
-  // Other tools
-  { id: 'skill', label: 'Invoke skill' },
-  { id: 'show_file', label: 'Show file' },
-  { id: 'fetch_copilot_cli_documentation', label: 'Fetch CLI docs' },
-  { id: 'update_todo', label: 'Update checklist' },
+  { id: 'shell', label: 'Shell commands' },
+  { id: 'web_fetch', label: 'Web access' },
   { id: 'store_memory', label: 'Store memory' },
-  { id: 'sql', label: 'Query session data' },
-  { id: 'lsp', label: 'Language server' },
 ];
 
 export function createWorkspaceSettings(): WorkspaceSettings {
@@ -238,12 +212,13 @@ export function normalizeSessionToolingSelection(
 
 export function listApprovalToolDefinitions(
   tooling: WorkspaceToolingSettings,
-  runtimeTools: ReadonlyArray<RuntimeToolDefinition> = fallbackRuntimeApprovalTools,
+  _runtimeTools: ReadonlyArray<RuntimeToolDefinition> = fallbackRuntimeApprovalTools,
 ): ApprovalToolDefinition[] {
   const toolsById = new Map<string, ApprovalToolDefinition>();
-  const runtimeApprovalTools = runtimeTools.length > 0 ? runtimeTools : fallbackRuntimeApprovalTools;
 
-  for (const tool of runtimeApprovalTools) {
+  // Always use category-level approval for built-in runtime tools regardless of
+  // what the sidecar reports as individual tools.
+  for (const tool of fallbackRuntimeApprovalTools) {
     registerApprovalTool(toolsById, {
       id: tool.id,
       label: resolveToolLabel(tool.id),

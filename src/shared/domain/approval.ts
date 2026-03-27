@@ -193,6 +193,28 @@ export function approvalPolicyRequiresCheckpoint(
   return rule.agentIds.includes(normalizedAgentId);
 }
 
+const runtimePermissionKinds: ReadonlySet<string> = new Set(['read', 'write', 'shell', 'memory', 'url']);
+
+/**
+ * Resolves the canonical approval key for a pending approval.
+ *
+ * Runtime tools always use their permission-kind category (`read`, `write`, `shell`)
+ * mapped to the corresponding approval-tool id. MCP/custom/hook tools use their
+ * specific tool name.
+ */
+export function resolveApprovalToolKey(
+  toolName: string | undefined,
+  permissionKind: string | undefined,
+): string | undefined {
+  if (permissionKind && runtimePermissionKinds.has(permissionKind)) {
+    if (permissionKind === 'memory') return 'store_memory';
+    if (permissionKind === 'url') return 'web_fetch';
+    return permissionKind;
+  }
+
+  return toolName;
+}
+
 export function approvalPolicyAutoApprovesTool(
   policy: ApprovalPolicy | undefined,
   toolName?: string,

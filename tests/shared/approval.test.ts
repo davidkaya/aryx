@@ -9,6 +9,7 @@ import {
   normalizePendingApprovalState,
   normalizeSessionApprovalSettings,
   pruneSessionApprovalSettings,
+  resolveApprovalToolKey,
   dequeuePendingApprovalState,
   enqueuePendingApprovalState,
   listPendingApprovals,
@@ -239,5 +240,25 @@ describe('approval helpers', () => {
     expect(approvalPolicyRequiresToolCallApproval(effective, 'agent-1', 'read')).toBe(false);
     expect(approvalPolicyRequiresToolCallApproval(effective, 'agent-1', 'shell')).toBe(false);
     expect(approvalPolicyRequiresToolCallApproval(effective, 'agent-1', 'write')).toBe(true);
+  });
+
+  test('resolveApprovalToolKey returns permission category for runtime tools', () => {
+    expect(resolveApprovalToolKey('view', 'read')).toBe('read');
+    expect(resolveApprovalToolKey('edit', 'write')).toBe('write');
+    expect(resolveApprovalToolKey('bash', 'shell')).toBe('shell');
+    expect(resolveApprovalToolKey('web_fetch', 'url')).toBe('web_fetch');
+    expect(resolveApprovalToolKey('store_memory', 'memory')).toBe('store_memory');
+  });
+
+  test('resolveApprovalToolKey returns tool name for non-runtime tools', () => {
+    expect(resolveApprovalToolKey('git.status', 'mcp')).toBe('git.status');
+    expect(resolveApprovalToolKey('lsp_ts_hover', 'custom-tool')).toBe('lsp_ts_hover');
+    expect(resolveApprovalToolKey('web_fetch', 'hook')).toBe('web_fetch');
+    expect(resolveApprovalToolKey('some_tool', undefined)).toBe('some_tool');
+  });
+
+  test('resolveApprovalToolKey returns undefined when both are absent', () => {
+    expect(resolveApprovalToolKey(undefined, undefined)).toBeUndefined();
+    expect(resolveApprovalToolKey(undefined, 'mcp')).toBeUndefined();
   });
 });

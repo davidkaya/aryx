@@ -93,6 +93,7 @@ export interface ResolveApprovalCommand {
   requestId: string;
   approvalId: string;
   decision: ApprovalDecision;
+  alwaysApprove: boolean;
 }
 
 export interface ResolveUserInputCommand {

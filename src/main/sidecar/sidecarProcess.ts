@@ -120,12 +120,13 @@ export class SidecarClient {
     });
   }
 
-  async resolveApproval(approvalId: string, decision: ApprovalDecision): Promise<void> {
+  async resolveApproval(approvalId: string, decision: ApprovalDecision, alwaysApprove?: boolean): Promise<void> {
     return this.dispatch<void>({
       type: 'resolve-approval',
       requestId: `approval-${Date.now()}`,
       approvalId,
       decision,
+      alwaysApprove: alwaysApprove ?? false,
     });
   }
 

@@ -741,6 +741,27 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     const updatedRun = this.updateSessionRun(session, handle.requestId, (run) =>
       upsertRunApprovalEvent(run, resolvedApproval));
 
+    // Auto-resolve queued approvals that share the same category key.
+    // When the user approves "read", all pending view/grep/glob calls resolve too.
+    const cascadeHandles: PendingApprovalHandle[] = [];
+    if (decision === 'approved' && approvalKey && approval.kind === 'tool-call') {
+      for (const queued of listPendingApprovals(session)) {
+        if (queued.id === approvalId) continue;
+        const queuedKey = resolveApprovalToolKey(queued.toolName, queued.permissionKind);
+        if (queuedKey !== approvalKey) continue;
+
+        const queuedHandle = this.pendingApprovalHandles.get(queued.id);
+        if (!queuedHandle || queuedHandle.sessionId !== sessionId) continue;
+
+        const cascadeResolved = resolvePendingApproval(queued, 'approved', resolvedAt);
+        this.setSessionPendingApprovalState(session, dequeuePendingApprovalState(session, queued.id));
+        this.updateSessionRun(session, queuedHandle.requestId, (run) =>
+          upsertRunApprovalEvent(run, cascadeResolved));
+        this.pendingApprovalHandles.delete(queued.id);
+        cascadeHandles.push(queuedHandle);
+      }
+    }
+
     const result = await this.persistAndBroadcast(workspace);
     if (updatedRun) {
       this.emitRunUpdated(sessionId, resolvedAt, updatedRun);
@@ -750,6 +771,9 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
 
     try {
       await Promise.resolve(handle.resolve(decision, alwaysApprove));
+      for (const cascaded of cascadeHandles) {
+        await Promise.resolve(cascaded.resolve('approved', alwaysApprove));
+      }
     } catch (error) {
       const failedAt = nowIso();
       this.rejectPendingApprovals(

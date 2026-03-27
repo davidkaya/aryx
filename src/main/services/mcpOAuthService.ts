@@ -61,8 +61,13 @@ export async function performMcpOAuthFlow(options: McpOAuthFlowOptions): Promise
     const authServerUrl = await discoverAuthorizationServer(serverUrl);
     const metadata = await fetchAuthServerMetadata(authServerUrl);
 
+    // Use explicit static config, fall back to the well-known GitHub Copilot client ID,
+    // and only attempt dynamic registration as a last resort.
+    const COPILOT_CLIENT_ID = 'aebc6443-996d-45c2-90f0-388ff96faa56';
     const clientId = staticClientConfig?.clientId
-      ?? await dynamicClientRegistration(metadata, serverUrl);
+      ?? (metadata.registration_endpoint
+        ? await dynamicClientRegistration(metadata, serverUrl)
+        : COPILOT_CLIENT_ID);
 
     const { verifier, challenge } = generatePkceChallenge();
     const { port, redirectUri, waitForCallback, close } = await startCallbackServer();

@@ -1,4 +1,5 @@
 using System.Reflection;
+using Microsoft.Agents.AI;
 using Aryx.AgentHost.Services;
 using GitHub.Copilot.SDK;
 using Microsoft.Extensions.AI;
@@ -50,6 +51,59 @@ public sealed class CopilotAgentBundleTests
         Assert.Equal(["glob", "view"], sessionConfig.AvailableTools);
     }
 
+    [Fact]
+    public void ApplyInitialHandoffEntryConstraints_DisablesCopilotToolsAndClearsSessionTooling()
+    {
+        SessionConfig sessionConfig = new()
+        {
+            AvailableTools = ["glob", "view"],
+            ExcludedTools = ["edit"],
+            McpServers = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Git MCP"] = new McpLocalServerConfig
+                {
+                    Type = "local",
+                    Command = "node",
+                },
+            },
+            Tools = [CreateTool()],
+        };
+
+        CopilotAgentBundle.ApplyInitialHandoffEntryConstraints(sessionConfig);
+
+        Assert.Empty(sessionConfig.AvailableTools);
+        Assert.Null(sessionConfig.ExcludedTools);
+        Assert.Null(sessionConfig.McpServers);
+        Assert.Null(sessionConfig.Tools);
+    }
+
+    [Fact]
+    public void RequireInitialHandoffToolMode_RequiresAToolWhenHandoffToolsArePresent()
+    {
+        ChatClientAgentRunOptions options = new(new ChatOptions
+        {
+            Tools = [CreateHandoffTool(), CreateTool()],
+        });
+
+        ChatClientAgentRunOptions constrained = Assert.IsType<ChatClientAgentRunOptions>(
+            CopilotAgentBundle.RequireInitialHandoffToolMode(options));
+
+        Assert.NotSame(options, constrained);
+        Assert.Null(options.ChatOptions?.ToolMode);
+        Assert.Equal(ChatToolMode.RequireAny, constrained.ChatOptions?.ToolMode);
+    }
+
+    [Fact]
+    public void RequireInitialHandoffToolMode_LeavesNonHandoffOptionsUnchanged()
+    {
+        ChatClientAgentRunOptions options = new(new ChatOptions
+        {
+            Tools = [CreateTool()],
+        });
+
+        Assert.Same(options, CopilotAgentBundle.RequireInitialHandoffToolMode(options));
+    }
+
     private static AIFunction CreateTool()
     {
         ToolTarget target = new();
@@ -63,6 +117,17 @@ public sealed class CopilotAgentBundleTests
             {
                 Name = "echo",
                 Description = "Echo test tool",
+            });
+    }
+
+    private static AIFunction CreateHandoffTool()
+    {
+        return AIFunctionFactory.Create(
+            (string reasonForHandoff) => $"Handed off because {reasonForHandoff}.",
+            new AIFunctionFactoryOptions
+            {
+                Name = "handoff_to_1",
+                Description = "Transfer ownership to a specialist",
             });
     }
 

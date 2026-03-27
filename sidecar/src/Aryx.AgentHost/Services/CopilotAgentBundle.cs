@@ -1,3 +1,4 @@
+using System.Threading;
 using GitHub.Copilot.SDK;
 using Aryx.AgentHost.Contracts;
 using Microsoft.Agents.AI;
@@ -10,6 +11,7 @@ namespace Aryx.AgentHost.Services;
 
 internal sealed class CopilotAgentBundle : IAsyncDisposable
 {
+    private const string HandoffToolPrefix = "handoff_to_";
     private readonly List<IAsyncDisposable> _disposables = [];
 
     private CopilotAgentBundle(IReadOnlyList<AIAgent> agents)
@@ -64,7 +66,14 @@ internal sealed class CopilotAgentBundle : IAsyncDisposable
                 Streaming = true,
             };
 
-            ApplySessionTooling(sessionConfig, toolingBundle?.McpServers, toolingBundle?.Tools);
+            if (IsInitialHandoffAgent(command.Pattern, agentIndex))
+            {
+                ApplyInitialHandoffEntryConstraints(sessionConfig);
+            }
+            else
+            {
+                ApplySessionTooling(sessionConfig, toolingBundle?.McpServers, toolingBundle?.Tools);
+            }
 
             GitHubCopilotAgent agent = new(
                 client,
@@ -99,6 +108,29 @@ internal sealed class CopilotAgentBundle : IAsyncDisposable
         }
     }
 
+    internal static void ApplyInitialHandoffEntryConstraints(SessionConfig sessionConfig)
+    {
+        sessionConfig.AvailableTools = [];
+        sessionConfig.ExcludedTools = null;
+        sessionConfig.McpServers = null;
+        sessionConfig.Tools = null;
+    }
+
+    internal static AgentRunOptions? RequireInitialHandoffToolMode(AgentRunOptions? options)
+    {
+        if (options is not ChatClientAgentRunOptions chatRunOptions
+            || chatRunOptions.ChatOptions?.Tools is not { Count: > 0 } tools
+            || !tools.Any(IsHandoffTool))
+        {
+            return options;
+        }
+
+        ChatClientAgentRunOptions constrainedOptions = (ChatClientAgentRunOptions)chatRunOptions.Clone();
+        constrainedOptions.ChatOptions ??= new ChatOptions();
+        constrainedOptions.ChatOptions.ToolMode ??= ChatToolMode.RequireAny;
+        return constrainedOptions;
+    }
+
     public Workflow BuildWorkflow(PatternDefinitionDto pattern)
     {
         return pattern.Mode switch
@@ -131,7 +163,14 @@ internal sealed class CopilotAgentBundle : IAsyncDisposable
             definition => definition,
             StringComparer.Ordinal);
         PatternHandoffTopology topology = PatternGraphResolver.ResolveHandoff(pattern);
-        AIAgent entryAgent = agentMap.GetValueOrDefault(topology.EntryAgentId) ?? Agents[0];
+        string entryAgentId = agentMap.ContainsKey(topology.EntryAgentId)
+            ? topology.EntryAgentId
+            : pattern.Agents.FirstOrDefault()?.Id ?? topology.EntryAgentId;
+        AIAgent entryAgent = WrapInitialHandoffEntryAgent(agentMap.GetValueOrDefault(entryAgentId) ?? Agents[0]);
+        if (!string.IsNullOrWhiteSpace(entryAgentId))
+        {
+            agentMap[entryAgentId] = entryAgent;
+        }
 
         HandoffsWorkflowBuilder builder = AgentWorkflowBuilder.CreateHandoffBuilderWith(entryAgent)
             .WithHandoffInstructions(HandoffWorkflowGuidance.CreateWorkflowInstructions());
@@ -196,5 +235,33 @@ internal sealed class CopilotAgentBundle : IAsyncDisposable
         }
 
         return agentMap;
+    }
+
+    private static bool IsInitialHandoffAgent(PatternDefinitionDto pattern, int agentIndex)
+    {
+        return agentIndex == 0
+            && string.Equals(pattern.Mode, "handoff", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsHandoffTool(AITool tool)
+    {
+        return !string.IsNullOrWhiteSpace(tool.Name)
+            && tool.Name.StartsWith(HandoffToolPrefix, StringComparison.Ordinal);
+    }
+
+    private static AIAgent WrapInitialHandoffEntryAgent(AIAgent agent)
+    {
+        int streamingInvocationCount = 0;
+        return agent.AsBuilder()
+            .Use(
+                runFunc: null,
+                runStreamingFunc: (messages, session, options, innerAgent, cancellationToken) =>
+                {
+                    AgentRunOptions? effectiveOptions = Interlocked.Increment(ref streamingInvocationCount) == 1
+                        ? RequireInitialHandoffToolMode(options)
+                        : options;
+                    return innerAgent.RunStreamingAsync(messages, session, effectiveOptions, cancellationToken);
+                })
+            .Build();
     }
 }

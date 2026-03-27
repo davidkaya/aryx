@@ -120,6 +120,10 @@ export function ChatPane({
     ),
     [isApprovalOverridden, session.approvalSettings, pattern.approvalPolicy],
   );
+  const effectiveAutoApprovedCount = useMemo(
+    () => approvalTools.filter((t) => effectiveAutoApproved.has(t.id)).length,
+    [approvalTools, effectiveAutoApproved],
+  );
 
   useEffect(() => {
     transcriptRef.current?.scrollTo({
@@ -443,6 +447,7 @@ export function ChatPane({
                   approvalTools={approvalTools}
                   disabled={isComposerDisabled}
                   effectiveAutoApproved={effectiveAutoApproved}
+                  effectiveAutoApprovedCount={effectiveAutoApprovedCount}
                   isOverridden={isApprovalOverridden}
                   onUpdate={onUpdateSessionApprovalSettings}
                 />
@@ -497,6 +502,7 @@ export function ChatPane({
                   approvalTools={approvalTools}
                   disabled={isComposerDisabled}
                   effectiveAutoApproved={effectiveAutoApproved}
+                  effectiveAutoApprovedCount={effectiveAutoApprovedCount}
                   isOverridden={isApprovalOverridden}
                   onUpdate={onUpdateSessionApprovalSettings}
                 />

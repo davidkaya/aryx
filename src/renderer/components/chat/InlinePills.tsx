@@ -348,16 +348,18 @@ const approvalKindLabels: Record<ApprovalToolKind, string> = {
 export function InlineApprovalPill({
   approvalTools,
   effectiveAutoApproved,
+  effectiveAutoApprovedCount,
   isOverridden,
   disabled,
   onUpdate,
 }: {
   approvalTools: ApprovalToolDefinition[];
   effectiveAutoApproved: Set<string>;
+  effectiveAutoApprovedCount: number;
   isOverridden: boolean;
   disabled: boolean;
   onUpdate: (settings: { autoApprovedToolNames?: string[] }) => void;
-}) {
+}){
   const [open, setOpen] = useState(false);
   const ref = useClickOutside<HTMLDivElement>(() => setOpen(false), open);
 
@@ -393,7 +395,7 @@ export function InlineApprovalPill({
         type="button"
       >
         <ShieldCheck className="size-2.5" />
-        <span>{effectiveAutoApproved.size}/{approvalTools.length} auto-approved</span>
+        <span>{effectiveAutoApprovedCount}/{approvalTools.length} auto-approved</span>
         <ChevronDown className={`size-2.5 transition ${open ? 'rotate-180' : ''}`} />
       </button>
 

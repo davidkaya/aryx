@@ -39,6 +39,7 @@ const api: ElectronApi = {
   resolveSessionUserInput: (input) => ipcRenderer.invoke(ipcChannels.resolveSessionUserInput, input),
   setSessionInteractionMode: (input) => ipcRenderer.invoke(ipcChannels.setSessionInteractionMode, input),
   dismissSessionPlanReview: (input) => ipcRenderer.invoke(ipcChannels.dismissSessionPlanReview, input),
+  dismissSessionMcpAuth: (input) => ipcRenderer.invoke(ipcChannels.dismissSessionMcpAuth, input),
   updateSessionModelConfig: (input) =>
     ipcRenderer.invoke(ipcChannels.updateSessionModelConfig, input),
   querySessions: (input) => ipcRenderer.invoke(ipcChannels.querySessions, input),

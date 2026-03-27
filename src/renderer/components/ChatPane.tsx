@@ -5,6 +5,7 @@ import { MarkdownContent } from '@renderer/components/MarkdownContent';
 import { MarkdownComposer, type MarkdownComposerHandle } from '@renderer/components/MarkdownComposer';
 import { ApprovalBanner, QueuedApprovalsList } from '@renderer/components/chat/ApprovalBanner';
 import { PlanReviewBanner } from '@renderer/components/chat/PlanReviewBanner';
+import { McpAuthBanner } from '@renderer/components/chat/McpAuthBanner';
 import { UserInputBanner } from '@renderer/components/chat/UserInputBanner';
 import { InlineApprovalPill, InlineModelPill, InlineThinkingPill, InlineToolsPill } from '@renderer/components/chat/InlinePills';
 import { ThinkingDots } from '@renderer/components/chat/ThinkingDots';
@@ -42,6 +43,7 @@ interface ChatPaneProps {
   onResolveUserInput?: (userInputId: string, answer: string, wasFreeform: boolean) => Promise<unknown>;
   onSetInteractionMode?: (mode: InteractionMode) => void;
   onDismissPlanReview?: () => void;
+  onDismissMcpAuth?: () => void;
   onUpdateSessionModelConfig?: (config: {
     model: string;
     reasoningEffort?: ReasoningEffort;
@@ -63,6 +65,7 @@ export function ChatPane({
   onResolveUserInput,
   onSetInteractionMode,
   onDismissPlanReview,
+  onDismissMcpAuth,
   onUpdateSessionModelConfig,
   onUpdateSessionTooling,
   onUpdateSessionApprovalSettings,
@@ -82,6 +85,10 @@ export function ChatPane({
   const totalPendingCount = (pendingApproval ? 1 : 0) + queuedApprovals.length;
   const pendingUserInput = session.pendingUserInput?.status === 'pending' ? session.pendingUserInput : undefined;
   const pendingPlanReview = session.pendingPlanReview?.status === 'pending' ? session.pendingPlanReview : undefined;
+  const pendingMcpAuth = session.pendingMcpAuth?.status === 'pending' || session.pendingMcpAuth?.status === 'authenticating'
+    || session.pendingMcpAuth?.status === 'failed'
+    ? session.pendingMcpAuth
+    : undefined;
   const interactionMode: InteractionMode = session.interactionMode ?? 'interactive';
   const isPlanMode = interactionMode === 'plan';
   const isScratchpad = isScratchpadProject(project);
@@ -132,6 +139,10 @@ export function ChatPane({
 
   function handleDismissPlan() {
     onDismissPlanReview?.();
+  }
+
+  function handleDismissMcpAuth() {
+    onDismissMcpAuth?.();
   }
 
   async function handleSessionModelConfigChange(config: {
@@ -398,6 +409,16 @@ export function ChatPane({
             </div>
           )}
 
+          {/* MCP auth required banner */}
+          {pendingMcpAuth && (
+            <div className="mb-3">
+              <McpAuthBanner
+                mcpAuth={pendingMcpAuth}
+                onDismiss={handleDismissMcpAuth}
+              />
+            </div>
+          )}
+
           {/* Session config pills — tools/approval left, model/reasoning right */}
           {isSingleAgent && (
             <div className="mb-2 flex items-center gap-2">
@@ -489,7 +510,9 @@ export function ChatPane({
                     ? 'Awaiting your input above...'
                     : pendingPlanReview
                       ? 'Review the plan above...'
-                      : isSessionBusy
+                      : pendingMcpAuth
+                        ? 'MCP server requires authentication...'
+                        : isSessionBusy
                         ? 'Waiting for response...'
                         : isUpdatingSessionModelConfig
                           ? 'Saving model settings...'

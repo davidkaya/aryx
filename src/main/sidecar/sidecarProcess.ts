@@ -10,6 +10,7 @@ import type {
   SidecarEvent,
   TurnDeltaEvent,
   UserInputRequestedEvent,
+  McpOauthRequiredEvent,
   ExitPlanModeRequestedEvent,
   ValidatePatternCommand,
   RunTurnCommand,
@@ -103,9 +104,10 @@ export class SidecarClient {
     onActivity: (event: AgentActivityEvent) => void | Promise<void>,
     onApproval: (event: ApprovalRequestedEvent) => void | Promise<void>,
     onUserInput: (event: UserInputRequestedEvent) => void | Promise<void>,
+    onMcpOAuthRequired: (event: McpOauthRequiredEvent) => void | Promise<void>,
     onExitPlanMode: (event: ExitPlanModeRequestedEvent) => void | Promise<void>,
   ): Promise<ChatMessageRecord[]> {
-    return this.dispatch<ChatMessageRecord[]>(command, onDelta, onActivity, onApproval, onUserInput, onExitPlanMode);
+    return this.dispatch<ChatMessageRecord[]>(command, onDelta, onActivity, onApproval, onUserInput, onMcpOAuthRequired, onExitPlanMode);
   }
 
   async resolveUserInput(userInputId: string, answer: string, wasFreeform: boolean): Promise<void> {
@@ -220,6 +222,7 @@ export class SidecarClient {
     onActivity?: (event: AgentActivityEvent) => void | Promise<void>,
     onApproval?: (event: ApprovalRequestedEvent) => void | Promise<void>,
     onUserInput?: (event: UserInputRequestedEvent) => void | Promise<void>,
+    onMcpOAuthRequired?: (event: McpOauthRequiredEvent) => void | Promise<void>,
     onExitPlanMode?: (event: ExitPlanModeRequestedEvent) => void | Promise<void>,
   ): Promise<TResult> {
     const state = await this.ensureProcess();
@@ -235,6 +238,7 @@ export class SidecarClient {
           onActivity: onActivity ?? (() => undefined),
           onApproval: onApproval ?? (() => undefined),
           onUserInput: onUserInput ?? (() => undefined),
+          onMcpOAuthRequired: onMcpOAuthRequired ?? (() => undefined),
           onExitPlanMode: onExitPlanMode ?? (() => undefined),
           errored: false,
         });
@@ -331,6 +335,11 @@ export class SidecarClient {
       case 'user-input-requested':
         if (pending.kind === 'run-turn' && shouldHandleRunTurnEvent(pending)) {
           this.invokeRunTurnHandler(event.requestId, pending, () => pending.onUserInput(event));
+        }
+        return;
+      case 'mcp-oauth-required':
+        if (pending.kind === 'run-turn' && shouldHandleRunTurnEvent(pending)) {
+          this.invokeRunTurnHandler(event.requestId, pending, () => pending.onMcpOAuthRequired(event));
         }
         return;
       case 'exit-plan-mode-requested':

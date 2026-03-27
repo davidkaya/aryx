@@ -259,6 +259,9 @@ export default function App() {
           onDismissPlanReview={() => {
             void api.dismissSessionPlanReview({ sessionId: selectedSession.id });
           }}
+          onDismissMcpAuth={() => {
+            void api.dismissSessionMcpAuth({ sessionId: selectedSession.id });
+          }}
           onUpdateSessionModelConfig={(config) =>
             api.updateSessionModelConfig({
               sessionId: selectedSession.id,

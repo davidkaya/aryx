@@ -13,6 +13,7 @@ import {
 import type { SessionRunRecord } from '@shared/domain/runTimeline';
 import type { PendingUserInputRecord } from '@shared/domain/userInput';
 import type { PendingPlanReviewRecord } from '@shared/domain/planReview';
+import type { PendingMcpAuthRecord } from '@shared/domain/mcpAuth';
 import type { InteractionMode } from '@shared/contracts/sidecar';
 
 export type ChatRole = 'system' | 'user' | 'assistant';
@@ -54,6 +55,7 @@ export interface SessionRecord {
   pendingApprovalQueue?: PendingApprovalRecord[];
   pendingUserInput?: PendingUserInputRecord;
   pendingPlanReview?: PendingPlanReviewRecord;
+  pendingMcpAuth?: PendingMcpAuthRecord;
   runs: SessionRunRecord[];
 }
 

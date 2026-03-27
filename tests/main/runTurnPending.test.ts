@@ -18,6 +18,7 @@ describe('run turn pending helpers', () => {
       onApproval: () => undefined,
       onUserInput: () => undefined,
       onExitPlanMode: () => undefined,
+      onMcpOAuthRequired: () => undefined,
       errored: false,
     };
 
@@ -42,6 +43,7 @@ describe('run turn pending helpers', () => {
       onApproval: () => undefined,
       onUserInput: () => undefined,
       onExitPlanMode: () => undefined,
+      onMcpOAuthRequired: () => undefined,
       errored: false,
     };
 

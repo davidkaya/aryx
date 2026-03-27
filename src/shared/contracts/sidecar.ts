@@ -244,6 +244,23 @@ export interface UserInputRequestedEvent {
   allowFreeform?: boolean;
 }
 
+export interface McpOauthStaticClientConfigEvent {
+  clientId: string;
+  publicClient?: boolean;
+}
+
+export interface McpOauthRequiredEvent {
+  type: 'mcp-oauth-required';
+  requestId: string;
+  sessionId: string;
+  oauthRequestId: string;
+  agentId?: string;
+  agentName?: string;
+  serverName: string;
+  serverUrl: string;
+  staticClientConfig?: McpOauthStaticClientConfigEvent;
+}
+
 export interface ExitPlanModeRequestedEvent {
   type: 'exit-plan-mode-requested';
   requestId: string;
@@ -276,6 +293,7 @@ export type SidecarEvent =
   | AgentActivityEvent
   | ApprovalRequestedEvent
   | UserInputRequestedEvent
+  | McpOauthRequiredEvent
   | ExitPlanModeRequestedEvent
   | CommandErrorEvent
   | CommandCompleteEvent;

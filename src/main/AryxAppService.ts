@@ -8,6 +8,7 @@ import type {
   AgentActivityEvent,
   ApprovalRequestedEvent,
   ExitPlanModeRequestedEvent,
+  McpOauthRequiredEvent,
   RunTurnToolingConfig,
   SidecarCapabilities,
   TurnDeltaEvent,
@@ -586,6 +587,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     session.status = 'running';
     session.lastError = undefined;
     session.pendingPlanReview = undefined;
+    session.pendingMcpAuth = undefined;
     session.updatedAt = occurredAt;
     session.runs = [
       createSessionRunRecord({
@@ -633,6 +635,9 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
         async (event) => {
           await this.handleUserInputRequested(workspace, session.id, requestId, event, (answer, wasFreeform) =>
             this.sidecar.resolveUserInput(event.userInputId, answer, wasFreeform));
+        },
+        async (event) => {
+          await this.handleMcpOAuthRequired(workspace, session.id, event);
         },
         async (event) => {
           await this.handleExitPlanModeRequested(workspace, session.id, event);
@@ -869,6 +874,16 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     const session = this.requireSession(workspace, sessionId);
 
     session.pendingPlanReview = undefined;
+    session.updatedAt = nowIso();
+
+    return this.persistAndBroadcast(workspace);
+  }
+
+  async dismissSessionMcpAuth(sessionId: string): Promise<WorkspaceState> {
+    const workspace = await this.loadWorkspace();
+    const session = this.requireSession(workspace, sessionId);
+
+    session.pendingMcpAuth = undefined;
     session.updatedAt = nowIso();
 
     return this.persistAndBroadcast(workspace);
@@ -1210,6 +1225,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     session.lastError = undefined;
     session.pendingUserInput = undefined;
     session.pendingPlanReview = undefined;
+    session.pendingMcpAuth = undefined;
     session.updatedAt = completedAt;
     const completedRun = this.updateSessionRun(session, requestId, (run) =>
       completeSessionRunRecord(run, completedAt));
@@ -1242,6 +1258,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     session.lastError = undefined;
     session.pendingUserInput = undefined;
     session.pendingPlanReview = undefined;
+    session.pendingMcpAuth = undefined;
     session.updatedAt = cancelledAt;
     const cancelledRun = this.updateSessionRun(session, requestId, (run) =>
       cancelSessionRunRecord(run, cancelledAt));
@@ -1333,6 +1350,31 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
       planContent: event.planContent,
       actions: event.actions,
       recommendedAction: event.recommendedAction,
+      requestedAt,
+    };
+    session.updatedAt = requestedAt;
+
+    await this.persistAndBroadcast(workspace);
+  }
+
+  private async handleMcpOAuthRequired(
+    workspace: WorkspaceState,
+    sessionId: string,
+    event: McpOauthRequiredEvent,
+  ): Promise<void> {
+    const session = this.requireSession(workspace, sessionId);
+    const requestedAt = nowIso();
+
+    session.pendingMcpAuth = {
+      id: event.oauthRequestId,
+      status: 'pending',
+      agentId: event.agentId,
+      agentName: event.agentName,
+      serverName: event.serverName,
+      serverUrl: event.serverUrl,
+      staticClientConfig: event.staticClientConfig
+        ? { clientId: event.staticClientConfig.clientId, publicClient: event.staticClientConfig.publicClient }
+        : undefined,
       requestedAt,
     };
     session.updatedAt = requestedAt;

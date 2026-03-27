@@ -309,6 +309,23 @@ public sealed class UserInputRequestedEventDto : SidecarEventDto
     public bool? AllowFreeform { get; init; }
 }
 
+public sealed class McpOauthStaticClientConfigDto
+{
+    public string ClientId { get; init; } = string.Empty;
+    public bool? PublicClient { get; init; }
+}
+
+public sealed class McpOauthRequiredEventDto : SidecarEventDto
+{
+    public string SessionId { get; init; } = string.Empty;
+    public string OauthRequestId { get; init; } = string.Empty;
+    public string? AgentId { get; init; }
+    public string? AgentName { get; init; }
+    public string ServerName { get; init; } = string.Empty;
+    public string ServerUrl { get; init; } = string.Empty;
+    public McpOauthStaticClientConfigDto? StaticClientConfig { get; init; }
+}
+
 public sealed class ExitPlanModeRequestedEventDto : SidecarEventDto
 {
     public string SessionId { get; init; } = string.Empty;

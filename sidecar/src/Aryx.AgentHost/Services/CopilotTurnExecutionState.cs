@@ -9,6 +9,7 @@ internal sealed class CopilotTurnExecutionState
 {
     private readonly RunTurnCommandDto _command;
     private readonly HashSet<string> _startedAgents = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentQueue<McpOauthRequiredEventDto> _pendingMcpOauthRequests = new();
     private readonly ConcurrentDictionary<string, AgentIdentity> _observedAgentsByMessageId = new(StringComparer.Ordinal);
     private readonly StreamingTranscriptBuffer _transcriptBuffer = new();
     private int _fallbackMessageIndex;
@@ -76,11 +77,31 @@ internal sealed class CopilotTurnExecutionState
             case AssistantReasoningDeltaEvent:
                 ActiveAgent = agent;
                 break;
+            case McpOauthRequiredEvent:
+                ActiveAgent = agent;
+                break;
             case ExitPlanModeRequestedEvent:
                 HasPendingExitPlanModeRequest = true;
                 ActiveAgent = agent;
                 break;
         }
+    }
+
+    public void EnqueuePendingMcpOauthRequest(McpOauthRequiredEventDto request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        _pendingMcpOauthRequests.Enqueue(request);
+    }
+
+    public IReadOnlyList<McpOauthRequiredEventDto> DrainPendingMcpOauthRequests()
+    {
+        List<McpOauthRequiredEventDto> pending = [];
+        while (_pendingMcpOauthRequests.TryDequeue(out McpOauthRequiredEventDto? request))
+        {
+            pending.Add(request);
+        }
+
+        return pending;
     }
 
     public bool TryResolveObservedAgentForMessage(string? messageId, out AgentIdentity agent)

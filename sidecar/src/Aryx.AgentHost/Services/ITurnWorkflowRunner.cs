@@ -10,6 +10,7 @@ public interface ITurnWorkflowRunner
         Func<AgentActivityEventDto, Task> onActivity,
         Func<ApprovalRequestedEventDto, Task> onApproval,
         Func<UserInputRequestedEventDto, Task> onUserInput,
+        Func<McpOauthRequiredEventDto, Task> onMcpOAuthRequired,
         Func<ExitPlanModeRequestedEventDto, Task> onExitPlanMode,
         CancellationToken cancellationToken);
 

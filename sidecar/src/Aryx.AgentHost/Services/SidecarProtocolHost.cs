@@ -188,6 +188,7 @@ public sealed class SidecarProtocolHost
                     activity => WriteAsync(context.Output, activity, turnCancellation.Token),
                     approval => WriteAsync(context.Output, approval, turnCancellation.Token),
                     userInput => WriteAsync(context.Output, userInput, turnCancellation.Token),
+                    mcpOauth => WriteAsync(context.Output, mcpOauth, turnCancellation.Token),
                     exitPlanMode => WriteAsync(context.Output, exitPlanMode, turnCancellation.Token),
                     turnCancellation.Token)
                 .ConfigureAwait(false);

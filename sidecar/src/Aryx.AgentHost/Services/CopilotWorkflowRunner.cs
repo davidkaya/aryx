@@ -10,6 +10,7 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
     private readonly PatternValidator _patternValidator;
     private readonly CopilotApprovalCoordinator _approvalCoordinator = new();
     private readonly CopilotUserInputCoordinator _userInputCoordinator = new();
+    private readonly CopilotMcpOAuthCoordinator _mcpOAuthCoordinator = new();
     private readonly CopilotExitPlanModeCoordinator _exitPlanModeCoordinator = new();
 
     public CopilotWorkflowRunner(PatternValidator patternValidator)
@@ -23,6 +24,7 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
         Func<AgentActivityEventDto, Task> onActivity,
         Func<ApprovalRequestedEventDto, Task> onApproval,
         Func<UserInputRequestedEventDto, Task> onUserInput,
+        Func<McpOauthRequiredEventDto, Task> onMcpOAuthRequired,
         Func<ExitPlanModeRequestedEventDto, Task> onExitPlanMode,
         CancellationToken cancellationToken)
     {
@@ -58,6 +60,12 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
                 (agent, sessionEvent) =>
                 {
                     state.ObserveSessionEvent(agent, sessionEvent);
+                    if (sessionEvent is McpOauthRequiredEvent mcpOauthRequired)
+                    {
+                        state.EnqueuePendingMcpOauthRequest(
+                            _mcpOAuthCoordinator.BuildMcpOauthRequiredEvent(command, agent, mcpOauthRequired));
+                    }
+
                     if (sessionEvent is ExitPlanModeRequestedEvent exitPlanModeRequested)
                     {
                         _exitPlanModeCoordinator.RecordExitPlanModeRequest(command, agent, exitPlanModeRequested);
@@ -75,16 +83,19 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
             {
                 bool shouldEndTurn = await HandleWorkflowEventAsync(command, evt, inputMessages, state, onDelta, onActivity)
                     .ConfigureAwait(false);
+                await EmitPendingMcpOauthRequestsAsync(state, onMcpOAuthRequired).ConfigureAwait(false);
                 if (shouldEndTurn)
                 {
                     break;
                 }
             }
 
+            await EmitPendingMcpOauthRequestsAsync(state, onMcpOAuthRequired).ConfigureAwait(false);
             return state.FinalizeCompletedMessages();
         }
         catch (OperationCanceledException) when (runCancellation.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
         {
+            await EmitPendingMcpOauthRequestsAsync(state, onMcpOAuthRequired).ConfigureAwait(false);
             ExitPlanModeRequestedEventDto? exitPlanModeEvent =
                 _exitPlanModeCoordinator.ConsumePendingRequest(command.RequestId);
             if (exitPlanModeEvent is null || !state.HasPendingExitPlanModeRequest)
@@ -94,6 +105,16 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
 
             await onExitPlanMode(exitPlanModeEvent).ConfigureAwait(false);
             return state.FinalizeCompletedMessages();
+        }
+    }
+
+    private static async Task EmitPendingMcpOauthRequestsAsync(
+        CopilotTurnExecutionState state,
+        Func<McpOauthRequiredEventDto, Task> onMcpOAuthRequired)
+    {
+        foreach (McpOauthRequiredEventDto request in state.DrainPendingMcpOauthRequests())
+        {
+            await onMcpOAuthRequired(request).ConfigureAwait(false);
         }
     }
 

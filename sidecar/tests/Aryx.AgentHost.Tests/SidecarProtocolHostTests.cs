@@ -113,7 +113,7 @@ public sealed class SidecarProtocolHostTests
     {
         SidecarProtocolHost host = new(
             new PatternValidator(),
-            new FakeWorkflowRunner(async (command, onDelta, onActivity, onApproval, onUserInput, onExitPlanMode, cancellationToken) =>
+            new FakeWorkflowRunner(async (command, onDelta, onActivity, onApproval, onUserInput, onMcpOAuthRequired, onExitPlanMode, cancellationToken) =>
             {
                 await onActivity(new AgentActivityEventDto
                 {
@@ -238,7 +238,7 @@ public sealed class SidecarProtocolHostTests
         string? capturedMode = null;
         SidecarProtocolHost host = new(
             new PatternValidator(),
-            new FakeWorkflowRunner(async (command, onDelta, onActivity, onApproval, onUserInput, onExitPlanMode, cancellationToken) =>
+            new FakeWorkflowRunner(async (command, onDelta, onActivity, onApproval, onUserInput, onMcpOAuthRequired, onExitPlanMode, cancellationToken) =>
             {
                 capturedMode = command.Mode;
                 return [];
@@ -274,7 +274,7 @@ public sealed class SidecarProtocolHostTests
     {
         SidecarProtocolHost host = new(
             new PatternValidator(),
-            new FakeWorkflowRunner(async (command, onDelta, onActivity, onApproval, onUserInput, onExitPlanMode, cancellationToken) =>
+            new FakeWorkflowRunner(async (command, onDelta, onActivity, onApproval, onUserInput, onMcpOAuthRequired, onExitPlanMode, cancellationToken) =>
             {
                 await onApproval(new ApprovalRequestedEventDto
                 {
@@ -352,7 +352,7 @@ public sealed class SidecarProtocolHostTests
     {
         SidecarProtocolHost host = new(
             new PatternValidator(),
-            new FakeWorkflowRunner(async (command, onDelta, onActivity, onApproval, onUserInput, onExitPlanMode, cancellationToken) =>
+            new FakeWorkflowRunner(async (command, onDelta, onActivity, onApproval, onUserInput, onMcpOAuthRequired, onExitPlanMode, cancellationToken) =>
             {
                 await onUserInput(new UserInputRequestedEventDto
                 {
@@ -421,11 +421,69 @@ public sealed class SidecarProtocolHostTests
     }
 
     [Fact]
+    public async Task RunTurnCommand_ReturnsMcpOauthRequiredEvents()
+    {
+        SidecarProtocolHost host = new(
+            new PatternValidator(),
+            new FakeWorkflowRunner(async (command, onDelta, onActivity, onApproval, onUserInput, onMcpOAuthRequired, onExitPlanMode, cancellationToken) =>
+            {
+                await onMcpOAuthRequired(new McpOauthRequiredEventDto
+                {
+                    Type = "mcp-oauth-required",
+                    RequestId = command.RequestId,
+                    SessionId = command.SessionId,
+                    OauthRequestId = "oauth-request-1",
+                    AgentId = "agent-1",
+                    AgentName = "Primary",
+                    ServerName = "Example MCP",
+                    ServerUrl = "https://example.com/mcp",
+                    StaticClientConfig = new McpOauthStaticClientConfigDto
+                    {
+                        ClientId = "aryx-client",
+                        PublicClient = true,
+                    },
+                });
+
+                return [];
+            }));
+
+        IReadOnlyList<JsonElement> events = await RunHostAsync(
+            CreateRunTurnCommand(requestId: "turn-mcp-oauth"),
+            host);
+
+        Assert.Collection(
+            events,
+            oauthEvent =>
+            {
+                Assert.Equal("mcp-oauth-required", oauthEvent.GetProperty("type").GetString());
+                Assert.Equal("turn-mcp-oauth", oauthEvent.GetProperty("requestId").GetString());
+                Assert.Equal("session-1", oauthEvent.GetProperty("sessionId").GetString());
+                Assert.Equal("oauth-request-1", oauthEvent.GetProperty("oauthRequestId").GetString());
+                Assert.Equal("Primary", oauthEvent.GetProperty("agentName").GetString());
+                Assert.Equal("Example MCP", oauthEvent.GetProperty("serverName").GetString());
+                Assert.Equal("https://example.com/mcp", oauthEvent.GetProperty("serverUrl").GetString());
+                JsonElement staticClientConfig = oauthEvent.GetProperty("staticClientConfig");
+                Assert.Equal("aryx-client", staticClientConfig.GetProperty("clientId").GetString());
+                Assert.True(staticClientConfig.GetProperty("publicClient").GetBoolean());
+            },
+            completionEvent =>
+            {
+                Assert.Equal("turn-complete", completionEvent.GetProperty("type").GetString());
+                Assert.False(completionEvent.GetProperty("cancelled").GetBoolean());
+            },
+            commandCompleteEvent =>
+            {
+                Assert.Equal("command-complete", commandCompleteEvent.GetProperty("type").GetString());
+                Assert.Equal("turn-mcp-oauth", commandCompleteEvent.GetProperty("requestId").GetString());
+            });
+    }
+
+    [Fact]
     public async Task RunTurnCommand_ReturnsExitPlanModeEvents()
     {
         SidecarProtocolHost host = new(
             new PatternValidator(),
-            new FakeWorkflowRunner(async (command, onDelta, onActivity, onApproval, onUserInput, onExitPlanMode, cancellationToken) =>
+            new FakeWorkflowRunner(async (command, onDelta, onActivity, onApproval, onUserInput, onMcpOAuthRequired, onExitPlanMode, cancellationToken) =>
             {
                 await onExitPlanMode(new ExitPlanModeRequestedEventDto
                 {
@@ -500,7 +558,7 @@ public sealed class SidecarProtocolHostTests
     {
         SidecarProtocolHost host = new(
             new PatternValidator(),
-            new FakeWorkflowRunner(async (command, onDelta, onActivity, onApproval, onUserInput, onExitPlanMode, cancellationToken) =>
+            new FakeWorkflowRunner(async (command, onDelta, onActivity, onApproval, onUserInput, onMcpOAuthRequired, onExitPlanMode, cancellationToken) =>
             {
                 await Task.Delay(Timeout.Infinite, cancellationToken);
                 return [];
@@ -548,7 +606,7 @@ public sealed class SidecarProtocolHostTests
     {
         SidecarProtocolHost host = new(
             new PatternValidator(),
-            new FakeWorkflowRunner(async (command, onDelta, onActivity, onApproval, onUserInput, onExitPlanMode, cancellationToken) => []));
+            new FakeWorkflowRunner(async (command, onDelta, onActivity, onApproval, onUserInput, onMcpOAuthRequired, onExitPlanMode, cancellationToken) => []));
 
         await RunHostAsync(CreateRunTurnCommand(requestId: "turn-completed"), host);
 
@@ -571,7 +629,7 @@ public sealed class SidecarProtocolHostTests
         SidecarProtocolHost host = new(
             new PatternValidator(),
             new FakeWorkflowRunner(
-                handler: async (command, onDelta, onActivity, onApproval, onUserInput, onExitPlanMode, cancellationToken) => [],
+                handler: async (command, onDelta, onActivity, onApproval, onUserInput, onMcpOAuthRequired, onExitPlanMode, cancellationToken) => [],
                 resolveApprovalHandler: (command, cancellationToken) =>
                 {
                     captured = command;
@@ -602,7 +660,7 @@ public sealed class SidecarProtocolHostTests
         SidecarProtocolHost host = new(
             new PatternValidator(),
             new FakeWorkflowRunner(
-                handler: async (command, onDelta, onActivity, onApproval, onUserInput, onExitPlanMode, cancellationToken) => [],
+                handler: async (command, onDelta, onActivity, onApproval, onUserInput, onMcpOAuthRequired, onExitPlanMode, cancellationToken) => [],
                 resolveUserInputHandler: (command, cancellationToken) =>
                 {
                     captured = command;
@@ -892,6 +950,7 @@ public sealed class SidecarProtocolHostTests
             Func<AgentActivityEventDto, Task>,
             Func<ApprovalRequestedEventDto, Task>,
             Func<UserInputRequestedEventDto, Task>,
+            Func<McpOauthRequiredEventDto, Task>,
             Func<ExitPlanModeRequestedEventDto, Task>,
             CancellationToken,
             Task<IReadOnlyList<ChatMessageDto>>> _handler;
@@ -905,6 +964,7 @@ public sealed class SidecarProtocolHostTests
                 Func<AgentActivityEventDto, Task>,
                 Func<ApprovalRequestedEventDto, Task>,
                 Func<UserInputRequestedEventDto, Task>,
+                Func<McpOauthRequiredEventDto, Task>,
                 Func<ExitPlanModeRequestedEventDto, Task>,
                 CancellationToken,
                 Task<IReadOnlyList<ChatMessageDto>>> handler,
@@ -922,10 +982,11 @@ public sealed class SidecarProtocolHostTests
             Func<AgentActivityEventDto, Task> onActivity,
             Func<ApprovalRequestedEventDto, Task> onApproval,
             Func<UserInputRequestedEventDto, Task> onUserInput,
+            Func<McpOauthRequiredEventDto, Task> onMcpOAuthRequired,
             Func<ExitPlanModeRequestedEventDto, Task> onExitPlanMode,
             CancellationToken cancellationToken)
         {
-            return _handler(command, onDelta, onActivity, onApproval, onUserInput, onExitPlanMode, cancellationToken);
+            return _handler(command, onDelta, onActivity, onApproval, onUserInput, onMcpOAuthRequired, onExitPlanMode, cancellationToken);
         }
 
         public Task ResolveApprovalAsync(

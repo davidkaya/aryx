@@ -21,6 +21,74 @@ export interface McpOAuthFlowResult {
   error?: string;
 }
 
+const VSCODE_REDIRECT_URI = 'https://vscode.dev/redirect';
+
+interface KnownOAuthProvider {
+  id: 'github' | 'entra';
+  clientId: string;
+  redirectMode: 'vscode-dev';
+  authorizationEndpoint?: string;
+  tokenEndpoint?: string;
+  scopes?: readonly string[];
+  authorizationParams?: Readonly<Record<string, string>>;
+  includeOfflineAccess?: boolean;
+}
+
+interface KnownOAuthProviderConfig extends KnownOAuthProvider {
+  matches: (url: URL) => boolean;
+}
+
+const GITHUB_PROVIDER_SCOPES = [
+  'codespace',
+  'gist',
+  'notifications',
+  'project',
+  'read:org',
+  'read:packages',
+  'read:project',
+  'read:user',
+  'repo',
+  'user:email',
+  'workflow',
+  'write:packages',
+] as const;
+
+const knownOAuthProviders: readonly KnownOAuthProviderConfig[] = [
+  {
+    id: 'github',
+    clientId: '01ab8ac9400c4e429b23',
+    redirectMode: 'vscode-dev',
+    authorizationEndpoint: 'https://github.com/login/oauth/authorize',
+    tokenEndpoint: 'https://github.com/login/oauth/access_token',
+    scopes: GITHUB_PROVIDER_SCOPES,
+    authorizationParams: { prompt: 'select_account' },
+    includeOfflineAccess: false,
+    matches: (url) => url.hostname === 'github.com',
+  },
+  {
+    id: 'entra',
+    clientId: 'aebc6443-996d-45c2-90f0-388ff96faa56',
+    redirectMode: 'vscode-dev',
+    includeOfflineAccess: true,
+    matches: (url) => url.hostname === 'login.microsoftonline.com',
+  },
+] as const;
+
+export function resolveKnownProvider(authServerUrl: string): KnownOAuthProvider | undefined {
+  try {
+    const parsed = new URL(authServerUrl);
+    const match = knownOAuthProviders.find((candidate) => candidate.matches(parsed));
+    if (!match) {
+      return undefined;
+    }
+
+    const { matches: _matches, ...provider } = match;
+    return provider;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Probes an MCP server URL to determine if it requires OAuth authentication.
  * Returns true if the server responds with 401 and has discoverable OAuth metadata.
@@ -59,32 +127,24 @@ export async function performMcpOAuthFlow(options: McpOAuthFlowOptions): Promise
     onStatusChange?.('discovering');
 
     const prm = await discoverProtectedResource(serverUrl);
-    const metadata = await fetchAuthServerMetadata(prm.authorizationServer);
-
-    // Use explicit static config, fall back to the well-known GitHub Copilot client ID,
-    // and only attempt dynamic registration as a last resort.
-    const COPILOT_CLIENT_ID = 'aebc6443-996d-45c2-90f0-388ff96faa56';
-    const VSCODE_REDIRECT_URI = 'https://vscode.dev/redirect';
-
-    const clientId = staticClientConfig?.clientId
-      ?? (metadata.registration_endpoint
-        ? await dynamicClientRegistration(metadata, serverUrl)
-        : COPILOT_CLIENT_ID);
-
-    const useCopilotRedirect = clientId === COPILOT_CLIENT_ID;
-
+    const knownProvider = resolveKnownProvider(prm.authorizationServer);
     const { verifier, challenge } = generatePkceChallenge();
-    const { redirectUri: localRedirectUri, waitForCallback, close } = await startCallbackServer();
+    const {
+      localRedirectUri,
+      hostedRedirectState,
+      waitForCallback,
+      close,
+    } = await startCallbackServer();
 
     try {
-      // Prefer PRM resource scopes (e.g. api://icmmcpapi-prod/mcp.tools), add offline_access.
-      // Fall back to auth server scopes_supported, then generic OIDC scopes.
-      const scopes = buildScopes(prm.resourceScopes, metadata.scopes_supported);
-
-      // When using the Copilot client ID, redirect through vscode.dev/redirect which
-      // reads the state parameter to find the local callback URL and forwards the code.
-      const redirectUri = useCopilotRedirect ? VSCODE_REDIRECT_URI : localRedirectUri;
-      const state = useCopilotRedirect ? localRedirectUri : randomBytes(16).toString('hex');
+      const metadata = await resolveAuthServerMetadata(prm.authorizationServer, knownProvider);
+      const clientId = staticClientConfig?.clientId
+        ?? knownProvider?.clientId
+        ?? await dynamicClientRegistration(metadata, localRedirectUri, serverUrl);
+      const usesHostedRedirect = knownProvider?.redirectMode === 'vscode-dev';
+      const scopes = buildScopes(knownProvider, prm.resourceScopes, metadata.scopes_supported);
+      const redirectUri = usesHostedRedirect ? VSCODE_REDIRECT_URI : localRedirectUri;
+      const state = usesHostedRedirect ? hostedRedirectState : randomBytes(16).toString('hex');
 
       const authUrl = buildAuthorizationUrl(metadata.authorization_endpoint, {
         clientId,
@@ -92,6 +152,7 @@ export async function performMcpOAuthFlow(options: McpOAuthFlowOptions): Promise
         codeChallenge: challenge,
         scope: scopes,
         state,
+        extraParams: knownProvider?.authorizationParams,
       });
 
       onStatusChange?.('awaiting-consent');
@@ -120,13 +181,23 @@ export async function performMcpOAuthFlow(options: McpOAuthFlowOptions): Promise
 
 /**
  * Builds the OAuth scope string.
- * Priority: PRM resource scopes > auth server scopes > empty.
- * Always appends offline_access for refresh token support.
+ * Priority: provider-specific scopes > PRM resource scopes > auth server scopes.
+ * `offline_access` is only appended when the provider supports/needs it.
  */
-function buildScopes(resourceScopes?: string[], authServerScopes?: string[]): string {
-  const scopes = resourceScopes ?? authServerScopes ?? [];
+export function buildScopes(
+  knownProvider: KnownOAuthProvider | undefined,
+  resourceScopes?: string[],
+  authServerScopes?: string[],
+): string {
+  const scopes = knownProvider?.scopes ?? resourceScopes ?? authServerScopes ?? [];
+  if (scopes.length === 0) {
+    return '';
+  }
+
   const set = new Set(scopes);
-  set.add('offline_access');
+  if (knownProvider?.includeOfflineAccess ?? true) {
+    set.add('offline_access');
+  }
   return [...set].join(' ');
 }
 
@@ -213,9 +284,29 @@ async function fetchAuthServerMetadata(authServerUrl: string): Promise<AuthServe
   return asMeta;
 }
 
+async function resolveAuthServerMetadata(
+  authServerUrl: string,
+  knownProvider: KnownOAuthProvider | undefined,
+): Promise<AuthServerMetadata> {
+  if (knownProvider?.authorizationEndpoint && knownProvider?.tokenEndpoint) {
+    return {
+      issuer: authServerUrl,
+      authorization_endpoint: knownProvider.authorizationEndpoint,
+      token_endpoint: knownProvider.tokenEndpoint,
+      scopes_supported: knownProvider.scopes ? [...knownProvider.scopes] : undefined,
+    };
+  }
+
+  return fetchAuthServerMetadata(authServerUrl);
+}
+
 /* ── Dynamic Client Registration (RFC 7591) ──────────────────── */
 
-async function dynamicClientRegistration(metadata: AuthServerMetadata, serverUrl: string): Promise<string> {
+async function dynamicClientRegistration(
+  metadata: AuthServerMetadata,
+  redirectUri: string,
+  serverUrl: string,
+): Promise<string> {
   if (!metadata.registration_endpoint) {
     throw new Error(
       'No static client ID provided and the authorization server does not support dynamic client registration',
@@ -227,7 +318,7 @@ async function dynamicClientRegistration(metadata: AuthServerMetadata, serverUrl
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       client_name: 'Aryx',
-      redirect_uris: ['http://127.0.0.1/callback'],
+      redirect_uris: [redirectUri],
       grant_types: ['authorization_code'],
       response_types: ['code'],
       token_endpoint_auth_method: 'none',
@@ -265,6 +356,7 @@ function buildAuthorizationUrl(
     codeChallenge: string;
     scope: string;
     state: string;
+    extraParams?: Readonly<Record<string, string>>;
   },
 ): string {
   const url = new URL(authorizationEndpoint);
@@ -277,6 +369,9 @@ function buildAuthorizationUrl(
     url.searchParams.set('scope', params.scope);
   }
   url.searchParams.set('state', params.state);
+  for (const [key, value] of Object.entries(params.extraParams ?? {})) {
+    url.searchParams.set(key, value);
+  }
   return url.toString();
 }
 
@@ -284,7 +379,8 @@ function buildAuthorizationUrl(
 
 interface CallbackServerHandle {
   port: number;
-  redirectUri: string;
+  localRedirectUri: string;
+  hostedRedirectState: string;
   waitForCallback: () => Promise<string>;
   close: () => void;
 }
@@ -341,7 +437,8 @@ function startCallbackServer(): Promise<CallbackServerHandle> {
 
       resolve({
         port: addr.port,
-        redirectUri: `http://127.0.0.1:${addr.port}/`,
+        localRedirectUri: `http://127.0.0.1:${addr.port}/callback`,
+        hostedRedirectState: buildHostedRedirectState(`http://127.0.0.1:${addr.port}/callback`),
         waitForCallback: () => callbackPromise,
         close: () => server.close(),
       });
@@ -355,6 +452,12 @@ function startCallbackServer(): Promise<CallbackServerHandle> {
       }
     }, 5_000);
   });
+}
+
+function buildHostedRedirectState(localRedirectUri: string): string {
+  const stateUrl = new URL(localRedirectUri);
+  stateUrl.searchParams.set('nonce', randomBytes(16).toString('base64url'));
+  return stateUrl.toString();
 }
 
 /* ── Token exchange ──────────────────────────────────────────── */
@@ -378,34 +481,62 @@ async function exchangeCodeForToken(
 
   const response = await fetch(tokenEndpoint, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
     body: body.toString(),
   });
 
+  const data = parseTokenResponseBody(await response.text(), response.headers.get('content-type'));
   if (!response.ok) {
-    throw new Error(`Token exchange failed: ${response.status} ${response.statusText}`);
+    const errorMessage =
+      typeof data.error_description === 'string'
+        ? data.error_description
+        : typeof data.error === 'string'
+          ? data.error
+          : `${response.status} ${response.statusText}`;
+    throw new Error(`Token exchange failed: ${errorMessage}`);
   }
 
-  const data = await response.json();
-  if (!data.access_token) {
+  const accessToken = typeof data.access_token === 'string' ? data.access_token : undefined;
+  const tokenType = typeof data.token_type === 'string' ? data.token_type : 'Bearer';
+  const scope = typeof data.scope === 'string' ? data.scope : undefined;
+  const refreshToken = typeof data.refresh_token === 'string' ? data.refresh_token : undefined;
+
+  if (!accessToken) {
     throw new Error('Token response is missing access_token');
   }
 
   const token: McpOAuthToken = {
-    accessToken: data.access_token,
-    tokenType: data.token_type ?? 'Bearer',
-    scope: data.scope,
+    accessToken,
+    tokenType,
+    scope,
   };
 
   if (data.expires_in && typeof data.expires_in === 'number') {
     token.expiresAt = Date.now() + data.expires_in * 1_000;
   }
 
-  if (data.refresh_token) {
-    token.refreshToken = data.refresh_token;
+  if (refreshToken) {
+    token.refreshToken = refreshToken;
   }
 
   return token;
+}
+
+export function parseTokenResponseBody(body: string, contentType?: string | null): Record<string, unknown> {
+  const normalizedContentType = contentType?.toLowerCase() ?? '';
+  if (normalizedContentType.includes('application/json') || body.trim().startsWith('{')) {
+    const parsed = JSON.parse(body) as unknown;
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+
+    return {};
+  }
+
+  return Object.fromEntries(new URLSearchParams(body).entries());
 }
 
 /* ── Utilities ───────────────────────────────────────────────── */

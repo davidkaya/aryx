@@ -27,22 +27,29 @@ export interface McpOAuthFlowResult {
  */
 export async function requiresOAuth(serverUrl: string): Promise<boolean> {
   try {
+    console.log(`[aryx oauth] Probing ${serverUrl} for OAuth requirements…`);
     const response = await fetch(serverUrl, {
       method: 'GET',
       signal: AbortSignal.timeout(5_000),
     });
+
+    console.log(`[aryx oauth] Probe ${serverUrl} returned ${response.status}`);
 
     if (response.status !== 401) {
       return false;
     }
 
     const base = serverUrl.replace(/\/+$/, '');
-    const prmResponse = await fetch(`${base}/.well-known/oauth-protected-resource`, {
+    const prmUrl = `${base}/.well-known/oauth-protected-resource`;
+    console.log(`[aryx oauth] Checking PRM at ${prmUrl}…`);
+    const prmResponse = await fetch(prmUrl, {
       signal: AbortSignal.timeout(5_000),
     });
 
+    console.log(`[aryx oauth] PRM response: ${prmResponse.status}`);
     return prmResponse.ok;
-  } catch {
+  } catch (err) {
+    console.warn(`[aryx oauth] Probe failed for ${serverUrl}:`, err instanceof Error ? err.message : err);
     return false;
   }
 }

@@ -944,18 +944,33 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
       .filter((s): s is McpServerDefinition => !!s && s.transport !== 'local')
       .filter((s) => s.transport === 'http' || s.transport === 'sse');
 
+    if (httpServers.length === 0) {
+      return;
+    }
+
+    console.log(`[aryx oauth] Probing ${httpServers.length} HTTP MCP server(s) for OAuth requirements…`);
+
     for (const server of httpServers) {
       if (server.transport === 'local') continue;
       const existingToken = getStoredToken(server.url);
-      if (existingToken) continue;
+      if (existingToken) {
+        console.log(`[aryx oauth] Skipping ${server.name} — token already stored`);
+        continue;
+      }
 
       try {
         const needsAuth = await requiresOAuth(server.url);
-        if (!needsAuth) continue;
+        if (!needsAuth) {
+          console.log(`[aryx oauth] ${server.name} does not require OAuth`);
+          continue;
+        }
 
+        console.log(`[aryx oauth] ${server.name} requires OAuth — starting flow…`);
         const result = await performMcpOAuthFlow({ serverUrl: server.url });
 
-        if (!result.success) {
+        if (result.success) {
+          console.log(`[aryx oauth] ${server.name} authenticated successfully`);
+        } else {
           console.warn(`[aryx oauth] Proactive auth failed for ${server.name}: ${result.error}`);
         }
       } catch (err) {

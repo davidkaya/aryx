@@ -18,6 +18,8 @@ import {
 import type { ApprovalCheckpointKind, ApprovalPolicy } from '@shared/domain/approval';
 import type { ModelDefinition } from '@shared/domain/models';
 import {
+  addAgentToGraph,
+  removeAgentFromGraph,
   resolvePatternGraph,
   syncPatternGraph,
   validatePatternDefinition,
@@ -35,7 +37,6 @@ import {
 } from '@shared/domain/tooling';
 
 import { ToggleSwitch } from '@renderer/components/ui';
-import { addAgentNodeToGraph } from '@renderer/lib/patternGraph';
 import { PatternGraphCanvas } from './pattern-graph/PatternGraphCanvas';
 import { PatternGraphInspector } from './pattern-graph/PatternGraphInspector';
 
@@ -143,6 +144,10 @@ export function PatternEditor({
   const graph = resolvePatternGraph(pattern);
 
   function emitChange(nextPattern: PatternDefinition) {
+    onChange({ ...nextPattern, graph: resolvePatternGraph(nextPattern) });
+  }
+
+  function emitModeChange(nextPattern: PatternDefinition) {
     onChange(syncPatternGraph(nextPattern));
   }
 
@@ -159,7 +164,7 @@ export function PatternEditor({
       model: 'gpt-5.4',
       reasoningEffort: 'high',
     };
-    const updatedGraph = addAgentNodeToGraph(graph, newAgent);
+    const updatedGraph = addAgentToGraph(graph, pattern.mode, newAgent);
     onChange({ ...pattern, agents: [...pattern.agents, newAgent], graph: updatedGraph });
   }
 
@@ -175,9 +180,11 @@ export function PatternEditor({
       return;
     }
 
-    emitChange({
+    const updatedGraph = removeAgentFromGraph(graph, pattern.mode, agentId);
+    onChange({
       ...pattern,
       agents: pattern.agents.filter((a) => a.id !== agentId),
+      graph: updatedGraph,
     });
     setSelectedNodeId(null);
   }
@@ -374,7 +381,7 @@ export function PatternEditor({
                         }`}
                         disabled={disabled}
                         key={mode}
-                        onClick={() => emitChange({ ...pattern, mode })}
+                        onClick={() => emitModeChange({ ...pattern, mode })}
                         type="button"
                       >
                         <div className="flex items-center gap-1.5">

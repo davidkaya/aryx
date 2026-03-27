@@ -1,8 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 
-import { createBuiltinPatterns, resolvePatternGraph, type PatternDefinition } from '@shared/domain/pattern';
+import { addAgentToGraph, createBuiltinPatterns, resolvePatternGraph, type PatternDefinition } from '@shared/domain/pattern';
 import {
-  addAgentNodeToGraph,
   addEdge,
   autoLayoutGraph,
   canMoveSequential,
@@ -208,20 +207,20 @@ describe('pattern graph mutation helpers', () => {
     expect(updated.edges.find((e) => e.id === firstEdge.id)).toBeUndefined();
   });
 
-  test('addAgentNodeToGraph places a disconnected agent node on the canvas', () => {
+  test('addAgentToGraph inserts a wired agent node for sequential mode', () => {
     const pattern = findPattern('sequential');
     const graph = resolvePatternGraph(pattern);
     const newAgent = { id: 'new-1', name: 'New Agent', description: '', instructions: '', model: 'gpt-5.4' };
 
-    const updated = addAgentNodeToGraph(graph, newAgent);
+    const updated = addAgentToGraph(graph, pattern.mode, newAgent);
     expect(updated.nodes.length).toBe(graph.nodes.length + 1);
 
     const newNode = updated.nodes.find((n) => n.agentId === 'new-1');
     expect(newNode).toBeDefined();
     expect(newNode!.kind).toBe('agent');
 
-    // No new edges added — node is disconnected
-    expect(updated.edges.length).toBe(graph.edges.length);
+    // New agent is wired into the chain, so edge count stays at agents+1
+    expect(updated.edges.length).toBe(graph.edges.length + 1);
   });
 });
 

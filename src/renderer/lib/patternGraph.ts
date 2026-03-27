@@ -246,32 +246,6 @@ export function removeEdge(graph: PatternGraph, removeEdgeId: string): PatternGr
   return { ...graph, edges: graph.edges.filter((e) => e.id !== removeEdgeId) };
 }
 
-/* ── Add disconnected agent node ───────────────────────────── */
-
-export function addAgentNodeToGraph(
-  graph: PatternGraph,
-  agent: PatternAgentDefinition,
-): PatternGraph {
-  const existingAgentNodes = graph.nodes.filter((n) => n.kind === 'agent');
-  const nextOrder = existingAgentNodes.length;
-
-  // Place new node below existing agent nodes
-  const maxY = existingAgentNodes.reduce((max, n) => Math.max(max, n.position.y), 0);
-  const avgX = existingAgentNodes.length > 0
-    ? Math.round(existingAgentNodes.reduce((sum, n) => sum + n.position.x, 0) / existingAgentNodes.length)
-    : 400;
-
-  const newNode: PatternGraphNode = {
-    id: `agent-node-${agent.id}`,
-    kind: 'agent',
-    agentId: agent.id,
-    order: nextOrder,
-    position: { x: avgX, y: maxY + 120 },
-  };
-
-  return { ...graph, nodes: [...graph.nodes, newNode] };
-}
-
 /* ── Sequential reorder ────────────────────────────────────── */
 
 export function swapSequentialOrder(

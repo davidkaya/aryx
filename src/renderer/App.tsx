@@ -262,6 +262,9 @@ export default function App() {
           onDismissMcpAuth={() => {
             void api.dismissSessionMcpAuth({ sessionId: selectedSession.id });
           }}
+          onAuthenticateMcp={() => {
+            void api.startSessionMcpAuth({ sessionId: selectedSession.id });
+          }}
           onUpdateSessionModelConfig={(config) =>
             api.updateSessionModelConfig({
               sessionId: selectedSession.id,

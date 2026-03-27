@@ -109,6 +109,8 @@ import {
   buildRunTurnToolingConfig as buildSessionToolingConfig,
   validateSessionToolingSelectionIds,
 } from '@main/sessionToolingConfig';
+import { getStoredToken } from '@main/services/mcpTokenStore';
+import { performMcpOAuthFlow } from '@main/services/mcpOAuthService';
 
 const { dialog, shell } = electron;
 
@@ -889,6 +891,42 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     return this.persistAndBroadcast(workspace);
   }
 
+  async startSessionMcpAuth(sessionId: string): Promise<WorkspaceState> {
+    const workspace = await this.loadWorkspace();
+    const session = this.requireSession(workspace, sessionId);
+
+    if (!session.pendingMcpAuth) {
+      return workspace;
+    }
+
+    session.pendingMcpAuth.status = 'authenticating';
+    session.updatedAt = nowIso();
+    await this.persistAndBroadcast(workspace);
+
+    const result = await performMcpOAuthFlow({
+      serverUrl: session.pendingMcpAuth.serverUrl,
+      staticClientConfig: session.pendingMcpAuth.staticClientConfig,
+    });
+
+    const workspaceAfter = await this.loadWorkspace();
+    const sessionAfter = this.requireSession(workspaceAfter, sessionId);
+
+    if (!sessionAfter.pendingMcpAuth) {
+      return workspaceAfter;
+    }
+
+    if (result.success) {
+      sessionAfter.pendingMcpAuth.status = 'authenticated';
+      sessionAfter.pendingMcpAuth.completedAt = nowIso();
+    } else {
+      sessionAfter.pendingMcpAuth.status = 'failed';
+      sessionAfter.pendingMcpAuth.errorMessage = result.error ?? 'Authentication failed';
+    }
+
+    sessionAfter.updatedAt = nowIso();
+    return this.persistAndBroadcast(workspaceAfter);
+  }
+
   async updateSessionTooling(
     sessionId: string,
     enabledMcpServerIds: string[],
@@ -1600,7 +1638,10 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     const tooling = resolveProjectToolingSettings(workspace.settings, project.discoveredTooling);
     const selection = resolveSessionToolingSelection(session);
     validateSessionToolingSelectionIds(tooling, selection);
-    return buildSessionToolingConfig(tooling, selection);
+    return buildSessionToolingConfig(tooling, selection, (serverUrl) => {
+      const token = getStoredToken(serverUrl);
+      return token?.accessToken;
+    });
   }
 
   private async syncUserDiscoveredTooling(workspace: WorkspaceState): Promise<boolean> {

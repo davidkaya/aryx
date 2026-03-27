@@ -30,6 +30,7 @@ export const ipcChannels = {
   setSessionInteractionMode: 'sessions:set-interaction-mode',
   dismissSessionPlanReview: 'sessions:dismiss-plan-review',
   dismissSessionMcpAuth: 'sessions:dismiss-mcp-auth',
+  startSessionMcpAuth: 'sessions:start-mcp-auth',
   querySessions: 'sessions:query',
   updateSessionModelConfig: 'sessions:update-model-config',
   selectProject: 'selection:project',

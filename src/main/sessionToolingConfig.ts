@@ -30,6 +30,7 @@ export function validateSessionToolingSelectionIds(
 export function buildRunTurnToolingConfig(
   tooling: WorkspaceToolingSettings,
   selection: SessionToolingSelection,
+  tokenLookup?: (serverUrl: string) => string | undefined,
 ): RunTurnToolingConfig | undefined {
   const mcpServersById = new Map<string, McpServerDefinition>(
     tooling.mcpServers.map((server) => [server.id, server]),
@@ -68,7 +69,7 @@ export function buildRunTurnToolingConfig(
           tools: [...server.tools],
           timeoutMs: server.timeoutMs,
           url: server.url,
-          headers: server.headers ? { ...server.headers } : undefined,
+          headers: mergeAuthorizationHeader(server.url, server.headers, tokenLookup),
         },
       ];
   });
@@ -98,5 +99,21 @@ export function buildRunTurnToolingConfig(
   return {
     mcpServers,
     lspProfiles,
+  };
+}
+
+function mergeAuthorizationHeader(
+  serverUrl: string,
+  configHeaders: Record<string, string> | undefined,
+  tokenLookup: ((serverUrl: string) => string | undefined) | undefined,
+): Record<string, string> | undefined {
+  const bearerToken = tokenLookup?.(serverUrl);
+  if (!bearerToken) {
+    return configHeaders ? { ...configHeaders } : undefined;
+  }
+
+  return {
+    ...(configHeaders ?? {}),
+    Authorization: `Bearer ${bearerToken}`,
   };
 }

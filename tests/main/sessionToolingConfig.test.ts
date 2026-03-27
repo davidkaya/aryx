@@ -117,4 +117,59 @@ describe('session tooling config helpers', () => {
       }),
     ).toBeUndefined();
   });
+
+  test('injects OAuth token as Authorization header for remote MCP servers', () => {
+    const tokenLookup = (url: string) =>
+      url === 'https://example.com/mcp' ? 'oauth-access-token' : undefined;
+
+    const config = buildRunTurnToolingConfig(
+      TOOLING,
+      { enabledMcpServerIds: ['mcp-remote'], enabledLspProfileIds: [] },
+      tokenLookup,
+    );
+
+    expect(config?.mcpServers[0]).toMatchObject({
+      id: 'mcp-remote',
+      headers: { Authorization: 'Bearer oauth-access-token' },
+    });
+  });
+
+  test('preserves existing headers when injecting OAuth token', () => {
+    const toolingWithHeaders: WorkspaceToolingSettings = {
+      ...TOOLING,
+      mcpServers: [
+        {
+          id: 'mcp-custom',
+          name: 'Custom MCP',
+          transport: 'http',
+          url: 'https://custom.example.com/mcp',
+          headers: { 'X-Custom': 'value' },
+          tools: [],
+          createdAt: TIMESTAMP,
+          updatedAt: TIMESTAMP,
+        },
+      ],
+    };
+
+    const config = buildRunTurnToolingConfig(
+      toolingWithHeaders,
+      { enabledMcpServerIds: ['mcp-custom'], enabledLspProfileIds: [] },
+      () => 'my-token',
+    );
+
+    expect(config?.mcpServers[0].headers).toEqual({
+      'X-Custom': 'value',
+      Authorization: 'Bearer my-token',
+    });
+  });
+
+  test('does not inject Authorization header when no token is available', () => {
+    const config = buildRunTurnToolingConfig(
+      TOOLING,
+      { enabledMcpServerIds: ['mcp-remote'], enabledLspProfileIds: [] },
+      () => undefined,
+    );
+
+    expect(config?.mcpServers[0].headers).toEqual({ Authorization: 'Bearer token' });
+  });
 });

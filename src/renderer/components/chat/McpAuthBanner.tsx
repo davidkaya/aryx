@@ -1,15 +1,21 @@
 import { useCallback } from 'react';
-import { KeyRound, X } from 'lucide-react';
+import { KeyRound, Loader2, X } from 'lucide-react';
 
 import type { PendingMcpAuthRecord } from '@shared/domain/mcpAuth';
 
 export function McpAuthBanner({
   mcpAuth,
+  onAuthenticate,
   onDismiss,
 }: {
   mcpAuth: PendingMcpAuthRecord;
+  onAuthenticate: () => void;
   onDismiss: () => void;
 }) {
+  const handleAuthenticate = useCallback(() => {
+    onAuthenticate();
+  }, [onAuthenticate]);
+
   const handleDismiss = useCallback(() => {
     onDismiss();
   }, [onDismiss]);
@@ -51,11 +57,30 @@ export function McpAuthBanner({
             <p className="mt-2 text-[12px] text-red-400">{mcpAuth.errorMessage}</p>
           )}
 
-          <p className="mt-3 text-[12px] leading-relaxed text-zinc-400">
-            {isAuthenticating
-              ? 'Waiting for authentication to complete in the browser…'
-              : 'Authentication support for HTTP MCP servers is not yet available. Configure a static access token in the MCP server headers instead.'}
-          </p>
+          <div className="mt-3 flex items-center gap-3">
+            <button
+              className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500/20 px-3 py-1.5 text-[12px] font-medium text-amber-200 transition hover:bg-amber-500/30 disabled:opacity-50"
+              disabled={isAuthenticating}
+              onClick={handleAuthenticate}
+              type="button"
+            >
+              {isAuthenticating ? (
+                <>
+                  <Loader2 className="size-3.5 animate-spin" />
+                  Authenticating…
+                </>
+              ) : hasFailed ? (
+                'Retry authentication'
+              ) : (
+                'Authenticate in browser'
+              )}
+            </button>
+            <span className="text-[11px] text-zinc-500">
+              {isAuthenticating
+                ? 'Waiting for consent in the browser…'
+                : 'Opens your browser for OAuth consent. Token is stored for this session only.'}
+            </span>
+          </div>
         </div>
       </div>
     </div>

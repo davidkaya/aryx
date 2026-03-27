@@ -44,6 +44,7 @@ interface ChatPaneProps {
   onSetInteractionMode?: (mode: InteractionMode) => void;
   onDismissPlanReview?: () => void;
   onDismissMcpAuth?: () => void;
+  onAuthenticateMcp?: () => void;
   onUpdateSessionModelConfig?: (config: {
     model: string;
     reasoningEffort?: ReasoningEffort;
@@ -66,6 +67,7 @@ export function ChatPane({
   onSetInteractionMode,
   onDismissPlanReview,
   onDismissMcpAuth,
+  onAuthenticateMcp,
   onUpdateSessionModelConfig,
   onUpdateSessionTooling,
   onUpdateSessionApprovalSettings,
@@ -143,6 +145,10 @@ export function ChatPane({
 
   function handleDismissMcpAuth() {
     onDismissMcpAuth?.();
+  }
+
+  function handleAuthenticateMcp() {
+    onAuthenticateMcp?.();
   }
 
   async function handleSessionModelConfigChange(config: {
@@ -414,6 +420,7 @@ export function ChatPane({
             <div className="mb-3">
               <McpAuthBanner
                 mcpAuth={pendingMcpAuth}
+                onAuthenticate={handleAuthenticateMcp}
                 onDismiss={handleDismissMcpAuth}
               />
             </div>

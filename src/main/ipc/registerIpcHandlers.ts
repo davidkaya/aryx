@@ -9,6 +9,7 @@ import type {
   ResolveWorkspaceDiscoveredToolingInput,
   DismissSessionPlanReviewInput,
   DismissSessionMcpAuthInput,
+  StartSessionMcpAuthInput,
   DuplicateSessionInput,
   RenameSessionInput,
   RescanProjectConfigsInput,
@@ -125,6 +126,9 @@ export function registerIpcHandlers(window: BrowserWindow, service: AryxAppServi
   );
   ipcMain.handle(ipcChannels.dismissSessionMcpAuth, (_event, input: DismissSessionMcpAuthInput) =>
     service.dismissSessionMcpAuth(input.sessionId),
+  );
+  ipcMain.handle(ipcChannels.startSessionMcpAuth, (_event, input: StartSessionMcpAuthInput) =>
+    service.startSessionMcpAuth(input.sessionId),
   );
   ipcMain.handle(
     ipcChannels.updateSessionModelConfig,

@@ -120,6 +120,10 @@ export interface DismissSessionMcpAuthInput {
   sessionId: string;
 }
 
+export interface StartSessionMcpAuthInput {
+  sessionId: string;
+}
+
 export interface ElectronApi {
   describeSidecarCapabilities(): Promise<SidecarCapabilities>;
   refreshSidecarCapabilities(): Promise<SidecarCapabilities>;
@@ -150,6 +154,7 @@ export interface ElectronApi {
   setSessionInteractionMode(input: SetSessionInteractionModeInput): Promise<WorkspaceState>;
   dismissSessionPlanReview(input: DismissSessionPlanReviewInput): Promise<WorkspaceState>;
   dismissSessionMcpAuth(input: DismissSessionMcpAuthInput): Promise<WorkspaceState>;
+  startSessionMcpAuth(input: StartSessionMcpAuthInput): Promise<WorkspaceState>;
   updateSessionModelConfig(input: UpdateSessionModelConfigInput): Promise<WorkspaceState>;
   querySessions(input: QuerySessionsInput): Promise<SessionQueryResult[]>;
   selectProject(projectId?: string): Promise<WorkspaceState>;

@@ -1,0 +1,35 @@
+import { describe, expect, test } from 'bun:test';
+
+import { buildWellKnownUrl } from '@main/services/mcpTokenStore';
+
+describe('buildWellKnownUrl', () => {
+  test('inserts well-known segment after origin for URL with path', () => {
+    expect(buildWellKnownUrl('https://api.githubcopilot.com/mcp/', 'oauth-protected-resource'))
+      .toBe('https://api.githubcopilot.com/.well-known/oauth-protected-resource/mcp/');
+  });
+
+  test('inserts well-known segment for URL with multi-level path', () => {
+    expect(buildWellKnownUrl('https://example.com/v1/mcp/api', 'oauth-protected-resource'))
+      .toBe('https://example.com/.well-known/oauth-protected-resource/v1/mcp/api');
+  });
+
+  test('handles origin-only URL without path', () => {
+    expect(buildWellKnownUrl('https://auth.example.com', 'oauth-authorization-server'))
+      .toBe('https://auth.example.com/.well-known/oauth-authorization-server');
+  });
+
+  test('handles origin-only URL with trailing slash', () => {
+    expect(buildWellKnownUrl('https://auth.example.com/', 'oauth-authorization-server'))
+      .toBe('https://auth.example.com/.well-known/oauth-authorization-server');
+  });
+
+  test('handles URL with port', () => {
+    expect(buildWellKnownUrl('https://mcp.example.com:8443/v1/', 'oauth-protected-resource'))
+      .toBe('https://mcp.example.com:8443/.well-known/oauth-protected-resource/v1/');
+  });
+
+  test('preserves path without trailing slash', () => {
+    expect(buildWellKnownUrl('https://example.com/mcp', 'oauth-protected-resource'))
+      .toBe('https://example.com/.well-known/oauth-protected-resource/mcp');
+  });
+});

@@ -5,7 +5,7 @@ import { shell } from 'electron';
 
 import type { McpOauthStaticClientConfig } from '@shared/domain/mcpAuth';
 
-import { storeToken, type McpOAuthToken } from './mcpTokenStore';
+import { storeToken, buildWellKnownUrl, type McpOAuthToken } from './mcpTokenStore';
 
 /* ── Public API ──────────────────────────────────────────────── */
 
@@ -39,8 +39,7 @@ export async function requiresOAuth(serverUrl: string): Promise<boolean> {
       return false;
     }
 
-    const base = serverUrl.replace(/\/+$/, '');
-    const prmUrl = `${base}/.well-known/oauth-protected-resource`;
+    const prmUrl = buildWellKnownUrl(serverUrl, 'oauth-protected-resource');
     console.log(`[aryx oauth] Checking PRM at ${prmUrl}…`);
     const prmResponse = await fetch(prmUrl, {
       signal: AbortSignal.timeout(5_000),
@@ -128,8 +127,7 @@ interface AuthServerMetadata {
 }
 
 async function discoverAuthorizationServer(serverUrl: string): Promise<string> {
-  const base = serverUrl.replace(/\/+$/, '');
-  const prmUrl = `${base}/.well-known/oauth-protected-resource`;
+  const prmUrl = buildWellKnownUrl(serverUrl, 'oauth-protected-resource');
 
   const response = await fetch(prmUrl);
   if (!response.ok) {
@@ -146,8 +144,7 @@ async function discoverAuthorizationServer(serverUrl: string): Promise<string> {
 }
 
 async function fetchAuthServerMetadata(authServerUrl: string): Promise<AuthServerMetadata> {
-  const base = authServerUrl.replace(/\/+$/, '');
-  const metadataUrl = `${base}/.well-known/oauth-authorization-server`;
+  const metadataUrl = buildWellKnownUrl(authServerUrl, 'oauth-authorization-server');
 
   const response = await fetch(metadataUrl);
   if (!response.ok) {

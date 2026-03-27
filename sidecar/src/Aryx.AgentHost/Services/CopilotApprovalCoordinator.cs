@@ -9,6 +9,7 @@ internal sealed class CopilotApprovalCoordinator
     private const string ApprovedDecision = "approved";
     private const string RejectedDecision = "rejected";
     private const string ToolCallApprovalKind = "tool-call";
+    private const string StoreMemoryToolName = "store_memory";
     private const string WebFetchToolName = "web_fetch";
     private const string ShellPermissionKind = "shell";
     private const string WritePermissionKind = "write";
@@ -49,7 +50,8 @@ internal sealed class CopilotApprovalCoordinator
         CancellationToken cancellationToken)
     {
         string? toolName = ResolveApprovalToolName(request, toolNamesByCallId);
-        if (!RequiresToolCallApproval(command.Pattern.ApprovalPolicy, agent.Id, toolName))
+        string? autoApprovedToolName = ResolveAutoApprovedToolName(request);
+        if (!RequiresToolCallApproval(command.Pattern.ApprovalPolicy, agent.Id, toolName, autoApprovedToolName))
         {
             return CreateApprovalResult(PermissionRequestResultKind.Approved);
         }
@@ -216,7 +218,8 @@ internal sealed class CopilotApprovalCoordinator
     internal static bool RequiresToolCallApproval(
         ApprovalPolicyDto? approvalPolicy,
         string agentId,
-        string? toolName)
+        string? toolName,
+        string? autoApprovedToolName = null)
     {
         if (approvalPolicy?.Rules is null || approvalPolicy.Rules.Count == 0)
         {
@@ -228,9 +231,13 @@ internal sealed class CopilotApprovalCoordinator
             return false;
         }
 
-        return string.IsNullOrWhiteSpace(toolName)
-            || !approvalPolicy.AutoApprovedToolNames.Any(candidate =>
-                string.Equals(candidate, toolName, StringComparison.OrdinalIgnoreCase));
+        IReadOnlyList<string> autoApprovedToolNames = approvalPolicy.AutoApprovedToolNames;
+        if (autoApprovedToolNames.Count == 0)
+        {
+            return true;
+        }
+
+        return !MatchesAutoApprovedTool(autoApprovedToolNames, toolName, autoApprovedToolName);
     }
 
     internal static bool TryGetApprovalToolName(
@@ -293,6 +300,11 @@ internal sealed class CopilotApprovalCoordinator
             ?? GetFallbackToolName(request);
     }
 
+    private static string? ResolveAutoApprovedToolName(PermissionRequest request)
+    {
+        return GetFallbackToolName(request);
+    }
+
     private static string? GetDirectToolName(PermissionRequest request)
     {
         return request switch
@@ -344,8 +356,31 @@ internal sealed class CopilotApprovalCoordinator
         return request switch
         {
             PermissionRequestUrl => WebFetchToolName,
+            PermissionRequestShell => ShellPermissionKind,
+            PermissionRequestWrite => WritePermissionKind,
+            PermissionRequestRead => ReadPermissionKind,
+            PermissionRequestMemory => StoreMemoryToolName,
             _ => null,
         };
+    }
+
+    private static bool MatchesAutoApprovedTool(
+        IReadOnlyList<string> autoApprovedToolNames,
+        string? toolName,
+        string? autoApprovedToolName)
+    {
+        return MatchesAutoApprovedToolName(autoApprovedToolNames, toolName)
+            || MatchesAutoApprovedToolName(autoApprovedToolNames, autoApprovedToolName);
+    }
+
+    private static bool MatchesAutoApprovedToolName(
+        IReadOnlyList<string> autoApprovedToolNames,
+        string? toolName)
+    {
+        string? normalizedToolName = NormalizeOptionalString(toolName);
+        return normalizedToolName is not null
+            && autoApprovedToolNames.Any(candidate =>
+                string.Equals(candidate, normalizedToolName, StringComparison.OrdinalIgnoreCase));
     }
 
     private PendingApprovalRequest GetPendingApproval(string approvalId)

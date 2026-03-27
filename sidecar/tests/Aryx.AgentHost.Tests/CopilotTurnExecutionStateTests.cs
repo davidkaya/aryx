@@ -59,6 +59,31 @@ public sealed class CopilotTurnExecutionStateTests
     }
 
     [Fact]
+    public void ObserveSessionEvent_ToolExecutionStart_TracksToolNameByCallId()
+    {
+        RunTurnCommandDto command = CreateCommand();
+        CopilotTurnExecutionState state = new(command);
+
+        state.ObserveSessionEvent(
+            command.Pattern.Agents[0],
+            SessionEvent.FromJson(
+                """
+                {
+                  "type": "tool.execution_start",
+                  "data": {
+                    "toolCallId": "tool-call-1",
+                    "toolName": "view"
+                  },
+                  "id": "33333333-3333-3333-3333-333333333333",
+                  "timestamp": "2026-03-27T00:00:00Z"
+                }
+                """));
+
+        Assert.True(state.ToolNamesByCallId.TryGetValue("tool-call-1", out string? toolName));
+        Assert.Equal("view", toolName);
+    }
+
+    [Fact]
     public async Task EmitThinkingIfNeeded_DoesNotDuplicateQueuedThinkingActivity()
     {
         RunTurnCommandDto command = CreateCommand();

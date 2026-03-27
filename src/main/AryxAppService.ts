@@ -729,10 +729,11 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     this.setSessionPendingApprovalState(session, dequeuePendingApprovalState(session, approvalId));
     session.updatedAt = resolvedAt;
 
-    if (decision === 'approved' && alwaysApprove && approval.toolName) {
+    const approvalKey = approval.toolName ?? approval.permissionKind;
+    if (decision === 'approved' && alwaysApprove && approvalKey) {
       const existing = session.approvalSettings?.autoApprovedToolNames ?? [];
-      if (!existing.includes(approval.toolName)) {
-        session.approvalSettings = { autoApprovedToolNames: [...existing, approval.toolName] };
+      if (!existing.includes(approvalKey)) {
+        session.approvalSettings = { autoApprovedToolNames: [...existing, approvalKey] };
       }
     }
 

@@ -766,7 +766,29 @@ public sealed class CopilotWorkflowRunnerTests
     }
 
     [Fact]
-    public void TryGetApprovalToolName_ReadsMcpCustomAndHookRequests()
+    public void RequiresToolCallApproval_HonorsRuntimeApprovalAliases()
+    {
+        ApprovalPolicyDto policy = new()
+        {
+            Rules =
+            [
+                new ApprovalCheckpointRuleDto
+                {
+                    Kind = "tool-call",
+                    AgentIds = ["agent-1"],
+                },
+            ],
+            AutoApprovedToolNames = ["read", "store_memory"],
+        };
+
+        Assert.False(CopilotApprovalCoordinator.RequiresToolCallApproval(policy, "agent-1", "view", "read"));
+        Assert.False(CopilotApprovalCoordinator.RequiresToolCallApproval(policy, "agent-1", "remember_fact", "store_memory"));
+        Assert.True(CopilotApprovalCoordinator.RequiresToolCallApproval(policy, "agent-1", "write_file", "write"));
+        Assert.True(CopilotApprovalCoordinator.RequiresToolCallApproval(policy, "agent-1", "git.status"));
+    }
+
+    [Fact]
+    public void TryGetApprovalToolName_ResolvesDirectNamesAndRuntimeFallbacks()
     {
         Assert.True(
             CopilotApprovalCoordinator.TryGetApprovalToolName(
@@ -804,7 +826,7 @@ public sealed class CopilotWorkflowRunnerTests
                 out string? hookToolName));
         Assert.Equal("web_fetch", hookToolName);
 
-        Assert.False(
+        Assert.True(
             CopilotApprovalCoordinator.TryGetApprovalToolName(
                 new PermissionRequestShell
                 {
@@ -818,7 +840,49 @@ public sealed class CopilotWorkflowRunnerTests
                     CanOfferSessionApproval = false,
                 },
                 out string? shellToolName));
-        Assert.Null(shellToolName);
+        Assert.Equal("shell", shellToolName);
+    }
+
+    [Fact]
+    public void TryGetApprovalToolName_FallsBackToRuntimeApprovalAliasesWhenLookupMissing()
+    {
+        Assert.True(
+            CopilotApprovalCoordinator.TryGetApprovalToolName(
+                new PermissionRequestRead
+                {
+                    Kind = "read",
+                    ToolCallId = "tool-call-read",
+                    Intention = "Inspect a file",
+                    Path = "README.md",
+                },
+                out string? readToolName));
+        Assert.Equal("read", readToolName);
+
+        Assert.True(
+            CopilotApprovalCoordinator.TryGetApprovalToolName(
+                new PermissionRequestWrite
+                {
+                    Kind = "write",
+                    ToolCallId = "tool-call-write",
+                    Intention = "Update a file",
+                    FileName = "README.md",
+                    Diff = "@@ -1 +1 @@",
+                },
+                out string? writeToolName));
+        Assert.Equal("write", writeToolName);
+
+        Assert.True(
+            CopilotApprovalCoordinator.TryGetApprovalToolName(
+                new PermissionRequestMemory
+                {
+                    Kind = "memory",
+                    ToolCallId = "tool-call-memory",
+                    Subject = "repo conventions",
+                    Fact = "Use Bun for script execution.",
+                    Citations = "package.json",
+                },
+                out string? memoryToolName));
+        Assert.Equal("store_memory", memoryToolName);
     }
 
     [Fact]

@@ -8,6 +8,7 @@ import {
   normalizePendingApproval,
   normalizePendingApprovalState,
   normalizeSessionApprovalSettings,
+  pruneSessionApprovalSettings,
   dequeuePendingApprovalState,
   enqueuePendingApprovalState,
   listPendingApprovals,
@@ -208,5 +209,35 @@ describe('approval helpers', () => {
       },
       pendingApprovalQueue: undefined,
     });
+  });
+
+  test('prune preserves permission-kind approval entries when they are known tools', () => {
+    const settings = normalizeSessionApprovalSettings({
+      autoApprovedToolNames: ['read', 'write', 'shell', 'git.status', 'unknown_tool'],
+    });
+    const knownToolNames = ['read', 'write', 'shell', 'git.status', 'bash', 'view'];
+
+    const pruned = pruneSessionApprovalSettings(settings, knownToolNames);
+    expect(pruned?.autoApprovedToolNames).toEqual(['read', 'write', 'shell', 'git.status']);
+  });
+
+  test('session approval with permission-kind entries overrides pattern defaults', () => {
+    const effective = resolveEffectiveApprovalPolicy(
+      {
+        rules: [{ kind: 'tool-call' }],
+        autoApprovedToolNames: ['git.status'],
+      },
+      normalizeSessionApprovalSettings({
+        autoApprovedToolNames: ['read', 'shell'],
+      }),
+    );
+
+    expect(effective).toEqual({
+      rules: [{ kind: 'tool-call' }],
+      autoApprovedToolNames: ['read', 'shell'],
+    });
+    expect(approvalPolicyRequiresToolCallApproval(effective, 'agent-1', 'read')).toBe(false);
+    expect(approvalPolicyRequiresToolCallApproval(effective, 'agent-1', 'shell')).toBe(false);
+    expect(approvalPolicyRequiresToolCallApproval(effective, 'agent-1', 'write')).toBe(true);
   });
 });

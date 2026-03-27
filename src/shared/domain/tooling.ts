@@ -92,6 +92,10 @@ const lspApprovalOperations = [
 // Human-readable labels for built-in runtime tools.
 // Both bash and powershell variants are included for forward compatibility.
 const builtinToolLabels: ReadonlyMap<string, string> = new Map([
+  // Permission-kind approval categories (used by sidecar for runtime tool session approval)
+  ['shell', 'Shell commands'],
+  ['read', 'Read files'],
+  ['write', 'Write files'],
   // Shell tools
   ['bash', 'Execute shell commands'],
   ['powershell', 'Execute shell commands'],
@@ -136,6 +140,10 @@ export function resolveToolLabel(toolId: string): string {
 // Fallback runtime tools used before sidecar capabilities are loaded or when the
 // CLI cannot report its built-in tool catalog dynamically.
 const fallbackRuntimeApprovalTools: ReadonlyArray<RuntimeToolDefinition> = [
+  // Permission-kind approval categories (used by sidecar for runtime tool session approval)
+  { id: 'shell', label: 'Shell commands' },
+  { id: 'read', label: 'Read files' },
+  { id: 'write', label: 'Write files' },
   // Shell tools (bash variants — SDK reports these on all platforms)
   { id: 'bash', label: 'Execute shell commands' },
   { id: 'read_bash', label: 'Read shell output' },

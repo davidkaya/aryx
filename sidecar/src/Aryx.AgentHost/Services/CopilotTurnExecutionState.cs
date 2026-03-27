@@ -77,6 +77,11 @@ internal sealed class CopilotTurnExecutionState
                 RecordObservedAgentForMessage(agent, assistantMessage.Data!.MessageId);
                 QueueThinkingIfNeeded(agent);
                 break;
+            case ToolExecutionStartEvent toolExecutionStart
+                when !string.IsNullOrWhiteSpace(toolExecutionStart.Data?.ToolCallId)
+                    && !string.IsNullOrWhiteSpace(toolExecutionStart.Data?.ToolName):
+                ToolNamesByCallId[toolExecutionStart.Data.ToolCallId.Trim()] = toolExecutionStart.Data.ToolName.Trim();
+                break;
             case AssistantReasoningDeltaEvent:
                 ActiveAgent = agent;
                 QueueThinkingIfNeeded(agent);

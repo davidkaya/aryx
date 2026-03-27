@@ -160,7 +160,11 @@ async function discoverAuthorizationServer(serverUrl: string): Promise<string> {
 }
 
 async function fetchAuthServerMetadata(authServerUrl: string): Promise<AuthServerMetadata> {
-  const metadata = await fetchWellKnownMetadata(authServerUrl, 'oauth-authorization-server');
+  // RFC 8414 suffix first, then OpenID Connect Discovery suffix (used by Entra ID, Google, etc.)
+  const metadata =
+    (await fetchWellKnownMetadata(authServerUrl, 'oauth-authorization-server')) ??
+    (await fetchWellKnownMetadata(authServerUrl, 'openid-configuration'));
+
   if (!metadata) {
     throw new Error('Authorization Server Metadata fetch failed: no well-known endpoint found');
   }

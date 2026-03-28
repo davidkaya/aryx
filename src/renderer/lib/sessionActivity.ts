@@ -256,15 +256,17 @@ function formatTurnEventEntry(event: SessionEventRecord): TurnEventEntry | undef
         phase: event.subagentEventKind === 'started' ? 'start' : event.subagentEventKind === 'completed' ? 'end' : undefined,
         success: event.subagentEventKind === 'completed' ? true : event.subagentEventKind === 'failed' ? false : undefined,
       };
-    case 'hook-lifecycle':
+    case 'hook-lifecycle': {
+      const phaseLabel = event.hookPhase === 'start' ? 'started' : event.hookPhase === 'end' ? 'completed' : undefined;
       return {
         kind: event.kind,
         occurredAt: event.occurredAt,
-        label: `Hook ${event.hookType ?? 'unknown'}`,
+        label: phaseLabel ? `Hook ${event.hookType ?? 'unknown'} ${phaseLabel}` : `Hook ${event.hookType ?? 'unknown'}`,
         detail: event.hookInvocationId,
         phase: event.hookPhase,
         success: event.hookSuccess,
       };
+    }
     case 'skill-invoked':
       return {
         kind: event.kind,

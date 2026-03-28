@@ -12,6 +12,18 @@ namespace Aryx.AgentHost.Tests;
 public sealed class CopilotWorkflowRunnerTests
 {
     [Fact]
+    public void ConfigureHookLifecycleEventSuppression_SetsStateFromBundle()
+    {
+        RunTurnCommandDto command = CreateApprovalCommand();
+        CopilotTurnExecutionState state = new(command);
+        CopilotAgentBundle bundle = new(Array.Empty<AIAgent>(), hasConfiguredHooks: false);
+
+        CopilotWorkflowRunner.ConfigureHookLifecycleEventSuppression(state, bundle);
+
+        Assert.True(state.SuppressHookLifecycleEvents);
+    }
+
+    [Fact]
     public void SelectNewOutputMessages_SkipsFullTranscriptPrefix()
     {
         List<ChatMessage> inputMessages =

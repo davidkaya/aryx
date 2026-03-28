@@ -206,7 +206,7 @@ The protocol also carries **turn-scoped lifecycle events** alongside output delt
 
 - **Sub-agent events**: started, completed, failed, selected, deselected — surfaced when custom agents are defined
 - **Skill invocation events**: emitted when an agent-side skill is triggered
-- **Hook lifecycle events**: start and end of registered hooks, including Aryx-managed SDK hooks and project hook files discovered from `.github/hooks/*.json`
+- **Hook lifecycle events**: start and end of configured project hook commands discovered from `.github/hooks/*.json`; Aryx suppresses the SDK's built-in no-op hook chatter so the UI only sees meaningful hook activity
 - **Session compaction events**: start and complete, with token-reduction metrics when infinite sessions trigger context trimming
 - **Session usage events**: current token count and context-window limit for usage-bar rendering
 - **Pending-messages-modified events**: emitted when mid-turn steering changes the pending message queue

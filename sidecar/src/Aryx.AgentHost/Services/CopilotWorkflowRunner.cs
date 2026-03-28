@@ -75,6 +75,7 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
                     }
                 },
                 runCancellation.Token);
+            ConfigureHookLifecycleEventSuppression(state, bundle);
             Workflow workflow = bundle.BuildWorkflow(command.Pattern);
             List<ChatMessage> inputMessages = command.Messages.Select(WorkflowTranscriptProjector.ToChatMessage).ToList();
             WorkflowTranscriptProjector.AttachMessageMode(inputMessages, command.MessageMode);
@@ -116,6 +117,16 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
         {
             _approvalCoordinator.ClearRequestApprovals(command.RequestId);
         }
+    }
+
+    internal static void ConfigureHookLifecycleEventSuppression(
+        CopilotTurnExecutionState state,
+        CopilotAgentBundle bundle)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        ArgumentNullException.ThrowIfNull(bundle);
+
+        state.SuppressHookLifecycleEvents = !bundle.HasConfiguredHooks;
     }
 
     private static async Task EmitPendingEventsAsync(

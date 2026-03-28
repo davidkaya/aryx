@@ -28,6 +28,8 @@ internal sealed class CopilotTurnExecutionState
 
     public bool HasPendingExitPlanModeRequest { get; private set; }
 
+    public bool SuppressHookLifecycleEvents { get; set; }
+
     public async Task EmitThinkingIfNeeded(
         AgentIdentity agent,
         Func<SidecarEventDto, Task> onEvent)
@@ -113,11 +115,17 @@ internal sealed class CopilotTurnExecutionState
                 break;
             case HookStartEvent hookStart:
                 ActiveAgent = agent;
-                _pendingEvents.Enqueue(CreateHookLifecycleEvent(agent, "start", hookStart.Data));
+                if (!SuppressHookLifecycleEvents)
+                {
+                    _pendingEvents.Enqueue(CreateHookLifecycleEvent(agent, "start", hookStart.Data));
+                }
                 break;
             case HookEndEvent hookEnd:
                 ActiveAgent = agent;
-                _pendingEvents.Enqueue(CreateHookLifecycleEvent(agent, "end", hookEnd.Data));
+                if (!SuppressHookLifecycleEvents)
+                {
+                    _pendingEvents.Enqueue(CreateHookLifecycleEvent(agent, "end", hookEnd.Data));
+                }
                 break;
             case SessionUsageInfoEvent usageInfo:
                 ActiveAgent = agent;

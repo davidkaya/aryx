@@ -54,6 +54,15 @@ public sealed class CopilotAgentBundleTests
     }
 
     [Fact]
+    public void Constructor_StoresWhetherHooksAreConfigured()
+    {
+        CopilotAgentBundle bundle = new([], hasConfiguredHooks: true);
+
+        Assert.True(bundle.HasConfiguredHooks);
+        Assert.Empty(bundle.Agents);
+    }
+
+    [Fact]
     public async Task CreateConfiguredSessionConfig_MergesInstructionsAndConvertsHandoffDeclarations()
     {
         SessionConfig baseConfig = new()

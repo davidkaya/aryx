@@ -212,29 +212,43 @@ public sealed class CopilotTurnExecutionStateTests
         RunTurnCommandDto command = CreateCommand();
         CopilotTurnExecutionState state = new(command);
 
-        state.ObserveSessionEvent(
-            command.Pattern.Agents[0],
-            SessionEvent.FromJson(
-                """
-                {
-                  "type": "hook.start",
-                  "data": {
-                    "hookInvocationId": "hook-1",
-                    "hookType": "postToolUse",
-                    "input": {
-                      "toolName": "view"
-                    }
-                  },
-                  "id": "66666666-6666-6666-6666-666666666666",
-                  "timestamp": "2026-03-27T00:00:00Z"
-                }
-                """));
+        state.ObserveSessionEvent(command.Pattern.Agents[0], CreateHookStartEvent());
 
         HookLifecycleEventDto evt = Assert.Single(state.DrainPendingEvents().OfType<HookLifecycleEventDto>());
         Assert.Equal("start", evt.Phase);
         Assert.Equal("postToolUse", evt.HookType);
         Assert.Equal("hook-1", evt.HookInvocationId);
         Assert.NotNull(evt.Input);
+    }
+
+    [Fact]
+    public void ObserveSessionEvent_HookEnd_QueuesHookLifecycleEvent()
+    {
+        RunTurnCommandDto command = CreateCommand();
+        CopilotTurnExecutionState state = new(command);
+
+        state.ObserveSessionEvent(command.Pattern.Agents[0], CreateHookEndEvent());
+
+        HookLifecycleEventDto evt = Assert.Single(state.DrainPendingEvents().OfType<HookLifecycleEventDto>());
+        Assert.Equal("end", evt.Phase);
+        Assert.Equal("postToolUse", evt.HookType);
+        Assert.Equal("hook-1", evt.HookInvocationId);
+        Assert.True(evt.Success);
+    }
+
+    [Fact]
+    public void ObserveSessionEvent_HookLifecycleEvents_AreSuppressedWhenConfigured()
+    {
+        RunTurnCommandDto command = CreateCommand();
+        CopilotTurnExecutionState state = new(command)
+        {
+            SuppressHookLifecycleEvents = true,
+        };
+
+        state.ObserveSessionEvent(command.Pattern.Agents[0], CreateHookStartEvent());
+        state.ObserveSessionEvent(command.Pattern.Agents[0], CreateHookEndEvent());
+
+        Assert.Empty(state.DrainPendingEvents());
     }
 
     [Fact]
@@ -293,6 +307,45 @@ public sealed class CopilotTurnExecutionStateTests
         PendingMessagesModifiedEventDto evt = Assert.Single(state.DrainPendingEvents().OfType<PendingMessagesModifiedEventDto>());
         Assert.Equal("session-1", evt.SessionId);
         Assert.Equal("agent-1", evt.AgentId);
+    }
+
+    private static SessionEvent CreateHookStartEvent()
+    {
+        return SessionEvent.FromJson(
+            """
+            {
+              "type": "hook.start",
+              "data": {
+                "hookInvocationId": "hook-1",
+                "hookType": "postToolUse",
+                "input": {
+                  "toolName": "view"
+                }
+              },
+              "id": "66666666-6666-6666-6666-666666666666",
+              "timestamp": "2026-03-27T00:00:00Z"
+            }
+            """);
+    }
+
+    private static SessionEvent CreateHookEndEvent()
+    {
+        return SessionEvent.FromJson(
+            """
+            {
+              "type": "hook.end",
+              "data": {
+                "hookInvocationId": "hook-1",
+                "hookType": "postToolUse",
+                "success": true,
+                "output": {
+                  "status": "ok"
+                }
+              },
+              "id": "99999999-9999-9999-9999-999999999999",
+              "timestamp": "2026-03-27T00:00:00Z"
+            }
+            """);
     }
 
     private static RunTurnCommandDto CreateCommand()

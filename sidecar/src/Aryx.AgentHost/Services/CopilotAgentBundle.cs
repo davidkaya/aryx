@@ -13,12 +13,15 @@ internal sealed class CopilotAgentBundle : IAsyncDisposable
 {
     private readonly List<IAsyncDisposable> _disposables = [];
 
-    private CopilotAgentBundle(IReadOnlyList<AIAgent> agents)
+    internal CopilotAgentBundle(IReadOnlyList<AIAgent> agents, bool hasConfiguredHooks)
     {
         Agents = agents;
+        HasConfiguredHooks = hasConfiguredHooks;
     }
 
     public IReadOnlyList<AIAgent> Agents { get; }
+
+    public bool HasConfiguredHooks { get; }
 
     public static async Task<CopilotAgentBundle> CreateAsync(
         RunTurnCommandDto command,
@@ -72,7 +75,7 @@ internal sealed class CopilotAgentBundle : IAsyncDisposable
             disposables.Add(agent);
         }
 
-        CopilotAgentBundle bundle = new(agents);
+        CopilotAgentBundle bundle = new(agents, hasConfiguredHooks: !configuredHooks.IsEmpty);
         bundle._disposables.AddRange(disposables);
         return bundle;
     }

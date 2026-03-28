@@ -1827,6 +1827,10 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
           subagentEventKind: event.eventKind,
           customAgentName: event.customAgentName,
           customAgentDisplayName: event.customAgentDisplayName,
+          customAgentDescription: event.customAgentDescription,
+          subagentError: event.error,
+          subagentToolCallId: event.toolCallId,
+          subagentModel: event.model,
         });
         return;
       case 'skill-invoked':

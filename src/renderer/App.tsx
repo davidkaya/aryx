@@ -21,6 +21,7 @@ import {
   type SessionUsageMap,
   type TurnEventLogMap,
 } from '@renderer/lib/sessionActivity';
+import { applySubagentEvent, pruneSubagentMap, type ActiveSubagentMap } from '@renderer/lib/subagentTracker';
 import { applySessionEventWorkspace } from '@renderer/lib/sessionWorkspace';
 import { WelcomePane } from '@renderer/components/WelcomePane';
 import { getElectronApi } from '@renderer/lib/electronApi';
@@ -101,6 +102,7 @@ export default function App() {
   const [sessionActivities, setSessionActivities] = useState<SessionActivityMap>({});
   const [sessionUsage, setSessionUsage] = useState<SessionUsageMap>({});
   const [turnEventLogs, setTurnEventLogs] = useState<TurnEventLogMap>({});
+  const [activeSubagents, setActiveSubagents] = useState<ActiveSubagentMap>({});
 
   const [showSettings, setShowSettings] = useState(false);
   const [projectSettingsId, setProjectSettingsId] = useState<string>();
@@ -144,6 +146,12 @@ export default function App() {
           ws.sessions.map((session) => session.id),
         ),
       );
+      setActiveSubagents((current) =>
+        pruneSubagentMap(
+          current,
+          ws.sessions.map((session) => session.id),
+        ),
+      );
     });
 
     const offSessionEvent = api.onSessionEvent((event) => {
@@ -151,6 +159,7 @@ export default function App() {
       setSessionActivities((current) => applySessionEventActivity(current, event));
       setSessionUsage((current) => applySessionUsageEvent(current, event));
       setTurnEventLogs((current) => applyTurnEventLog(current, event));
+      setActiveSubagents((current) => applySubagentEvent(current, event));
     });
 
     return () => {
@@ -204,6 +213,10 @@ export default function App() {
   const usageForSession = useMemo(
     () => (selectedSession ? sessionUsage[selectedSession.id] : undefined),
     [selectedSession, sessionUsage],
+  );
+  const subagentsForSession = useMemo(
+    () => (selectedSession ? activeSubagents[selectedSession.id] : undefined),
+    [selectedSession, activeSubagents],
   );
   const turnEventsForSession = useMemo(
     () => (selectedSession ? turnEventLogs[selectedSession.id] : undefined),
@@ -388,6 +401,7 @@ export default function App() {
           runtimeTools={sidecarCapabilities?.runtimeTools}
           session={selectedSession}
           sessionUsage={usageForSession}
+          activeSubagents={subagentsForSession}
           terminalOpen={terminalOpen}
           terminalRunning={terminalRunning}
           toolingSettings={chatToolingSettings ?? workspace.settings.tooling}

@@ -10,12 +10,14 @@ import { UserInputBanner } from '@renderer/components/chat/UserInputBanner';
 import { InlineApprovalPill, InlineModelPill, InlineTerminalPill, InlineThinkingPill, InlineToolsPill } from '@renderer/components/chat/InlinePills';
 import { InlinePromptPill } from '@renderer/components/chat/InlinePromptPill';
 import { ThinkingDots } from '@renderer/components/chat/ThinkingDots';
+import { SubagentActivityList } from '@renderer/components/chat/SubagentActivityCard';
 import { getAssistantMessagePhase } from '@renderer/lib/messagePhase';
 import type { ApprovalDecision } from '@shared/domain/approval';
 import type { InteractionMode, MessageMode } from '@shared/contracts/sidecar';
 import type { ChatMessageAttachment } from '@shared/domain/attachment';
 import { getAttachmentDisplayName, isImageAttachment } from '@shared/domain/attachment';
 import type { SessionUsageState } from '@renderer/lib/sessionActivity';
+import type { ActiveSubagent } from '@renderer/lib/subagentTracker';
 import {
   findModel,
   getSupportedReasoningEfforts,
@@ -44,6 +46,7 @@ interface ChatPaneProps {
   mcpProbingServerIds?: string[];
   runtimeTools?: ReadonlyArray<RuntimeToolDefinition>;
   sessionUsage?: SessionUsageState;
+  activeSubagents?: ReadonlyArray<ActiveSubagent>;
   terminalOpen?: boolean;
   terminalRunning?: boolean;
   onSend: (content: string, attachments?: ChatMessageAttachment[], messageMode?: MessageMode) => Promise<void>;
@@ -72,6 +75,7 @@ export function ChatPane({
   mcpProbingServerIds,
   runtimeTools,
   sessionUsage,
+  activeSubagents,
   terminalOpen,
   terminalRunning,
   onSend,
@@ -409,6 +413,11 @@ export function ChatPane({
                 );
               })}
             </div>
+            {activeSubagents && activeSubagents.length > 0 && (
+              <div className="px-6 py-1">
+                <SubagentActivityList subagents={activeSubagents} />
+              </div>
+            )}
           </div>
         )}
       </div>

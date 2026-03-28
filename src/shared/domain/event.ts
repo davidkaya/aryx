@@ -40,6 +40,10 @@ export interface SessionEventRecord {
   subagentEventKind?: SubagentEventKind;
   customAgentName?: string;
   customAgentDisplayName?: string;
+  customAgentDescription?: string;
+  subagentError?: string;
+  subagentToolCallId?: string;
+  subagentModel?: string;
 
   // Skill invoked fields
   skillName?: string;

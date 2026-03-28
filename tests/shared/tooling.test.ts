@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 
 import {
+  groupApprovalToolsByProvider,
   listApprovalToolDefinitions,
   normalizeWorkspaceSettings,
   resolveProjectToolingSettings,
@@ -10,6 +11,7 @@ import {
   validateMcpServerDefinition,
   type LspProfileDefinition,
   type McpServerDefinition,
+  type WorkspaceToolingSettings,
 } from '@shared/domain/tooling';
 
 const TIMESTAMP = '2026-03-23T00:00:00.000Z';
@@ -376,5 +378,98 @@ describe('tooling settings helpers', () => {
       createdAt: expect.any(String),
       updatedAt: expect.any(String),
     });
+  });
+});
+
+describe('groupApprovalToolsByProvider', () => {
+  const TIMESTAMP = '2026-03-28T00:00:00.000Z';
+
+  function makeTooling(
+    mcpServers: McpServerDefinition[] = [],
+    lspProfiles: LspProfileDefinition[] = [],
+  ): WorkspaceToolingSettings {
+    return { mcpServers, lspProfiles };
+  }
+
+  function makeMcpServer(id: string, name: string, tools: string[]): McpServerDefinition {
+    return { id, name, transport: 'local', command: 'node', args: [], tools, createdAt: TIMESTAMP, updatedAt: TIMESTAMP };
+  }
+
+  function makeLspProfile(id: string, name: string): LspProfileDefinition {
+    return { id, name, command: 'lsp-server', args: ['--stdio'], languageId: 'typescript', fileExtensions: ['.ts'], createdAt: TIMESTAMP, updatedAt: TIMESTAMP };
+  }
+
+  test('groups MCP tools by server', () => {
+    const tooling = makeTooling([
+      makeMcpServer('git', 'Git MCP', ['git.status', 'git.diff']),
+      makeMcpServer('fs', 'Filesystem', ['fs.read', 'fs.write']),
+    ]);
+    const tools = listApprovalToolDefinitions(tooling);
+    const groups = groupApprovalToolsByProvider(tools, tooling);
+
+    const mcpGroups = groups.filter((g) => g.kind === 'mcp');
+    expect(mcpGroups.length).toBe(2);
+
+    const fsGroup = mcpGroups.find((g) => g.label === 'Filesystem');
+    expect(fsGroup).toBeDefined();
+    expect(fsGroup!.tools.map((t) => t.id).sort()).toEqual(['fs.read', 'fs.write']);
+
+    const gitGroup = mcpGroups.find((g) => g.label === 'Git MCP');
+    expect(gitGroup).toBeDefined();
+    expect(gitGroup!.tools.map((t) => t.id).sort()).toEqual(['git.diff', 'git.status']);
+  });
+
+  test('groups LSP tools by profile', () => {
+    const tooling = makeTooling([], [makeLspProfile('ts', 'TypeScript')]);
+    const tools = listApprovalToolDefinitions(tooling);
+    const groups = groupApprovalToolsByProvider(tools, tooling);
+
+    const lspGroups = groups.filter((g) => g.kind === 'lsp');
+    expect(lspGroups.length).toBe(1);
+    expect(lspGroups[0].label).toBe('TypeScript');
+    expect(lspGroups[0].tools.length).toBe(5);
+  });
+
+  test('keeps builtins in one group', () => {
+    const tooling = makeTooling();
+    const tools = listApprovalToolDefinitions(tooling);
+    const groups = groupApprovalToolsByProvider(tools, tooling);
+
+    const builtinGroups = groups.filter((g) => g.kind === 'builtin');
+    expect(builtinGroups.length).toBe(1);
+    expect(builtinGroups[0].label).toBe('Built-in');
+    expect(builtinGroups[0].tools.length).toBe(5);
+  });
+
+  test('multi-provider tools go into first provider group', () => {
+    const tooling = makeTooling([
+      makeMcpServer('git-a', 'Git A', ['git.status']),
+      makeMcpServer('git-b', 'Git B', ['git.status']),
+    ]);
+    const tools = listApprovalToolDefinitions(tooling);
+    const groups = groupApprovalToolsByProvider(tools, tooling);
+
+    const mcpGroups = groups.filter((g) => g.kind === 'mcp');
+    expect(mcpGroups.length).toBe(1);
+    expect(mcpGroups[0].label).toBe('Git A');
+    expect(mcpGroups[0].tools[0].providerNames).toEqual(['Git A', 'Git B']);
+  });
+
+  test('sorts builtin first, then MCP by name, then LSP by name', () => {
+    const tooling = makeTooling(
+      [makeMcpServer('z', 'Zebra', ['z.tool']), makeMcpServer('a', 'Alpha', ['a.tool'])],
+      [makeLspProfile('ts', 'TypeScript')],
+    );
+    const tools = listApprovalToolDefinitions(tooling);
+    const groups = groupApprovalToolsByProvider(tools, tooling);
+
+    const kindOrder = groups.map((g) => g.kind);
+    expect(kindOrder[0]).toBe('builtin');
+    const mcpIdx = kindOrder.indexOf('mcp');
+    const lspIdx = kindOrder.indexOf('lsp');
+    expect(mcpIdx).toBeLessThan(lspIdx);
+
+    const mcpLabels = groups.filter((g) => g.kind === 'mcp').map((g) => g.label);
+    expect(mcpLabels).toEqual(['Alpha', 'Zebra']);
   });
 });

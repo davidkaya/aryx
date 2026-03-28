@@ -484,6 +484,7 @@ export function ChatPane({
                   effectiveAutoApprovedCount={effectiveAutoApprovedCount}
                   isOverridden={isApprovalOverridden}
                   onUpdate={onUpdateSessionApprovalSettings}
+                  toolingSettings={toolingSettings}
                 />
               )}
               {primaryAgent && (
@@ -539,6 +540,7 @@ export function ChatPane({
                   effectiveAutoApprovedCount={effectiveAutoApprovedCount}
                   isOverridden={isApprovalOverridden}
                   onUpdate={onUpdateSessionApprovalSettings}
+                  toolingSettings={toolingSettings}
                 />
               )}
             </div>

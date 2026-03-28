@@ -1,10 +1,11 @@
-import { useState } from 'react';
-import { ChevronDown, Sparkles } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { ChevronDown, ChevronRight, Minus, Search, Sparkles } from 'lucide-react';
 
 import { ProviderIcon } from '@renderer/components/ProviderIcons';
 import { PopoverToggleRow } from '@renderer/components/ui';
 import { useClickOutside } from '@renderer/hooks/useClickOutside';
-import type { ApprovalToolDefinition, ApprovalToolKind, LspProfileDefinition, McpServerDefinition, SessionToolingSelection } from '@shared/domain/tooling';
+import type { ApprovalToolDefinition, LspProfileDefinition, McpServerDefinition, SessionToolingSelection, WorkspaceToolingSettings } from '@shared/domain/tooling';
+import { groupApprovalToolsByProvider, type ApprovalToolGroup } from '@shared/domain/tooling';
 import { findModel, inferProvider, providerMeta, type ModelDefinition } from '@shared/domain/models';
 import { reasoningEffortOptions, type ReasoningEffort } from '@shared/domain/pattern';
 import { RotateCcw, Server, ShieldCheck } from 'lucide-react';
@@ -337,16 +338,11 @@ function McpServerGroup({
 
 /* ── InlineApprovalPill ────────────────────────────────────── */
 
-const approvalKindOrder: ApprovalToolKind[] = ['builtin', 'mcp', 'lsp', 'mixed'];
-const approvalKindLabels: Record<ApprovalToolKind, string> = {
-  builtin: 'Built-in',
-  mcp: 'MCP Servers',
-  lsp: 'Language Servers',
-  mixed: 'Other',
-};
+const SEARCH_THRESHOLD = 10;
 
 export function InlineApprovalPill({
   approvalTools,
+  toolingSettings,
   effectiveAutoApproved,
   effectiveAutoApprovedCount,
   isOverridden,
@@ -354,6 +350,7 @@ export function InlineApprovalPill({
   onUpdate,
 }: {
   approvalTools: ApprovalToolDefinition[];
+  toolingSettings: WorkspaceToolingSettings;
   effectiveAutoApproved: Set<string>;
   effectiveAutoApprovedCount: number;
   isOverridden: boolean;
@@ -361,7 +358,32 @@ export function InlineApprovalPill({
   onUpdate: (settings: { autoApprovedToolNames?: string[] }) => void;
 }){
   const [open, setOpen] = useState(false);
-  const ref = useClickOutside<HTMLDivElement>(() => setOpen(false), open);
+  const [search, setSearch] = useState('');
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const ref = useClickOutside<HTMLDivElement>(() => { setOpen(false); setSearch(''); }, open);
+
+  const groups = useMemo(
+    () => groupApprovalToolsByProvider(approvalTools, toolingSettings),
+    [approvalTools, toolingSettings],
+  );
+
+  const showSearch = approvalTools.length > SEARCH_THRESHOLD;
+  const searchLower = search.toLowerCase().trim();
+
+  const filteredGroups = useMemo(() => {
+    if (!searchLower) return groups;
+    return groups
+      .map((group) => ({
+        ...group,
+        tools: group.tools.filter(
+          (t) =>
+            t.label.toLowerCase().includes(searchLower)
+            || t.id.toLowerCase().includes(searchLower)
+            || group.label.toLowerCase().includes(searchLower),
+        ),
+      }))
+      .filter((g) => g.tools.length > 0);
+  }, [groups, searchLower]);
 
   function toggleTool(toolId: string) {
     const next = new Set(effectiveAutoApproved);
@@ -373,10 +395,35 @@ export function InlineApprovalPill({
     onUpdate({ autoApprovedToolNames: [...next] });
   }
 
-  const groups = approvalKindOrder
-    .map((kind) => ({ kind, tools: approvalTools.filter((t) => t.kind === kind) }))
-    .filter((g) => g.tools.length > 0);
-  const showHeaders = groups.length > 1;
+  function toggleGroup(group: ApprovalToolGroup) {
+    const allApproved = group.tools.every((t) => effectiveAutoApproved.has(t.id));
+    const next = new Set(effectiveAutoApproved);
+    for (const tool of group.tools) {
+      if (allApproved) {
+        next.delete(tool.id);
+      } else {
+        next.add(tool.id);
+      }
+    }
+    onUpdate({ autoApprovedToolNames: [...next] });
+  }
+
+  function toggleExpanded(groupId: string) {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupId)) {
+        next.delete(groupId);
+      } else {
+        next.add(groupId);
+      }
+      return next;
+    });
+  }
+
+  function isGroupExpanded(groupId: string): boolean {
+    if (searchLower) return true;
+    return expandedGroups.has(groupId);
+  }
 
   return (
     <div className="relative" ref={ref}>
@@ -400,52 +447,144 @@ export function InlineApprovalPill({
       </button>
 
       {open && !disabled && (
-        <div className="absolute bottom-full left-0 z-40 mb-1.5 max-h-80 w-72 overflow-y-auto rounded-lg border border-zinc-700 bg-zinc-900 shadow-2xl">
-          <div className="flex items-center gap-2 border-b border-zinc-800 px-3 py-2">
-            <span className={`rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider ${
-              isOverridden
-                ? 'bg-amber-500/15 text-amber-400'
-                : 'bg-zinc-800 text-zinc-500'
-            }`}>
-              {isOverridden ? 'Session override' : 'Pattern defaults'}
-            </span>
-            {isOverridden && (
-              <button
-                className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-medium text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-300"
-                onClick={() => onUpdate({})}
-                type="button"
-              >
-                <RotateCcw className="size-2.5" />
-                Reset
-              </button>
+        <div className="absolute bottom-full left-0 z-40 mb-1.5 max-h-[28rem] w-80 overflow-y-auto rounded-lg border border-zinc-700 bg-zinc-900 shadow-2xl">
+          {/* Header: session override / pattern defaults */}
+          <div className="sticky top-0 z-10 border-b border-zinc-800 bg-zinc-900">
+            <div className="flex items-center gap-2 px-3 py-2">
+              <span className={`rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider ${
+                isOverridden
+                  ? 'bg-amber-500/15 text-amber-400'
+                  : 'bg-zinc-800 text-zinc-500'
+              }`}>
+                {isOverridden ? 'Session override' : 'Pattern defaults'}
+              </span>
+              {isOverridden && (
+                <button
+                  className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-medium text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-300"
+                  onClick={() => onUpdate({})}
+                  type="button"
+                >
+                  <RotateCcw className="size-2.5" />
+                  Reset
+                </button>
+              )}
+            </div>
+
+            {/* Search */}
+            {showSearch && (
+              <div className="border-t border-zinc-800/50 px-3 py-1.5">
+                <div className="flex items-center gap-2 rounded border border-zinc-800 bg-zinc-800/30 px-2 py-1">
+                  <Search className="size-3 shrink-0 text-zinc-600" />
+                  <input
+                    autoFocus
+                    className="w-full bg-transparent text-[12px] text-zinc-300 placeholder-zinc-600 outline-none"
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Filter tools…"
+                    type="text"
+                    value={search}
+                  />
+                </div>
+              </div>
             )}
           </div>
 
+          {/* Tool groups */}
           <div className="py-1">
-            {groups.map((group, i) => (
-              <div key={group.kind}>
-                {showHeaders && (
-                  <div className={`px-3 pb-1 ${i > 0 ? 'pt-2' : 'pt-1'} text-[9px] font-semibold uppercase tracking-wider text-zinc-600`}>
-                    {approvalKindLabels[group.kind]}
-                  </div>
-                )}
-                {group.tools.map((tool) => {
-                  const detail = tool.description || (tool.providerNames.length > 0 ? tool.providerNames.join(', ') : undefined);
-                  return (
-                    <PopoverToggleRow
-                      detail={detail}
-                      enabled={effectiveAutoApproved.has(tool.id)}
-                      key={tool.id}
-                      label={tool.label}
-                      onToggle={() => toggleTool(tool.id)}
-                    />
-                  );
-                })}
+            {filteredGroups.map((group, groupIdx) => {
+              const isBuiltin = group.kind === 'builtin';
+              const isCollapsible = !isBuiltin;
+              const expanded = isBuiltin || isGroupExpanded(group.id);
+              const approvedCount = group.tools.filter((t) => effectiveAutoApproved.has(t.id)).length;
+              const allApproved = approvedCount === group.tools.length;
+              const someApproved = approvedCount > 0 && !allApproved;
+
+              return (
+                <div key={group.id}>
+                  {/* Group header */}
+                  {isBuiltin ? (
+                    <div className={`px-3 pb-1 ${groupIdx > 0 ? 'pt-2.5' : 'pt-1'} text-[9px] font-semibold uppercase tracking-wider text-zinc-600`}>
+                      {group.label}
+                    </div>
+                  ) : (
+                    <button
+                      className={`flex w-full items-center gap-1.5 px-2.5 py-1.5 text-left transition hover:bg-zinc-800/60 ${groupIdx > 0 ? 'mt-0.5' : ''}`}
+                      onClick={() => toggleExpanded(group.id)}
+                      type="button"
+                    >
+                      <ChevronRight className={`size-3 shrink-0 text-zinc-600 transition ${expanded ? 'rotate-90' : ''}`} />
+                      <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-zinc-300">{group.label}</span>
+                      <span className="shrink-0 rounded-full bg-zinc-800/80 px-1.5 py-px text-[9px] font-medium tabular-nums text-zinc-500">
+                        {approvedCount}/{group.tools.length}
+                      </span>
+                      <GroupToggle
+                        allApproved={allApproved}
+                        someApproved={someApproved}
+                        onToggle={(e) => { e.stopPropagation(); toggleGroup(group); }}
+                      />
+                    </button>
+                  )}
+
+                  {/* Group tools */}
+                  {expanded && group.tools.map((tool) => {
+                    const detail = tool.description || (
+                      !isBuiltin && tool.providerNames.length > 1
+                        ? tool.providerNames.join(', ')
+                        : undefined
+                    );
+                    return (
+                      <div key={tool.id} className={isCollapsible ? 'pl-3' : ''}>
+                        <PopoverToggleRow
+                          detail={detail}
+                          enabled={effectiveAutoApproved.has(tool.id)}
+                          label={tool.label}
+                          onToggle={() => toggleTool(tool.id)}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+
+            {filteredGroups.length === 0 && searchLower && (
+              <div className="px-3 py-4 text-center text-[12px] text-zinc-600">
+                No tools match "{search}"
               </div>
-            ))}
+            )}
           </div>
         </div>
       )}
     </div>
+  );
+}
+
+function GroupToggle({
+  allApproved,
+  someApproved,
+  onToggle,
+}: {
+  allApproved: boolean;
+  someApproved: boolean;
+  onToggle: (e: React.MouseEvent) => void;
+}) {
+  return (
+    <button
+      aria-pressed={allApproved}
+      className={`relative inline-flex h-[16px] w-[28px] shrink-0 items-center rounded-full transition-colors ${
+        allApproved ? 'bg-indigo-500' : someApproved ? 'bg-zinc-600' : 'bg-zinc-700'
+      }`}
+      onClick={onToggle}
+      type="button"
+    >
+      {someApproved ? (
+        <Minus className="absolute left-1/2 size-2 -translate-x-1/2 text-zinc-300" strokeWidth={3} />
+      ) : (
+        <span
+          className={`inline-block size-[12px] rounded-full bg-white shadow transition-transform ${
+            allApproved ? 'translate-x-[13px]' : 'translate-x-[2px]'
+          }`}
+        />
+      )}
+    </button>
   );
 }

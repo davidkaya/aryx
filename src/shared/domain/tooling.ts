@@ -265,6 +265,69 @@ export function listApprovalToolNames(
   return listApprovalToolDefinitions(tooling, runtimeTools).map((tool) => tool.id);
 }
 
+export interface ApprovalToolGroup {
+  id: string;
+  label: string;
+  kind: ApprovalToolKind;
+  tools: ApprovalToolDefinition[];
+}
+
+const approvalToolGroupKindOrder: ApprovalToolKind[] = ['builtin', 'mcp', 'lsp', 'mixed'];
+
+export function groupApprovalToolsByProvider(
+  tools: ReadonlyArray<ApprovalToolDefinition>,
+  tooling: WorkspaceToolingSettings,
+): ApprovalToolGroup[] {
+  const serverNames = new Map(tooling.mcpServers.map((s) => [s.id, s.name]));
+  const profileNames = new Map(tooling.lspProfiles.map((p) => [p.id, p.name]));
+  const groups = new Map<string, ApprovalToolGroup>();
+
+  for (const tool of tools) {
+    const groupKey = resolveApprovalToolGroupKey(tool, serverNames, profileNames);
+    let group = groups.get(groupKey.id);
+    if (!group) {
+      group = { id: groupKey.id, label: groupKey.label, kind: groupKey.kind, tools: [] };
+      groups.set(groupKey.id, group);
+    }
+    group.tools.push(tool);
+  }
+
+  return [...groups.values()].sort((a, b) => {
+    const kindDiff = approvalToolGroupKindOrder.indexOf(a.kind) - approvalToolGroupKindOrder.indexOf(b.kind);
+    if (kindDiff !== 0) return kindDiff;
+    return a.label.localeCompare(b.label);
+  });
+}
+
+function resolveApprovalToolGroupKey(
+  tool: ApprovalToolDefinition,
+  serverNames: ReadonlyMap<string, string>,
+  profileNames: ReadonlyMap<string, string>,
+): { id: string; label: string; kind: ApprovalToolKind } {
+  if (tool.kind === 'builtin') {
+    return { id: 'builtin', label: 'Built-in', kind: 'builtin' };
+  }
+
+  const primaryProviderId = tool.providerIds[0];
+  if (tool.kind === 'mcp' && primaryProviderId) {
+    return {
+      id: `mcp:${primaryProviderId}`,
+      label: serverNames.get(primaryProviderId) ?? tool.providerNames[0] ?? primaryProviderId,
+      kind: 'mcp',
+    };
+  }
+
+  if (tool.kind === 'lsp' && primaryProviderId) {
+    return {
+      id: `lsp:${primaryProviderId}`,
+      label: profileNames.get(primaryProviderId) ?? tool.providerNames[0] ?? primaryProviderId,
+      kind: 'lsp',
+    };
+  }
+
+  return { id: 'other', label: 'Other', kind: 'mixed' };
+}
+
 export function validateMcpServerDefinition(server: McpServerDefinition): string | undefined {
   if (!server.name.trim()) {
     return 'MCP server name is required.';

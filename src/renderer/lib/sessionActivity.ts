@@ -245,6 +245,20 @@ export interface TurnEventEntry {
 export type TurnEventLog = readonly TurnEventEntry[];
 export type TurnEventLogMap = Record<string, TurnEventLog | undefined>;
 
+const hookTypeLabels: Record<string, string> = {
+  sessionStart: 'Session start',
+  sessionEnd: 'Session end',
+  userPromptSubmitted: 'Prompt submitted',
+  preToolUse: 'Pre-tool use',
+  postToolUse: 'Post-tool use',
+  errorOccurred: 'Error occurred',
+};
+
+function formatHookType(hookType: string | undefined): string {
+  if (!hookType) return 'Unknown';
+  return hookTypeLabels[hookType] ?? hookType;
+}
+
 function formatTurnEventEntry(event: SessionEventRecord): TurnEventEntry | undefined {
   switch (event.kind) {
     case 'subagent':
@@ -257,12 +271,12 @@ function formatTurnEventEntry(event: SessionEventRecord): TurnEventEntry | undef
         success: event.subagentEventKind === 'completed' ? true : event.subagentEventKind === 'failed' ? false : undefined,
       };
     case 'hook-lifecycle': {
+      const hookLabel = formatHookType(event.hookType);
       const phaseLabel = event.hookPhase === 'start' ? 'started' : event.hookPhase === 'end' ? 'completed' : undefined;
       return {
         kind: event.kind,
         occurredAt: event.occurredAt,
-        label: phaseLabel ? `Hook ${event.hookType ?? 'unknown'} ${phaseLabel}` : `Hook ${event.hookType ?? 'unknown'}`,
-        detail: event.hookInvocationId,
+        label: phaseLabel ? `${hookLabel} hook ${phaseLabel}` : `${hookLabel} hook`,
         phase: event.hookPhase,
         success: event.hookSuccess,
       };

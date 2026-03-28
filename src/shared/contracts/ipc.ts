@@ -91,10 +91,20 @@ export interface RescanProjectConfigsInput {
   projectId: string;
 }
 
+export interface RescanProjectCustomizationInput {
+  projectId: string;
+}
+
 export interface ResolveProjectDiscoveredToolingInput {
   projectId: string;
   serverIds: string[];
   resolution: DiscoveredToolingResolution;
+}
+
+export interface SetProjectAgentProfileEnabledInput {
+  projectId: string;
+  agentProfileId: string;
+  enabled: boolean;
 }
 
 export interface ResolveWorkspaceDiscoveredToolingInput {
@@ -141,7 +151,9 @@ export interface ElectronApi {
   resolveWorkspaceDiscoveredTooling(input: ResolveWorkspaceDiscoveredToolingInput): Promise<WorkspaceState>;
   refreshProjectGitContext(projectId?: string): Promise<WorkspaceState>;
   rescanProjectConfigs(input: RescanProjectConfigsInput): Promise<WorkspaceState>;
+  rescanProjectCustomization(input: RescanProjectCustomizationInput): Promise<WorkspaceState>;
   resolveProjectDiscoveredTooling(input: ResolveProjectDiscoveredToolingInput): Promise<WorkspaceState>;
+  setProjectAgentProfileEnabled(input: SetProjectAgentProfileEnabledInput): Promise<WorkspaceState>;
   savePattern(input: SavePatternInput): Promise<WorkspaceState>;
   deletePattern(patternId: string): Promise<WorkspaceState>;
   saveMcpServer(input: SaveMcpServerInput): Promise<WorkspaceState>;

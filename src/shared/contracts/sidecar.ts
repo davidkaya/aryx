@@ -80,6 +80,7 @@ export interface RunTurnCommand {
   workspaceKind?: 'project' | 'scratchpad';
   mode?: InteractionMode;
   messageMode?: MessageMode;
+  projectInstructions?: string;
   pattern: PatternDefinition;
   messages: ChatMessageRecord[];
   attachments?: ChatMessageAttachment[];

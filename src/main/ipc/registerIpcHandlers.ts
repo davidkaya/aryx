@@ -5,28 +5,30 @@ import { ipcChannels } from '@shared/contracts/channels';
 import type {
   CancelSessionTurnInput,
   CreateSessionInput,
-  ResolveProjectDiscoveredToolingInput,
-  ResolveWorkspaceDiscoveredToolingInput,
-  DismissSessionPlanReviewInput,
   DismissSessionMcpAuthInput,
+  DismissSessionPlanReviewInput,
+  DeleteSessionInput,
   StartSessionMcpAuthInput,
   DuplicateSessionInput,
   RenameSessionInput,
   RescanProjectConfigsInput,
+  RescanProjectCustomizationInput,
+  ResolveProjectDiscoveredToolingInput,
   ResolveSessionApprovalInput,
   ResolveSessionUserInputInput,
+  ResolveWorkspaceDiscoveredToolingInput,
   SaveLspProfileInput,
   SaveMcpServerInput,
   SavePatternInput,
   SendSessionMessageInput,
   SetPatternFavoriteInput,
+  SetProjectAgentProfileEnabledInput,
   SetSessionArchivedInput,
   SetSessionInteractionModeInput,
   SetSessionPinnedInput,
+  UpdateSessionModelConfigInput,
   UpdateSessionApprovalSettingsInput,
   UpdateSessionToolingInput,
-  UpdateSessionModelConfigInput,
-  DeleteSessionInput,
 } from '@shared/contracts/ipc';
 import type { QuerySessionsInput } from '@shared/domain/sessionLibrary';
 import type { AppearanceTheme } from '@shared/domain/tooling';
@@ -54,9 +56,19 @@ export function registerIpcHandlers(window: BrowserWindow, service: AryxAppServi
     service.rescanProjectConfigs(input.projectId),
   );
   ipcMain.handle(
+    ipcChannels.rescanProjectCustomization,
+    (_event, input: RescanProjectCustomizationInput) =>
+      service.rescanProjectCustomization(input.projectId),
+  );
+  ipcMain.handle(
     ipcChannels.resolveProjectDiscoveredTooling,
     (_event, input: ResolveProjectDiscoveredToolingInput) =>
       service.resolveProjectDiscoveredTooling(input.projectId, input.serverIds, input.resolution),
+  );
+  ipcMain.handle(
+    ipcChannels.setProjectAgentProfileEnabled,
+    (_event, input: SetProjectAgentProfileEnabledInput) =>
+      service.setProjectAgentProfileEnabled(input.projectId, input.agentProfileId, input.enabled),
   );
   ipcMain.handle(ipcChannels.savePattern, (_event, input: SavePatternInput) => service.savePattern(input.pattern));
   ipcMain.handle(ipcChannels.deletePattern, (_event, patternId: string) => service.deletePattern(patternId));

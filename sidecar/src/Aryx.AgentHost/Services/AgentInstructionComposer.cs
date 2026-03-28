@@ -9,9 +9,11 @@ internal static class AgentInstructionComposer
         PatternAgentDefinitionDto agent,
         int agentIndex,
         string workspaceKind = "project",
-        string interactionMode = "interactive")
+        string interactionMode = "interactive",
+        string? projectInstructions = null)
     {
         string baseInstructions = agent.Instructions.Trim();
+        string repositoryInstructions = projectInstructions?.Trim() ?? string.Empty;
         string workspaceGuidance = string.Equals(workspaceKind, "scratchpad", StringComparison.OrdinalIgnoreCase)
             ? """
               You are operating in scratchpad mode.
@@ -46,12 +48,12 @@ internal static class AgentInstructionComposer
                   Focus on refining the answer already in progress.
                   """;
 
-            return JoinInstructionBlocks(baseInstructions, workspaceGuidance, planModeGuidance, groupChatGuidance);
+            return JoinInstructionBlocks(baseInstructions, repositoryInstructions, workspaceGuidance, planModeGuidance, groupChatGuidance);
         }
 
         if (!string.Equals(pattern.Mode, "handoff", StringComparison.OrdinalIgnoreCase))
         {
-            return JoinInstructionBlocks(baseInstructions, workspaceGuidance, planModeGuidance);
+            return JoinInstructionBlocks(baseInstructions, repositoryInstructions, workspaceGuidance, planModeGuidance);
         }
 
         string runtimeGuidance = agentIndex == 0
@@ -69,7 +71,7 @@ internal static class AgentInstructionComposer
               Do not push the actual work back to triage unless you are blocked or the request is clearly outside your specialty.
               """;
 
-        return JoinInstructionBlocks(baseInstructions, workspaceGuidance, planModeGuidance, runtimeGuidance);
+        return JoinInstructionBlocks(baseInstructions, repositoryInstructions, workspaceGuidance, planModeGuidance, runtimeGuidance);
     }
 
     private static string JoinInstructionBlocks(params string[] blocks)

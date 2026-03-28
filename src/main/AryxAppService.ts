@@ -9,6 +9,7 @@ import type {
   ApprovalRequestedEvent,
   ExitPlanModeRequestedEvent,
   McpOauthRequiredEvent,
+  RunTurnCustomAgentConfig,
   RunTurnToolingConfig,
   SidecarCapabilities,
   TurnDeltaEvent,
@@ -34,6 +35,14 @@ import {
   type DiscoveredToolingState,
   type DiscoveredToolingStatus,
 } from '@shared/domain/discoveredTooling';
+import {
+  listEnabledProjectAgentProfiles,
+  normalizeProjectCustomizationState,
+  resolveProjectInstructionsContent,
+  setProjectAgentProfileEnabled,
+  type ProjectAgentProfile,
+  type ProjectCustomizationState,
+} from '@shared/domain/projectCustomization';
 import {
   approvalPolicyRequiresCheckpoint,
   dequeuePendingApprovalState,
@@ -104,6 +113,7 @@ import { WorkspaceRepository } from '@main/persistence/workspaceRepository';
 import { getScratchpadSessionPath } from '@main/persistence/appPaths';
 import { SecretStore } from '@main/secrets/secretStore';
 import { ConfigScannerRegistry } from '@main/services/configScanner';
+import { ProjectCustomizationScanner } from '@main/services/customizationScanner';
 import {
   SIDECAR_STOPPED_BEFORE_COMPLETION_MESSAGE,
   SidecarClient,
@@ -167,6 +177,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
   private readonly secretStore = new SecretStore();
   private readonly gitService = new GitService();
   private readonly configScanner = new ConfigScannerRegistry();
+  private readonly customizationScanner = new ProjectCustomizationScanner();
   private readonly pendingApprovalHandles = new Map<string, PendingApprovalHandle>();
   private readonly pendingUserInputHandles = new Map<string, PendingUserInputHandle>();
   private workspace?: WorkspaceState;
@@ -193,11 +204,15 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
       const didSyncProjectTooling = selectedProject
         ? await this.syncProjectDiscoveredTooling(this.workspace, selectedProject)
         : false;
+      const didSyncProjectCustomization = selectedProject
+        ? await this.syncProjectCustomization(selectedProject)
+        : false;
       const didPruneSelections = this.pruneUnavailableSessionToolingSelections(this.workspace);
       const didPruneApprovalTools = await this.pruneUnavailableApprovalTools(this.workspace);
       if (
         didSyncUserTooling
         || didSyncProjectTooling
+        || didSyncProjectCustomization
         || didPruneSelections
         || didPruneApprovalTools
         || this.cleanupInterruptedSessions(this.workspace)
@@ -262,6 +277,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     if (existing) {
       workspace.selectedProjectId = existing.id;
       const didSyncProjectTooling = await this.syncProjectDiscoveredTooling(workspace, existing);
+      await this.syncProjectCustomization(existing);
       if (didSyncProjectTooling) {
         this.pruneUnavailableSessionToolingSelections(workspace);
         await this.pruneUnavailableApprovalTools(workspace);
@@ -280,6 +296,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     workspace.projects.push(project);
     workspace.selectedProjectId = project.id;
     await this.syncProjectDiscoveredTooling(workspace, project);
+    await this.syncProjectCustomization(project);
     return this.persistAndBroadcast(workspace);
   }
 
@@ -328,6 +345,28 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     await this.syncProjectDiscoveredTooling(workspace, project);
     this.pruneUnavailableSessionToolingSelections(workspace);
     await this.pruneUnavailableApprovalTools(workspace);
+    return this.persistAndBroadcast(workspace);
+  }
+
+  async rescanProjectCustomization(projectId: string): Promise<WorkspaceState> {
+    const workspace = await this.loadWorkspace();
+    const project = this.requireProject(workspace, projectId);
+    await this.syncProjectCustomization(project);
+    return this.persistAndBroadcast(workspace);
+  }
+
+  async setProjectAgentProfileEnabled(
+    projectId: string,
+    agentProfileId: string,
+    enabled: boolean,
+  ): Promise<WorkspaceState> {
+    const workspace = await this.loadWorkspace();
+    const project = this.requireProject(workspace, projectId);
+    project.customization = setProjectAgentProfileEnabled(
+      project.customization,
+      agentProfileId,
+      enabled,
+    );
     return this.persistAndBroadcast(workspace);
   }
 
@@ -624,7 +663,11 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     }
     const project = this.requireProject(workspace, session.projectId);
     const pattern = this.requirePattern(workspace, session.patternId);
-    const effectivePattern = await this.buildEffectivePattern(pattern, session);
+    const effectivePattern = this.applyProjectCustomizationToPattern(
+      await this.buildEffectivePattern(pattern, session),
+      project,
+    );
+    const projectInstructions = resolveProjectInstructionsContent(project.customization);
 
     const preparedContent = prepareChatMessageContent(content);
     if (!preparedContent) {
@@ -679,6 +722,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
           workspaceKind,
           mode: session.interactionMode ?? 'interactive',
           messageMode,
+          projectInstructions,
           pattern: effectivePattern,
           messages: session.messages,
           attachments: attachments?.length ? attachments : undefined,
@@ -1155,13 +1199,31 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
       ? [this.requireProject(workspace, projectId)]
       : workspace.projects;
 
-    let changed = false;
+    let didRefreshGit = false;
+    let didSyncProjectTooling = false;
+    let didSyncProjectCustomization = false;
     for (const project of projects) {
-      const projectChanged = await this.refreshGitContextForProject(project);
-      changed = projectChanged || changed;
+      didRefreshGit = await this.refreshGitContextForProject(project) || didRefreshGit;
+      didSyncProjectTooling = await this.syncProjectDiscoveredTooling(workspace, project) || didSyncProjectTooling;
+      didSyncProjectCustomization = await this.syncProjectCustomization(project) || didSyncProjectCustomization;
     }
 
-    return changed ? this.persistAndBroadcast(workspace) : workspace;
+    const didPruneSelections = didSyncProjectTooling
+      ? this.pruneUnavailableSessionToolingSelections(workspace)
+      : false;
+    const didPruneApprovalTools = didSyncProjectTooling
+      ? await this.pruneUnavailableApprovalTools(workspace)
+      : false;
+
+    return (
+      didRefreshGit
+      || didSyncProjectTooling
+      || didSyncProjectCustomization
+      || didPruneSelections
+      || didPruneApprovalTools
+    )
+      ? this.persistAndBroadcast(workspace)
+      : workspace;
   }
 
   async selectProject(projectId?: string): Promise<WorkspaceState> {
@@ -1169,6 +1231,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     if (projectId) {
       const project = this.requireProject(workspace, projectId);
       const didSyncProjectTooling = await this.syncProjectDiscoveredTooling(workspace, project);
+      await this.syncProjectCustomization(project);
       if (didSyncProjectTooling) {
         this.pruneUnavailableSessionToolingSelections(workspace);
         await this.pruneUnavailableApprovalTools(workspace);
@@ -1193,6 +1256,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
       const session = this.requireSession(workspace, sessionId);
       const project = this.requireProject(workspace, session.projectId);
       const didSyncProjectTooling = await this.syncProjectDiscoveredTooling(workspace, project);
+      await this.syncProjectCustomization(project);
       if (didSyncProjectTooling) {
         this.pruneUnavailableSessionToolingSelections(workspace);
         await this.pruneUnavailableApprovalTools(workspace);
@@ -1842,6 +1906,77 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     return normalizePatternModels(patternWithApprovalSettings, modelCatalog);
   }
 
+  private applyProjectCustomizationToPattern(
+    pattern: PatternDefinition,
+    project: ProjectRecord,
+  ): PatternDefinition {
+    if (isScratchpadProject(project)) {
+      return pattern;
+    }
+
+    const projectCustomAgents = this.buildProjectCustomAgents(project.customization);
+    if (projectCustomAgents.length === 0) {
+      return pattern;
+    }
+
+    const [primaryAgent, ...remainingAgents] = pattern.agents;
+    if (!primaryAgent) {
+      return pattern;
+    }
+
+    const existingCustomAgents = primaryAgent.copilot?.customAgents ?? [];
+    const existingAgentNames = new Set(existingCustomAgents.map((agent) => agent.name.toLowerCase()));
+    const mergedCustomAgents = [
+      ...existingCustomAgents,
+      ...projectCustomAgents.filter((agent) => !existingAgentNames.has(agent.name.toLowerCase())),
+    ];
+
+    return {
+      ...pattern,
+      agents: [
+        {
+          ...primaryAgent,
+          copilot: {
+            ...primaryAgent.copilot,
+            customAgents: mergedCustomAgents,
+          },
+        },
+        ...remainingAgents,
+      ],
+    };
+  }
+
+  private buildProjectCustomAgents(
+    customization?: ProjectCustomizationState,
+  ): RunTurnCustomAgentConfig[] {
+    return listEnabledProjectAgentProfiles(customization).map((profile) => this.mapProjectAgentProfile(profile));
+  }
+
+  private mapProjectAgentProfile(profile: ProjectAgentProfile): RunTurnCustomAgentConfig {
+    const customAgent: RunTurnCustomAgentConfig = {
+      name: profile.name,
+      prompt: profile.prompt,
+    };
+
+    if (profile.displayName) {
+      customAgent.displayName = profile.displayName;
+    }
+
+    if (profile.description) {
+      customAgent.description = profile.description;
+    }
+
+    if (profile.tools) {
+      customAgent.tools = profile.tools;
+    }
+
+    if (profile.infer !== undefined) {
+      customAgent.infer = profile.infer;
+    }
+
+    return customAgent;
+  }
+
   private async listKnownApprovalToolNames(
     workspace: WorkspaceState,
     project?: ProjectRecord,
@@ -1920,6 +2055,25 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     return true;
   }
 
+  private async syncProjectCustomization(project: ProjectRecord): Promise<boolean> {
+    if (isScratchpadProject(project)) {
+      if (!project.customization || this.equalProjectCustomizationState(project.customization, undefined)) {
+        return false;
+      }
+
+      project.customization = undefined;
+      return true;
+    }
+
+    const nextState = await this.customizationScanner.scanProject(project.path, project.customization);
+    if (this.equalProjectCustomizationState(project.customization, nextState)) {
+      return false;
+    }
+
+    project.customization = nextState;
+    return true;
+  }
+
   private async syncProjectDiscoveredTooling(
     workspace: WorkspaceState,
     project: ProjectRecord,
@@ -1986,6 +2140,23 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
   ): boolean {
     return JSON.stringify(normalizeDiscoveredToolingState(left).mcpServers)
       === JSON.stringify(normalizeDiscoveredToolingState(right).mcpServers);
+  }
+
+  private equalProjectCustomizationState(
+    left?: ProjectCustomizationState,
+    right?: ProjectCustomizationState,
+  ): boolean {
+    const normalizedLeft = normalizeProjectCustomizationState(left);
+    const normalizedRight = normalizeProjectCustomizationState(right);
+    return JSON.stringify({
+      instructions: normalizedLeft.instructions,
+      agentProfiles: normalizedLeft.agentProfiles,
+      promptFiles: normalizedLeft.promptFiles,
+    }) === JSON.stringify({
+      instructions: normalizedRight.instructions,
+      agentProfiles: normalizedRight.agentProfiles,
+      promptFiles: normalizedRight.promptFiles,
+    });
   }
 
   private updateSessionRun(

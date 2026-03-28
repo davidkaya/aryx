@@ -4,6 +4,7 @@ import { createBuiltinPatterns, resolvePatternGraph } from '@shared/domain/patte
 import type { PatternDefinition } from '@shared/domain/pattern';
 import { isScratchpadProject, mergeScratchpadProject } from '@shared/domain/project';
 import { normalizeDiscoveredToolingState } from '@shared/domain/discoveredTooling';
+import { normalizeProjectCustomizationState } from '@shared/domain/projectCustomization';
 import { normalizeSessionRunRecords } from '@shared/domain/runTimeline';
 import type { SessionRecord } from '@shared/domain/session';
 import {
@@ -73,6 +74,7 @@ export class WorkspaceRepository {
       (stored.projects ?? []).map((project) => ({
         ...project,
         discoveredTooling: normalizeDiscoveredToolingState(project.discoveredTooling),
+        customization: normalizeProjectCustomizationState(project.customization),
       })),
       this.scratchpadPath,
     );

@@ -124,6 +124,8 @@ Projects are the container for context. There are two kinds:
 
 The scratchpad is modeled inside the same workspace system instead of as a separate subsystem. That keeps the UI and session model consistent while still allowing special rules for scratchpad behavior. Each scratchpad session receives its own working directory under the shared scratchpad root, so session-created files stay isolated from other scratchpad conversations.
 
+Project-backed entries also persist scanned Copilot customization metadata discovered from repository files such as `.github/copilot-instructions.md`, `AGENTS.md`, `.github/agents/*.agent.md`, and `.github/prompts/*.prompt.md`. The main process owns that scan step and stores the normalized results on the project record so repo instructions and enabled custom agent profiles can participate in later run execution without turning the renderer into a filesystem crawler.
+
 ### Patterns
 
 Patterns describe how agents collaborate. The architecture supports:
@@ -214,6 +216,8 @@ The protocol also carries **turn-scoped lifecycle events** alongside output delt
 These events flow through a single `onTurnScopedEvent` callback on the `runTurn` command, avoiding per-event-type callback proliferation. The main process maps each event to a `SessionEventRecord` and pushes it to the renderer, where lightweight state maps (activity, usage, turn-event log) consume them without touching the persisted workspace.
 
 For project-backed sessions, the sidecar also discovers GitHub Copilot CLI hook definitions from `.github/hooks/*.json` under the repository root. Those files are parsed and merged once per run bundle, then projected onto the SDK session hook delegates. Hook commands run synchronously in the sidecar through the platform shell, with stdin JSON payloads shaped to match Copilot CLI hook expectations as closely as the SDK allows. Hook failures are logged to stderr and treated as non-fatal diagnostics, while `preToolUse` hook outputs can still deny a tool call before Aryx falls back to its built-in approval policy.
+
+The `run-turn` command now also carries a project-instruction payload derived from scanned repo customization files. The main process composes that payload from repo-level instruction files and merges enabled discovered custom agent profiles into the primary pattern agent's Copilot configuration before sending the command across the stdio boundary. The sidecar then folds those project instructions into the final SDK system message alongside the agent's own instructions and runtime guidance.
 
 ## Security model
 

@@ -251,6 +251,43 @@ public sealed class CopilotAgentBundleTests
     }
 
     [Fact]
+    public void CreateSessionConfig_PassesProjectInstructionsIntoTheSystemMessage()
+    {
+        RunTurnCommandDto command = new()
+        {
+            SessionId = "session-1",
+            ProjectPath = @"C:\workspace\project",
+            WorkspaceKind = "project",
+            Mode = "interactive",
+            ProjectInstructions = "Follow repository guidance.",
+            Pattern = new PatternDefinitionDto
+            {
+                Id = "pattern-1",
+                Name = "Pattern",
+                Mode = "single",
+                Availability = "available",
+                Agents =
+                [
+                    new PatternAgentDefinitionDto
+                    {
+                        Id = "agent-1",
+                        Name = "Primary",
+                        Model = "gpt-5.4",
+                        Instructions = "Help.",
+                    },
+                ],
+            },
+        };
+
+        SessionConfig sessionConfig = CopilotAgentBundle.CreateSessionConfig(
+            command,
+            command.Pattern.Agents[0],
+            agentIndex: 0);
+
+        Assert.Equal("Help.\n\nFollow repository guidance.", sessionConfig.SystemMessage?.Content);
+    }
+
+    [Fact]
     public async Task CopilotSessionHooks_Create_UsesApprovalPolicyForPreToolUse()
     {
         RunTurnCommandDto command = new()

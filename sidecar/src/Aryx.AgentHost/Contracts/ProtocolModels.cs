@@ -183,6 +183,7 @@ public sealed class RunTurnCommandDto : SidecarCommandEnvelope
     public string WorkspaceKind { get; init; } = "project";
     public string Mode { get; init; } = "interactive";
     public string MessageMode { get; init; } = "enqueue";
+    public string? ProjectInstructions { get; init; }
     public PatternDefinitionDto Pattern { get; init; } = new();
     public IReadOnlyList<ChatMessageDto> Messages { get; init; } = [];
     public RunTurnToolingConfigDto? Tooling { get; init; }

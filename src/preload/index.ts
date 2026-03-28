@@ -15,8 +15,12 @@ const api: ElectronApi = {
     ipcRenderer.invoke(ipcChannels.resolveWorkspaceDiscoveredTooling, input),
   refreshProjectGitContext: (projectId) => ipcRenderer.invoke(ipcChannels.refreshProjectGitContext, projectId),
   rescanProjectConfigs: (input) => ipcRenderer.invoke(ipcChannels.rescanProjectConfigs, input),
+  rescanProjectCustomization: (input) =>
+    ipcRenderer.invoke(ipcChannels.rescanProjectCustomization, input),
   resolveProjectDiscoveredTooling: (input) =>
     ipcRenderer.invoke(ipcChannels.resolveProjectDiscoveredTooling, input),
+  setProjectAgentProfileEnabled: (input) =>
+    ipcRenderer.invoke(ipcChannels.setProjectAgentProfileEnabled, input),
   savePattern: (input) => ipcRenderer.invoke(ipcChannels.savePattern, input),
   deletePattern: (patternId) => ipcRenderer.invoke(ipcChannels.deletePattern, patternId),
   setPatternFavorite: (input) => ipcRenderer.invoke(ipcChannels.setPatternFavorite, input),

@@ -151,6 +151,39 @@ public sealed class AgentInstructionComposerTests
         Assert.Contains("Do not continue into implementation", instructions, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void Compose_InsertsProjectInstructionsBetweenBaseAndRuntimeGuidance()
+    {
+        PatternDefinitionDto pattern = new()
+        {
+            Id = "pattern-single",
+            Name = "Single",
+            Mode = "single",
+            Availability = "available",
+        };
+        PatternAgentDefinitionDto agent = CreateAgent(
+            id: "agent-primary",
+            name: "Primary Agent",
+            instructions: "You are a helpful assistant.");
+
+        string instructions = AgentInstructionComposer.Compose(
+            pattern,
+            agent,
+            agentIndex: 0,
+            workspaceKind: "scratchpad",
+            projectInstructions: "Follow the repository guide.");
+
+        Assert.Contains("You are a helpful assistant.", instructions, StringComparison.Ordinal);
+        Assert.Contains("Follow the repository guide.", instructions, StringComparison.Ordinal);
+        Assert.Contains("scratchpad mode", instructions, StringComparison.OrdinalIgnoreCase);
+        Assert.True(
+            instructions.IndexOf("You are a helpful assistant.", StringComparison.Ordinal)
+            < instructions.IndexOf("Follow the repository guide.", StringComparison.Ordinal));
+        Assert.True(
+            instructions.IndexOf("Follow the repository guide.", StringComparison.Ordinal)
+            < instructions.IndexOf("scratchpad mode", StringComparison.OrdinalIgnoreCase));
+    }
+
     private static PatternAgentDefinitionDto CreateAgent(string id, string name, string instructions)
     {
         return new PatternAgentDefinitionDto

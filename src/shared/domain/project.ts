@@ -1,5 +1,6 @@
 import { nowIso } from '@shared/utils/ids';
 import type { ProjectDiscoveredTooling } from '@shared/domain/discoveredTooling';
+import type { ProjectCustomizationState } from '@shared/domain/projectCustomization';
 
 export type ProjectGitContextStatus = 'ready' | 'not-repository' | 'git-missing' | 'error';
 
@@ -39,6 +40,7 @@ export interface ProjectRecord {
   addedAt: string;
   git?: ProjectGitContext;
   discoveredTooling?: ProjectDiscoveredTooling;
+  customization?: ProjectCustomizationState;
 }
 
 export const SCRATCHPAD_PROJECT_ID = 'project-scratchpad';

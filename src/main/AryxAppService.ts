@@ -156,6 +156,11 @@ function isSidecarStoppedBeforeCompletionError(error: unknown): error is Error {
   return error instanceof Error && error.message === SIDECAR_STOPPED_BEFORE_COMPLETION_MESSAGE;
 }
 
+const INTERRUPTED_RUN_ERROR =
+  'This session was interrupted because Aryx restarted while a run was in progress.';
+const INTERRUPTED_APPROVAL_ERROR =
+  'Pending approval was interrupted because Aryx restarted before a decision was recorded.';
+
 export class AryxAppService extends EventEmitter<AppServiceEvents> {
   private readonly workspaceRepository = new WorkspaceRepository();
   private readonly sidecar = new SidecarClient();
@@ -195,7 +200,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
         || didSyncProjectTooling
         || didPruneSelections
         || didPruneApprovalTools
-        || this.failInterruptedPendingApprovals(this.workspace)
+        || this.cleanupInterruptedSessions(this.workspace)
       ) {
         await this.workspaceRepository.save(this.workspace);
       }
@@ -2015,33 +2020,41 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     this.emit('session-event', event);
   }
 
-  private failInterruptedPendingApprovals(workspace: WorkspaceState): boolean {
+  private cleanupInterruptedSessions(workspace: WorkspaceState): boolean {
     let changed = false;
 
     for (const session of workspace.sessions) {
       const pendingApprovals = listPendingApprovals(session);
-      if (pendingApprovals.length === 0) {
+      const hasPendingUserInput = session.pendingUserInput !== undefined;
+      const failedRequestIds = new Set(
+        session.runs
+          .filter((run) => run.status === 'running')
+          .map((run) => run.requestId),
+      );
+      if (pendingApprovals.length === 0 && !hasPendingUserInput && failedRequestIds.size === 0) {
         continue;
       }
 
       changed = true;
       const failedAt = nowIso();
-      const error = 'Pending approval was interrupted because Aryx restarted before a decision was recorded.';
-      const requestIds = this.rejectPendingApprovals(session, failedAt, error);
-      session.status = 'error';
-      session.lastError = error;
-      session.updatedAt = failedAt;
-
-      if (requestIds.length === 0) {
-        const fallbackRequestId = session.runs.find((run) => run.status === 'running')?.requestId;
-        if (fallbackRequestId) {
-          requestIds.push(fallbackRequestId);
+      if (pendingApprovals.length > 0) {
+        for (const requestId of this.rejectPendingApprovals(session, failedAt, INTERRUPTED_APPROVAL_ERROR)) {
+          failedRequestIds.add(requestId);
         }
       }
 
-      for (const requestId of requestIds) {
+      if (session.pendingUserInput) {
+        this.pendingUserInputHandles.delete(session.pendingUserInput.id);
+        session.pendingUserInput = undefined;
+      }
+
+      session.status = 'error';
+      session.lastError = INTERRUPTED_RUN_ERROR;
+      session.updatedAt = failedAt;
+
+      for (const requestId of failedRequestIds) {
         this.updateSessionRun(session, requestId, (run) =>
-          failSessionRunRecord(run, failedAt, error));
+          failSessionRunRecord(run, failedAt, INTERRUPTED_RUN_ERROR));
       }
     }
 

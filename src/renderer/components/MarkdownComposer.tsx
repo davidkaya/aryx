@@ -24,7 +24,6 @@ import {
   $isCodeNode,
   $createCodeNode,
   $createCodeHighlightNode,
-  $isCodeHighlightNode,
   CodeNode,
   CodeHighlightNode,
 } from '@lexical/code';
@@ -44,9 +43,7 @@ import {
   $getNodeByKey,
   $getRoot,
   $getSelection,
-  $isLineBreakNode,
   $isRangeSelection,
-  $isTextNode,
   CLEAR_EDITOR_COMMAND,
   COMMAND_PRIORITY_HIGH,
   FORMAT_TEXT_COMMAND,
@@ -63,6 +60,8 @@ import {
   markdownEditorNamespace,
   markdownEditorNodes,
   markdownEditorTransformers,
+  getCodeNodeAbsoluteOffset,
+  restoreCodeNodeSelection,
 } from '@renderer/lib/markdownEditor';
 import { prepareChatMessageContent } from '@shared/utils/chatMessage';
 
@@ -295,55 +294,6 @@ function parseHljsHtml(html: string): HljsToken[] {
 
 /* ── Code highlight plugin ────────────────────────────── */
 
-function getAbsoluteOffset(
-  codeNode: ReturnType<typeof $getNodeByKey>,
-  point: { key: string; offset: number },
-): number {
-  if (!codeNode || !('getChildren' in codeNode)) return 0;
-  let offset = 0;
-  for (const child of (codeNode as CodeNode).getChildren()) {
-    if (child.getKey() === point.key) return offset + point.offset;
-    offset += $isLineBreakNode(child) ? 1 : child.getTextContentSize();
-  }
-  return offset;
-}
-
-function restoreSelectionFromOffsets(codeNode: CodeNode, anchorOff: number, focusOff: number) {
-  const children = codeNode.getChildren();
-
-  function findPoint(target: number) {
-    let offset = 0;
-    for (const child of children) {
-      const size = $isLineBreakNode(child) ? 1 : child.getTextContentSize();
-      if (offset + size > target || (offset + size === target && $isTextNode(child))) {
-        return {
-          key: child.getKey(),
-          offset: target - offset,
-          type: ($isTextNode(child) || $isCodeHighlightNode(child) ? 'text' : 'element') as 'text' | 'element',
-        };
-      }
-      offset += size;
-    }
-    const last = children[children.length - 1];
-    if (last) {
-      return {
-        key: last.getKey(),
-        offset: $isLineBreakNode(last) ? 0 : last.getTextContentSize(),
-        type: ($isTextNode(last) || $isCodeHighlightNode(last) ? 'text' : 'element') as 'text' | 'element',
-      };
-    }
-    return { key: codeNode.getKey(), offset: 0, type: 'element' as const };
-  }
-
-  const anchor = findPoint(anchorOff);
-  const focus = findPoint(focusOff);
-  const selection = $getSelection();
-  if ($isRangeSelection(selection)) {
-    selection.anchor.set(anchor.key, anchor.offset, anchor.type);
-    selection.focus.set(focus.key, focus.offset, focus.type);
-  }
-}
-
 /** Enables highlight.js-based syntax highlighting inside CodeNodes. */
 function CodeHighlightPlugin() {
   const [editor] = useLexicalComposerContext();
@@ -369,8 +319,8 @@ function CodeHighlightPlugin() {
         let anchorOff: number | undefined;
         let focusOff: number | undefined;
         if ($isRangeSelection(sel)) {
-          anchorOff = getAbsoluteOffset(current, sel.anchor);
-          focusOff = getAbsoluteOffset(current, sel.focus);
+          anchorOff = getCodeNodeAbsoluteOffset(current, sel.anchor);
+          focusOff = getCodeNodeAbsoluteOffset(current, sel.focus);
         }
 
         // Build new children from tokens
@@ -392,7 +342,7 @@ function CodeHighlightPlugin() {
 
         // Restore cursor
         if (anchorOff !== undefined && focusOff !== undefined) {
-          restoreSelectionFromOffsets(current, anchorOff, focusOff);
+          restoreCodeNodeSelection(current, anchorOff, focusOff);
         }
       });
       queueMicrotask(() => highlightingKeys.delete(nodeKey));

@@ -26,6 +26,8 @@ import { type PatternDefinition, type ReasoningEffort } from '@shared/domain/pat
 import { isScratchpadProject, type ProjectRecord } from '@shared/domain/project';
 import { resolveSessionToolingSelection, type SessionRecord } from '@shared/domain/session';
 import {
+  groupApprovalToolsByProvider,
+  isMcpServerApprovalKey,
   listApprovalToolDefinitions,
   type RuntimeToolDefinition,
   type SessionToolingSelection,
@@ -128,10 +130,19 @@ export function ChatPane({
     ),
     [isApprovalOverridden, session.approvalSettings, pattern.approvalPolicy],
   );
-  const effectiveAutoApprovedCount = useMemo(
-    () => approvalTools.filter((t) => effectiveAutoApproved.has(t.id)).length,
-    [approvalTools, effectiveAutoApproved],
-  );
+  const effectiveAutoApprovedCount = useMemo(() => {
+    const groups = groupApprovalToolsByProvider(approvalTools, toolingSettings);
+    let count = 0;
+    for (const group of groups) {
+      if (group.serverApprovalKey && effectiveAutoApproved.has(group.serverApprovalKey)) {
+        // Server-level approval: count as 1 approved group even with 0 declared tools
+        count += Math.max(group.tools.length, 1);
+      } else {
+        count += group.tools.filter((t) => effectiveAutoApproved.has(t.id)).length;
+      }
+    }
+    return count;
+  }, [approvalTools, effectiveAutoApproved, toolingSettings]);
 
   useEffect(() => {
     transcriptRef.current?.scrollTo({

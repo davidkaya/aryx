@@ -844,6 +844,36 @@ public sealed class CopilotWorkflowRunnerTests
     }
 
     [Fact]
+    public void RequiresToolCallApproval_HonorsMcpServerLevelApprovalKey()
+    {
+        ApprovalPolicyDto policy = new()
+        {
+            Rules =
+            [
+                new ApprovalCheckpointRuleDto
+                {
+                    Kind = "tool-call",
+                },
+            ],
+            AutoApprovedToolNames = ["mcp_server:Git MCP"],
+        };
+
+        // Server-level key approves any tool from that server
+        Assert.False(CopilotApprovalCoordinator.RequiresToolCallApproval(
+            policy, "agent-1", "git.status", null, "mcp_server:Git MCP"));
+        Assert.False(CopilotApprovalCoordinator.RequiresToolCallApproval(
+            policy, "agent-1", "git.diff", null, "mcp_server:Git MCP"));
+
+        // Different server still requires approval
+        Assert.True(CopilotApprovalCoordinator.RequiresToolCallApproval(
+            policy, "agent-1", "fs.read", null, "mcp_server:Filesystem"));
+
+        // Non-MCP tools unaffected
+        Assert.True(CopilotApprovalCoordinator.RequiresToolCallApproval(
+            policy, "agent-1", "unknown_tool"));
+    }
+
+    [Fact]
     public void TryGetApprovalToolName_ResolvesDirectNamesAndRuntimeFallbacks()
     {
         Assert.True(

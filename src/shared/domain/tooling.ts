@@ -149,6 +149,16 @@ const fallbackRuntimeApprovalTools: ReadonlyArray<RuntimeToolDefinition> = [
   { id: 'store_memory', label: 'Store memory' },
 ];
 
+const MCP_SERVER_APPROVAL_PREFIX = 'mcp_server:';
+
+export function buildMcpServerApprovalKey(serverName: string): string {
+  return `${MCP_SERVER_APPROVAL_PREFIX}${serverName}`;
+}
+
+export function isMcpServerApprovalKey(key: string): boolean {
+  return key.startsWith(MCP_SERVER_APPROVAL_PREFIX);
+}
+
 export function createWorkspaceSettings(): WorkspaceSettings {
   return {
     theme: 'dark',
@@ -262,7 +272,11 @@ export function listApprovalToolNames(
   tooling: WorkspaceToolingSettings,
   runtimeTools?: ReadonlyArray<RuntimeToolDefinition>,
 ): string[] {
-  return listApprovalToolDefinitions(tooling, runtimeTools).map((tool) => tool.id);
+  const toolNames = listApprovalToolDefinitions(tooling, runtimeTools).map((tool) => tool.id);
+  for (const server of tooling.mcpServers) {
+    toolNames.push(buildMcpServerApprovalKey(server.name));
+  }
+  return [...new Set(toolNames)];
 }
 
 export interface ApprovalToolGroup {
@@ -270,6 +284,7 @@ export interface ApprovalToolGroup {
   label: string;
   kind: ApprovalToolKind;
   tools: ApprovalToolDefinition[];
+  serverApprovalKey?: string;
 }
 
 const approvalToolGroupKindOrder: ApprovalToolKind[] = ['builtin', 'mcp', 'lsp', 'mixed'];
@@ -290,6 +305,18 @@ export function groupApprovalToolsByProvider(
       groups.set(groupKey.id, group);
     }
     group.tools.push(tool);
+  }
+
+  // Ensure every MCP server has a group (even with no declared tools) and
+  // attach server-level approval keys.
+  for (const server of tooling.mcpServers) {
+    const groupId = `mcp:${server.id}`;
+    let group = groups.get(groupId);
+    if (!group) {
+      group = { id: groupId, label: server.name, kind: 'mcp', tools: [] };
+      groups.set(groupId, group);
+    }
+    group.serverApprovalKey = buildMcpServerApprovalKey(server.name);
   }
 
   return [...groups.values()].sort((a, b) => {

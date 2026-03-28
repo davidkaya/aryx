@@ -1,8 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 
 import {
+  buildMcpServerApprovalKey,
   groupApprovalToolsByProvider,
   listApprovalToolDefinitions,
+  listApprovalToolNames,
   normalizeWorkspaceSettings,
   resolveProjectToolingSettings,
   resolveToolLabel,
@@ -441,7 +443,7 @@ describe('groupApprovalToolsByProvider', () => {
     expect(builtinGroups[0].tools.length).toBe(5);
   });
 
-  test('multi-provider tools go into first provider group', () => {
+  test('multi-provider tools go into first provider group, second provider gets empty group', () => {
     const tooling = makeTooling([
       makeMcpServer('git-a', 'Git A', ['git.status']),
       makeMcpServer('git-b', 'Git B', ['git.status']),
@@ -450,9 +452,13 @@ describe('groupApprovalToolsByProvider', () => {
     const groups = groupApprovalToolsByProvider(tools, tooling);
 
     const mcpGroups = groups.filter((g) => g.kind === 'mcp');
-    expect(mcpGroups.length).toBe(1);
-    expect(mcpGroups[0].label).toBe('Git A');
-    expect(mcpGroups[0].tools[0].providerNames).toEqual(['Git A', 'Git B']);
+    expect(mcpGroups.length).toBe(2);
+    const gitA = mcpGroups.find((g) => g.label === 'Git A');
+    expect(gitA).toBeDefined();
+    expect(gitA!.tools[0].providerNames).toEqual(['Git A', 'Git B']);
+    const gitB = mcpGroups.find((g) => g.label === 'Git B');
+    expect(gitB).toBeDefined();
+    expect(gitB!.tools.length).toBe(0);
   });
 
   test('sorts builtin first, then MCP by name, then LSP by name', () => {
@@ -471,5 +477,62 @@ describe('groupApprovalToolsByProvider', () => {
 
     const mcpLabels = groups.filter((g) => g.kind === 'mcp').map((g) => g.label);
     expect(mcpLabels).toEqual(['Alpha', 'Zebra']);
+  });
+
+  test('creates groups with serverApprovalKey for MCP servers', () => {
+    const tooling = makeTooling([
+      makeMcpServer('git', 'Git MCP', ['git.status']),
+    ]);
+    const tools = listApprovalToolDefinitions(tooling);
+    const groups = groupApprovalToolsByProvider(tools, tooling);
+
+    const mcpGroup = groups.find((g) => g.kind === 'mcp');
+    expect(mcpGroup).toBeDefined();
+    expect(mcpGroup!.serverApprovalKey).toBe('mcp_server:Git MCP');
+  });
+
+  test('creates groups for MCP servers with empty tools array', () => {
+    const tooling = makeTooling([
+      makeMcpServer('empty', 'Empty Server', []),
+    ]);
+    const tools = listApprovalToolDefinitions(tooling);
+    const groups = groupApprovalToolsByProvider(tools, tooling);
+
+    const mcpGroups = groups.filter((g) => g.kind === 'mcp');
+    expect(mcpGroups.length).toBe(1);
+    expect(mcpGroups[0].label).toBe('Empty Server');
+    expect(mcpGroups[0].tools.length).toBe(0);
+    expect(mcpGroups[0].serverApprovalKey).toBe('mcp_server:Empty Server');
+  });
+
+  test('builtin groups do not have serverApprovalKey', () => {
+    const tooling = makeTooling();
+    const tools = listApprovalToolDefinitions(tooling);
+    const groups = groupApprovalToolsByProvider(tools, tooling);
+
+    const builtinGroup = groups.find((g) => g.kind === 'builtin');
+    expect(builtinGroup!.serverApprovalKey).toBeUndefined();
+  });
+});
+
+describe('server-level approval keys', () => {
+  test('buildMcpServerApprovalKey produces mcp_server: prefixed key', () => {
+    expect(buildMcpServerApprovalKey('My Server')).toBe('mcp_server:My Server');
+    expect(buildMcpServerApprovalKey('git')).toBe('mcp_server:git');
+  });
+
+  test('listApprovalToolNames includes server-level keys', () => {
+    const tooling: WorkspaceToolingSettings = {
+      mcpServers: [{
+        id: 'git', name: 'Git MCP', transport: 'local', command: 'node', args: [],
+        tools: [], createdAt: '2026-03-28T00:00:00.000Z', updatedAt: '2026-03-28T00:00:00.000Z',
+      }],
+      lspProfiles: [],
+    };
+    const names = listApprovalToolNames(tooling);
+    expect(names).toContain('mcp_server:Git MCP');
+    // Also includes builtins
+    expect(names).toContain('read');
+    expect(names).toContain('shell');
   });
 });

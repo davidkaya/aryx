@@ -57,9 +57,10 @@ internal sealed class CopilotApprovalCoordinator
     {
         string? toolName = ResolveApprovalToolName(request, toolNamesByCallId);
         string? autoApprovedToolName = ResolveAutoApprovedToolName(request);
+        string? mcpServerApprovalKey = ResolveMcpServerApprovalKey(request);
         string? approvalCacheKey = ResolveApprovalCacheKey(toolName, autoApprovedToolName);
         if (IsToolApprovedForRequest(command.RequestId, approvalCacheKey)
-            || !RequiresToolCallApproval(command.Pattern.ApprovalPolicy, agent.Id, toolName, autoApprovedToolName))
+            || !RequiresToolCallApproval(command.Pattern.ApprovalPolicy, agent.Id, toolName, autoApprovedToolName, mcpServerApprovalKey))
         {
             return CreateApprovalResult(PermissionRequestResultKind.Approved);
         }
@@ -227,7 +228,8 @@ internal sealed class CopilotApprovalCoordinator
         ApprovalPolicyDto? approvalPolicy,
         string agentId,
         string? toolName,
-        string? autoApprovedToolName = null)
+        string? autoApprovedToolName = null,
+        string? mcpServerApprovalKey = null)
     {
         if (approvalPolicy?.Rules is null || approvalPolicy.Rules.Count == 0)
         {
@@ -245,7 +247,8 @@ internal sealed class CopilotApprovalCoordinator
             return true;
         }
 
-        return !MatchesAutoApprovedTool(autoApprovedToolNames, toolName, autoApprovedToolName);
+        return !MatchesAutoApprovedTool(autoApprovedToolNames, toolName, autoApprovedToolName)
+            && !MatchesAutoApprovedToolName(autoApprovedToolNames, mcpServerApprovalKey);
     }
 
     internal static bool TryGetApprovalToolName(
@@ -325,6 +328,19 @@ internal sealed class CopilotApprovalCoordinator
     private static string? ResolveAutoApprovedToolName(PermissionRequest request)
     {
         return GetFallbackToolName(request);
+    }
+
+    private const string McpServerApprovalPrefix = "mcp_server:";
+
+    private static string? ResolveMcpServerApprovalKey(PermissionRequest request)
+    {
+        if (request is not PermissionRequestMcp mcp)
+        {
+            return null;
+        }
+
+        string? serverName = NormalizeOptionalString(mcp.ServerName);
+        return serverName is not null ? $"{McpServerApprovalPrefix}{serverName}" : null;
     }
 
     private static string? ResolveApprovalCacheKey(

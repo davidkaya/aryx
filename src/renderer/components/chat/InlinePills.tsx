@@ -367,7 +367,11 @@ export function InlineApprovalPill({
     [approvalTools, toolingSettings],
   );
 
-  const showSearch = approvalTools.length > SEARCH_THRESHOLD;
+  const totalItemCount = groups.reduce(
+    (sum, g) => sum + Math.max(g.tools.length, g.serverApprovalKey ? 1 : 0),
+    0,
+  );
+  const showSearch = totalItemCount > SEARCH_THRESHOLD;
   const searchLower = search.toLowerCase().trim();
 
   const filteredGroups = useMemo(() => {
@@ -382,7 +386,7 @@ export function InlineApprovalPill({
             || group.label.toLowerCase().includes(searchLower),
         ),
       }))
-      .filter((g) => g.tools.length > 0);
+      .filter((g) => g.tools.length > 0 || g.label.toLowerCase().includes(searchLower));
   }, [groups, searchLower]);
 
   function toggleTool(toolId: string) {
@@ -396,16 +400,43 @@ export function InlineApprovalPill({
   }
 
   function toggleGroup(group: ApprovalToolGroup) {
-    const allApproved = group.tools.every((t) => effectiveAutoApproved.has(t.id));
     const next = new Set(effectiveAutoApproved);
-    for (const tool of group.tools) {
-      if (allApproved) {
-        next.delete(tool.id);
+
+    if (group.serverApprovalKey) {
+      // MCP servers use server-level approval key
+      if (next.has(group.serverApprovalKey)) {
+        next.delete(group.serverApprovalKey);
       } else {
-        next.add(tool.id);
+        next.add(group.serverApprovalKey);
+      }
+      // Also remove individual tool entries when toggling server-level
+      for (const tool of group.tools) {
+        next.delete(tool.id);
+      }
+    } else {
+      // Non-MCP groups: toggle individual tools
+      const allApproved = group.tools.every((t) => next.has(t.id));
+      for (const tool of group.tools) {
+        if (allApproved) {
+          next.delete(tool.id);
+        } else {
+          next.add(tool.id);
+        }
       }
     }
+
     onUpdate({ autoApprovedToolNames: [...next] });
+  }
+
+  function isGroupApproved(group: ApprovalToolGroup): 'all' | 'some' | 'none' {
+    if (group.serverApprovalKey && effectiveAutoApproved.has(group.serverApprovalKey)) {
+      return 'all';
+    }
+    if (group.tools.length === 0) return 'none';
+    const approvedCount = group.tools.filter((t) => effectiveAutoApproved.has(t.id)).length;
+    if (approvedCount === group.tools.length) return 'all';
+    if (approvedCount > 0) return 'some';
+    return 'none';
   }
 
   function toggleExpanded(groupId: string) {
@@ -442,7 +473,7 @@ export function InlineApprovalPill({
         type="button"
       >
         <ShieldCheck className="size-2.5" />
-        <span>{effectiveAutoApprovedCount}/{approvalTools.length} auto-approved</span>
+        <span>{effectiveAutoApprovedCount}/{totalItemCount} auto-approved</span>
         <ChevronDown className={`size-2.5 transition ${open ? 'rotate-180' : ''}`} />
       </button>
 
@@ -494,9 +525,12 @@ export function InlineApprovalPill({
               const isBuiltin = group.kind === 'builtin';
               const isCollapsible = !isBuiltin;
               const expanded = isBuiltin || isGroupExpanded(group.id);
-              const approvedCount = group.tools.filter((t) => effectiveAutoApproved.has(t.id)).length;
-              const allApproved = approvedCount === group.tools.length;
-              const someApproved = approvedCount > 0 && !allApproved;
+              const groupState = isGroupApproved(group);
+              const allApproved = groupState === 'all';
+              const someApproved = groupState === 'some';
+              const approvedLabel = group.serverApprovalKey && allApproved
+                ? 'all'
+                : `${group.tools.filter((t) => effectiveAutoApproved.has(t.id)).length}/${group.tools.length}`;
 
               return (
                 <div key={group.id}>
@@ -511,10 +545,14 @@ export function InlineApprovalPill({
                       onClick={() => toggleExpanded(group.id)}
                       type="button"
                     >
-                      <ChevronRight className={`size-3 shrink-0 text-zinc-600 transition ${expanded ? 'rotate-90' : ''}`} />
+                      {group.tools.length > 0 ? (
+                        <ChevronRight className={`size-3 shrink-0 text-zinc-600 transition ${expanded ? 'rotate-90' : ''}`} />
+                      ) : (
+                        <Server className="size-3 shrink-0 text-zinc-600" />
+                      )}
                       <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-zinc-300">{group.label}</span>
                       <span className="shrink-0 rounded-full bg-zinc-800/80 px-1.5 py-px text-[9px] font-medium tabular-nums text-zinc-500">
-                        {approvedCount}/{group.tools.length}
+                        {approvedLabel}
                       </span>
                       <GroupToggle
                         allApproved={allApproved}

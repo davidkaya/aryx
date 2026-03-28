@@ -73,7 +73,7 @@ export async function probeServer(
       status: 'success',
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = formatProbeError(error);
     console.warn(`[aryx mcp-probe] ${server.name}: failed — ${message}`);
     return {
       serverId: server.id,
@@ -102,10 +102,17 @@ async function probeServerCore(
     return await probeWithTransport(
       new StreamableHTTPClientTransport(new URL(server.url), headerOpts),
     );
-  } catch {
-    return probeWithTransport(
-      new SSEClientTransport(new URL(server.url), headerOpts),
-    );
+  } catch (streamableError) {
+    try {
+      return await probeWithTransport(
+        new SSEClientTransport(new URL(server.url), headerOpts),
+      );
+    } catch (sseError) {
+      // SSE 405 means the server IS Streamable HTTP — surface the original error.
+      const sseCode = (sseError as { code?: number }).code;
+      if (sseCode === 405) throw streamableError;
+      throw sseError;
+    }
   }
 }
 
@@ -175,6 +182,19 @@ function buildHeaders(
     ...(configHeaders ?? {}),
     ...(bearerToken ? { Authorization: `Bearer ${bearerToken}` } : {}),
   };
+}
+
+function formatProbeError(error: unknown): string {
+  if (!(error instanceof Error)) return String(error);
+
+  const httpCode = (error as { code?: number }).code;
+  const base = error.message;
+
+  if (typeof httpCode === 'number' && httpCode >= 100) {
+    return `HTTP ${httpCode}: ${base}`;
+  }
+
+  return base;
 }
 
 function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {

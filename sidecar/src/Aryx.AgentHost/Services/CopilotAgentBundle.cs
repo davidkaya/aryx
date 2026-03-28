@@ -45,32 +45,13 @@ internal sealed class CopilotAgentBundle : IAsyncDisposable
             CopilotClient client = new(clientOptions);
             await client.StartAsync(cancellationToken).ConfigureAwait(false);
 
-            SessionConfig sessionConfig = new()
-            {
-                SessionId = CopilotManagedSessionIds.Build(command.SessionId, definition.Id),
-                Model = definition.Model,
-                ReasoningEffort = definition.ReasoningEffort,
-                SystemMessage = new SystemMessageConfig
-                {
-                    Content = AgentInstructionComposer.Compose(
-                        command.Pattern,
-                        definition,
-                        agentIndex,
-                        command.WorkspaceKind,
-                        command.Mode),
-                },
-                WorkingDirectory = command.ProjectPath,
-                OnPermissionRequest = (request, invocation) => onPermissionRequest(definition, request, invocation),
-                OnUserInputRequest = (request, invocation) => onUserInputRequest(definition, request, invocation),
-                Hooks = CopilotSessionHooks.Create(command, definition),
-                OnEvent = evt => onSessionEvent?.Invoke(definition, evt),
-                Streaming = true,
-                CustomAgents = CreateCustomAgents(definition.Copilot?.CustomAgents),
-                Agent = NormalizeOptionalString(definition.Copilot?.Agent),
-                SkillDirectories = CreateStringList(definition.Copilot?.SkillDirectories),
-                DisabledSkills = CreateStringList(definition.Copilot?.DisabledSkills),
-                InfiniteSessions = CreateInfiniteSessions(definition.Copilot?.InfiniteSessions),
-            };
+            SessionConfig sessionConfig = CreateSessionConfig(
+                command,
+                definition,
+                agentIndex,
+                (request, invocation) => onPermissionRequest(definition, request, invocation),
+                (request, invocation) => onUserInputRequest(definition, request, invocation),
+                evt => onSessionEvent?.Invoke(definition, evt));
 
             ApplySessionTooling(sessionConfig, toolingBundle?.McpServers, toolingBundle?.Tools);
 
@@ -89,6 +70,43 @@ internal sealed class CopilotAgentBundle : IAsyncDisposable
         CopilotAgentBundle bundle = new(agents);
         bundle._disposables.AddRange(disposables);
         return bundle;
+    }
+
+    internal static SessionConfig CreateSessionConfig(
+        RunTurnCommandDto command,
+        PatternAgentDefinitionDto definition,
+        int agentIndex,
+        PermissionRequestHandler? onPermissionRequest = null,
+        UserInputHandler? onUserInputRequest = null,
+        SessionEventHandler? onSessionEvent = null)
+    {
+        // Let the Copilot SDK allocate session IDs. Explicit custom SessionId values currently
+        // cause turns to complete without assistant output, even for simple single-agent prompts.
+        return new SessionConfig
+        {
+            Model = definition.Model,
+            ReasoningEffort = definition.ReasoningEffort,
+            SystemMessage = new SystemMessageConfig
+            {
+                Content = AgentInstructionComposer.Compose(
+                    command.Pattern,
+                    definition,
+                    agentIndex,
+                    command.WorkspaceKind,
+                    command.Mode),
+            },
+            WorkingDirectory = command.ProjectPath,
+            OnPermissionRequest = onPermissionRequest,
+            OnUserInputRequest = onUserInputRequest,
+            Hooks = CopilotSessionHooks.Create(command, definition),
+            OnEvent = onSessionEvent,
+            Streaming = true,
+            CustomAgents = CreateCustomAgents(definition.Copilot?.CustomAgents),
+            Agent = NormalizeOptionalString(definition.Copilot?.Agent),
+            SkillDirectories = CreateStringList(definition.Copilot?.SkillDirectories),
+            DisabledSkills = CreateStringList(definition.Copilot?.DisabledSkills),
+            InfiniteSessions = CreateInfiniteSessions(definition.Copilot?.InfiniteSessions),
+        };
     }
 
     internal static void ApplySessionTooling(

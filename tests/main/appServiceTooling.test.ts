@@ -8,6 +8,7 @@ import { createWorkspaceSeed, type WorkspaceState } from '@shared/domain/workspa
 
 const TIMESTAMP = '2026-03-25T00:00:00.000Z';
 const SCRATCHPAD_PATH = 'C:\\workspace\\personal\\repositories\\aryx\\scratchpad';
+const SCRATCHPAD_SESSION_PATH = `${SCRATCHPAD_PATH}\\session-scratchpad`;
 
 mock.module('electron', () => {
   const electronMock = {
@@ -60,6 +61,7 @@ function createWorkspaceFixture(): {
     createdAt: TIMESTAMP,
     updatedAt: TIMESTAMP,
     status: 'idle',
+    cwd: SCRATCHPAD_SESSION_PATH,
     messages: [],
     runs: [],
   };
@@ -186,7 +188,7 @@ describe('AryxAppService scratchpad tooling support', () => {
 
     expect(command).toMatchObject({
       sessionId: session.id,
-      projectPath: SCRATCHPAD_PATH,
+      projectPath: SCRATCHPAD_SESSION_PATH,
       workspaceKind: 'scratchpad',
       tooling: {
         mcpServers: [

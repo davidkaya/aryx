@@ -28,6 +28,7 @@ It works especially well when you want AI help that stays grounded in an actual 
 ### Ask quick questions in a scratchpad
 
 If you just want to think through an idea, draft something, or ask for help without connecting a project, start a scratchpad session and begin chatting.
+Each scratchpad session keeps its own isolated working directory, so files created in one scratchpad do not leak into another.
 
 ### Connect a real project
 

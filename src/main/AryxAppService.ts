@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import { rm } from 'node:fs/promises';
+import { mkdir, rm } from 'node:fs/promises';
 import { basename, dirname } from 'node:path';
 
 import electron from 'electron';
@@ -101,6 +101,7 @@ import { createId, nowIso } from '@shared/utils/ids';
 import { mergeStreamingText } from '@shared/utils/streamingText';
 
 import { WorkspaceRepository } from '@main/persistence/workspaceRepository';
+import { getScratchpadSessionPath } from '@main/persistence/appPaths';
 import { SecretStore } from '@main/secrets/secretStore';
 import { ConfigScannerRegistry } from '@main/services/configScanner';
 import {
@@ -521,6 +522,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
       runs: [],
     };
 
+    await this.ensureScratchpadSessionDirectory(session);
     workspace.sessions.unshift(session);
     workspace.selectedProjectId = project.id;
     workspace.selectedPatternId = pattern.id;
@@ -532,7 +534,11 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     const workspace = await this.loadWorkspace();
     const session = this.requireSession(workspace, sessionId);
     const duplicate = duplicateSessionRecord(session, createId('session'), nowIso());
+    if (isScratchpadProject(duplicate.projectId)) {
+      duplicate.cwd = undefined;
+    }
 
+    await this.ensureScratchpadSessionDirectory(duplicate);
     workspace.sessions.unshift(duplicate);
     workspace.selectedProjectId = duplicate.projectId;
     workspace.selectedPatternId = duplicate.patternId;
@@ -570,6 +576,16 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     const sessionIndex = workspace.sessions.findIndex((s) => s.id === sessionId);
     if (sessionIndex < 0) {
       throw new Error(`Session ${sessionId} not found.`);
+    }
+
+    const session = workspace.sessions[sessionIndex];
+    if (!session) {
+      throw new Error(`Session ${sessionId} not found.`);
+    }
+
+    const scratchpadDirectory = this.resolveScratchpadSessionDirectory(session);
+    if (scratchpadDirectory) {
+      await rm(scratchpadDirectory, { recursive: true, force: true });
     }
 
     workspace.sessions.splice(sessionIndex, 1);
@@ -654,7 +670,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
           type: 'run-turn',
           requestId,
           sessionId: session.id,
-          projectPath: project.path,
+          projectPath: session.cwd ?? project.path,
           workspaceKind,
           mode: session.interactionMode ?? 'interactive',
           messageMode,
@@ -1223,6 +1239,26 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     }
 
     return session;
+  }
+
+  private resolveScratchpadSessionDirectory(
+    session: Pick<SessionRecord, 'id' | 'projectId' | 'cwd'>,
+  ): string | undefined {
+    if (!isScratchpadProject(session.projectId)) {
+      return undefined;
+    }
+
+    return session.cwd ?? getScratchpadSessionPath(session.id);
+  }
+
+  private async ensureScratchpadSessionDirectory(session: SessionRecord): Promise<void> {
+    const scratchpadDirectory = this.resolveScratchpadSessionDirectory(session);
+    if (!scratchpadDirectory) {
+      return;
+    }
+
+    await mkdir(scratchpadDirectory, { recursive: true });
+    session.cwd = scratchpadDirectory;
   }
 
   private async applyTurnDelta(

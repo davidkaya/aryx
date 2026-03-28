@@ -2,9 +2,10 @@ import { mkdir } from 'node:fs/promises';
 
 import { createBuiltinPatterns, resolvePatternGraph } from '@shared/domain/pattern';
 import type { PatternDefinition } from '@shared/domain/pattern';
-import { mergeScratchpadProject } from '@shared/domain/project';
+import { isScratchpadProject, mergeScratchpadProject } from '@shared/domain/project';
 import { normalizeDiscoveredToolingState } from '@shared/domain/discoveredTooling';
 import { normalizeSessionRunRecords } from '@shared/domain/runTimeline';
+import type { SessionRecord } from '@shared/domain/session';
 import {
   normalizeSessionToolingSelection,
   normalizeWorkspaceSettings,
@@ -17,7 +18,11 @@ import {
 import { createWorkspaceSeed, type WorkspaceState } from '@shared/domain/workspace';
 import { nowIso } from '@shared/utils/ids';
 
-import { getScratchpadDirectoryPath, getWorkspaceFilePath } from '@main/persistence/appPaths';
+import {
+  getScratchpadDirectoryPath,
+  getScratchpadSessionPath,
+  getWorkspaceFilePath,
+} from '@main/persistence/appPaths';
 import { readJsonFile, writeJsonFile } from '@main/persistence/jsonStore';
 
 function mergePatterns(existingPatterns: PatternDefinition[]): PatternDefinition[] {
@@ -71,6 +76,28 @@ export class WorkspaceRepository {
       })),
       this.scratchpadPath,
     );
+    const sessions = await Promise.all((stored.sessions ?? []).map(async (session): Promise<SessionRecord> => {
+      const normalizedSession: SessionRecord = {
+        ...session,
+        runs: normalizeSessionRunRecords(session.runs),
+        tooling: normalizeSessionToolingSelection(session.tooling),
+        approvalSettings: normalizeSessionApprovalSettings(session.approvalSettings),
+        ...normalizePendingApprovalState({
+          pendingApproval: session.pendingApproval,
+          pendingApprovalQueue: session.pendingApprovalQueue,
+        }),
+      };
+      if (!isScratchpadProject(normalizedSession.projectId)) {
+        return normalizedSession;
+      }
+
+      const cwd = normalizedSession.cwd ?? getScratchpadSessionPath(normalizedSession.id);
+      await mkdir(cwd, { recursive: true });
+      return {
+        ...normalizedSession,
+        cwd,
+      };
+    }));
     const settings = normalizeWorkspaceSettings(stored.settings);
 
     const workspace: WorkspaceState = {
@@ -81,16 +108,7 @@ export class WorkspaceRepository {
         graph: resolvePatternGraph(pattern),
       })),
       projects,
-      sessions: (stored.sessions ?? []).map((session) => ({
-        ...session,
-        runs: normalizeSessionRunRecords(session.runs),
-        tooling: normalizeSessionToolingSelection(session.tooling),
-        approvalSettings: normalizeSessionApprovalSettings(session.approvalSettings),
-        ...normalizePendingApprovalState({
-          pendingApproval: session.pendingApproval,
-          pendingApprovalQueue: session.pendingApprovalQueue,
-        }),
-      })),
+      sessions,
       settings,
       selectedProjectId: projects.some((project) => project.id === stored.selectedProjectId)
         ? stored.selectedProjectId

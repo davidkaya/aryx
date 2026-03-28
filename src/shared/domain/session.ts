@@ -48,6 +48,7 @@ export interface SessionRecord {
   isPinned?: boolean;
   isArchived?: boolean;
   interactionMode?: InteractionMode;
+  cwd?: string;
   messages: ChatMessageRecord[];
   lastError?: string;
   sessionModelConfig?: SessionModelConfig;

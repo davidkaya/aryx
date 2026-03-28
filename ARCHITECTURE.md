@@ -33,7 +33,7 @@ flowchart LR
     Renderer[Renderer UI<br/>React + Tailwind]
     Preload[Preload bridge]
     Main[Electron main process]
-    Workspace[Workspace storage<br/>JSON + scratchpad files]
+    Workspace[Workspace storage<br/>workspace.json + per-session scratchpad directories]
     Git[Local git repositories]
     Sidecar[.NET sidecar]
     Copilot[GitHub Copilot CLI<br/>+ agent runtime]
@@ -122,7 +122,7 @@ Projects are the container for context. There are two kinds:
 - a special **scratchpad** project for lightweight work
 - normal **project-backed** entries pointing at local folders
 
-The scratchpad is modeled inside the same workspace system instead of as a separate subsystem. That keeps the UI and session model consistent while still allowing special rules for scratchpad behavior.
+The scratchpad is modeled inside the same workspace system instead of as a separate subsystem. That keeps the UI and session model consistent while still allowing special rules for scratchpad behavior. Each scratchpad session receives its own working directory under the shared scratchpad root, so session-created files stay isolated from other scratchpad conversations.
 
 ### Patterns
 
@@ -278,7 +278,7 @@ This lets the application treat tooling as reusable workspace capability while s
 
 ### Project awareness
 
-Project-backed sessions can carry repository context such as branch and dirty state, while scratchpad sessions omit git context but still support MCP, LSP, and runtime tooling. Both session kinds share the same tooling selection and approval model. This keeps the architecture grounded in real codebases without forcing every conversation to be project-heavy, while still letting scratchpad sessions leverage configured tools when useful.
+Project-backed sessions can carry repository context such as branch and dirty state, while scratchpad sessions omit git context but still support MCP, LSP, and runtime tooling. Scratchpad execution uses a per-session working directory instead of a single shared scratchpad folder, so file-based context and generated artifacts stay scoped to the active scratchpad session. Both session kinds share the same tooling selection and approval model. This keeps the architecture grounded in real codebases without forcing every conversation to be project-heavy, while still letting scratchpad sessions leverage configured tools when useful.
 
 ### Execution observability
 

@@ -10,3 +10,7 @@ export function getWorkspaceFilePath(): string {
 export function getScratchpadDirectoryPath(): string {
   return join(app.getPath('userData'), 'scratchpad');
 }
+
+export function getScratchpadSessionPath(sessionId: string): string {
+  return join(getScratchpadDirectoryPath(), sessionId);
+}

@@ -26,6 +26,8 @@ import type {
   SetSessionArchivedInput,
   SetSessionInteractionModeInput,
   SetSessionPinnedInput,
+  SetTerminalHeightInput,
+  ResizeTerminalInput,
   UpdateSessionModelConfigInput,
   UpdateSessionApprovalSettingsInput,
   UpdateSessionToolingInput,
@@ -80,6 +82,10 @@ export function registerIpcHandlers(window: BrowserWindow, service: AryxAppServi
     applyTitleBarTheme(window, theme);
     return result;
   });
+  ipcMain.handle(
+    ipcChannels.setTerminalHeight,
+    (_event, input: SetTerminalHeightInput) => service.setTerminalHeight(input.height),
+  );
   ipcMain.handle(ipcChannels.saveMcpServer, (_event, input: SaveMcpServerInput) =>
     service.saveMcpServer(input.server),
   );
@@ -92,6 +98,16 @@ export function registerIpcHandlers(window: BrowserWindow, service: AryxAppServi
   ipcMain.handle(ipcChannels.deleteLspProfile, (_event, profileId: string) =>
     service.deleteLspProfile(profileId),
   );
+  ipcMain.handle(ipcChannels.describeTerminal, () => service.describeTerminal());
+  ipcMain.handle(ipcChannels.createTerminal, () => service.createTerminal());
+  ipcMain.handle(ipcChannels.restartTerminal, () => service.restartTerminal());
+  ipcMain.handle(ipcChannels.killTerminal, () => service.killTerminal());
+  ipcMain.on(ipcChannels.writeTerminal, (_event, data: string) => {
+    service.writeTerminal(data);
+  });
+  ipcMain.on(ipcChannels.resizeTerminal, (_event, input: ResizeTerminalInput) => {
+    service.resizeTerminal(input.cols, input.rows);
+  });
   ipcMain.handle(ipcChannels.updateSessionTooling, (_event, input: UpdateSessionToolingInput) =>
     service.updateSessionTooling(
       input.sessionId,
@@ -164,5 +180,13 @@ export function registerIpcHandlers(window: BrowserWindow, service: AryxAppServi
 
   service.on('session-event', (event) => {
     window.webContents.send(ipcChannels.sessionEvent, event);
+  });
+
+  service.on('terminal-data', (data) => {
+    window.webContents.send(ipcChannels.terminalData, data);
+  });
+
+  service.on('terminal-exit', (info) => {
+    window.webContents.send(ipcChannels.terminalExit, info);
   });
 }

@@ -25,10 +25,21 @@ const api: ElectronApi = {
   deletePattern: (patternId) => ipcRenderer.invoke(ipcChannels.deletePattern, patternId),
   setPatternFavorite: (input) => ipcRenderer.invoke(ipcChannels.setPatternFavorite, input),
   setTheme: (theme) => ipcRenderer.invoke(ipcChannels.setTheme, theme),
+  setTerminalHeight: (input) => ipcRenderer.invoke(ipcChannels.setTerminalHeight, input),
   saveMcpServer: (input) => ipcRenderer.invoke(ipcChannels.saveMcpServer, input),
   deleteMcpServer: (serverId) => ipcRenderer.invoke(ipcChannels.deleteMcpServer, serverId),
   saveLspProfile: (input) => ipcRenderer.invoke(ipcChannels.saveLspProfile, input),
   deleteLspProfile: (profileId) => ipcRenderer.invoke(ipcChannels.deleteLspProfile, profileId),
+  describeTerminal: () => ipcRenderer.invoke(ipcChannels.describeTerminal),
+  createTerminal: () => ipcRenderer.invoke(ipcChannels.createTerminal),
+  restartTerminal: () => ipcRenderer.invoke(ipcChannels.restartTerminal),
+  killTerminal: () => ipcRenderer.invoke(ipcChannels.killTerminal),
+  writeTerminal: (data) => {
+    ipcRenderer.send(ipcChannels.writeTerminal, data);
+  },
+  resizeTerminal: (input) => {
+    ipcRenderer.send(ipcChannels.resizeTerminal, input);
+  },
   updateSessionTooling: (input) => ipcRenderer.invoke(ipcChannels.updateSessionTooling, input),
   updateSessionApprovalSettings: (input) =>
     ipcRenderer.invoke(ipcChannels.updateSessionApprovalSettings, input),
@@ -54,6 +65,20 @@ const api: ElectronApi = {
   selectSession: (sessionId) => ipcRenderer.invoke(ipcChannels.selectSession, sessionId),
   openAppDataFolder: () => ipcRenderer.invoke(ipcChannels.openAppDataFolder),
   resetLocalWorkspace: () => ipcRenderer.invoke(ipcChannels.resetLocalWorkspace),
+  onTerminalData: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: Parameters<typeof listener>[0]) =>
+      listener(data);
+
+    ipcRenderer.on(ipcChannels.terminalData, handler);
+    return () => ipcRenderer.off(ipcChannels.terminalData, handler);
+  },
+  onTerminalExit: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, info: Parameters<typeof listener>[0]) =>
+      listener(info);
+
+    ipcRenderer.on(ipcChannels.terminalExit, handler);
+    return () => ipcRenderer.off(ipcChannels.terminalExit, handler);
+  },
   onWorkspaceUpdated:(listener) => {
     const handler = (_event: Electron.IpcRendererEvent, workspace: Awaited<ReturnType<ElectronApi['loadWorkspace']>>) =>
       listener(workspace);

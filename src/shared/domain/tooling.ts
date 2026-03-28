@@ -63,6 +63,7 @@ export interface WorkspaceSettings {
   theme: AppearanceTheme;
   tooling: WorkspaceToolingSettings;
   discoveredUserTooling: DiscoveredToolingState;
+  terminalHeight?: number;
 }
 
 export interface SessionToolingSelection {
@@ -185,7 +186,17 @@ export function normalizeTheme(value?: string): AppearanceTheme {
   return validThemes.has(value ?? '') ? (value as AppearanceTheme) : 'dark';
 }
 
+export function normalizeTerminalHeight(value?: number): number | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return undefined;
+  }
+
+  const normalized = Math.round(value);
+  return normalized >= 120 ? normalized : undefined;
+}
+
 export function normalizeWorkspaceSettings(settings?: Partial<WorkspaceSettings>): WorkspaceSettings {
+  const terminalHeight = normalizeTerminalHeight(settings?.terminalHeight);
   return {
     theme: normalizeTheme(settings?.theme),
     tooling: {
@@ -193,6 +204,7 @@ export function normalizeWorkspaceSettings(settings?: Partial<WorkspaceSettings>
       lspProfiles: (settings?.tooling?.lspProfiles ?? []).map(normalizeLspProfileDefinition),
     },
     discoveredUserTooling: normalizeDiscoveredToolingState(settings?.discoveredUserTooling),
+    ...(terminalHeight !== undefined ? { terminalHeight } : {}),
   };
 }
 

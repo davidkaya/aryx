@@ -21,6 +21,7 @@ const TIMESTAMP = '2026-03-23T00:00:00.000Z';
 describe('tooling settings helpers', () => {
   test('normalizes persisted MCP and LSP definitions into trimmed stable settings', () => {
     const workspaceSettings = normalizeWorkspaceSettings({
+      terminalHeight: 240.4,
       tooling: {
         mcpServers: [
           {
@@ -64,6 +65,7 @@ describe('tooling settings helpers', () => {
 
     expect(workspaceSettings).toEqual({
       theme: 'dark',
+      terminalHeight: 240,
       tooling: {
         mcpServers: [
           {
@@ -107,6 +109,11 @@ describe('tooling settings helpers', () => {
         mcpServers: [],
       },
     });
+  });
+
+  test('drops invalid persisted terminal height values', () => {
+    expect(normalizeWorkspaceSettings({ terminalHeight: 119 }).terminalHeight).toBeUndefined();
+    expect(normalizeWorkspaceSettings({ terminalHeight: Number.NaN }).terminalHeight).toBeUndefined();
   });
 
   test('validates required MCP transport settings', () => {

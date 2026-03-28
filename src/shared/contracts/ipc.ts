@@ -4,6 +4,7 @@ import type { PatternDefinition, ReasoningEffort } from '@shared/domain/pattern'
 import type { ProjectRecord } from '@shared/domain/project';
 import type { QuerySessionsInput, SessionQueryResult } from '@shared/domain/sessionLibrary';
 import type { SessionEventRecord } from '@shared/domain/event';
+import type { TerminalExitInfo, TerminalSnapshot } from '@shared/domain/terminal';
 import type {
   LspProfileDefinition,
   McpServerDefinition,
@@ -142,6 +143,15 @@ export interface DeleteSessionInput {
   sessionId: string;
 }
 
+export interface ResizeTerminalInput {
+  cols: number;
+  rows: number;
+}
+
+export interface SetTerminalHeightInput {
+  height?: number;
+}
+
 export interface ElectronApi {
   describeSidecarCapabilities(): Promise<SidecarCapabilities>;
   refreshSidecarCapabilities(): Promise<SidecarCapabilities>;
@@ -183,8 +193,17 @@ export interface ElectronApi {
   selectSession(sessionId?: string): Promise<WorkspaceState>;
   setPatternFavorite(input: SetPatternFavoriteInput): Promise<WorkspaceState>;
   setTheme(theme: AppearanceTheme): Promise<WorkspaceState>;
+  setTerminalHeight(input: SetTerminalHeightInput): Promise<WorkspaceState>;
+  describeTerminal(): Promise<TerminalSnapshot | undefined>;
+  createTerminal(): Promise<TerminalSnapshot>;
+  restartTerminal(): Promise<TerminalSnapshot>;
+  killTerminal(): Promise<void>;
+  writeTerminal(data: string): void;
+  resizeTerminal(input: ResizeTerminalInput): void;
   openAppDataFolder(): Promise<void>;
   resetLocalWorkspace(): Promise<WorkspaceState>;
+  onTerminalData(listener: (data: string) => void): () => void;
+  onTerminalExit(listener: (info: TerminalExitInfo) => void): () => void;
   onWorkspaceUpdated(listener: (workspace: WorkspaceState) => void): () => void;
   onSessionEvent(listener: (event: SessionEventRecord) => void): () => void;
 }

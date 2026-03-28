@@ -69,6 +69,7 @@ import {
   type SessionQueryResult,
 } from '@shared/domain/sessionLibrary';
 import type { SessionEventRecord } from '@shared/domain/event';
+import type { TerminalExitInfo, TerminalSnapshot } from '@shared/domain/terminal';
 import {
   applySessionApprovalSettings,
   applySessionModelConfig,
@@ -93,6 +94,7 @@ import {
 import {
   createSessionToolingSelection,
   listApprovalToolNames,
+  normalizeTerminalHeight,
   normalizeTheme,
   resolveProjectToolingSettings,
   resolveWorkspaceToolingSettings,
@@ -129,12 +131,15 @@ import {
 import { getStoredToken } from '@main/services/mcpTokenStore';
 import { performMcpOAuthFlow, requiresOAuth } from '@main/services/mcpOAuthService';
 import { probeServers, type McpProbeResult } from '@main/services/mcpToolProber';
+import { PtyManager } from '@main/services/ptyManager';
 
 const { dialog, shell } = electron;
 
 type AppServiceEvents = {
   'workspace-updated': [WorkspaceState];
   'session-event': [SessionEventRecord];
+  'terminal-data': [string];
+  'terminal-exit': [TerminalExitInfo];
 };
 
 type PendingApprovalHandle = {
@@ -182,6 +187,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
   private readonly configScanner = new ConfigScannerRegistry();
   private readonly customizationScanner = new ProjectCustomizationScanner();
   private readonly probeMcpServers = probeServers;
+  private readonly ptyManager = new PtyManager();
   private readonly pendingApprovalHandles = new Map<string, PendingApprovalHandle>();
   private readonly pendingUserInputHandles = new Map<string, PendingUserInputHandle>();
   private workspace?: WorkspaceState;
@@ -189,6 +195,17 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
   private sidecarCapabilitiesPromise?: Promise<SidecarCapabilities>;
   private didScheduleInitialProjectGitRefresh = false;
   private mcpProbeUpdateQueue = Promise.resolve();
+
+  constructor() {
+    super();
+
+    this.ptyManager.on('data', (data) => {
+      this.emit('terminal-data', data);
+    });
+    this.ptyManager.on('exit', (info) => {
+      this.emit('terminal-exit', info);
+    });
+  }
 
   async describeSidecarCapabilities(): Promise<SidecarCapabilities> {
     return this.loadSidecarCapabilities();
@@ -241,6 +258,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
   }
 
   async dispose(): Promise<void> {
+    this.ptyManager.dispose();
     await this.sidecar.dispose();
     void this.secretStore;
   }
@@ -462,6 +480,53 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     const workspace = await this.loadWorkspace();
     workspace.settings.theme = normalizeTheme(theme);
     return this.persistAndBroadcast(workspace);
+  }
+
+  async setTerminalHeight(height?: number): Promise<WorkspaceState> {
+    const workspace = await this.loadWorkspace();
+    const normalizedHeight = normalizeTerminalHeight(height);
+
+    if (normalizedHeight === undefined) {
+      if (workspace.settings.terminalHeight === undefined) {
+        return workspace;
+      }
+
+      delete workspace.settings.terminalHeight;
+      return this.persistAndBroadcast(workspace);
+    }
+
+    if (workspace.settings.terminalHeight === normalizedHeight) {
+      return workspace;
+    }
+
+    workspace.settings.terminalHeight = normalizedHeight;
+    return this.persistAndBroadcast(workspace);
+  }
+
+  async describeTerminal(): Promise<TerminalSnapshot | undefined> {
+    return this.ptyManager.getSnapshot();
+  }
+
+  async createTerminal(): Promise<TerminalSnapshot> {
+    const workspace = await this.loadWorkspace();
+    return this.ptyManager.create(this.resolveTerminalWorkingDirectory(workspace));
+  }
+
+  async restartTerminal(): Promise<TerminalSnapshot> {
+    const workspace = await this.loadWorkspace();
+    return this.ptyManager.restart(this.resolveTerminalWorkingDirectory(workspace));
+  }
+
+  async killTerminal(): Promise<void> {
+    this.ptyManager.kill();
+  }
+
+  writeTerminal(data: string): void {
+    this.ptyManager.write(data);
+  }
+
+  resizeTerminal(cols: number, rows: number): void {
+    this.ptyManager.resize(cols, rows);
   }
 
   async deletePattern(patternId: string): Promise<WorkspaceState> {
@@ -1315,6 +1380,25 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     }
 
     return project;
+  }
+
+  private resolveTerminalWorkingDirectory(workspace: WorkspaceState): string {
+    const selectedSession = workspace.selectedSessionId
+      ? workspace.sessions.find((session) => session.id === workspace.selectedSessionId)
+      : undefined;
+    if (selectedSession) {
+      const project = this.requireProject(workspace, selectedSession.projectId);
+      return selectedSession.cwd ?? project.path;
+    }
+
+    const selectedProject = workspace.selectedProjectId
+      ? workspace.projects.find((project) => project.id === workspace.selectedProjectId)
+      : workspace.projects[0];
+    if (!selectedProject) {
+      throw new Error('Open a project or session before starting the integrated terminal.');
+    }
+
+    return selectedProject.path;
   }
 
   private async refreshGitContextForProject(project: ProjectRecord): Promise<boolean> {

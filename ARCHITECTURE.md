@@ -55,7 +55,7 @@ flowchart LR
 | --- | --- | --- | --- |
 | Renderer | Screens, interaction, local view composition, theme application | Filesystem, process spawning, raw Electron access, Copilot runtime | Typed preload API and pushed events |
 | Preload | Narrow bridge between browser context and Electron IPC | Business logic, persistence, orchestration | `ipcRenderer` / `ipcMain` |
-| Main process | Workspace mutation, persistence, git inspection, session lifecycle, native window state, sidecar lifecycle | UI rendering, LLM orchestration internals | IPC, filesystem, git CLI, stdio with sidecar |
+| Main process | Workspace mutation, persistence, git inspection, session lifecycle, native window state, sidecar lifecycle, PTY-backed terminal lifecycle | UI rendering, LLM orchestration internals | IPC, filesystem, git CLI, stdio with sidecar, native child processes |
 | Sidecar | Capability discovery, pattern validation, run execution, streaming deltas and activity | UI, workspace persistence, Electron APIs | Line-delimited JSON over stdio |
 | External systems | Git data, Copilot account/model access, OS window chrome | Application state and UI behavior | Controlled adapters owned by main or sidecar |
 
@@ -187,10 +187,13 @@ Typical examples:
 - create session
 - send message
 - update theme
+- create or restart the integrated terminal
 - toggle session tooling
 - update session approval overrides
 
 The renderer does not reach into Electron or the filesystem directly. It talks through a constrained API surface.
+
+The integrated terminal uses the same boundary. The renderer never opens a shell directly; it asks the main process to create or restart a PTY, sends fire-and-forget input and resize messages over IPC, and listens for streamed terminal data and exit events pushed back through preload.
 
 ### 2. Main process <-> sidecar
 

@@ -1,5 +1,6 @@
 import type { PatternDefinition } from '@shared/domain/pattern';
 import type { SessionEventRecord } from '@shared/domain/event';
+import type { QuotaSnapshot } from '@shared/contracts/sidecar';
 
 export interface AgentActivityState {
   agentId: string;
@@ -334,4 +335,120 @@ export function pruneTurnEventLogs(
   }
 
   return changed || Object.keys(next).length !== Object.keys(current).length ? next : current;
+}
+
+/* ── Assistant usage accumulator ────────────────────────────── */
+
+export interface AgentUsageAccumulator {
+  inputTokens: number;
+  outputTokens: number;
+  cost: number;
+  durationMs: number;
+  requestCount: number;
+}
+
+export interface SessionRequestUsageState {
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalCost: number;
+  totalDurationMs: number;
+  totalNanoAiu: number;
+  requestCount: number;
+  perAgent: Record<string, AgentUsageAccumulator>;
+  latestQuotaSnapshots?: Record<string, QuotaSnapshot>;
+}
+
+export type SessionRequestUsageMap = Record<string, SessionRequestUsageState | undefined>;
+
+function createEmptyUsageAccumulator(): AgentUsageAccumulator {
+  return { inputTokens: 0, outputTokens: 0, cost: 0, durationMs: 0, requestCount: 0 };
+}
+
+export function applyAssistantUsageEvent(
+  current: SessionRequestUsageMap,
+  event: SessionEventRecord,
+): SessionRequestUsageMap {
+  if (event.kind !== 'assistant-usage') {
+    return current;
+  }
+
+  const prev = current[event.sessionId] ?? {
+    totalInputTokens: 0,
+    totalOutputTokens: 0,
+    totalCost: 0,
+    totalDurationMs: 0,
+    totalNanoAiu: 0,
+    requestCount: 0,
+    perAgent: {},
+  };
+
+  const inputTokens = event.usageInputTokens ?? 0;
+  const outputTokens = event.usageOutputTokens ?? 0;
+  const cost = event.usageCost ?? 0;
+  const durationMs = event.usageDuration ?? 0;
+  const nanoAiu = event.usageTotalNanoAiu ?? 0;
+
+  const next: SessionRequestUsageState = {
+    totalInputTokens: prev.totalInputTokens + inputTokens,
+    totalOutputTokens: prev.totalOutputTokens + outputTokens,
+    totalCost: prev.totalCost + cost,
+    totalDurationMs: prev.totalDurationMs + durationMs,
+    totalNanoAiu: nanoAiu > 0 ? nanoAiu : prev.totalNanoAiu,
+    requestCount: prev.requestCount + 1,
+    perAgent: { ...prev.perAgent },
+    latestQuotaSnapshots: event.usageQuotaSnapshots ?? prev.latestQuotaSnapshots,
+  };
+
+  const agentKey = event.agentId?.trim() || event.agentName?.trim();
+  if (agentKey) {
+    const agentPrev = next.perAgent[agentKey] ?? createEmptyUsageAccumulator();
+    next.perAgent[agentKey] = {
+      inputTokens: agentPrev.inputTokens + inputTokens,
+      outputTokens: agentPrev.outputTokens + outputTokens,
+      cost: agentPrev.cost + cost,
+      durationMs: agentPrev.durationMs + durationMs,
+      requestCount: agentPrev.requestCount + 1,
+    };
+  }
+
+  return { ...current, [event.sessionId]: next };
+}
+
+export function pruneSessionRequestUsage(
+  current: SessionRequestUsageMap,
+  sessionIds: Iterable<string>,
+): SessionRequestUsageMap {
+  const allowed = new Set(sessionIds);
+  const next: SessionRequestUsageMap = {};
+  let changed = false;
+
+  for (const [sessionId, usage] of Object.entries(current)) {
+    if (!allowed.has(sessionId)) {
+      changed = true;
+      continue;
+    }
+    next[sessionId] = usage;
+  }
+
+  return changed || Object.keys(next).length !== Object.keys(current).length ? next : current;
+}
+
+/* ── Formatting helpers ─────────────────────────────────────── */
+
+export function formatTokenCount(tokens: number): string {
+  if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(1)}M`;
+  if (tokens >= 1_000) return `${(tokens / 1_000).toFixed(1)}k`;
+  return String(tokens);
+}
+
+export function formatNanoAiu(nanoAiu: number): string {
+  const aiu = nanoAiu / 1e9;
+  if (aiu >= 100) return aiu.toFixed(0);
+  if (aiu >= 10) return aiu.toFixed(1);
+  return aiu.toFixed(2);
+}
+
+export function formatDuration(ms: number): string {
+  if (ms >= 60_000) return `${(ms / 60_000).toFixed(1)}m`;
+  return `${(ms / 1_000).toFixed(1)}s`;
 }

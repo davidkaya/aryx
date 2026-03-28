@@ -144,7 +144,8 @@ export type SidecarCommand =
   | ResolveUserInputCommand
   | ListSessionsCommand
   | DeleteSessionCommand
-  | DisconnectSessionCommand;
+  | DisconnectSessionCommand
+  | GetQuotaCommand;
 
 export interface RunTurnLocalMcpServerConfig {
   id: string;
@@ -470,6 +471,43 @@ export interface CommandErrorEvent {
   message: string;
 }
 
+export interface AssistantUsageEvent {
+  type: 'assistant-usage';
+  requestId: string;
+  sessionId: string;
+  agentId?: string;
+  agentName?: string;
+  model: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
+  cost?: number;
+  duration?: number;
+  totalNanoAiu?: number;
+  quotaSnapshots?: Record<string, QuotaSnapshot>;
+}
+
+export interface QuotaSnapshot {
+  entitlementRequests: number;
+  usedRequests: number;
+  remainingPercentage: number;
+  overage: number;
+  overageAllowedWithExhaustedQuota: boolean;
+  resetDate?: string;
+}
+
+export interface GetQuotaCommand {
+  type: 'get-quota';
+  requestId: string;
+}
+
+export interface QuotaResultEvent {
+  type: 'quota-result';
+  requestId: string;
+  quotaSnapshots: Record<string, QuotaSnapshot>;
+}
+
 export interface CommandCompleteEvent {
   type: 'command-complete';
   requestId: string;
@@ -494,5 +532,7 @@ export type SidecarEvent =
   | SessionsListedEvent
   | SessionsDeletedEvent
   | SessionDisconnectedEvent
+  | AssistantUsageEvent
+  | QuotaResultEvent
   | CommandErrorEvent
   | CommandCompleteEvent;

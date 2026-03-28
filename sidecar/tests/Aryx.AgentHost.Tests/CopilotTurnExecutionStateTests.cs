@@ -252,6 +252,69 @@ public sealed class CopilotTurnExecutionStateTests
     }
 
     [Fact]
+    public void ObserveSessionEvent_AssistantUsage_QueuesAssistantUsageEvent()
+    {
+        RunTurnCommandDto command = CreateCommand();
+        CopilotTurnExecutionState state = new(command);
+
+        state.ObserveSessionEvent(
+            command.Pattern.Agents[0],
+            SessionEvent.FromJson(
+                """
+                {
+                  "type": "assistant.usage",
+                  "data": {
+                    "model": "gpt-5.4",
+                    "inputTokens": 1200,
+                    "outputTokens": 300,
+                    "cacheReadTokens": 50,
+                    "cacheWriteTokens": 10,
+                    "cost": 0.42,
+                    "duration": 8200,
+                    "quotaSnapshots": {
+                      "premium_interactions": {
+                        "entitlementRequests": 50,
+                        "usedRequests": 12,
+                        "remainingPercentage": 76,
+                        "overage": 0,
+                        "overageAllowedWithExhaustedQuota": true,
+                        "resetDate": "2026-04-01T00:00:00Z"
+                      }
+                    },
+                    "copilotUsage": {
+                      "tokenDetails": [
+                        {
+                          "batchSize": 1,
+                          "costPerBatch": 1,
+                          "tokenCount": 1500,
+                          "tokenType": "input"
+                        }
+                      ],
+                      "totalNanoAiu": 1200000000
+                    }
+                  },
+                  "id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+                  "timestamp": "2026-03-27T00:00:00Z"
+                }
+                """));
+
+        AssistantUsageEventDto evt = Assert.Single(state.DrainPendingEvents().OfType<AssistantUsageEventDto>());
+        Assert.Equal("session-1", evt.SessionId);
+        Assert.Equal("agent-1", evt.AgentId);
+        Assert.Equal("Primary", evt.AgentName);
+        Assert.Equal("gpt-5.4", evt.Model);
+        Assert.Equal(1200, evt.InputTokens);
+        Assert.Equal(300, evt.OutputTokens);
+        Assert.Equal(0.42, evt.Cost);
+        Assert.Equal(8200, evt.Duration);
+        Assert.Equal(1200000000, evt.TotalNanoAiu);
+        QuotaSnapshotDto snapshot = Assert.Single(evt.QuotaSnapshots!.Values);
+        Assert.Equal(50, snapshot.EntitlementRequests);
+        Assert.Equal(12, snapshot.UsedRequests);
+        Assert.Equal(76, snapshot.RemainingPercentage);
+    }
+
+    [Fact]
     public void ObserveSessionEvent_SessionCompactionComplete_QueuesCompactionEvent()
     {
         RunTurnCommandDto command = CreateCommand();

@@ -1,5 +1,7 @@
 import type { SessionRunRecord } from '@shared/domain/runTimeline';
 
+import type { QuotaSnapshot } from '@shared/contracts/sidecar';
+
 export type SessionActivityType = 'thinking' | 'tool-calling' | 'handoff' | 'completed';
 
 export type SessionEventKind =
@@ -14,7 +16,8 @@ export type SessionEventKind =
   | 'hook-lifecycle'
   | 'session-usage'
   | 'session-compaction'
-  | 'pending-messages-modified';
+  | 'pending-messages-modified'
+  | 'assistant-usage';
 
 export type SubagentEventKind = 'started' | 'completed' | 'failed' | 'selected' | 'deselected';
 
@@ -67,4 +70,15 @@ export interface SessionEventRecord {
   preCompactionTokens?: number;
   postCompactionTokens?: number;
   tokensRemoved?: number;
+
+  // Assistant usage fields
+  usageModel?: string;
+  usageInputTokens?: number;
+  usageOutputTokens?: number;
+  usageCacheReadTokens?: number;
+  usageCacheWriteTokens?: number;
+  usageCost?: number;
+  usageDuration?: number;
+  usageTotalNanoAiu?: number;
+  usageQuotaSnapshots?: Record<string, QuotaSnapshot>;
 }

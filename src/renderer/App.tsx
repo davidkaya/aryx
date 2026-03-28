@@ -13,12 +13,15 @@ import { resolveChatToolingSettings } from '@renderer/lib/chatTooling';
 import {
   applySessionEventActivity,
   applySessionUsageEvent,
+  applyAssistantUsageEvent,
   applyTurnEventLog,
   pruneSessionActivities,
   pruneSessionUsage,
+  pruneSessionRequestUsage,
   pruneTurnEventLogs,
   type SessionActivityMap,
   type SessionUsageMap,
+  type SessionRequestUsageMap,
   type TurnEventLogMap,
 } from '@renderer/lib/sessionActivity';
 import { applySubagentEvent, pruneSubagentMap, type ActiveSubagentMap } from '@renderer/lib/subagentTracker';
@@ -101,6 +104,7 @@ export default function App() {
   const { capabilities: sidecarCapabilities, isRefreshing: isRefreshingCapabilities, refresh: refreshCapabilities } = useSidecarCapabilities(api);
   const [sessionActivities, setSessionActivities] = useState<SessionActivityMap>({});
   const [sessionUsage, setSessionUsage] = useState<SessionUsageMap>({});
+  const [sessionRequestUsage, setSessionRequestUsage] = useState<SessionRequestUsageMap>({});
   const [turnEventLogs, setTurnEventLogs] = useState<TurnEventLogMap>({});
   const [activeSubagents, setActiveSubagents] = useState<ActiveSubagentMap>({});
 
@@ -140,6 +144,12 @@ export default function App() {
           ws.sessions.map((session) => session.id),
         ),
       );
+      setSessionRequestUsage((current) =>
+        pruneSessionRequestUsage(
+          current,
+          ws.sessions.map((session) => session.id),
+        ),
+      );
       setTurnEventLogs((current) =>
         pruneTurnEventLogs(
           current,
@@ -158,6 +168,7 @@ export default function App() {
       setWorkspace((current) => applySessionEventWorkspace(current, event));
       setSessionActivities((current) => applySessionEventActivity(current, event));
       setSessionUsage((current) => applySessionUsageEvent(current, event));
+      setSessionRequestUsage((current) => applyAssistantUsageEvent(current, event));
       setTurnEventLogs((current) => applyTurnEventLog(current, event));
       setActiveSubagents((current) => applySubagentEvent(current, event));
     });
@@ -213,6 +224,10 @@ export default function App() {
   const usageForSession = useMemo(
     () => (selectedSession ? sessionUsage[selectedSession.id] : undefined),
     [selectedSession, sessionUsage],
+  );
+  const requestUsageForSession = useMemo(
+    () => (selectedSession ? sessionRequestUsage[selectedSession.id] : undefined),
+    [selectedSession, sessionRequestUsage],
   );
   const subagentsForSession = useMemo(
     () => (selectedSession ? activeSubagents[selectedSession.id] : undefined),
@@ -401,6 +416,7 @@ export default function App() {
           runtimeTools={sidecarCapabilities?.runtimeTools}
           session={selectedSession}
           sessionUsage={usageForSession}
+          sessionRequestUsage={requestUsageForSession}
           activeSubagents={subagentsForSession}
           terminalOpen={terminalOpen}
           terminalRunning={terminalRunning}
@@ -413,6 +429,7 @@ export default function App() {
         onJumpToMessage={jumpToMessage}
         pattern={patternForSession}
         session={selectedSession}
+        sessionRequestUsage={requestUsageForSession}
         turnEvents={turnEventsForSession}
       />
     );
@@ -478,6 +495,7 @@ export default function App() {
         onResolveUserDiscoveredTooling={(serverIds, resolution) => {
           void api.resolveWorkspaceDiscoveredTooling({ serverIds, resolution });
         }}
+        onGetQuota={() => api.getQuota()}
       />
   ) : null;
 

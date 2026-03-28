@@ -18,6 +18,7 @@ public sealed class SidecarProtocolHost
     private const string ListSessionsCommandType = "list-sessions";
     private const string DeleteSessionCommandType = "delete-session";
     private const string DisconnectSessionCommandType = "disconnect-session";
+    private const string GetQuotaCommandType = "get-quota";
     private const string AskUserToolName = "ask_user";
     private static readonly HashSet<string> ExcludedRuntimeToolNames = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -82,6 +83,7 @@ public sealed class SidecarProtocolHost
             [ListSessionsCommandType] = HandleListSessionsAsync,
             [DeleteSessionCommandType] = HandleDeleteSessionAsync,
             [DisconnectSessionCommandType] = HandleDisconnectSessionAsync,
+            [GetQuotaCommandType] = HandleGetQuotaAsync,
         };
     }
 
@@ -310,6 +312,23 @@ public sealed class SidecarProtocolHost
             RequestId = context.Envelope.RequestId,
             SessionId = command.SessionId,
             CancelledRequestIds = cancelledRequestIds,
+        }, context.CancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task HandleGetQuotaAsync(CommandContext context)
+    {
+        _ = DeserializeCommand<GetQuotaCommandDto>(context);
+        IReadOnlyDictionary<string, QuotaSnapshotDto> quotaSnapshots =
+            await _sessionManager.GetQuotaAsync(context.CancellationToken).ConfigureAwait(false);
+
+        await WriteAsync(context.Output, new AccountQuotaResultEventDto
+        {
+            Type = "quota-result",
+            RequestId = context.Envelope.RequestId,
+            QuotaSnapshots = quotaSnapshots.ToDictionary(
+                snapshot => snapshot.Key,
+                snapshot => snapshot.Value,
+                StringComparer.Ordinal),
         }, context.CancellationToken).ConfigureAwait(false);
     }
 

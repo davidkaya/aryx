@@ -200,6 +200,7 @@ The integrated terminal uses the same boundary. The renderer never opens a shell
 This is a structured stdio protocol used for:
 
 - capability discovery
+- on-demand account quota lookup
 - pattern validation
 - run execution
 - streaming partial output
@@ -212,11 +213,14 @@ The protocol also carries **turn-scoped lifecycle events** alongside output delt
 - **Sub-agent events**: started, completed, failed, selected, deselected — surfaced when custom agents are defined
 - **Skill invocation events**: emitted when an agent-side skill is triggered
 - **Hook lifecycle events**: start and end of configured project hook commands discovered from `.github/hooks/*.json`; Aryx suppresses the SDK's built-in no-op hook chatter so the UI only sees meaningful hook activity
+- **Assistant usage events**: per-LLM-call tokens, cost, AIU, and quota snapshots from the Copilot SDK's `assistant.usage` stream
 - **Session compaction events**: start and complete, with token-reduction metrics when infinite sessions trigger context trimming
-- **Session usage events**: current token count and context-window limit for usage-bar rendering
+- **Session usage events**: current token count and context-window limit from `session.usage_info` for context-bar rendering
 - **Pending-messages-modified events**: emitted when mid-turn steering changes the pending message queue
 
 These events flow through a single `onTurnScopedEvent` callback on the `runTurn` command, avoiding per-event-type callback proliferation. The main process maps each event to a `SessionEventRecord` and pushes it to the renderer, where lightweight state maps (activity, usage, turn-event log) consume them without touching the persisted workspace.
+
+The same boundary also supports server-scoped sidecar commands that do not require a live Copilot session. The new `get-quota` command uses the SDK's `account.getQuota` RPC to fetch account quota snapshots on demand, then returns them as a `quota-result` protocol event followed by the usual `command-complete` sentinel.
 
 For project-backed sessions, the sidecar also discovers GitHub Copilot CLI hook definitions from `.github/hooks/*.json` under the repository root. Those files are parsed and merged once per run bundle, then projected onto the SDK session hook delegates. Hook commands run synchronously in the sidecar through the platform shell, with stdin JSON payloads shaped to match Copilot CLI hook expectations as closely as the SDK allows. Hook failures are logged to stderr and treated as non-fatal diagnostics, while `preToolUse` hook outputs can still deny a tool call before Aryx falls back to its built-in approval policy.
 

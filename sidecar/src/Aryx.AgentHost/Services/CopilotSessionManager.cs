@@ -1,10 +1,19 @@
 using Aryx.AgentHost.Contracts;
 using GitHub.Copilot.SDK;
+using GitHub.Copilot.SDK.Rpc;
 
 namespace Aryx.AgentHost.Services;
 
 internal sealed class CopilotSessionManager : ICopilotSessionManager
 {
+    public async Task<IReadOnlyDictionary<string, QuotaSnapshotDto>> GetQuotaAsync(
+        CancellationToken cancellationToken)
+    {
+        await using CopilotClient client = await CreateStartedClientAsync(cancellationToken).ConfigureAwait(false);
+        AccountGetQuotaResult result = await client.Rpc.Account.GetQuotaAsync(cancellationToken).ConfigureAwait(false);
+        return QuotaSnapshotMapper.Map(result.QuotaSnapshots);
+    }
+
     public async Task<IReadOnlyList<CopilotSessionInfoDto>> ListSessionsAsync(
         CopilotSessionListFilterDto? filter,
         CancellationToken cancellationToken)

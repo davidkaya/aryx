@@ -1297,6 +1297,10 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     return queryWorkspaceSessions(workspace, input);
   }
 
+  async getQuota(): Promise<Record<string, import('@shared/contracts/sidecar').QuotaSnapshot>> {
+    return this.sidecar.getQuota();
+  }
+
   async refreshProjectGitContext(projectId?: string): Promise<WorkspaceState> {
     const workspace = await this.loadWorkspace();
     const projects = projectId
@@ -1891,6 +1895,24 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
           occurredAt,
           agentId: event.agentId,
           agentName: event.agentName,
+        });
+        return;
+      case 'assistant-usage':
+        this.emitSessionEvent({
+          sessionId,
+          kind: 'assistant-usage',
+          occurredAt,
+          agentId: event.agentId,
+          agentName: event.agentName,
+          usageModel: event.model,
+          usageInputTokens: event.inputTokens,
+          usageOutputTokens: event.outputTokens,
+          usageCacheReadTokens: event.cacheReadTokens,
+          usageCacheWriteTokens: event.cacheWriteTokens,
+          usageCost: event.cost,
+          usageDuration: event.duration,
+          usageTotalNanoAiu: event.totalNanoAiu,
+          usageQuotaSnapshots: event.quotaSnapshots,
         });
         return;
     }

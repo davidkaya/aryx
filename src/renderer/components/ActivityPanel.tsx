@@ -1,13 +1,18 @@
 import { useMemo, type ReactNode } from 'react';
-import { Activity, ArrowRight, CheckCircle2, Clock, Cog, ShieldAlert, Sparkles, Users, Zap } from 'lucide-react';
+import { Activity, ArrowRight, BarChart3, CheckCircle2, Clock, Cog, ShieldAlert, Sparkles, Users, Zap } from 'lucide-react';
 
 import {
   buildAgentActivityRows,
   formatAgentActivityLabel,
+  formatDuration,
+  formatNanoAiu,
+  formatTokenCount,
   isAgentActivityActive,
   isAgentActivityCompleted,
   type AgentActivityRow,
+  type AgentUsageAccumulator,
   type SessionActivityState,
+  type SessionRequestUsageState,
   type TurnEventLog,
 } from '@renderer/lib/sessionActivity';
 import { RunTimeline } from '@renderer/components/RunTimeline';
@@ -70,11 +75,13 @@ function AgentRow({
   agent,
   accent,
   isLast,
+  agentUsage,
 }: {
   row: AgentActivityRow;
   agent?: PatternAgentDefinition;
   accent: (typeof modeAccent)[OrchestrationMode];
   isLast: boolean;
+  agentUsage?: AgentUsageAccumulator;
 }) {
   const isActive = isAgentActivityActive(row.activity);
   const isCompleted = isAgentActivityCompleted(row.activity);
@@ -141,6 +148,27 @@ function AgentRow({
             {formatAgentActivityLabel(row.activity)}
           </span>
         </div>
+
+        {/* Per-agent usage summary */}
+        {agentUsage && agentUsage.requestCount > 0 && (
+          <div className="mt-0.5 flex items-center gap-1 text-[10px] text-zinc-600">
+            <span className="tabular-nums">{formatTokenCount(agentUsage.inputTokens)} in</span>
+            <span className="text-zinc-700">·</span>
+            <span className="tabular-nums">{formatTokenCount(agentUsage.outputTokens)} out</span>
+            {agentUsage.cost > 0 && (
+              <>
+                <span className="text-zinc-700">·</span>
+                <span className="tabular-nums">{agentUsage.cost.toFixed(2)} cost</span>
+              </>
+            )}
+            {agentUsage.durationMs > 0 && (
+              <>
+                <span className="text-zinc-700">·</span>
+                <span className="tabular-nums">{formatDuration(agentUsage.durationMs)}</span>
+              </>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -182,6 +210,7 @@ interface ActivityPanelProps {
   onJumpToMessage?: (messageId: string) => void;
   pattern: PatternDefinition;
   session: SessionRecord;
+  sessionRequestUsage?: SessionRequestUsageState;
   turnEvents?: TurnEventLog;
 }
 
@@ -190,6 +219,7 @@ export function ActivityPanel({
   onJumpToMessage,
   pattern,
   session,
+  sessionRequestUsage,
   turnEvents,
 }: ActivityPanelProps) {
   const activityRows = useMemo(
@@ -241,20 +271,67 @@ export function ActivityPanel({
 
           {activityRows.length > 0 ? (
             <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 px-3">
-              {activityRows.map((row, index) => (
-                <AgentRow
-                  accent={accent}
-                  agent={pattern.agents[index]}
-                  isLast={index === activityRows.length - 1}
-                  key={row.key}
-                  row={row}
-                />
-              ))}
+              {activityRows.map((row, index) => {
+                const agentKey = row.activity?.agentId ?? row.key;
+                const agentUsage = sessionRequestUsage?.perAgent[agentKey]
+                  ?? sessionRequestUsage?.perAgent[row.agentName];
+                return (
+                  <AgentRow
+                    accent={accent}
+                    agent={pattern.agents[index]}
+                    agentUsage={agentUsage}
+                    isLast={index === activityRows.length - 1}
+                    key={row.key}
+                    row={row}
+                  />
+                );
+              })}
             </div>
           ) : (
             <p className="py-4 text-center text-[11px] text-zinc-600">No agents configured</p>
           )}
         </div>
+
+        {/* ── Session usage section ──────────────────────────── */}
+        {sessionRequestUsage && sessionRequestUsage.requestCount > 0 && (
+          <div className="mb-4">
+            <SectionHeader>
+              <BarChart3 className="size-3" />
+              <span>Session Usage</span>
+            </SectionHeader>
+
+            <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 px-3 py-2.5">
+              <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-zinc-400">
+                <span className="font-medium tabular-nums">
+                  {sessionRequestUsage.requestCount} premium request{sessionRequestUsage.requestCount === 1 ? '' : 's'}
+                </span>
+                {sessionRequestUsage.totalNanoAiu > 0 && (
+                  <>
+                    <span className="text-zinc-700">·</span>
+                    <span className="tabular-nums">{formatNanoAiu(sessionRequestUsage.totalNanoAiu)} AIU</span>
+                  </>
+                )}
+              </div>
+              <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] text-zinc-500">
+                <span className="tabular-nums">{formatTokenCount(sessionRequestUsage.totalInputTokens)} in</span>
+                <span className="text-zinc-700">·</span>
+                <span className="tabular-nums">{formatTokenCount(sessionRequestUsage.totalOutputTokens)} out</span>
+                {sessionRequestUsage.totalCost > 0 && (
+                  <>
+                    <span className="text-zinc-700">·</span>
+                    <span className="tabular-nums">{sessionRequestUsage.totalCost.toFixed(2)} cost</span>
+                  </>
+                )}
+                {sessionRequestUsage.totalDurationMs > 0 && (
+                  <>
+                    <span className="text-zinc-700">·</span>
+                    <span className="tabular-nums">{formatDuration(sessionRequestUsage.totalDurationMs)} total</span>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ── Run timeline section ─────────────────────────── */}
         <div className="mb-4">

@@ -224,6 +224,8 @@ public sealed class DisconnectSessionCommandDto : SidecarCommandEnvelope
     public string SessionId { get; init; } = string.Empty;
 }
 
+public sealed class GetQuotaCommandDto : SidecarCommandEnvelope;
+
 public sealed class RunTurnToolingConfigDto
 {
     public IReadOnlyList<RunTurnMcpServerConfigDto> McpServers { get; init; } = [];
@@ -384,6 +386,37 @@ public sealed class HookLifecycleEventDto : SidecarEventDto
     public object? Input { get; init; }
     public object? Output { get; init; }
     public string? Error { get; init; }
+}
+
+public sealed class QuotaSnapshotDto
+{
+    public double EntitlementRequests { get; init; }
+    public double UsedRequests { get; init; }
+    public double RemainingPercentage { get; init; }
+    public double Overage { get; init; }
+    public bool OverageAllowedWithExhaustedQuota { get; init; }
+    public string? ResetDate { get; init; }
+}
+
+public sealed class AccountQuotaResultEventDto : SidecarEventDto
+{
+    public Dictionary<string, QuotaSnapshotDto> QuotaSnapshots { get; init; } = new(StringComparer.Ordinal);
+}
+
+public sealed class AssistantUsageEventDto : SidecarEventDto
+{
+    public string SessionId { get; init; } = string.Empty;
+    public string? AgentId { get; init; }
+    public string? AgentName { get; init; }
+    public string Model { get; init; } = string.Empty;
+    public double? InputTokens { get; init; }
+    public double? OutputTokens { get; init; }
+    public double? CacheReadTokens { get; init; }
+    public double? CacheWriteTokens { get; init; }
+    public double? Cost { get; init; }
+    public double? Duration { get; init; }
+    public double? TotalNanoAiu { get; init; }
+    public Dictionary<string, QuotaSnapshotDto>? QuotaSnapshots { get; init; }
 }
 
 public sealed class SessionUsageEventDto : SidecarEventDto

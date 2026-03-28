@@ -12,5 +12,8 @@ public interface ICopilotSessionManager
         string? aryxSessionId,
         string? copilotSessionId,
         CancellationToken cancellationToken);
+
+    Task<IReadOnlyDictionary<string, QuotaSnapshotDto>> GetQuotaAsync(
+        CancellationToken cancellationToken);
 }
 

@@ -173,6 +173,7 @@ export function registerIpcHandlers(window: BrowserWindow, service: AryxAppServi
   ipcMain.handle(ipcChannels.selectSession, (_event, sessionId?: string) => service.selectSession(sessionId));
   ipcMain.handle(ipcChannels.openAppDataFolder, () => service.openAppDataFolder());
   ipcMain.handle(ipcChannels.resetLocalWorkspace, () => service.resetLocalWorkspace());
+  ipcMain.handle(ipcChannels.getQuota, () => service.getQuota());
 
   service.on('workspace-updated', (workspace) => {
     window.webContents.send(ipcChannels.workspaceUpdated, workspace);

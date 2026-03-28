@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   CheckCircle2,
   XCircle,
@@ -12,12 +12,15 @@ import {
   ArrowUpCircle,
   User,
   Building2,
+  BarChart3,
+  Loader2,
 } from 'lucide-react';
 
 import type {
   SidecarConnectionDiagnostics,
   SidecarConnectionStatus,
   SidecarCopilotCliVersionStatus,
+  QuotaSnapshot,
 } from '@shared/contracts/sidecar';
 
 interface CopilotStatusCardProps {
@@ -25,6 +28,7 @@ interface CopilotStatusCardProps {
   modelCount: number;
   isRefreshing: boolean;
   onRefresh: () => void;
+  onGetQuota?: () => Promise<Record<string, QuotaSnapshot>>;
 }
 
 interface StatusConfig {
@@ -125,6 +129,137 @@ function VersionBadge({ status, installedVersion }: { status: SidecarCopilotCliV
   }
 }
 
+const quotaTypeLabels: Record<string, string> = {
+  premium_interactions: 'Premium Requests',
+  chat: 'Chat',
+  completions: 'Completions',
+};
+
+function formatQuotaTypeLabel(key: string): string {
+  return quotaTypeLabels[key] ?? key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function formatResetDate(iso: string): string {
+  try {
+    const date = new Date(iso);
+    const now = new Date();
+    const diffMs = date.getTime() - now.getTime();
+    const diffDays = Math.ceil(diffMs / 86_400_000);
+
+    if (diffDays <= 0) return 'Today';
+    if (diffDays === 1) return 'Tomorrow';
+    if (diffDays <= 30) return `In ${diffDays} day${diffDays === 1 ? '' : 's'}`;
+
+    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  } catch {
+    return iso;
+  }
+}
+
+function QuotaSection({
+  onGetQuota,
+}: {
+  onGetQuota: () => Promise<Record<string, QuotaSnapshot>>;
+}) {
+  const [quotaData, setQuotaData] = useState<Record<string, QuotaSnapshot>>();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string>();
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(undefined);
+
+    void onGetQuota()
+      .then((data) => { if (!cancelled) setQuotaData(data); })
+      .catch((err: unknown) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+      })
+      .finally(() => { if (!cancelled) setLoading(false); });
+
+    return () => { cancelled = true; };
+  }, [onGetQuota]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 py-2">
+        <Loader2 className="size-3.5 animate-spin text-zinc-500" />
+        <span className="text-[12px] text-zinc-500">Loading quota…</span>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center gap-2 py-2">
+        <XCircle className="size-3.5 text-red-400" />
+        <span className="text-[12px] text-zinc-500">Could not load quota</span>
+      </div>
+    );
+  }
+
+  if (!quotaData || Object.keys(quotaData).length === 0) {
+    return (
+      <div className="py-2">
+        <span className="text-[12px] text-zinc-600">No quota data available</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {Object.entries(quotaData).map(([key, snapshot]) => {
+        const usedPct = snapshot.entitlementRequests > 0
+          ? (snapshot.usedRequests / snapshot.entitlementRequests) * 100
+          : 0;
+        const barColor = usedPct > 90
+          ? 'bg-red-500'
+          : usedPct > 70
+            ? 'bg-amber-500'
+            : 'bg-indigo-500/60';
+
+        return (
+          <div key={key} className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[12px] font-medium text-zinc-300">
+                {formatQuotaTypeLabel(key)}
+              </span>
+              <span className="text-[11px] tabular-nums text-zinc-500">
+                {Math.round(snapshot.remainingPercentage)}% remaining
+              </span>
+            </div>
+            <div className="h-1.5 overflow-hidden rounded-full bg-zinc-800">
+              <div
+                className={`h-full rounded-full transition-all ${barColor}`}
+                style={{ width: `${Math.min(100, usedPct)}%` }}
+              />
+            </div>
+            <div className="flex items-center gap-1.5 text-[10px] text-zinc-500">
+              <span className="tabular-nums">
+                {Math.round(snapshot.usedRequests)} of {Math.round(snapshot.entitlementRequests)} used
+              </span>
+              {snapshot.overage > 0 && (
+                <>
+                  <span className="text-zinc-700">·</span>
+                  <span className="tabular-nums text-amber-400">
+                    {Math.round(snapshot.overage)} overage
+                  </span>
+                </>
+              )}
+              {snapshot.resetDate && (
+                <>
+                  <span className="text-zinc-700">·</span>
+                  <span>Resets {formatResetDate(snapshot.resetDate)}</span>
+                </>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function AccountSection({ connection }: { connection: SidecarConnectionDiagnostics }) {
   const { account } = connection;
   if (!account) return null;
@@ -182,6 +317,7 @@ export function CopilotStatusCard({
   modelCount,
   isRefreshing,
   onRefresh,
+  onGetQuota,
 }: CopilotStatusCardProps) {
   const [showDetails, setShowDetails] = useState(false);
 
@@ -240,6 +376,19 @@ export function CopilotStatusCard({
       {/* Account info (when healthy) */}
       {isHealthy && hasAccountInfo && (
         <AccountSection connection={connection} />
+      )}
+
+      {/* Usage & Quota (when healthy and callback provided) */}
+      {isHealthy && onGetQuota && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-1.5 text-[11px] font-medium text-zinc-400">
+            <BarChart3 className="size-3" />
+            <span>Usage &amp; Quota</span>
+          </div>
+          <div className="rounded-lg border border-zinc-800/60 bg-zinc-900/40 px-3 py-2.5">
+            <QuotaSection onGetQuota={onGetQuota} />
+          </div>
+        </div>
       )}
 
       {/* Action hint for non-ready states */}

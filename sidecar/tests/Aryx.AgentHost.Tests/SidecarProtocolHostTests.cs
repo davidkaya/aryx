@@ -851,6 +851,44 @@ public sealed class SidecarProtocolHostTests
     }
 
     [Fact]
+    public async Task GetQuotaCommand_ReturnsQuotaResultEvent()
+    {
+        SidecarProtocolHost host = new(
+            new PatternValidator(),
+            sessionManager: new FakeSessionManager
+            {
+                QuotaSnapshots = new Dictionary<string, QuotaSnapshotDto>(StringComparer.Ordinal)
+                {
+                    ["premium_interactions"] = new()
+                    {
+                        EntitlementRequests = 50,
+                        UsedRequests = 12,
+                        RemainingPercentage = 76,
+                        Overage = 0,
+                        OverageAllowedWithExhaustedQuota = true,
+                        ResetDate = "2026-04-01T00:00:00Z",
+                    },
+                },
+            });
+
+        IReadOnlyList<JsonElement> events = await RunHostAsync(
+            new GetQuotaCommandDto
+            {
+                Type = "get-quota",
+                RequestId = "quota-1",
+            },
+            host);
+
+        JsonElement quotaEvent = AssertSingleEvent(events, "quota-result", "quota-1");
+        JsonElement snapshot = quotaEvent.GetProperty("quotaSnapshots").GetProperty("premium_interactions");
+        Assert.Equal(50, snapshot.GetProperty("entitlementRequests").GetDouble());
+        Assert.Equal(12, snapshot.GetProperty("usedRequests").GetDouble());
+        Assert.Equal(76, snapshot.GetProperty("remainingPercentage").GetDouble());
+        Assert.True(snapshot.GetProperty("overageAllowedWithExhaustedQuota").GetBoolean());
+        Assert.Equal("2026-04-01T00:00:00Z", snapshot.GetProperty("resetDate").GetString());
+    }
+
+    [Fact]
     public async Task DisconnectSessionCommand_CancelsActiveTurnsForSession()
     {
         FakeWorkflowRunner runner = new(async (command, onDelta, onActivity, onApproval, onUserInput, onMcpOAuthRequired, onExitPlanMode, cancellationToken) =>
@@ -1115,6 +1153,9 @@ public sealed class SidecarProtocolHostTests
 
         public IReadOnlyList<CopilotSessionInfoDto> DeletedSessions { get; init; } = [];
 
+        public IReadOnlyDictionary<string, QuotaSnapshotDto> QuotaSnapshots { get; init; }
+            = new Dictionary<string, QuotaSnapshotDto>(StringComparer.Ordinal);
+
         public string? DeletedAryxSessionId { get; private set; }
 
         public string? DeletedCopilotSessionId { get; private set; }
@@ -1134,6 +1175,12 @@ public sealed class SidecarProtocolHostTests
             DeletedAryxSessionId = aryxSessionId;
             DeletedCopilotSessionId = copilotSessionId;
             return Task.FromResult(DeletedSessions);
+        }
+
+        public Task<IReadOnlyDictionary<string, QuotaSnapshotDto>> GetQuotaAsync(
+            CancellationToken cancellationToken)
+        {
+            return Task.FromResult(QuotaSnapshots);
         }
     }
 }

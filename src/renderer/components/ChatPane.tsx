@@ -17,6 +17,8 @@ import type { InteractionMode, MessageMode } from '@shared/contracts/sidecar';
 import type { ChatMessageAttachment } from '@shared/domain/attachment';
 import { getAttachmentDisplayName, isImageAttachment } from '@shared/domain/attachment';
 import type { SessionUsageState } from '@renderer/lib/sessionActivity';
+import type { SessionRequestUsageState, AgentUsageAccumulator } from '@renderer/lib/sessionActivity';
+import { formatNanoAiu } from '@renderer/lib/sessionActivity';
 import type { ActiveSubagent } from '@renderer/lib/subagentTracker';
 import {
   findModel,
@@ -46,6 +48,7 @@ interface ChatPaneProps {
   mcpProbingServerIds?: string[];
   runtimeTools?: ReadonlyArray<RuntimeToolDefinition>;
   sessionUsage?: SessionUsageState;
+  sessionRequestUsage?: SessionRequestUsageState;
   activeSubagents?: ReadonlyArray<ActiveSubagent>;
   terminalOpen?: boolean;
   terminalRunning?: boolean;
@@ -75,6 +78,7 @@ export function ChatPane({
   mcpProbingServerIds,
   runtimeTools,
   sessionUsage,
+  sessionRequestUsage,
   activeSubagents,
   terminalOpen,
   terminalRunning,
@@ -777,6 +781,27 @@ export function ChatPane({
                   {Math.round((sessionUsage.currentTokens / sessionUsage.tokenLimit) * 100)}% context
                 </span>
               </div>
+              {sessionRequestUsage && sessionRequestUsage.requestCount > 0 && (
+                <div className="mt-0.5 flex items-center gap-1 text-[10px] text-zinc-600">
+                  <span className="tabular-nums">
+                    {sessionRequestUsage.requestCount} premium request{sessionRequestUsage.requestCount === 1 ? '' : 's'}
+                  </span>
+                  {sessionRequestUsage.totalNanoAiu > 0 && (
+                    <>
+                      <span className="text-zinc-700">·</span>
+                      <span className="tabular-nums">{formatNanoAiu(sessionRequestUsage.totalNanoAiu)} AIU</span>
+                    </>
+                  )}
+                  {sessionRequestUsage.latestQuotaSnapshots?.premium_interactions && (
+                    <>
+                      <span className="text-zinc-700">·</span>
+                      <span className="tabular-nums">
+                        {Math.round(sessionRequestUsage.latestQuotaSnapshots.premium_interactions.remainingPercentage)}% quota
+                      </span>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>

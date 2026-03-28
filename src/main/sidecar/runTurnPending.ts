@@ -11,6 +11,7 @@ import type {
   SessionUsageEvent,
   SessionCompactionEvent,
   PendingMessagesModifiedEvent,
+  AssistantUsageEvent,
 } from '@shared/contracts/sidecar';
 import type { ChatMessageRecord } from '@shared/domain/session';
 
@@ -20,7 +21,8 @@ export type TurnScopedEvent =
   | HookLifecycleEvent
   | SessionUsageEvent
   | SessionCompactionEvent
-  | PendingMessagesModifiedEvent;
+  | PendingMessagesModifiedEvent
+  | AssistantUsageEvent;
 
 export interface RunTurnPendingCommand {
   kind: 'run-turn';

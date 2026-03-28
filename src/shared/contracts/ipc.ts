@@ -1,5 +1,5 @@
 import type { ApprovalDecision } from '@shared/domain/approval';
-import type { SidecarCapabilities, InteractionMode, MessageMode } from '@shared/contracts/sidecar';
+import type { SidecarCapabilities, InteractionMode, MessageMode, QuotaSnapshot } from '@shared/contracts/sidecar';
 import type { PatternDefinition, ReasoningEffort } from '@shared/domain/pattern';
 import type { ProjectRecord } from '@shared/domain/project';
 import type { QuerySessionsInput, SessionQueryResult } from '@shared/domain/sessionLibrary';
@@ -202,6 +202,7 @@ export interface ElectronApi {
   resizeTerminal(input: ResizeTerminalInput): void;
   openAppDataFolder(): Promise<void>;
   resetLocalWorkspace(): Promise<WorkspaceState>;
+  getQuota(): Promise<Record<string, QuotaSnapshot>>;
   onTerminalData(listener: (data: string) => void): () => void;
   onTerminalExit(listener: (info: TerminalExitInfo) => void): () => void;
   onWorkspaceUpdated(listener: (workspace: WorkspaceState) => void): () => void;

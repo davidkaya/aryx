@@ -52,4 +52,5 @@ export const ipcChannels = {
   terminalExit: 'terminal:exit',
   workspaceUpdated: 'workspace:updated',
   sessionEvent: 'sessions:event',
+  getQuota: 'sidecar:get-quota',
 } as const;

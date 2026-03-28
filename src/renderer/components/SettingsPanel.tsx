@@ -5,7 +5,7 @@ import { CopilotStatusCard } from '@renderer/components/CopilotStatusCard';
 import { PatternEditor } from '@renderer/components/PatternEditor';
 import { LspProfileEditor } from '@renderer/components/settings/LspProfileEditor';
 import { McpServerEditor } from '@renderer/components/settings/McpServerEditor';
-import type { SidecarCapabilities } from '@shared/contracts/sidecar';
+import type { SidecarCapabilities, QuotaSnapshot } from '@shared/contracts/sidecar';
 import type { DiscoveredMcpServer, DiscoveredToolingState } from '@shared/domain/discoveredTooling';
 import { listAcceptedDiscoveredMcpServers, listPendingDiscoveredMcpServers } from '@shared/domain/discoveredTooling';
 import type { ModelDefinition } from '@shared/domain/models';
@@ -42,6 +42,7 @@ interface SettingsPanelProps {
   onOpenAppDataFolder: () => void;
   onResetLocalWorkspace: () => Promise<void>;
   onResolveUserDiscoveredTooling?: (serverIds: string[], resolution: 'accept' | 'dismiss') => void;
+  onGetQuota?: () => Promise<Record<string, QuotaSnapshot>>;
 }
 
 type SettingsSection = 'appearance' | 'connection' | 'patterns' | 'mcp-servers' | 'lsp-profiles' | 'troubleshooting';
@@ -119,6 +120,7 @@ export function SettingsPanel({
   onOpenAppDataFolder,
   onResetLocalWorkspace,
   onResolveUserDiscoveredTooling,
+  onGetQuota,
 }: SettingsPanelProps) {
   const [activeSection, setActiveSection] = useState<SettingsSection>('appearance');
   const [editingPattern, setEditingPattern] = useState<PatternDefinition | null>(null);
@@ -261,6 +263,7 @@ export function SettingsPanel({
                 isRefreshing={isRefreshingCapabilities}
                 modelCount={sidecarCapabilities?.models.length ?? 0}
                 onRefresh={onRefreshCapabilities}
+                onGetQuota={onGetQuota}
               />
             )}
             {activeSection === 'patterns' && (
@@ -365,11 +368,13 @@ function ConnectionSection({
   modelCount,
   isRefreshing,
   onRefresh,
+  onGetQuota,
 }: {
   connection?: SidecarCapabilities['connection'];
   modelCount: number;
   isRefreshing: boolean;
   onRefresh: () => void;
+  onGetQuota?: () => Promise<Record<string, QuotaSnapshot>>;
 }) {
   return (
     <div>
@@ -384,6 +389,7 @@ function ConnectionSection({
           connection={connection}
           isRefreshing={isRefreshing}
           modelCount={modelCount}
+          onGetQuota={onGetQuota}
           onRefresh={onRefresh}
         />
       </div>

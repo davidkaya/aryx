@@ -16,6 +16,7 @@ import type {
   RunTurnCommand,
   CopilotSessionListFilter,
   CopilotSessionInfo,
+  QuotaSnapshot,
 } from '@shared/contracts/sidecar';
 import type { ApprovalDecision } from '@shared/domain/approval';
 import type { ChatMessageRecord } from '@shared/domain/session';
@@ -78,6 +79,12 @@ type PendingCommand =
       processId: number;
       kind: 'disconnect-session';
       resolve: () => void;
+      reject: (error: Error) => void;
+    })
+  | ({
+      processId: number;
+      kind: 'get-quota';
+      resolve: (snapshots: Record<string, QuotaSnapshot>) => void;
       reject: (error: Error) => void;
     })
   | ({
@@ -182,6 +189,13 @@ export class SidecarClient {
       type: 'disconnect-session',
       requestId: `disconnect-session-${Date.now()}`,
       sessionId,
+    });
+  }
+
+  async getQuota(): Promise<Record<string, QuotaSnapshot>> {
+    return this.dispatch<Record<string, QuotaSnapshot>>({
+      type: 'get-quota',
+      requestId: `get-quota-${Date.now()}`,
     });
   }
 
@@ -341,6 +355,13 @@ export class SidecarClient {
           resolve: resolve as () => void,
           reject,
         });
+      } else if (command.type === 'get-quota') {
+        this.pending.set(command.requestId, {
+          processId: state.id,
+          kind: 'get-quota',
+          resolve: resolve as (snapshots: Record<string, QuotaSnapshot>) => void,
+          reject,
+        });
       } else {
         this.pending.set(command.requestId, {
           processId: state.id,
@@ -424,8 +445,15 @@ export class SidecarClient {
       case 'session-usage':
       case 'session-compaction':
       case 'pending-messages-modified':
+      case 'assistant-usage':
         if (pending.kind === 'run-turn' && shouldHandleRunTurnEvent(pending)) {
           this.invokeRunTurnHandler(event.requestId, pending, () => pending.onTurnScopedEvent(event));
+        }
+        return;
+      case 'quota-result':
+        if (pending.kind === 'get-quota') {
+          pending.resolve(event.quotaSnapshots);
+          this.pending.delete(event.requestId);
         }
         return;
       case 'sessions-listed':

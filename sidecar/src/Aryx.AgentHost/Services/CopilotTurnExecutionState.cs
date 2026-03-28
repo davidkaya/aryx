@@ -127,6 +127,10 @@ internal sealed class CopilotTurnExecutionState
                     _pendingEvents.Enqueue(CreateHookLifecycleEvent(agent, "end", hookEnd.Data));
                 }
                 break;
+            case AssistantUsageEvent assistantUsage:
+                ActiveAgent = agent;
+                _pendingEvents.Enqueue(CreateAssistantUsageEvent(agent, assistantUsage.Data));
+                break;
             case SessionUsageInfoEvent usageInfo:
                 ActiveAgent = agent;
                 _pendingEvents.Enqueue(CreateUsageEvent(agent, usageInfo.Data));
@@ -407,6 +411,29 @@ internal sealed class CopilotTurnExecutionState
             Success = data?.Success,
             Output = data?.Output,
             Error = data?.Error?.Message,
+        };
+    }
+
+    private AssistantUsageEventDto CreateAssistantUsageEvent(
+        AgentIdentity agent,
+        AssistantUsageData? data)
+    {
+        return new AssistantUsageEventDto
+        {
+            Type = "assistant-usage",
+            RequestId = _command.RequestId,
+            SessionId = _command.SessionId,
+            AgentId = agent.AgentId,
+            AgentName = agent.AgentName,
+            Model = data?.Model ?? string.Empty,
+            InputTokens = data?.InputTokens,
+            OutputTokens = data?.OutputTokens,
+            CacheReadTokens = data?.CacheReadTokens,
+            CacheWriteTokens = data?.CacheWriteTokens,
+            Cost = data?.Cost,
+            Duration = data?.Duration,
+            TotalNanoAiu = data?.CopilotUsage?.TotalNanoAiu,
+            QuotaSnapshots = QuotaSnapshotMapper.MapOrNull(data?.QuotaSnapshots),
         };
     }
 

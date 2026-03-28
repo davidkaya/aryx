@@ -65,6 +65,7 @@ const api: ElectronApi = {
   selectSession: (sessionId) => ipcRenderer.invoke(ipcChannels.selectSession, sessionId),
   openAppDataFolder: () => ipcRenderer.invoke(ipcChannels.openAppDataFolder),
   resetLocalWorkspace: () => ipcRenderer.invoke(ipcChannels.resetLocalWorkspace),
+  getQuota: () => ipcRenderer.invoke(ipcChannels.getQuota),
   onTerminalData: (listener) => {
     const handler = (_event: Electron.IpcRendererEvent, data: Parameters<typeof listener>[0]) =>
       listener(data);

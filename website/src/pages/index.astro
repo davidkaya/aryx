@@ -114,7 +114,7 @@ import Base from '../layouts/Base.astro';
           </div>
           <h3 class="text-base font-semibold">Real Project Context</h3>
           <p class="mt-2 text-sm leading-relaxed text-zinc-400">
-            Attach local folders and repos so conversations stay grounded in your actual codebase, branch, and work.
+            Attach local folders and repos so conversations stay grounded in your actual codebase. See branch name, dirty state, and ahead/behind status — the agent works with full awareness of your project.
           </p>
         </div>
 
@@ -154,7 +154,7 @@ import Base from '../layouts/Base.astro';
           </div>
           <h3 class="text-base font-semibold">Persistent Sessions</h3>
           <p class="mt-2 text-sm leading-relaxed text-zinc-400">
-            Rename, pin, archive, delete, and return to sessions later. Your work persists instead of disappearing after each conversation.
+            Rename, pin, archive, duplicate, and return to sessions later. Search across all sessions by title, content, or project to find past work instantly.
           </p>
         </div>
 
@@ -193,7 +193,73 @@ import Base from '../layouts/Base.astro';
           </div>
           <h3 class="text-base font-semibold">Tune Your Workflow</h3>
           <p class="mt-2 text-sm leading-relaxed text-zinc-400">
-            Choose models, adjust reasoning effort, configure MCP servers and LSP profiles, and manage tool approval policies.
+            Choose models, adjust reasoning effort, and set interaction modes. Fine-tune how each agent works without leaving the session.
+          </p>
+        </div>
+
+        <!-- Feature 9: Visual Pattern Editor -->
+        <div class="group rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6 transition hover:border-zinc-700 hover:bg-zinc-900/60">
+          <div class="mb-4 flex size-10 items-center justify-center rounded-xl bg-fuchsia-500/10 text-fuchsia-400">
+            <svg class="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
+            </svg>
+          </div>
+          <h3 class="text-base font-semibold">Visual Pattern Editor</h3>
+          <p class="mt-2 text-sm leading-relaxed text-zinc-400">
+            Design orchestration patterns visually. Drag agent nodes, draw connections, and inspect each step — all in an interactive graph canvas.
+          </p>
+        </div>
+
+        <!-- Feature 10: Extensible Tooling -->
+        <div class="group rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6 transition hover:border-zinc-700 hover:bg-zinc-900/60">
+          <div class="mb-4 flex size-10 items-center justify-center rounded-xl bg-teal-500/10 text-teal-400">
+            <svg class="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.573-1.066z" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+          </div>
+          <h3 class="text-base font-semibold">Extensible Tooling</h3>
+          <p class="mt-2 text-sm leading-relaxed text-zinc-400">
+            Add MCP servers and LSP profiles for code intelligence. Set tool approval policies to keep runs safe, and integrate project hooks for custom automation.
+          </p>
+        </div>
+
+        <!-- Feature 11: Tooling Discovery -->
+        <div class="group rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6 transition hover:border-zinc-700 hover:bg-zinc-900/60">
+          <div class="mb-4 flex size-10 items-center justify-center rounded-xl bg-cyan-500/10 text-cyan-400">
+            <svg class="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </div>
+          <h3 class="text-base font-semibold">Tooling Discovery</h3>
+          <p class="mt-2 text-sm leading-relaxed text-zinc-400">
+            Aryx automatically discovers MCP servers from your project and user configs. Review, accept, or dismiss discovered tools before they join your sessions.
+          </p>
+        </div>
+
+        <!-- Feature 12: Plan Review & Agent Questions -->
+        <div class="group rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6 transition hover:border-zinc-700 hover:bg-zinc-900/60">
+          <div class="mb-4 flex size-10 items-center justify-center rounded-xl bg-lime-500/10 text-lime-400">
+            <svg class="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+            </svg>
+          </div>
+          <h3 class="text-base font-semibold">Plan Review &amp; Agent Questions</h3>
+          <p class="mt-2 text-sm leading-relaxed text-zinc-400">
+            Agents can propose plans for your review and ask clarifying questions mid-run. You stay in control of direction without micromanaging every step.
+          </p>
+        </div>
+
+        <!-- Feature 13: Run Timeline -->
+        <div class="group rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6 transition hover:border-zinc-700 hover:bg-zinc-900/60">
+          <div class="mb-4 flex size-10 items-center justify-center rounded-xl bg-orange-500/10 text-orange-400">
+            <svg class="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <h3 class="text-base font-semibold">Run Timeline</h3>
+          <p class="mt-2 text-sm leading-relaxed text-zinc-400">
+            Every turn is recorded in a structured run timeline — see tool calls, agent delegation, hook execution, and context usage at a glance.
           </p>
         </div>
       </div>
@@ -322,7 +388,7 @@ import Base from '../layouts/Base.astro';
           <div>
             <h3 class="text-base font-semibold">Download &amp; Launch</h3>
             <p class="mt-2 text-sm leading-relaxed text-zinc-400">
-              Grab the latest release from GitHub and open Aryx. Make sure GitHub Copilot CLI is installed and authenticated.
+              Grab the latest release from GitHub and open Aryx. The app shows your Copilot connection status so you'll know right away if authentication is ready.
             </p>
           </div>
         </div>
@@ -406,6 +472,16 @@ import Base from '../layouts/Base.astro';
         <div class="flex items-center gap-2">
           <span class="text-zinc-600">🛡️</span>
           Tool Approval Controls
+        </div>
+        <span class="hidden text-zinc-800 md:inline">·</span>
+        <div class="flex items-center gap-2">
+          <span class="text-zinc-600">🧩</span>
+          React Flow Graph Editor
+        </div>
+        <span class="hidden text-zinc-800 md:inline">·</span>
+        <div class="flex items-center gap-2">
+          <span class="text-zinc-600">📦</span>
+          Open Source
         </div>
       </div>
     </div>

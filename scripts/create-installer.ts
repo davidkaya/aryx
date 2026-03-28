@@ -5,7 +5,6 @@ import {
   cp,
   mkdir,
   readFile,
-  rename,
   symlink,
   writeFile,
 } from 'node:fs/promises';
@@ -104,28 +103,23 @@ async function createMacInstaller(): Promise<void> {
   }
 
   const appBundlePath = join(packagedAppDirectory, appBundleName);
-  const createDmg = join(repositoryRoot, 'node_modules', '.bin', 'create-dmg');
-
-  // create-dmg outputs to the destination directory with a generated filename.
-  // We use --no-version-in-filename so the output is "<AppName>.dmg", then
-  // rename it to the expected installer asset name.
+  // Use macOS's native disk image tooling so packaging does not depend on
+  // create-dmg's native node-gyp install path on CI runners.
   await runCommand(
-    createDmg,
+    'hdiutil',
     [
-      '--overwrite',
-      '--no-version-in-filename',
-      '--no-code-sign',
+      'create',
+      '-volname',
+      productName,
+      '-srcfolder',
       appBundlePath,
-      releaseRootDirectory,
+      '-ov',
+      '-format',
+      'UDZO',
+      installerOutputPath,
     ],
     repositoryRoot,
   );
-
-  // Rename from the generated name ("Aryx.dmg") to the platform-specific asset name
-  const generatedDmgPath = join(releaseRootDirectory, `${productName}.dmg`);
-  if (generatedDmgPath !== installerOutputPath) {
-    await rename(generatedDmgPath, installerOutputPath);
-  }
 }
 
 // --- Linux: .deb package ---

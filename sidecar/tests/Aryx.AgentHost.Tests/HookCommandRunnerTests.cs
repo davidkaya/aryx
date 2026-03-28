@@ -69,10 +69,11 @@ public sealed class HookCommandRunnerTests
         HookCommandRunner runner = new();
         using TestDirectory project = new();
         string hooksDirectory = Directory.CreateDirectory(Path.Combine(project.Path, "scripts")).FullName;
+        await File.WriteAllTextAsync(Path.Combine(hooksDirectory, "cwd-marker.txt"), "marker");
         HookCommandDefinition hook = CreatePlatformHook(
             OperatingSystem.IsWindows()
-                ? "$null = [Console]::In.ReadToEnd(); Write-Output ([Environment]::CurrentDirectory + '|' + $env:HOOK_TEST_ENV)"
-                : "cat >/dev/null; printf '%s|%s' \"$(pwd)\" \"$HOOK_TEST_ENV\"",
+                ? "$null = [Console]::In.ReadToEnd(); if (Test-Path -LiteralPath './cwd-marker.txt') { $status = 'present' } else { $status = 'missing' }; Write-Output ($status + '|' + $env:HOOK_TEST_ENV)"
+                : "cat >/dev/null; if [ -f ./cwd-marker.txt ]; then status=present; else status=missing; fi; printf '%s|%s' \"$status\" \"$HOOK_TEST_ENV\"",
             cwd: "scripts",
             env: new Dictionary<string, string>
             {
@@ -81,7 +82,7 @@ public sealed class HookCommandRunnerTests
 
         string? output = await runner.RunAsync(hook, "{}", project.Path, CancellationToken.None);
 
-        Assert.Equal($"{hooksDirectory}|configured", output?.Trim());
+        Assert.Equal("present|configured", output?.Trim());
     }
 
     private static HookCommandDefinition CreatePlatformHook(

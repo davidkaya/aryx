@@ -275,6 +275,7 @@ Tooling is deliberately split into two levels:
 
 - **dynamic runtime tools** reported by the Copilot CLI, with a fallback catalog for startup/offline cases
 - **global definitions** for MCP servers and LSP profiles
+- **MCP tool discovery** — when MCP server configs declare wildcard tools (empty `tools` array), the main process probes each server directly via the MCP protocol `tools/list` method to discover available tools, using the same auth credentials Aryx manages for OAuth-protected servers
 - **pattern defaults** where tool-call approval is enabled by default, plus which known runtime tools can bypass manual approval
 - **per-session overrides** for both tool enablement and tool auto-approval
 

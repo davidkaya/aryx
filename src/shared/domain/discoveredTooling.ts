@@ -7,6 +7,7 @@ export interface BaseDiscoveredMcpServer {
   name: string;
   transport: DiscoveredMcpServerTransport;
   tools: string[];
+  probedTools?: { name: string; description?: string }[];
   timeoutMs?: number;
   scope: DiscoveredToolingScope;
   scannerId: string;

@@ -1,0 +1,171 @@
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
+
+import type { McpServerDefinition } from '@shared/domain/tooling';
+
+export interface McpProbedTool {
+  name: string;
+  description?: string;
+}
+
+export interface McpProbeResult {
+  serverId: string;
+  serverName: string;
+  tools: McpProbedTool[];
+  status: 'success' | 'failed';
+  error?: string;
+}
+
+const CLIENT_INFO = { name: 'aryx', version: '1.0.0' };
+const DEFAULT_TIMEOUT_MS = 10_000;
+const MAX_CONCURRENCY = 5;
+
+export async function probeServers(
+  servers: ReadonlyArray<McpServerDefinition>,
+  tokenLookup?: (serverUrl: string) => string | undefined,
+): Promise<McpProbeResult[]> {
+  const pending = [...servers];
+  const results: McpProbeResult[] = [];
+  const active: Promise<void>[] = [];
+
+  for (const server of pending) {
+    const task = probeServer(server, tokenLookup).then((result) => {
+      results.push(result);
+    });
+    active.push(task);
+
+    if (active.length >= MAX_CONCURRENCY) {
+      await Promise.race(active);
+      // Remove settled promises
+      for (let i = active.length - 1; i >= 0; i--) {
+        const status = await Promise.race([active[i].then(() => 'done'), Promise.resolve('pending')]);
+        if (status === 'done') {
+          active.splice(i, 1);
+        }
+      }
+    }
+  }
+
+  await Promise.allSettled(active);
+  return results;
+}
+
+export async function probeServer(
+  server: McpServerDefinition,
+  tokenLookup?: (serverUrl: string) => string | undefined,
+): Promise<McpProbeResult> {
+  const timeoutMs = server.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+
+  try {
+    const tools = await withTimeout(
+      probeServerCore(server, tokenLookup),
+      timeoutMs,
+      `Probe timed out after ${timeoutMs}ms`,
+    );
+
+    return {
+      serverId: server.id,
+      serverName: server.name,
+      tools,
+      status: 'success',
+    };
+  } catch (error) {
+    return {
+      serverId: server.id,
+      serverName: server.name,
+      tools: [],
+      status: 'failed',
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+async function probeServerCore(
+  server: McpServerDefinition,
+  tokenLookup?: (serverUrl: string) => string | undefined,
+): Promise<McpProbedTool[]> {
+  const transport = createTransport(server, tokenLookup);
+  const client = new Client(CLIENT_INFO, { capabilities: {} });
+
+  try {
+    await client.connect(transport);
+    const result = await client.listTools();
+
+    return (result.tools ?? [])
+      .filter((tool) => typeof tool.name === 'string' && tool.name.trim().length > 0)
+      .map((tool) => ({
+        name: tool.name.trim(),
+        description: typeof tool.description === 'string' && tool.description.trim().length > 0
+          ? tool.description.trim()
+          : undefined,
+      }));
+  } finally {
+    try {
+      await client.close();
+    } catch {
+      // Ignore close errors — connection may already be closed
+    }
+  }
+}
+
+function createTransport(
+  server: McpServerDefinition,
+  tokenLookup?: (serverUrl: string) => string | undefined,
+) {
+  if (server.transport === 'local') {
+    return new StdioClientTransport({
+      command: server.command,
+      args: server.args.length > 0 ? server.args : undefined,
+      env: server.env
+        ? Object.fromEntries(
+          Object.entries({ ...process.env, ...server.env })
+            .filter((entry): entry is [string, string] => entry[1] !== undefined),
+        )
+        : undefined,
+      cwd: server.cwd,
+      stderr: 'ignore',
+    });
+  }
+
+  const headers = buildHeaders(server.url, server.headers, tokenLookup);
+
+  if (server.transport === 'sse') {
+    return new SSEClientTransport(
+      new URL(server.url),
+      headers ? { requestInit: { headers } } : undefined,
+    );
+  }
+
+  return new StreamableHTTPClientTransport(
+    new URL(server.url),
+    headers ? { requestInit: { headers } } : undefined,
+  );
+}
+
+function buildHeaders(
+  serverUrl: string,
+  configHeaders?: Record<string, string>,
+  tokenLookup?: (serverUrl: string) => string | undefined,
+): Record<string, string> | undefined {
+  const bearerToken = tokenLookup?.(serverUrl);
+  if (!bearerToken && !configHeaders) {
+    return undefined;
+  }
+
+  return {
+    ...(configHeaders ?? {}),
+    ...(bearerToken ? { Authorization: `Bearer ${bearerToken}` } : {}),
+  };
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), ms);
+    promise.then(
+      (value) => { clearTimeout(timer); resolve(value); },
+      (error) => { clearTimeout(timer); reject(error); },
+    );
+  });
+}

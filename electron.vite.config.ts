@@ -9,7 +9,7 @@ export default defineConfig({
     build: {
       outDir: 'dist-electron/main',
     },
-    plugins: [externalizeDepsPlugin()],
+    plugins: [externalizeDepsPlugin({ exclude: ['@modelcontextprotocol/sdk'] })],
     resolve: {
       alias: {
         '@main': resolve(__dirname, 'src/main'),

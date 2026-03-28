@@ -31,7 +31,9 @@ import {
 } from '@shared/domain/pattern';
 import {
   applyDiscoveredMcpServerStatus,
+  listAcceptedDiscoveredMcpServers,
   normalizeDiscoveredToolingState,
+  type DiscoveredMcpServer,
   type DiscoveredToolingState,
   type DiscoveredToolingStatus,
 } from '@shared/domain/discoveredTooling';
@@ -126,6 +128,7 @@ import {
 } from '@main/sessionToolingConfig';
 import { getStoredToken } from '@main/services/mcpTokenStore';
 import { performMcpOAuthFlow, requiresOAuth } from '@main/services/mcpOAuthService';
+import { probeServers, type McpProbeResult } from '@main/services/mcpToolProber';
 
 const { dialog, shell } = electron;
 
@@ -225,6 +228,10 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
       this.didScheduleInitialProjectGitRefresh = true;
       void this.refreshProjectGitContext().catch((error) => {
         console.error('[aryx git]', error);
+      });
+
+      void this.probeAllAcceptedMcpServers(this.workspace).catch((error) => {
+        console.error('[aryx mcp-probe]', error);
       });
     }
 
@@ -336,7 +343,15 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
 
     this.pruneUnavailableSessionToolingSelections(workspace);
     await this.pruneUnavailableApprovalTools(workspace);
-    return this.persistAndBroadcast(workspace);
+    const result = await this.persistAndBroadcast(workspace);
+
+    if (resolution === 'accept') {
+      void this.probeDiscoveredMcpServers(workspace.settings.discoveredUserTooling, serverIds).catch((error) => {
+        console.error('[aryx mcp-probe]', error);
+      });
+    }
+
+    return result;
   }
 
   async rescanProjectConfigs(projectId: string): Promise<WorkspaceState> {
@@ -345,7 +360,13 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     await this.syncProjectDiscoveredTooling(workspace, project);
     this.pruneUnavailableSessionToolingSelections(workspace);
     await this.pruneUnavailableApprovalTools(workspace);
-    return this.persistAndBroadcast(workspace);
+    const result = await this.persistAndBroadcast(workspace);
+
+    void this.probeDiscoveredMcpServersFromState(project.discoveredTooling).catch((error) => {
+      console.error('[aryx mcp-probe]', error);
+    });
+
+    return result;
   }
 
   async rescanProjectCustomization(projectId: string): Promise<WorkspaceState> {
@@ -385,7 +406,15 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
 
     this.pruneUnavailableSessionToolingSelections(workspace);
     await this.pruneUnavailableApprovalTools(workspace);
-    return this.persistAndBroadcast(workspace);
+    const result = await this.persistAndBroadcast(workspace);
+
+    if (resolution === 'accept') {
+      void this.probeDiscoveredMcpServers(project.discoveredTooling, serverIds).catch((error) => {
+        console.error('[aryx mcp-probe]', error);
+      });
+    }
+
+    return result;
   }
 
   async savePattern(pattern: PatternDefinition): Promise<WorkspaceState> {
@@ -2098,6 +2127,92 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
 
     project.discoveredTooling = nextState;
     return true;
+  }
+
+  private async probeAllAcceptedMcpServers(workspace: WorkspaceState): Promise<void> {
+    await this.probeDiscoveredMcpServersFromState(workspace.settings.discoveredUserTooling);
+    for (const project of workspace.projects) {
+      await this.probeDiscoveredMcpServersFromState(project.discoveredTooling);
+    }
+  }
+
+  private async probeDiscoveredMcpServersFromState(
+    state?: DiscoveredToolingState,
+  ): Promise<void> {
+    const accepted = listAcceptedDiscoveredMcpServers(state);
+    const serversNeedingProbe = accepted.filter(
+      (server) => !server.probedTools || server.probedTools.length === 0,
+    );
+    if (serversNeedingProbe.length === 0) return;
+
+    await this.probeAndApplyResults(state, serversNeedingProbe);
+  }
+
+  private async probeDiscoveredMcpServers(
+    state: DiscoveredToolingState | undefined,
+    serverIds: ReadonlyArray<string>,
+  ): Promise<void> {
+    const accepted = listAcceptedDiscoveredMcpServers(state);
+    const targets = accepted.filter((server) => serverIds.includes(server.id));
+    if (targets.length === 0) return;
+
+    await this.probeAndApplyResults(state, targets);
+  }
+
+  private async probeAndApplyResults(
+    state: DiscoveredToolingState | undefined,
+    targets: ReadonlyArray<DiscoveredMcpServer>,
+  ): Promise<void> {
+    const tokenLookup = (url: string) => getStoredToken(url)?.accessToken;
+    const serverDefs = targets.map((server) => this.discoveredServerToDefinition(server));
+    const results = await probeServers(serverDefs, tokenLookup);
+
+    const resultsById = new Map<string, McpProbeResult>(
+      results.map((r) => [r.serverId, r]),
+    );
+
+    let changed = false;
+    for (const server of state?.mcpServers ?? []) {
+      const result = resultsById.get(server.id);
+      if (result?.status === 'success' && result.tools.length > 0) {
+        server.probedTools = result.tools;
+        changed = true;
+      }
+    }
+
+    if (changed && this.workspace) {
+      await this.persistAndBroadcast(this.workspace);
+    }
+  }
+
+  private discoveredServerToDefinition(server: DiscoveredMcpServer): McpServerDefinition {
+    if (server.transport === 'local') {
+      return {
+        id: server.id,
+        name: server.name,
+        transport: 'local',
+        command: server.command,
+        args: [...server.args],
+        cwd: server.cwd,
+        env: server.env ? { ...server.env } : undefined,
+        tools: [...server.tools],
+        timeoutMs: server.timeoutMs,
+        createdAt: nowIso(),
+        updatedAt: nowIso(),
+      };
+    }
+
+    return {
+      id: server.id,
+      name: server.name,
+      transport: server.transport,
+      url: server.url,
+      headers: server.headers ? { ...server.headers } : undefined,
+      tools: [...server.tools],
+      timeoutMs: server.timeoutMs,
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+    };
   }
 
   private pruneUnavailableSessionToolingSelections(workspace: WorkspaceState): boolean {

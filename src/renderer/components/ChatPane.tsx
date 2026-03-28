@@ -27,7 +27,6 @@ import { isScratchpadProject, type ProjectRecord } from '@shared/domain/project'
 import { resolveSessionToolingSelection, type SessionRecord } from '@shared/domain/session';
 import {
   groupApprovalToolsByProvider,
-  isMcpServerApprovalKey,
   listApprovalToolDefinitions,
   type RuntimeToolDefinition,
   type SessionToolingSelection,
@@ -135,8 +134,7 @@ export function ChatPane({
     let count = 0;
     for (const group of groups) {
       if (group.serverApprovalKey && effectiveAutoApproved.has(group.serverApprovalKey)) {
-        // Server-level approval: count as 1 approved group even with 0 declared tools
-        count += Math.max(group.tools.length, 1);
+        count += group.tools.length;
       } else {
         count += group.tools.filter((t) => effectiveAutoApproved.has(t.id)).length;
       }

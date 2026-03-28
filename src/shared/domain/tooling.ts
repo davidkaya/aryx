@@ -9,11 +9,17 @@ import { nowIso } from '@shared/utils/ids';
 
 export type McpServerTransport = 'local' | 'http' | 'sse';
 
+export interface McpProbedTool {
+  name: string;
+  description?: string;
+}
+
 export interface BaseMcpServerDefinition {
   id: string;
   name: string;
   transport: McpServerTransport;
   tools: string[];
+  probedTools?: McpProbedTool[];
   timeoutMs?: number;
   createdAt: string;
   updatedAt: string;
@@ -155,10 +161,6 @@ export function buildMcpServerApprovalKey(serverName: string): string {
   return `${MCP_SERVER_APPROVAL_PREFIX}${serverName}`;
 }
 
-export function isMcpServerApprovalKey(key: string): boolean {
-  return key.startsWith(MCP_SERVER_APPROVAL_PREFIX);
-}
-
 export function createWorkspaceSettings(): WorkspaceSettings {
   return {
     theme: 'dark',
@@ -240,10 +242,16 @@ export function listApprovalToolDefinitions(
   }
 
   for (const server of tooling.mcpServers) {
-    for (const toolName of normalizeStringArray(server.tools)) {
+    const declaredTools = normalizeStringArray(server.tools);
+    const toolEntries = declaredTools.length > 0
+      ? declaredTools.map((name) => ({ name, description: undefined }))
+      : (server.probedTools ?? []).filter((t) => t.name.trim().length > 0);
+
+    for (const tool of toolEntries) {
       registerApprovalTool(toolsById, {
-        id: toolName,
-        label: toolName,
+        id: tool.name,
+        label: tool.name,
+        description: tool.description,
         kind: 'mcp',
         providerId: server.id,
         providerName: server.name,
@@ -469,6 +477,10 @@ function toResolvedMcpServerDefinition(
   server: ReturnType<typeof listAcceptedDiscoveredMcpServers>[number],
   timestamp = nowIso(),
 ): McpServerDefinition {
+  const probedTools = server.probedTools && server.probedTools.length > 0
+    ? [...server.probedTools]
+    : undefined;
+
   if (server.transport === 'local') {
     return normalizeMcpServerDefinition({
       id: server.id,
@@ -479,6 +491,7 @@ function toResolvedMcpServerDefinition(
       cwd: server.cwd,
       env: server.env ? { ...server.env } : undefined,
       tools: [...server.tools],
+      probedTools,
       timeoutMs: server.timeoutMs,
       createdAt: timestamp,
       updatedAt: timestamp,
@@ -492,6 +505,7 @@ function toResolvedMcpServerDefinition(
     url: server.url,
     headers: server.headers ? { ...server.headers } : undefined,
     tools: [...server.tools],
+    probedTools,
     timeoutMs: server.timeoutMs,
     createdAt: timestamp,
     updatedAt: timestamp,

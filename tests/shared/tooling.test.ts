@@ -536,3 +536,116 @@ describe('server-level approval keys', () => {
     expect(names).toContain('shell');
   });
 });
+
+describe('probed tools', () => {
+  const TS = '2026-03-28T00:00:00.000Z';
+
+  function makeTooling(mcpServers: McpServerDefinition[] = []): WorkspaceToolingSettings {
+    return { mcpServers, lspProfiles: [] };
+  }
+
+  test('listApprovalToolDefinitions uses probedTools when tools array is empty', () => {
+    const tooling = makeTooling([{
+      id: 'mcp-1', name: 'Probed Server', transport: 'local', command: 'node', args: [],
+      tools: [],
+      probedTools: [
+        { name: 'search', description: 'Search files' },
+        { name: 'index', description: 'Build index' },
+      ],
+      createdAt: TS, updatedAt: TS,
+    }]);
+    const defs = listApprovalToolDefinitions(tooling);
+    const mcpDefs = defs.filter((d) => d.kind === 'mcp');
+    expect(mcpDefs.length).toBe(2);
+    expect(mcpDefs.map((d) => d.id).sort()).toEqual(['index', 'search']);
+    expect(mcpDefs[0].providerNames).toContain('Probed Server');
+  });
+
+  test('listApprovalToolDefinitions prefers declared tools over probedTools', () => {
+    const tooling = makeTooling([{
+      id: 'mcp-2', name: 'Declared Server', transport: 'local', command: 'node', args: [],
+      tools: ['read_file', 'write_file'],
+      probedTools: [
+        { name: 'read_file' },
+        { name: 'write_file' },
+        { name: 'delete_file' },
+      ],
+      createdAt: TS, updatedAt: TS,
+    }]);
+    const defs = listApprovalToolDefinitions(tooling);
+    const mcpDefs = defs.filter((d) => d.kind === 'mcp');
+    expect(mcpDefs.length).toBe(2);
+    expect(mcpDefs.map((d) => d.id).sort()).toEqual(['read_file', 'write_file']);
+  });
+
+  test('listApprovalToolDefinitions returns no MCP tools when both tools and probedTools are empty', () => {
+    const tooling = makeTooling([{
+      id: 'mcp-3', name: 'Empty Server', transport: 'local', command: 'node', args: [],
+      tools: [],
+      probedTools: [],
+      createdAt: TS, updatedAt: TS,
+    }]);
+    const defs = listApprovalToolDefinitions(tooling);
+    const mcpDefs = defs.filter((d) => d.kind === 'mcp');
+    expect(mcpDefs.length).toBe(0);
+  });
+
+  test('listApprovalToolDefinitions handles undefined probedTools gracefully', () => {
+    const tooling = makeTooling([{
+      id: 'mcp-4', name: 'No Probe Server', transport: 'local', command: 'node', args: [],
+      tools: [],
+      createdAt: TS, updatedAt: TS,
+    }]);
+    const defs = listApprovalToolDefinitions(tooling);
+    const mcpDefs = defs.filter((d) => d.kind === 'mcp');
+    expect(mcpDefs.length).toBe(0);
+  });
+
+  test('probed tools with blank names are filtered out', () => {
+    const tooling = makeTooling([{
+      id: 'mcp-5', name: 'Blank Tools', transport: 'local', command: 'node', args: [],
+      tools: [],
+      probedTools: [
+        { name: 'valid_tool' },
+        { name: '  ' },
+        { name: '' },
+      ],
+      createdAt: TS, updatedAt: TS,
+    }]);
+    const defs = listApprovalToolDefinitions(tooling);
+    const mcpDefs = defs.filter((d) => d.kind === 'mcp');
+    expect(mcpDefs.length).toBe(1);
+    expect(mcpDefs[0].id).toBe('valid_tool');
+  });
+
+  test('groupApprovalToolsByProvider shows probed tools in MCP group', () => {
+    const tooling = makeTooling([{
+      id: 'mcp-6', name: 'Probed MCP', transport: 'local', command: 'node', args: [],
+      tools: [],
+      probedTools: [
+        { name: 'tool_a', description: 'Tool A desc' },
+        { name: 'tool_b' },
+      ],
+      createdAt: TS, updatedAt: TS,
+    }]);
+    const defs = listApprovalToolDefinitions(tooling);
+    const groups = groupApprovalToolsByProvider(defs, tooling);
+    const mcpGroup = groups.find((g) => g.kind === 'mcp' && g.label === 'Probed MCP');
+    expect(mcpGroup).toBeDefined();
+    expect(mcpGroup!.tools.length).toBe(2);
+    expect(mcpGroup!.serverApprovalKey).toBe('mcp_server:Probed MCP');
+  });
+
+  test('listApprovalToolNames includes probed tool names', () => {
+    const tooling = makeTooling([{
+      id: 'mcp-7', name: 'Probed Keys', transport: 'local', command: 'node', args: [],
+      tools: [],
+      probedTools: [{ name: 'probe_tool_1' }, { name: 'probe_tool_2' }],
+      createdAt: TS, updatedAt: TS,
+    }]);
+    const names = listApprovalToolNames(tooling);
+    expect(names).toContain('probe_tool_1');
+    expect(names).toContain('probe_tool_2');
+    expect(names).toContain('mcp_server:Probed Keys');
+  });
+});

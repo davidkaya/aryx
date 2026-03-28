@@ -41,6 +41,7 @@
     "@lexical/markdown": "0.42.0",
     "@lexical/react": "0.42.0",
     "@lexical/rich-text": "0.42.0",
+    "@modelcontextprotocol/sdk": "^1.28.0",
     "@tailwindcss/vite": "^4.2.2",
     "@types/node": "^25.5.0",
     "@types/react": "^19.2.14",

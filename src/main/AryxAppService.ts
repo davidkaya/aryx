@@ -181,12 +181,14 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
   private readonly gitService = new GitService();
   private readonly configScanner = new ConfigScannerRegistry();
   private readonly customizationScanner = new ProjectCustomizationScanner();
+  private readonly probeMcpServers = probeServers;
   private readonly pendingApprovalHandles = new Map<string, PendingApprovalHandle>();
   private readonly pendingUserInputHandles = new Map<string, PendingUserInputHandle>();
   private workspace?: WorkspaceState;
   private sidecarCapabilities?: SidecarCapabilities;
   private sidecarCapabilitiesPromise?: Promise<SidecarCapabilities>;
   private didScheduleInitialProjectGitRefresh = false;
+  private mcpProbeUpdateQueue = Promise.resolve();
 
   async describeSidecarCapabilities(): Promise<SidecarCapabilities> {
     return this.loadSidecarCapabilities();
@@ -346,7 +348,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     const result = await this.persistAndBroadcast(workspace);
 
     if (resolution === 'accept') {
-      void this.probeDiscoveredMcpServers(workspace.settings.discoveredUserTooling, serverIds).catch((error) => {
+      void this.probeDiscoveredMcpServers(workspace, workspace.settings.discoveredUserTooling, serverIds).catch((error) => {
         console.error('[aryx mcp-probe]', error);
       });
     }
@@ -362,7 +364,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     await this.pruneUnavailableApprovalTools(workspace);
     const result = await this.persistAndBroadcast(workspace);
 
-    void this.probeDiscoveredMcpServersFromState(project.discoveredTooling).catch((error) => {
+    void this.probeDiscoveredMcpServersFromState(workspace, project.discoveredTooling).catch((error) => {
       console.error('[aryx mcp-probe]', error);
     });
 
@@ -409,7 +411,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     const result = await this.persistAndBroadcast(workspace);
 
     if (resolution === 'accept') {
-      void this.probeDiscoveredMcpServers(project.discoveredTooling, serverIds).catch((error) => {
+      void this.probeDiscoveredMcpServers(workspace, project.discoveredTooling, serverIds).catch((error) => {
         console.error('[aryx mcp-probe]', error);
       });
     }
@@ -2138,86 +2140,73 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
   }
 
   private async probeAllAcceptedMcpServers(workspace: WorkspaceState): Promise<void> {
-    // Probe discovered MCP servers (from config files)
-    await this.probeDiscoveredMcpServersFromState(workspace.settings.discoveredUserTooling);
-    for (const project of workspace.projects) {
-      await this.probeDiscoveredMcpServersFromState(project.discoveredTooling);
-    }
+    const targets = [
+      ...this.listAcceptedDiscoveredServerDefinitions(
+        workspace,
+        (server) => !server.probedTools || server.probedTools.length === 0,
+      ),
+      ...workspace.settings.tooling.mcpServers.filter(
+        (server) => server.tools.length === 0 && (!server.probedTools || server.probedTools.length === 0),
+      ),
+    ];
 
-    // Probe manually configured MCP servers that have empty tools arrays
-    await this.probeManualMcpServers(workspace);
+    await this.probeWorkspaceMcpServers(workspace, targets);
   }
 
   private async probeDiscoveredMcpServersFromState(
+    workspace: WorkspaceState,
     state?: DiscoveredToolingState,
   ): Promise<void> {
-    const accepted = listAcceptedDiscoveredMcpServers(state);
-    const serversNeedingProbe = accepted.filter(
-      (server) => !server.probedTools || server.probedTools.length === 0,
-    );
-    if (serversNeedingProbe.length === 0) return;
-
-    await this.probeAndApplyResults(state, serversNeedingProbe);
+    const targets = listAcceptedDiscoveredMcpServers(state)
+      .filter((server) => !server.probedTools || server.probedTools.length === 0)
+      .map((server) => this.discoveredServerToDefinition(server));
+    await this.probeWorkspaceMcpServers(workspace, targets);
   }
 
   private async probeDiscoveredMcpServers(
+    workspace: WorkspaceState,
     state: DiscoveredToolingState | undefined,
     serverIds: ReadonlyArray<string>,
   ): Promise<void> {
-    const accepted = listAcceptedDiscoveredMcpServers(state);
-    const targets = accepted.filter((server) => serverIds.includes(server.id));
-    if (targets.length === 0) return;
-
-    await this.probeAndApplyResults(state, targets);
+    const targets = listAcceptedDiscoveredMcpServers(state)
+      .filter((server) => serverIds.includes(server.id))
+      .map((server) => this.discoveredServerToDefinition(server));
+    await this.probeWorkspaceMcpServers(workspace, targets);
   }
 
-  private async probeAndApplyResults(
-    state: DiscoveredToolingState | undefined,
-    targets: ReadonlyArray<DiscoveredMcpServer>,
+  private async probeWorkspaceMcpServers(
+    workspace: WorkspaceState,
+    targets: ReadonlyArray<McpServerDefinition>,
   ): Promise<void> {
+    const uniqueTargets = [...new Map(targets.map((server) => [server.id, server])).values()];
+    if (uniqueTargets.length === 0) {
+      return;
+    }
+
+    const targetIds = uniqueTargets.map((server) => server.id);
     const tokenLookup = (url: string) => getStoredToken(url)?.accessToken;
-    const serverDefs = targets.map((server) => this.discoveredServerToDefinition(server));
-    const results = await probeServers(serverDefs, tokenLookup);
-
-    const resultsById = new Map<string, McpProbeResult>(
-      results.map((r) => [r.serverId, r]),
-    );
-
-    let changed = false;
-    for (const server of state?.mcpServers ?? []) {
-      const result = resultsById.get(server.id);
-      if (result?.status === 'success' && result.tools.length > 0) {
-        server.probedTools = result.tools;
-        changed = true;
+    await this.enqueueMcpProbeUpdate(async () => {
+      if (this.addMcpProbingServerIds(workspace, targetIds)) {
+        await this.persistAndBroadcast(workspace);
       }
-    }
+    });
 
-    if (changed && this.workspace) {
-      await this.persistAndBroadcast(this.workspace);
-    }
-  }
-
-  private async probeManualMcpServers(workspace: WorkspaceState): Promise<void> {
-    const manualServers = workspace.settings.tooling.mcpServers.filter(
-      (server) => server.tools.length === 0 && (!server.probedTools || server.probedTools.length === 0),
-    );
-    if (manualServers.length === 0) return;
-
-    const tokenLookup = (url: string) => getStoredToken(url)?.accessToken;
-    const results = await probeServers(manualServers, tokenLookup);
-
-    let changed = false;
-    for (const result of results) {
-      if (result.status !== 'success' || result.tools.length === 0) continue;
-      const server = workspace.settings.tooling.mcpServers.find((s) => s.id === result.serverId);
-      if (server) {
-        server.probedTools = result.tools;
-        changed = true;
-      }
-    }
-
-    if (changed) {
-      await this.persistAndBroadcast(workspace);
+    try {
+      await this.probeMcpServers(uniqueTargets, tokenLookup, (result) =>
+        this.enqueueMcpProbeUpdate(async () => {
+          const didUpdateProbing = this.removeMcpProbingServerIds(workspace, [result.serverId]);
+          const didApplyResult = this.applyMcpProbeResult(workspace, result);
+          if (didUpdateProbing || didApplyResult) {
+            await this.persistAndBroadcast(workspace);
+          }
+        }),
+      );
+    } finally {
+      await this.enqueueMcpProbeUpdate(async () => {
+        if (this.removeMcpProbingServerIds(workspace, targetIds)) {
+          await this.persistAndBroadcast(workspace);
+        }
+      });
     }
   }
 
@@ -2227,7 +2216,6 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
    */
   private async reprobeServerByUrl(serverUrl: string): Promise<void> {
     const workspace = await this.loadWorkspace();
-    const tokenLookup = (url: string) => getStoredToken(url)?.accessToken;
 
     // Collect matching servers from manual config and discovered tooling
     const targets: McpServerDefinition[] = [];
@@ -2248,36 +2236,103 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
       }
     }
 
-    if (targets.length === 0) return;
+    await this.probeWorkspaceMcpServers(workspace, targets);
+  }
 
-    const results = await probeServers(targets, tokenLookup);
-    const resultsById = new Map(results.map((r) => [r.serverId, r]));
+  private listAcceptedDiscoveredServerDefinitions(
+    workspace: WorkspaceState,
+    predicate?: (server: DiscoveredMcpServer) => boolean,
+  ): McpServerDefinition[] {
+    const definitions: McpServerDefinition[] = [];
+
+    for (const state of this.listDiscoveredToolingStates(workspace)) {
+      for (const server of listAcceptedDiscoveredMcpServers(state)) {
+        if (predicate && !predicate(server)) {
+          continue;
+        }
+        definitions.push(this.discoveredServerToDefinition(server));
+      }
+    }
+
+    return definitions;
+  }
+
+  private listDiscoveredToolingStates(workspace: WorkspaceState): Array<DiscoveredToolingState | undefined> {
+    return [
+      workspace.settings.discoveredUserTooling,
+      ...workspace.projects.map((project) => project.discoveredTooling),
+    ];
+  }
+
+  private addMcpProbingServerIds(workspace: WorkspaceState, serverIds: ReadonlyArray<string>): boolean {
+    return this.updateMcpProbingServerIds(workspace, serverIds, 'add');
+  }
+
+  private removeMcpProbingServerIds(workspace: WorkspaceState, serverIds: ReadonlyArray<string>): boolean {
+    return this.updateMcpProbingServerIds(workspace, serverIds, 'remove');
+  }
+
+  private updateMcpProbingServerIds(
+    workspace: WorkspaceState,
+    serverIds: ReadonlyArray<string>,
+    operation: 'add' | 'remove',
+  ): boolean {
+    const next = new Set(workspace.mcpProbingServerIds ?? []);
+    const before = next.size;
+
+    for (const serverId of serverIds) {
+      if (operation === 'add') {
+        next.add(serverId);
+      } else {
+        next.delete(serverId);
+      }
+    }
+
+    if (next.size === before) {
+      return false;
+    }
+
+    if (next.size === 0) {
+      delete workspace.mcpProbingServerIds;
+    } else {
+      workspace.mcpProbingServerIds = [...next];
+    }
+
+    return true;
+  }
+
+  private applyMcpProbeResult(workspace: WorkspaceState, result: McpProbeResult): boolean {
+    if (result.status !== 'success' || result.tools.length === 0) {
+      return false;
+    }
 
     let changed = false;
 
-    // Apply to manual servers
     for (const server of workspace.settings.tooling.mcpServers) {
-      const result = resultsById.get(server.id);
-      if (result?.status === 'success' && result.tools.length > 0) {
+      if (server.id !== result.serverId) {
+        continue;
+      }
+      server.probedTools = result.tools;
+      changed = true;
+    }
+
+    for (const state of this.listDiscoveredToolingStates(workspace)) {
+      for (const server of state?.mcpServers ?? []) {
+        if (server.id !== result.serverId) {
+          continue;
+        }
         server.probedTools = result.tools;
         changed = true;
       }
     }
 
-    // Apply to discovered servers
-    for (const state of [workspace.settings.discoveredUserTooling, ...workspace.projects.map((p) => p.discoveredTooling)]) {
-      for (const server of state?.mcpServers ?? []) {
-        const result = resultsById.get(server.id);
-        if (result?.status === 'success' && result.tools.length > 0) {
-          server.probedTools = result.tools;
-          changed = true;
-        }
-      }
-    }
+    return changed;
+  }
 
-    if (changed) {
-      await this.persistAndBroadcast(workspace);
-    }
+  private async enqueueMcpProbeUpdate(update: () => Promise<void>): Promise<void> {
+    const next = this.mcpProbeUpdateQueue.then(update, update);
+    this.mcpProbeUpdateQueue = next.catch(() => undefined);
+    await next;
   }
 
   private discoveredServerToDefinition(server: DiscoveredMcpServer): McpServerDefinition {

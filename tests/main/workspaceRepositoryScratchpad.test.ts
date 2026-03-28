@@ -87,4 +87,18 @@ describe('WorkspaceRepository scratchpad migration', () => {
     const persisted = JSON.parse(await readFile(workspaceFilePath, 'utf8')) as WorkspaceState;
     expect(persisted.sessions[0]?.cwd).toBe(expectedSessionPath);
   });
+
+  test('strips runtime MCP probing state before persisting workspace data', async () => {
+    const workspaceFilePath = join(USER_DATA_PATH, 'workspace.json');
+    await mkdir(USER_DATA_PATH, { recursive: true });
+
+    const repository = new WorkspaceRepository();
+    const workspace = createStoredWorkspace();
+    workspace.mcpProbingServerIds = ['server-a', 'server-b'];
+
+    await repository.save(workspace);
+
+    const persisted = JSON.parse(await readFile(workspaceFilePath, 'utf8')) as WorkspaceState;
+    expect('mcpProbingServerIds' in persisted).toBe(false);
+  });
 });

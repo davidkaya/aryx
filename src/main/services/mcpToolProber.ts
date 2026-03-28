@@ -25,30 +25,32 @@ const MAX_CONCURRENCY = 5;
 export async function probeServers(
   servers: ReadonlyArray<McpServerDefinition>,
   tokenLookup?: (serverUrl: string) => string | undefined,
+  onResult?: (result: McpProbeResult) => void | Promise<void>,
 ): Promise<McpProbeResult[]> {
-  const pending = [...servers];
-  const results: McpProbeResult[] = [];
-  const active: Promise<void>[] = [];
+  if (servers.length === 0) {
+    return [];
+  }
 
-  for (const server of pending) {
-    const task = probeServer(server, tokenLookup).then((result) => {
-      results.push(result);
-    });
-    active.push(task);
+  const results = new Array<McpProbeResult>(servers.length);
+  let nextIndex = 0;
+  const workerCount = Math.min(MAX_CONCURRENCY, servers.length);
 
-    if (active.length >= MAX_CONCURRENCY) {
-      await Promise.race(active);
-      // Remove settled promises
-      for (let i = active.length - 1; i >= 0; i--) {
-        const status = await Promise.race([active[i].then(() => 'done'), Promise.resolve('pending')]);
-        if (status === 'done') {
-          active.splice(i, 1);
-        }
+  async function worker(): Promise<void> {
+    while (true) {
+      const index = nextIndex;
+      nextIndex += 1;
+      const server = servers[index];
+      if (!server) {
+        return;
       }
+
+      const result = await probeServer(server, tokenLookup);
+      results[index] = result;
+      await onResult?.(result);
     }
   }
 
-  await Promise.allSettled(active);
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
   return results;
 }
 

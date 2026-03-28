@@ -123,8 +123,9 @@ export class WorkspaceRepository {
   }
 
   async save(workspace: WorkspaceState): Promise<void> {
+    const { mcpProbingServerIds: _mcpProbingServerIds, ...persistedWorkspace } = workspace;
     await writeJsonFile(this.filePath, {
-      ...workspace,
+      ...persistedWorkspace,
       lastUpdatedAt: nowIso(),
     });
   }

@@ -10,6 +10,8 @@ export interface WorkspaceState {
   patterns: PatternDefinition[];
   sessions: SessionRecord[];
   settings: WorkspaceSettings;
+  /** Runtime-only MCP probe progress for live UI updates. */
+  mcpProbingServerIds?: string[];
   selectedProjectId?: string;
   selectedPatternId?: string;
   selectedSessionId?: string;

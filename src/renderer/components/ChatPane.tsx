@@ -7,7 +7,7 @@ import { ApprovalBanner, QueuedApprovalsList } from '@renderer/components/chat/A
 import { PlanReviewBanner } from '@renderer/components/chat/PlanReviewBanner';
 import { McpAuthBanner } from '@renderer/components/chat/McpAuthBanner';
 import { UserInputBanner } from '@renderer/components/chat/UserInputBanner';
-import { InlineApprovalPill, InlineModelPill, InlineThinkingPill, InlineToolsPill } from '@renderer/components/chat/InlinePills';
+import { InlineApprovalPill, InlineModelPill, InlineTerminalPill, InlineThinkingPill, InlineToolsPill } from '@renderer/components/chat/InlinePills';
 import { InlinePromptPill } from '@renderer/components/chat/InlinePromptPill';
 import { ThinkingDots } from '@renderer/components/chat/ThinkingDots';
 import { getAssistantMessagePhase } from '@renderer/lib/messagePhase';
@@ -44,6 +44,8 @@ interface ChatPaneProps {
   mcpProbingServerIds?: string[];
   runtimeTools?: ReadonlyArray<RuntimeToolDefinition>;
   sessionUsage?: SessionUsageState;
+  terminalOpen?: boolean;
+  terminalRunning?: boolean;
   onSend: (content: string, attachments?: ChatMessageAttachment[], messageMode?: MessageMode) => Promise<void>;
   onCancelTurn?: () => void;
   onResolveApproval?: (approvalId: string, decision: ApprovalDecision, alwaysApprove?: boolean) => Promise<unknown>;
@@ -52,6 +54,7 @@ interface ChatPaneProps {
   onDismissPlanReview?: () => void;
   onDismissMcpAuth?: () => void;
   onAuthenticateMcp?: () => void;
+  onTerminalToggle?: () => void;
   onUpdateSessionModelConfig?: (config: {
     model: string;
     reasoningEffort?: ReasoningEffort;
@@ -69,6 +72,8 @@ export function ChatPane({
   mcpProbingServerIds,
   runtimeTools,
   sessionUsage,
+  terminalOpen,
+  terminalRunning,
   onSend,
   onCancelTurn,
   onResolveApproval,
@@ -77,6 +82,7 @@ export function ChatPane({
   onDismissPlanReview,
   onDismissMcpAuth,
   onAuthenticateMcp,
+  onTerminalToggle,
   onUpdateSessionModelConfig,
   onUpdateSessionTooling,
   onUpdateSessionApprovalSettings,
@@ -482,6 +488,14 @@ export function ChatPane({
           {/* Session config pills — tools/approval left, model/reasoning right */}
           {isSingleAgent && (
             <div className="mb-2 flex items-center gap-2">
+              {onTerminalToggle && (
+                <InlineTerminalPill
+                  disabled={false}
+                  isOpen={!!terminalOpen}
+                  isRunning={!!terminalRunning}
+                  onToggle={onTerminalToggle}
+                />
+              )}
               {hasConfigurableTools && onUpdateSessionTooling && (
                 <InlineToolsPill
                   disabled={isComposerDisabled}
@@ -539,6 +553,14 @@ export function ChatPane({
           {/* Session config pills — tool & approval controls (multi-agent) */}
           {!isSingleAgent && (hasConfigurableTools || hasToolCallApproval) && (
             <div className="mb-2 flex items-center gap-2">
+              {onTerminalToggle && (
+                <InlineTerminalPill
+                  disabled={false}
+                  isOpen={!!terminalOpen}
+                  isRunning={!!terminalRunning}
+                  onToggle={onTerminalToggle}
+                />
+              )}
               {hasConfigurableTools && onUpdateSessionTooling && (
                 <InlineToolsPill
                   disabled={isComposerDisabled}

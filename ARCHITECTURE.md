@@ -193,7 +193,7 @@ Typical examples:
 
 The renderer does not reach into Electron or the filesystem directly. It talks through a constrained API surface.
 
-The integrated terminal uses the same boundary. The renderer never opens a shell directly; it asks the main process to create or restart a PTY, sends fire-and-forget input and resize messages over IPC, and listens for streamed terminal data and exit events pushed back through preload.
+The integrated terminal uses the same boundary. The renderer never opens a shell directly; it asks the main process to create or restart a PTY, sends fire-and-forget input and resize messages over IPC, and listens for streamed terminal data and exit events pushed back through preload. The `TerminalPanel` component manages an xterm.js terminal instance with a FitAddon, a drag-to-resize handle, and a header bar showing shell status.
 
 ### 2. Main process <-> sidecar
 

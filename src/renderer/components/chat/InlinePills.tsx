@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ChevronDown, ChevronRight, Loader2, Minus, Search, Sparkles } from 'lucide-react';
+import { ChevronDown, ChevronRight, Loader2, Minus, Search, Sparkles, TerminalSquare } from 'lucide-react';
 
 import { ProviderIcon } from '@renderer/components/ProviderIcons';
 import { PopoverToggleRow } from '@renderer/components/ui';
@@ -657,6 +657,38 @@ function GroupToggle({
           }`}
         />
       )}
+    </button>
+  );
+}
+
+/* ── InlineTerminalPill ────────────────────────────────────── */
+
+export function InlineTerminalPill({
+  disabled,
+  isRunning,
+  isOpen,
+  onToggle,
+}: {
+  disabled: boolean;
+  isRunning: boolean;
+  isOpen: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      aria-pressed={isOpen}
+      className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-pill font-medium transition ${
+        isOpen
+          ? 'border-indigo-500/40 bg-indigo-500/10 text-indigo-300'
+          : 'border-zinc-700/60 bg-zinc-800/40 text-zinc-400 hover:border-zinc-600 hover:text-zinc-300'
+      } disabled:cursor-not-allowed disabled:opacity-50`}
+      disabled={disabled}
+      onClick={onToggle}
+      type="button"
+    >
+      {isRunning && <span className="size-1.5 shrink-0 rounded-full bg-emerald-400" />}
+      <TerminalSquare className="size-2.5" />
+      <span>Terminal</span>
     </button>
   );
 }

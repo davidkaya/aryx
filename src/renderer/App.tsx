@@ -8,6 +8,7 @@ import { NewSessionModal } from '@renderer/components/NewSessionModal';
 import { ProjectSettingsPanel } from '@renderer/components/ProjectSettingsPanel';
 import { SettingsPanel } from '@renderer/components/SettingsPanel';
 import { Sidebar } from '@renderer/components/Sidebar';
+import { TerminalPanel, DEFAULT_HEIGHT as DEFAULT_TERMINAL_HEIGHT, MIN_HEIGHT as MIN_TERMINAL_HEIGHT } from '@renderer/components/TerminalPanel';
 import { resolveChatToolingSettings } from '@renderer/lib/chatTooling';
 import {
   applySessionEventActivity,
@@ -105,6 +106,13 @@ export default function App() {
   const [projectSettingsId, setProjectSettingsId] = useState<string>();
   const [newSessionProjectId, setNewSessionProjectId] = useState<string>();
   const [showDiscoveryModal, setShowDiscoveryModal] = useState(false);
+
+  // Terminal state
+  const [terminalOpen, setTerminalOpen] = useState(false);
+  const [terminalHeight, setTerminalHeight] = useState(
+    () => workspace?.settings.terminalHeight ?? DEFAULT_TERMINAL_HEIGHT,
+  );
+  const [terminalRunning, setTerminalRunning] = useState(false);
 
   // Load workspace on mount
   useEffect(() => {
@@ -228,6 +236,46 @@ export default function App() {
     if (hasPendingDiscoveries) setShowDiscoveryModal(true);
   }, [hasPendingDiscoveries]);
 
+  // Terminal: Ctrl+` toggle + track running state
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.key === '`') {
+        e.preventDefault();
+        setTerminalOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+
+    // Track terminal running state via exit events
+    const offExit = api.onTerminalExit(() => setTerminalRunning(false));
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      offExit();
+    };
+  }, [api]);
+
+  // Sync terminalHeight from workspace settings when workspace loads
+  useEffect(() => {
+    if (workspace?.settings.terminalHeight) {
+      setTerminalHeight(workspace.settings.terminalHeight);
+    }
+  }, [workspace?.settings.terminalHeight]);
+
+  const handleTerminalHeightChange = useCallback((newHeight: number) => {
+    const clamped = Math.max(MIN_TERMINAL_HEIGHT, Math.round(newHeight));
+    setTerminalHeight(clamped);
+    void api.setTerminalHeight({ height: clamped });
+  }, [api]);
+
+  const handleTerminalClose = useCallback(() => {
+    setTerminalOpen(false);
+  }, []);
+
+  const handleTerminalToggle = useCallback(() => {
+    setTerminalOpen((prev) => !prev);
+  }, []);
+
   const jumpToMessage = useCallback((messageId: string) => {
     const element = document.querySelector(`[data-message-id="${CSS.escape(messageId)}"]`);
     if (element) {
@@ -334,11 +382,14 @@ export default function App() {
           }}
           availableModels={availableModels}
           mcpProbingServerIds={workspace.mcpProbingServerIds}
+          onTerminalToggle={handleTerminalToggle}
           pattern={patternForSession}
           project={projectForSession}
           runtimeTools={sidecarCapabilities?.runtimeTools}
           session={selectedSession}
           sessionUsage={usageForSession}
+          terminalOpen={terminalOpen}
+          terminalRunning={terminalRunning}
           toolingSettings={chatToolingSettings ?? workspace.settings.tooling}
         />
     );
@@ -422,6 +473,16 @@ export default function App() {
         content={content}
         detailPanel={detailPanel}
         overlay={overlay}
+        terminalPanel={
+          terminalOpen ? (
+            <TerminalPanel
+              height={terminalHeight}
+              onHeightChange={handleTerminalHeightChange}
+              onClose={handleTerminalClose}
+              onMinimize={handleTerminalClose}
+            />
+          ) : undefined
+        }
         sidebar={
           <Sidebar
             onAddProject={() => void api.addProject()}

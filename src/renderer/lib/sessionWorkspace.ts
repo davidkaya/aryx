@@ -112,10 +112,18 @@ function applyMessageDeltaEvent(session: SessionRecord, event: SessionEventRecor
     };
   }
 
+  // Auto-complete any previously pending assistant messages so only
+  // the new message shows the "Thinking" indicator.
+  const completedMessages = session.messages.map((message) =>
+    message.pending && message.role === 'assistant'
+      ? { ...message, pending: false }
+      : message,
+  );
+
   return {
     ...session,
     messages: [
-      ...session.messages,
+      ...completedMessages,
         {
           id: event.messageId,
           role: 'assistant',

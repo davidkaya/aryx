@@ -228,6 +228,46 @@ describe('session workspace helpers', () => {
     expect(updated?.sessions[0].runs).toEqual([run]);
   });
 
+  test('auto-completes previous pending assistant messages when a new message starts', () => {
+    const first = applySessionEventWorkspace(createWorkspace(), {
+      sessionId: 'session-1',
+      kind: 'message-delta',
+      occurredAt: '2026-03-23T00:00:01.000Z',
+      messageId: 'assistant-1',
+      authorName: 'Primary Agent',
+      contentDelta: 'Exploring the codebase...',
+      content: 'Exploring the codebase...',
+    } satisfies SessionEventRecord);
+
+    expect(first?.sessions[0].messages).toHaveLength(1);
+    expect(first?.sessions[0].messages[0]).toMatchObject({
+      id: 'assistant-1',
+      pending: true,
+    });
+
+    const second = applySessionEventWorkspace(first, {
+      sessionId: 'session-1',
+      kind: 'message-delta',
+      occurredAt: '2026-03-23T00:00:02.000Z',
+      messageId: 'assistant-2',
+      authorName: 'Primary Agent',
+      contentDelta: 'Still exploring...',
+      content: 'Still exploring...',
+    } satisfies SessionEventRecord);
+
+    expect(second?.sessions[0].messages).toHaveLength(2);
+    expect(second?.sessions[0].messages[0]).toMatchObject({
+      id: 'assistant-1',
+      content: 'Exploring the codebase...',
+      pending: false,
+    });
+    expect(second?.sessions[0].messages[1]).toMatchObject({
+      id: 'assistant-2',
+      content: 'Still exploring...',
+      pending: true,
+    });
+  });
+
   test('ignores events for unknown sessions', () => {
     const workspace = createWorkspace();
     expect(

@@ -1471,11 +1471,20 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
         ? mergeStreamingText(existing.content, event.contentDelta)
         : (event.content ?? event.contentDelta);
 
+    // When a new assistant message begins, auto-complete any previously pending
+    // assistant messages so only the latest one shows the "Thinking" indicator.
+    const completedMessages: ChatMessageRecord[] = [];
     if (existing) {
       existing.content = content;
       existing.pending = true;
       existing.authorName = event.authorName;
     } else {
+      for (const message of session.messages) {
+        if (message.pending && message.role === 'assistant') {
+          message.pending = false;
+          completedMessages.push(message);
+        }
+      }
       session.messages.push({
         id: event.messageId,
         role: 'assistant',
@@ -1498,6 +1507,16 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     session.updatedAt = occurredAt;
     await this.workspaceRepository.save(workspace);
 
+    for (const completed of completedMessages) {
+      this.emitSessionEvent({
+        sessionId,
+        kind: 'message-complete',
+        occurredAt,
+        messageId: completed.id,
+        authorName: completed.authorName,
+        content: completed.content,
+      });
+    }
     this.emitSessionEvent({
       sessionId,
       kind: 'message-delta',

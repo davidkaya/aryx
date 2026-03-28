@@ -2348,8 +2348,10 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     left?: DiscoveredToolingState,
     right?: DiscoveredToolingState,
   ): boolean {
-    return JSON.stringify(normalizeDiscoveredToolingState(left).mcpServers)
-      === JSON.stringify(normalizeDiscoveredToolingState(right).mcpServers);
+    const stripRuntime = (servers: DiscoveredMcpServer[]) =>
+      servers.map(({ probedTools: _, ...rest }) => rest);
+    return JSON.stringify(stripRuntime(normalizeDiscoveredToolingState(left).mcpServers))
+      === JSON.stringify(stripRuntime(normalizeDiscoveredToolingState(right).mcpServers));
   }
 
   private equalProjectCustomizationState(

@@ -105,4 +105,50 @@ describe('discovered tooling helpers', () => {
     expect(listPendingDiscoveredMcpServers(dismissed)).toEqual([]);
     expect(dismissed.mcpServers[1]?.status).toBe('dismissed');
   });
+
+  test('preserves probedTools when fingerprint is unchanged on re-scan', () => {
+    const probedTools = [
+      { name: 'git_status', description: 'Get git status' },
+      { name: 'git_diff', description: 'Get git diff' },
+    ];
+    const current = {
+      mcpServers: [
+        createDiscoveredServer({
+          status: 'accepted',
+          probedTools,
+        }),
+      ],
+      lastScannedAt: TIMESTAMP,
+    };
+
+    const merged = mergeDiscoveredToolingState(
+      current,
+      [createDiscoveredServer()],
+      '2026-03-25T01:00:00.000Z',
+    );
+
+    expect(merged.mcpServers[0]?.probedTools).toEqual(probedTools);
+    expect(merged.mcpServers[0]?.status).toBe('accepted');
+  });
+
+  test('drops probedTools when fingerprint changes on re-scan', () => {
+    const current = {
+      mcpServers: [
+        createDiscoveredServer({
+          status: 'accepted',
+          probedTools: [{ name: 'git_status' }],
+        }),
+      ],
+      lastScannedAt: TIMESTAMP,
+    };
+
+    const merged = mergeDiscoveredToolingState(
+      current,
+      [createDiscoveredServer({ args: ['server.js', '--debug'] })],
+      '2026-03-25T01:00:00.000Z',
+    );
+
+    expect(merged.mcpServers[0]?.probedTools).toBeUndefined();
+    expect(merged.mcpServers[0]?.status).toBe('pending');
+  });
 });

@@ -122,6 +122,7 @@ export function mergeDiscoveredToolingState(
         return {
           ...server,
           status: existing.status,
+          probedTools: existing.probedTools,
         } satisfies DiscoveredMcpServer;
       }
 

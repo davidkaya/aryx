@@ -10,8 +10,14 @@ import { Sidebar } from '@renderer/components/Sidebar';
 import { resolveChatToolingSettings } from '@renderer/lib/chatTooling';
 import {
   applySessionEventActivity,
+  applySessionUsageEvent,
+  applyTurnEventLog,
   pruneSessionActivities,
+  pruneSessionUsage,
+  pruneTurnEventLogs,
   type SessionActivityMap,
+  type SessionUsageMap,
+  type TurnEventLogMap,
 } from '@renderer/lib/sessionActivity';
 import { applySessionEventWorkspace } from '@renderer/lib/sessionWorkspace';
 import { WelcomePane } from '@renderer/components/WelcomePane';
@@ -91,6 +97,8 @@ export default function App() {
   const [error, setError] = useState<string>();
   const { capabilities: sidecarCapabilities, isRefreshing: isRefreshingCapabilities, refresh: refreshCapabilities } = useSidecarCapabilities(api);
   const [sessionActivities, setSessionActivities] = useState<SessionActivityMap>({});
+  const [sessionUsage, setSessionUsage] = useState<SessionUsageMap>({});
+  const [turnEventLogs, setTurnEventLogs] = useState<TurnEventLogMap>({});
 
   const [showSettings, setShowSettings] = useState(false);
   const [newSessionProjectId, setNewSessionProjectId] = useState<string>();
@@ -114,11 +122,25 @@ export default function App() {
           ws.sessions.map((session) => session.id),
         ),
       );
+      setSessionUsage((current) =>
+        pruneSessionUsage(
+          current,
+          ws.sessions.map((session) => session.id),
+        ),
+      );
+      setTurnEventLogs((current) =>
+        pruneTurnEventLogs(
+          current,
+          ws.sessions.map((session) => session.id),
+        ),
+      );
     });
 
     const offSessionEvent = api.onSessionEvent((event) => {
       setWorkspace((current) => applySessionEventWorkspace(current, event));
       setSessionActivities((current) => applySessionEventActivity(current, event));
+      setSessionUsage((current) => applySessionUsageEvent(current, event));
+      setTurnEventLogs((current) => applyTurnEventLog(current, event));
     });
 
     return () => {
@@ -168,6 +190,14 @@ export default function App() {
   const activityForSession = useMemo(
     () => (selectedSession ? sessionActivities[selectedSession.id] : undefined),
     [selectedSession, sessionActivities],
+  );
+  const usageForSession = useMemo(
+    () => (selectedSession ? sessionUsage[selectedSession.id] : undefined),
+    [selectedSession, sessionUsage],
+  );
+  const turnEventsForSession = useMemo(
+    () => (selectedSession ? turnEventLogs[selectedSession.id] : undefined),
+    [selectedSession, turnEventLogs],
   );
   const hasUserProjects = useMemo(
     () => (workspace?.projects.some((project) => !isScratchpadProject(project)) ?? false),
@@ -245,7 +275,12 @@ export default function App() {
   } else if (selectedSession && patternForSession && projectForSession) {
     content = (
         <ChatPane
-          onSend={(c) => api.sendSessionMessage({ sessionId: selectedSession.id, content: c })}
+          onSend={(c, attachments, messageMode) => api.sendSessionMessage({
+            sessionId: selectedSession.id,
+            content: c,
+            attachments: attachments?.length ? attachments : undefined,
+            messageMode,
+          })}
           onCancelTurn={() => { void api.cancelSessionTurn({ sessionId: selectedSession.id }); }}
           onResolveApproval={(approvalId, decision, alwaysApprove) =>
             api.resolveSessionApproval({ sessionId: selectedSession.id, approvalId, decision, alwaysApprove })
@@ -290,6 +325,7 @@ export default function App() {
           project={projectForSession}
           runtimeTools={sidecarCapabilities?.runtimeTools}
           session={selectedSession}
+          sessionUsage={usageForSession}
           toolingSettings={chatToolingSettings ?? workspace.settings.tooling}
         />
     );
@@ -299,6 +335,7 @@ export default function App() {
         onJumpToMessage={jumpToMessage}
         pattern={patternForSession}
         session={selectedSession}
+        turnEvents={turnEventsForSession}
       />
     );
   } else {
@@ -403,6 +440,9 @@ export default function App() {
             }}
             onSetSessionArchived={(sessionId, isArchived) => {
               void api.setSessionArchived({ sessionId, isArchived });
+            }}
+            onDeleteSession={(sessionId) => {
+              void api.deleteSession({ sessionId });
             }}
             onRefreshGitContext={(projectId) => {
               void api.refreshProjectGitContext(projectId);

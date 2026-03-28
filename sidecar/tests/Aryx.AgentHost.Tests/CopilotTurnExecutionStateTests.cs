@@ -50,7 +50,7 @@ public sealed class CopilotTurnExecutionStateTests
                 }
                 """));
 
-        AgentActivityEventDto activity = Assert.Single(state.DrainPendingActivityEvents());
+        AgentActivityEventDto activity = Assert.Single(state.DrainPendingEvents().OfType<AgentActivityEventDto>());
         Assert.Equal("thinking", activity.ActivityType);
         Assert.Equal("agent-1", activity.AgentId);
         Assert.Equal("Primary", activity.AgentName);
@@ -104,13 +104,13 @@ public sealed class CopilotTurnExecutionStateTests
                 }
                 """));
 
-        List<AgentActivityEventDto> activities = [.. state.DrainPendingActivityEvents()];
+        List<AgentActivityEventDto> activities = [.. state.DrainPendingEvents().OfType<AgentActivityEventDto>()];
 
         await state.EmitThinkingIfNeeded(
             new AgentIdentity("agent-1", "Primary"),
-            activity =>
+            sidecarEvent =>
             {
-                activities.Add(activity);
+                activities.Add(Assert.IsType<AgentActivityEventDto>(sidecarEvent));
                 return Task.CompletedTask;
             });
 
@@ -142,6 +142,157 @@ public sealed class CopilotTurnExecutionStateTests
         McpOauthRequiredEventDto drained = Assert.Single(firstDrain);
         Assert.Equal("oauth-request-1", drained.OauthRequestId);
         Assert.Empty(secondDrain);
+    }
+
+    [Fact]
+    public void ObserveSessionEvent_SubagentStarted_QueuesSubagentEvent()
+    {
+        RunTurnCommandDto command = CreateCommand();
+        CopilotTurnExecutionState state = new(command);
+
+        state.ObserveSessionEvent(
+            command.Pattern.Agents[0],
+            SessionEvent.FromJson(
+                """
+                {
+                  "type": "subagent.started",
+                  "data": {
+                    "toolCallId": "tool-call-1",
+                    "agentName": "designer",
+                    "agentDisplayName": "Designer",
+                    "agentDescription": "Design specialist"
+                  },
+                  "id": "44444444-4444-4444-4444-444444444444",
+                  "timestamp": "2026-03-27T00:00:00Z"
+                }
+                """));
+
+        SubagentEventDto evt = Assert.Single(state.DrainPendingEvents().OfType<SubagentEventDto>());
+        Assert.Equal("started", evt.EventKind);
+        Assert.Equal("tool-call-1", evt.ToolCallId);
+        Assert.Equal("designer", evt.CustomAgentName);
+        Assert.Equal("Designer", evt.CustomAgentDisplayName);
+    }
+
+    [Fact]
+    public void ObserveSessionEvent_SkillInvoked_QueuesSkillEvent()
+    {
+        RunTurnCommandDto command = CreateCommand();
+        CopilotTurnExecutionState state = new(command);
+
+        state.ObserveSessionEvent(
+            command.Pattern.Agents[0],
+            SessionEvent.FromJson(
+                """
+                {
+                  "type": "skill.invoked",
+                  "data": {
+                    "name": "reviewer",
+                    "path": "C:\\skills\\reviewer\\SKILL.md",
+                    "content": "# Reviewer",
+                    "allowedTools": ["view"],
+                    "pluginName": "aryx-plugin",
+                    "pluginVersion": "1.0.0"
+                  },
+                  "id": "55555555-5555-5555-5555-555555555555",
+                  "timestamp": "2026-03-27T00:00:00Z"
+                }
+                """));
+
+        SkillInvokedEventDto evt = Assert.Single(state.DrainPendingEvents().OfType<SkillInvokedEventDto>());
+        Assert.Equal("reviewer", evt.SkillName);
+        Assert.Equal(@"C:\skills\reviewer\SKILL.md", evt.Path);
+        Assert.Equal(["view"], evt.AllowedTools);
+        Assert.Equal("aryx-plugin", evt.PluginName);
+    }
+
+    [Fact]
+    public void ObserveSessionEvent_HookStart_QueuesHookLifecycleEvent()
+    {
+        RunTurnCommandDto command = CreateCommand();
+        CopilotTurnExecutionState state = new(command);
+
+        state.ObserveSessionEvent(
+            command.Pattern.Agents[0],
+            SessionEvent.FromJson(
+                """
+                {
+                  "type": "hook.start",
+                  "data": {
+                    "hookInvocationId": "hook-1",
+                    "hookType": "postToolUse",
+                    "input": {
+                      "toolName": "view"
+                    }
+                  },
+                  "id": "66666666-6666-6666-6666-666666666666",
+                  "timestamp": "2026-03-27T00:00:00Z"
+                }
+                """));
+
+        HookLifecycleEventDto evt = Assert.Single(state.DrainPendingEvents().OfType<HookLifecycleEventDto>());
+        Assert.Equal("start", evt.Phase);
+        Assert.Equal("postToolUse", evt.HookType);
+        Assert.Equal("hook-1", evt.HookInvocationId);
+        Assert.NotNull(evt.Input);
+    }
+
+    [Fact]
+    public void ObserveSessionEvent_SessionCompactionComplete_QueuesCompactionEvent()
+    {
+        RunTurnCommandDto command = CreateCommand();
+        CopilotTurnExecutionState state = new(command);
+
+        state.ObserveSessionEvent(
+            command.Pattern.Agents[0],
+            SessionEvent.FromJson(
+                """
+                {
+                  "type": "session.compaction_complete",
+                  "data": {
+                    "success": true,
+                    "preCompactionTokens": 1000,
+                    "postCompactionTokens": 400,
+                    "messagesRemoved": 8,
+                    "tokensRemoved": 600,
+                    "summaryContent": "Compacted summary",
+                    "checkpointNumber": 2,
+                    "checkpointPath": "C:\\Users\\me\\.copilot\\session-state\\checkpoint-2.json"
+                  },
+                  "id": "77777777-7777-7777-7777-777777777777",
+                  "timestamp": "2026-03-27T00:00:00Z"
+                }
+                """));
+
+        SessionCompactionEventDto evt = Assert.Single(state.DrainPendingEvents().OfType<SessionCompactionEventDto>());
+        Assert.Equal("complete", evt.Phase);
+        Assert.True(evt.Success);
+        Assert.Equal(1000, evt.PreCompactionTokens);
+        Assert.Equal(400, evt.PostCompactionTokens);
+        Assert.Equal("Compacted summary", evt.SummaryContent);
+    }
+
+    [Fact]
+    public void ObserveSessionEvent_PendingMessagesModified_QueuesPendingMessageSignal()
+    {
+        RunTurnCommandDto command = CreateCommand();
+        CopilotTurnExecutionState state = new(command);
+
+        state.ObserveSessionEvent(
+            command.Pattern.Agents[0],
+            SessionEvent.FromJson(
+                """
+                {
+                  "type": "pending_messages.modified",
+                  "data": {},
+                  "id": "88888888-8888-8888-8888-888888888888",
+                  "timestamp": "2026-03-27T00:00:00Z"
+                }
+                """));
+
+        PendingMessagesModifiedEventDto evt = Assert.Single(state.DrainPendingEvents().OfType<PendingMessagesModifiedEventDto>());
+        Assert.Equal("session-1", evt.SessionId);
+        Assert.Equal("agent-1", evt.AgentId);
     }
 
     private static RunTurnCommandDto CreateCommand()

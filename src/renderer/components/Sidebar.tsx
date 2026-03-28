@@ -21,6 +21,7 @@ import {
   RefreshCw,
   Search,
   Settings,
+  Trash2,
   Users,
   X,
   type LucideIcon,
@@ -45,6 +46,7 @@ interface SidebarProps {
   onDuplicateSession: (sessionId: string) => void;
   onSetSessionPinned: (sessionId: string, isPinned: boolean) => void;
   onSetSessionArchived: (sessionId: string, isArchived: boolean) => void;
+  onDeleteSession: (sessionId: string) => void;
   onRefreshGitContext: (projectId: string) => void;
 }
 
@@ -128,14 +130,16 @@ function ActionMenuItem({
   icon: Icon,
   label,
   onClick,
+  className,
 }: {
   icon: LucideIcon;
   label: string;
   onClick: () => void;
+  className?: string;
 }) {
   return (
     <button
-      className="flex w-full items-center gap-2 px-3 py-1.5 text-[12px] text-zinc-300 transition hover:bg-zinc-800"
+      className={`flex w-full items-center gap-2 px-3 py-1.5 text-[12px] transition hover:bg-zinc-800 ${className ?? 'text-zinc-300'}`}
       onClick={onClick}
       role="menuitem"
       type="button"
@@ -475,6 +479,7 @@ export function Sidebar({
   onDuplicateSession,
   onSetSessionPinned,
   onSetSessionArchived,
+  onDeleteSession,
   onRefreshGitContext,
 }: SidebarProps) {
   const scratchpadProject = workspace.projects.find((project) => isScratchpadProject(project));
@@ -739,6 +744,15 @@ export function Sidebar({
               label={menuSession.isArchived ? 'Restore' : 'Archive'}
               onClick={() => {
                 onSetSessionArchived(menuState.sessionId, !menuSession.isArchived);
+                closeMenu();
+              }}
+            />
+            <ActionMenuItem
+              className="text-red-400 hover:bg-red-500/10"
+              icon={Trash2}
+              label="Delete"
+              onClick={() => {
+                onDeleteSession(menuState.sessionId);
                 closeMenu();
               }}
             />

@@ -1,5 +1,5 @@
 import { useMemo, type ReactNode } from 'react';
-import { Activity, Clock, ShieldAlert, Sparkles, Users } from 'lucide-react';
+import { Activity, ArrowRight, CheckCircle2, Clock, Cog, ShieldAlert, Sparkles, Users, Zap } from 'lucide-react';
 
 import {
   buildAgentActivityRows,
@@ -8,6 +8,7 @@ import {
   isAgentActivityCompleted,
   type AgentActivityRow,
   type SessionActivityState,
+  type TurnEventLog,
 } from '@renderer/lib/sessionActivity';
 import { RunTimeline } from '@renderer/components/RunTimeline';
 import { inferProvider } from '@shared/domain/models';
@@ -145,6 +146,35 @@ function AgentRow({
   );
 }
 
+/* ── Turn event helpers ─────────────────────────────────────── */
+
+import type { SessionEventKind } from '@shared/domain/event';
+
+function TurnEventIcon({ kind, phase, success }: { kind: SessionEventKind; phase?: string; success?: boolean }) {
+  const base = 'size-3';
+  switch (kind) {
+    case 'subagent':
+      return <ArrowRight className={`${base} ${success === false ? 'text-red-400' : 'text-sky-400'}`} />;
+    case 'hook-lifecycle':
+      return <Cog className={`${base} ${phase === 'start' ? 'animate-spin text-amber-400' : success === false ? 'text-red-400' : 'text-emerald-400'}`} />;
+    case 'skill-invoked':
+      return <Sparkles className={`${base} text-violet-400`} />;
+    case 'session-compaction':
+      return <CheckCircle2 className={`${base} ${phase === 'start' ? 'animate-pulse text-amber-400' : 'text-emerald-400'}`} />;
+    default:
+      return <Zap className={`${base} text-zinc-500`} />;
+  }
+}
+
+function formatTurnEventTimestamp(iso: string): string {
+  try {
+    const d = new Date(iso);
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  } catch {
+    return '';
+  }
+}
+
 /* ── ActivityPanel ─────────────────────────────────────────── */
 
 interface ActivityPanelProps {
@@ -152,6 +182,7 @@ interface ActivityPanelProps {
   onJumpToMessage?: (messageId: string) => void;
   pattern: PatternDefinition;
   session: SessionRecord;
+  turnEvents?: TurnEventLog;
 }
 
 export function ActivityPanel({
@@ -159,6 +190,7 @@ export function ActivityPanel({
   onJumpToMessage,
   pattern,
   session,
+  turnEvents,
 }: ActivityPanelProps) {
   const activityRows = useMemo(
     () => buildAgentActivityRows(activity, pattern.agents),
@@ -239,6 +271,39 @@ export function ActivityPanel({
           <RunTimeline onJumpToMessage={onJumpToMessage} runs={session.runs} />
         </div>
 
+        {/* ── Turn events section ─────────────────────────── */}
+        {turnEvents && turnEvents.length > 0 && (
+          <div className="mb-4">
+            <SectionHeader>
+              <Zap className="size-3" />
+              <span>Events</span>
+              <span className="rounded-full bg-zinc-800 px-1.5 py-0.5 text-[9px] tabular-nums text-zinc-500">
+                {turnEvents.length}
+              </span>
+            </SectionHeader>
+
+            <div className="space-y-0.5 rounded-lg border border-zinc-800 bg-zinc-900/40 px-3 py-2">
+              {turnEvents.slice().reverse().map((entry, index) => (
+                <div key={index} className="flex items-start gap-2 py-1">
+                  <div className="mt-0.5 shrink-0">
+                    <TurnEventIcon kind={entry.kind} phase={entry.phase} success={entry.success} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[11px] font-medium text-zinc-300">{entry.label}</span>
+                      <span className="ml-auto shrink-0 text-[9px] tabular-nums text-zinc-700">
+                        {formatTurnEventTimestamp(entry.occurredAt)}
+                      </span>
+                    </div>
+                    {entry.detail && (
+                      <p className="text-[10px] leading-snug text-zinc-600">{entry.detail}</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
       </div>
     </div>

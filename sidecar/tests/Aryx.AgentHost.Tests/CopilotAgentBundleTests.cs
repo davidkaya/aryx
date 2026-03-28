@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Text.Json;
+using Aryx.AgentHost.Contracts;
 using GitHub.Copilot.SDK;
 using Aryx.AgentHost.Services;
 using Microsoft.Agents.AI;
@@ -141,6 +142,122 @@ public sealed class CopilotAgentBundleTests
         FunctionCallContent single = Assert.Single(result);
         Assert.Equal("call-003", single.CallId);
         Assert.Equal("handoff_to_reviewer", single.Name);
+    }
+
+    [Fact]
+    public void CreateCustomAgents_MapsSdkCustomAgentConfiguration()
+    {
+        List<CustomAgentConfig> customAgents = Assert.IsType<List<CustomAgentConfig>>(CopilotAgentBundle.CreateCustomAgents(
+        [
+            new RunTurnCustomAgentConfigDto
+            {
+                Name = "designer",
+                DisplayName = "Designer",
+                Description = "Design specialist",
+                Tools = ["view", "glob"],
+                Prompt = "Focus on UX design.",
+                Infer = true,
+                McpServers =
+                [
+                    new RunTurnMcpServerConfigDto
+                    {
+                        Id = "designer-mcp",
+                        Name = "Designer MCP",
+                        Transport = "local",
+                        Command = "node",
+                        Args = ["designer.js"],
+                    },
+                ],
+            },
+        ]));
+
+        CustomAgentConfig customAgent = Assert.Single(customAgents);
+        Assert.Equal("designer", customAgent.Name);
+        Assert.Equal("Designer", customAgent.DisplayName);
+        Assert.Equal("Design specialist", customAgent.Description);
+        Assert.Equal(["view", "glob"], customAgent.Tools);
+        Assert.Equal("Focus on UX design.", customAgent.Prompt);
+        Assert.True(customAgent.Infer);
+
+        KeyValuePair<string, object> mcpServer = Assert.Single(customAgent.McpServers!);
+        Assert.Equal("Designer MCP", mcpServer.Key);
+        McpLocalServerConfig localServer = Assert.IsType<McpLocalServerConfig>(mcpServer.Value);
+        Assert.Equal("node", localServer.Command);
+        Assert.Equal(["designer.js"], localServer.Args);
+    }
+
+    [Fact]
+    public void CreateInfiniteSessions_MapsSdkInfiniteSessionConfiguration()
+    {
+        InfiniteSessionConfig config = Assert.IsType<InfiniteSessionConfig>(CopilotAgentBundle.CreateInfiniteSessions(
+            new RunTurnInfiniteSessionsConfigDto
+            {
+                Enabled = true,
+                BackgroundCompactionThreshold = 0.75,
+                BufferExhaustionThreshold = 0.9,
+            }));
+
+        Assert.True(config.Enabled);
+        Assert.Equal(0.75, config.BackgroundCompactionThreshold);
+        Assert.Equal(0.9, config.BufferExhaustionThreshold);
+    }
+
+    [Fact]
+    public async Task CopilotSessionHooks_Create_UsesApprovalPolicyForPreToolUse()
+    {
+        RunTurnCommandDto command = new()
+        {
+            RequestId = "turn-1",
+            SessionId = "session-1",
+            Pattern = new PatternDefinitionDto
+            {
+                Id = "pattern-1",
+                Name = "Pattern",
+                Mode = "single",
+                Availability = "available",
+                ApprovalPolicy = new ApprovalPolicyDto
+                {
+                    Rules =
+                    [
+                        new ApprovalCheckpointRuleDto
+                        {
+                            Kind = "tool-call",
+                            AgentIds = ["agent-1"],
+                        },
+                    ],
+                },
+                Agents =
+                [
+                    new PatternAgentDefinitionDto
+                    {
+                        Id = "agent-1",
+                        Name = "Primary",
+                        Model = "gpt-5.4",
+                        Instructions = "Help.",
+                    },
+                ],
+            },
+        };
+
+        SessionHooks hooks = CopilotSessionHooks.Create(command, command.Pattern.Agents[0]);
+        PreToolUseHookOutput? decision = await hooks.OnPreToolUse!(
+            new PreToolUseHookInput
+            {
+                ToolName = "view",
+            },
+            null!);
+
+        Assert.Equal("ask", decision?.PermissionDecision);
+    }
+
+    [Fact]
+    public void CopilotManagedSessionIds_BuildsAndParsesStableIds()
+    {
+        string sessionId = CopilotManagedSessionIds.Build("session-1", "agent-ux");
+
+        Assert.True(CopilotManagedSessionIds.TryParse(sessionId, out string aryxSessionId, out string agentId));
+        Assert.Equal("session-1", aryxSessionId);
+        Assert.Equal("agent-ux", agentId);
     }
 
     private static AIFunction CreateTool()

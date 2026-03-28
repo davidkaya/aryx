@@ -2,6 +2,7 @@ import type { PatternDefinition, PatternValidationIssue, ReasoningEffort } from 
 import type { ApprovalCheckpointKind, ApprovalDecision } from '@shared/domain/approval';
 import type { ChatMessageRecord } from '@shared/domain/session';
 import type { RuntimeToolDefinition } from '@shared/domain/tooling';
+import type { ChatMessageAttachment } from '@shared/domain/attachment';
 
 export interface SidecarModeCapability {
   available: boolean;
@@ -69,6 +70,7 @@ export interface ValidatePatternCommand {
 }
 
 export type InteractionMode = 'interactive' | 'plan';
+export type MessageMode = 'enqueue' | 'immediate';
 
 export interface RunTurnCommand {
   type: 'run-turn';
@@ -77,8 +79,10 @@ export interface RunTurnCommand {
   projectPath: string;
   workspaceKind?: 'project' | 'scratchpad';
   mode?: InteractionMode;
+  messageMode?: MessageMode;
   pattern: PatternDefinition;
   messages: ChatMessageRecord[];
+  attachments?: ChatMessageAttachment[];
   tooling?: RunTurnToolingConfig;
 }
 
@@ -104,13 +108,42 @@ export interface ResolveUserInputCommand {
   wasFreeform: boolean;
 }
 
+export interface ListSessionsCommand {
+  type: 'list-sessions';
+  requestId: string;
+  filter?: CopilotSessionListFilter;
+}
+
+export interface DeleteSessionCommand {
+  type: 'delete-session';
+  requestId: string;
+  sessionId?: string;
+  copilotSessionId?: string;
+}
+
+export interface DisconnectSessionCommand {
+  type: 'disconnect-session';
+  requestId: string;
+  sessionId: string;
+}
+
+export interface CopilotSessionListFilter {
+  cwd?: string;
+  gitRoot?: string;
+  repository?: string;
+  branch?: string;
+}
+
 export type SidecarCommand =
   | DescribeCapabilitiesCommand
   | ValidatePatternCommand
   | RunTurnCommand
   | CancelTurnCommand
   | ResolveApprovalCommand
-  | ResolveUserInputCommand;
+  | ResolveUserInputCommand
+  | ListSessionsCommand
+  | DeleteSessionCommand
+  | DisconnectSessionCommand;
 
 export interface RunTurnLocalMcpServerConfig {
   id: string;
@@ -148,6 +181,30 @@ export interface RunTurnLspProfileConfig {
 export interface RunTurnToolingConfig {
   mcpServers: RunTurnMcpServerConfig[];
   lspProfiles: RunTurnLspProfileConfig[];
+}
+
+export interface RunTurnCustomAgentConfig {
+  name: string;
+  displayName?: string;
+  description?: string;
+  tools?: string[];
+  prompt: string;
+  mcpServers?: RunTurnMcpServerConfig[];
+  infer?: boolean;
+}
+
+export interface RunTurnInfiniteSessionsConfig {
+  enabled?: boolean;
+  backgroundCompactionThreshold?: number;
+  bufferExhaustionThreshold?: number;
+}
+
+export interface PatternAgentCopilotConfig {
+  customAgents?: RunTurnCustomAgentConfig[];
+  agent?: string;
+  skillDirectories?: string[];
+  disabledSkills?: string[];
+  infiniteSessions?: RunTurnInfiniteSessionsConfig;
 }
 
 export interface CapabilitiesEvent {
@@ -192,6 +249,137 @@ export interface AgentActivityEvent {
   sourceAgentId?: string;
   sourceAgentName?: string;
   toolName?: string;
+}
+
+export type SubagentEventKind = 'started' | 'completed' | 'failed' | 'selected' | 'deselected';
+
+export interface SubagentEvent {
+  type: 'subagent-event';
+  requestId: string;
+  sessionId: string;
+  eventKind: SubagentEventKind;
+  agentId?: string;
+  agentName?: string;
+  toolCallId?: string;
+  customAgentName?: string;
+  customAgentDisplayName?: string;
+  customAgentDescription?: string;
+  error?: string;
+  model?: string;
+  totalToolCalls?: number;
+  totalTokens?: number;
+  durationMs?: number;
+  tools?: string[];
+}
+
+export interface SkillInvokedEvent {
+  type: 'skill-invoked';
+  requestId: string;
+  sessionId: string;
+  agentId?: string;
+  agentName?: string;
+  skillName: string;
+  path: string;
+  content: string;
+  allowedTools?: string[];
+  pluginName?: string;
+  pluginVersion?: string;
+  description?: string;
+}
+
+export interface HookLifecycleEvent {
+  type: 'hook-lifecycle';
+  requestId: string;
+  sessionId: string;
+  agentId?: string;
+  agentName?: string;
+  hookInvocationId: string;
+  hookType: string;
+  phase: 'start' | 'end';
+  success?: boolean;
+  input?: unknown;
+  output?: unknown;
+  error?: string;
+}
+
+export interface SessionUsageEvent {
+  type: 'session-usage';
+  requestId: string;
+  sessionId: string;
+  agentId?: string;
+  agentName?: string;
+  tokenLimit: number;
+  currentTokens: number;
+  messagesLength: number;
+  systemTokens?: number;
+  conversationTokens?: number;
+  toolDefinitionsTokens?: number;
+  isInitial?: boolean;
+}
+
+export interface SessionCompactionEvent {
+  type: 'session-compaction';
+  requestId: string;
+  sessionId: string;
+  agentId?: string;
+  agentName?: string;
+  phase: 'start' | 'complete';
+  success?: boolean;
+  error?: string;
+  systemTokens?: number;
+  conversationTokens?: number;
+  toolDefinitionsTokens?: number;
+  preCompactionTokens?: number;
+  postCompactionTokens?: number;
+  preCompactionMessagesLength?: number;
+  messagesRemoved?: number;
+  tokensRemoved?: number;
+  summaryContent?: string;
+  checkpointNumber?: number;
+  checkpointPath?: string;
+}
+
+export interface PendingMessagesModifiedEvent {
+  type: 'pending-messages-modified';
+  requestId: string;
+  sessionId: string;
+  agentId?: string;
+  agentName?: string;
+}
+
+export interface CopilotSessionInfo {
+  copilotSessionId: string;
+  managedByAryx: boolean;
+  sessionId?: string;
+  agentId?: string;
+  startTime: string;
+  modifiedTime: string;
+  summary?: string;
+  isRemote: boolean;
+  cwd?: string;
+  gitRoot?: string;
+  repository?: string;
+  branch?: string;
+}
+
+export interface SessionsListedEvent {
+  type: 'sessions-listed';
+  requestId: string;
+  sessions: CopilotSessionInfo[];
+}
+
+export interface SessionsDeletedEvent {
+  type: 'sessions-deleted';
+  requestId: string;
+  sessionId?: string;
+  sessions: CopilotSessionInfo[];
+}
+
+export interface SessionDisconnectedEvent {
+  type: 'session-disconnected';
+  requestId: string;
+  sessionId: string;
+  cancelledRequestIds: string[];
 }
 
 export interface PermissionDetail {
@@ -292,9 +480,18 @@ export type SidecarEvent =
   | TurnDeltaEvent
   | TurnCompleteEvent
   | AgentActivityEvent
+  | SubagentEvent
+  | SkillInvokedEvent
+  | HookLifecycleEvent
+  | SessionUsageEvent
+  | SessionCompactionEvent
+  | PendingMessagesModifiedEvent
   | ApprovalRequestedEvent
   | UserInputRequestedEvent
   | McpOauthRequiredEvent
   | ExitPlanModeRequestedEvent
+  | SessionsListedEvent
+  | SessionsDeletedEvent
+  | SessionDisconnectedEvent
   | CommandErrorEvent
   | CommandCompleteEvent;

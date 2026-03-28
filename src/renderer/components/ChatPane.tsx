@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, ArrowUp, Bot, Circle, ClipboardList, GitBranch, Loader2, MessageCircleQuestion, ShieldAlert, Square, User } from 'lucide-react';
+import { AlertCircle, ArrowUp, Bot, Circle, ClipboardList, GitBranch, Loader2, MessageCircleQuestion, Paperclip, ShieldAlert, Square, User, X } from 'lucide-react';
 
 import { MarkdownContent } from '@renderer/components/MarkdownContent';
 import { MarkdownComposer, type MarkdownComposerHandle } from '@renderer/components/MarkdownComposer';
@@ -11,7 +11,10 @@ import { InlineApprovalPill, InlineModelPill, InlineThinkingPill, InlineToolsPil
 import { ThinkingDots } from '@renderer/components/chat/ThinkingDots';
 import { getAssistantMessagePhase } from '@renderer/lib/messagePhase';
 import type { ApprovalDecision } from '@shared/domain/approval';
-import type { InteractionMode } from '@shared/contracts/sidecar';
+import type { InteractionMode, MessageMode } from '@shared/contracts/sidecar';
+import type { ChatMessageAttachment } from '@shared/domain/attachment';
+import { getAttachmentDisplayName, isImageAttachment } from '@shared/domain/attachment';
+import type { SessionUsageState } from '@renderer/lib/sessionActivity';
 import {
   findModel,
   getSupportedReasoningEfforts,
@@ -37,7 +40,8 @@ interface ChatPaneProps {
   availableModels: ReadonlyArray<ModelDefinition>;
   toolingSettings: WorkspaceToolingSettings;
   runtimeTools?: ReadonlyArray<RuntimeToolDefinition>;
-  onSend: (content: string) => Promise<void>;
+  sessionUsage?: SessionUsageState;
+  onSend: (content: string, attachments?: ChatMessageAttachment[], messageMode?: MessageMode) => Promise<void>;
   onCancelTurn?: () => void;
   onResolveApproval?: (approvalId: string, decision: ApprovalDecision, alwaysApprove?: boolean) => Promise<unknown>;
   onResolveUserInput?: (userInputId: string, answer: string, wasFreeform: boolean) => Promise<unknown>;
@@ -60,6 +64,7 @@ export function ChatPane({
   availableModels,
   toolingSettings,
   runtimeTools,
+  sessionUsage,
   onSend,
   onCancelTurn,
   onResolveApproval,
@@ -99,8 +104,9 @@ export function ChatPane({
   const selectedModel = primaryAgent ? findModel(primaryAgent.model, availableModels) : undefined;
   const supportedEfforts = getSupportedReasoningEfforts(selectedModel);
   const sessionReasoningEffort = resolveReasoningEffort(selectedModel, primaryAgent?.reasoningEffort);
-  const isComposerDisabled = isSessionBusy || isUpdatingSessionModelConfig;
+  const isComposerDisabled = isUpdatingSessionModelConfig;
   const canSubmitInput = hasComposerContent && !isComposerDisabled;
+  const [pendingAttachments, setPendingAttachments] = useState<ChatMessageAttachment[]>([]);
 
   const toolSelection = useMemo(() => resolveSessionToolingSelection(session), [session]);
   const mcpServers = toolingSettings.mcpServers;
@@ -140,7 +146,10 @@ export function ChatPane({
   }, [session.id]);
 
   function handleComposerSubmit(content: string) {
-    void onSend(content);
+    const attachments = pendingAttachments.length > 0 ? [...pendingAttachments] : undefined;
+    const messageMode: MessageMode | undefined = isSessionBusy ? 'immediate' : undefined;
+    setPendingAttachments([]);
+    void onSend(content, attachments, messageMode);
   }
 
   function handleDismissPlan() {
@@ -336,6 +345,29 @@ export function ChatPane({
                               : `rounded-xl border px-4 py-3 text-[14px] leading-relaxed text-zinc-200 ${assistantContainerClass}`
                           }
                         >
+                          {/* Attachment thumbnails */}
+                          {isUser && message.attachments && message.attachments.length > 0 && (
+                            <div className="mb-2 flex flex-wrap gap-2">
+                              {message.attachments.map((att, attIdx) =>
+                                isImageAttachment(att) ? (
+                                  <img
+                                    key={attIdx}
+                                    alt={getAttachmentDisplayName(att)}
+                                    className="max-h-48 max-w-xs rounded-lg border border-zinc-700 object-cover"
+                                    src={`data:${att.mimeType};base64,${att.data}`}
+                                  />
+                                ) : (
+                                  <div
+                                    key={attIdx}
+                                    className="flex items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-800 px-2 py-1 text-[11px] text-zinc-400"
+                                  >
+                                    <Paperclip className="size-3" />
+                                    {getAttachmentDisplayName(att)}
+                                  </div>
+                                ),
+                              )}
+                            </div>
+                          )}
                           {!isUser && message.pending ? (
                             <div className="whitespace-pre-wrap break-words text-[14px] leading-relaxed text-zinc-200">
                               {message.content}
@@ -510,6 +542,29 @@ export function ChatPane({
             </div>
           )}
 
+          {/* Attachment preview */}
+          {pendingAttachments.length > 0 && (
+            <div className="flex flex-wrap gap-2 px-1 pb-2">
+              {pendingAttachments.map((attachment, index) => (
+                <div
+                  key={index}
+                  className="flex items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 text-[11px] text-zinc-300"
+                >
+                  <Paperclip className="size-3 text-zinc-500" />
+                  <span className="max-w-[160px] truncate">{getAttachmentDisplayName(attachment)}</span>
+                  <button
+                    aria-label="Remove attachment"
+                    className="ml-1 rounded p-0.5 text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300"
+                    onClick={() => setPendingAttachments((prev) => prev.filter((_, i) => i !== index))}
+                    type="button"
+                  >
+                    <X className="size-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
           <div className="rounded-xl border border-zinc-700 bg-zinc-900 transition-colors focus-within:border-indigo-500/50">
             <MarkdownComposer
               ref={composerRef}
@@ -526,7 +581,7 @@ export function ChatPane({
                       : pendingMcpAuth
                         ? 'MCP server requires authentication...'
                         : isSessionBusy
-                        ? 'Waiting for response...'
+                        ? 'Steer the agent (sends immediately)...'
                         : isUpdatingSessionModelConfig
                           ? 'Saving model settings...'
                           : isPlanMode
@@ -535,6 +590,38 @@ export function ChatPane({
               }
             >
               <div className="absolute bottom-2 right-2 flex items-center gap-1">
+                {/* Attachment picker */}
+                <button
+                  aria-label="Attach image"
+                  className="flex size-8 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-300"
+                  disabled={isComposerDisabled}
+                  onClick={() => {
+                    const input = document.createElement('input');
+                    input.type = 'file';
+                    input.accept = 'image/jpeg,image/png,image/gif,image/webp';
+                    input.multiple = true;
+                    input.onchange = () => {
+                      if (!input.files) return;
+                      const newAttachments: ChatMessageAttachment[] = [];
+                      for (const file of input.files) {
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                          const base64 = (reader.result as string).split(',')[1];
+                          setPendingAttachments((prev) => [
+                            ...prev,
+                            { type: 'blob', data: base64, mimeType: file.type, displayName: file.name },
+                          ]);
+                        };
+                        reader.readAsDataURL(file);
+                      }
+                    };
+                    input.click();
+                  }}
+                  type="button"
+                >
+                  <Paperclip className="size-3.5" />
+                </button>
+
                 {/* Plan mode toggle */}
                 {onSetInteractionMode && !isSessionBusy && (
                   <button
@@ -553,29 +640,39 @@ export function ChatPane({
                   </button>
                 )}
 
-                {/* Send / Stop button */}
+                {/* Send / Stop / Steer button */}
                 <button
                   className={`flex size-8 items-center justify-center rounded-lg transition ${
-                    isSessionBusy
+                    isSessionBusy && !hasComposerContent && pendingAttachments.length === 0
                       ? 'bg-red-600/80 text-white hover:bg-red-500'
-                      : canSubmitInput
-                        ? isPlanMode
-                          ? 'bg-emerald-600 text-white hover:bg-emerald-500'
-                          : 'bg-indigo-600 text-white hover:bg-indigo-500'
+                      : canSubmitInput || pendingAttachments.length > 0
+                        ? isSessionBusy
+                          ? 'bg-amber-600 text-white hover:bg-amber-500'
+                          : isPlanMode
+                            ? 'bg-emerald-600 text-white hover:bg-emerald-500'
+                            : 'bg-indigo-600 text-white hover:bg-indigo-500'
                         : 'bg-zinc-800 text-zinc-600'
                   }`}
-                  disabled={!canSubmitInput && !isSessionBusy}
+                  disabled={!canSubmitInput && !isSessionBusy && pendingAttachments.length === 0}
                   onClick={() => {
-                    if (isSessionBusy) {
+                    if (isSessionBusy && !hasComposerContent && pendingAttachments.length === 0) {
                       onCancelTurn?.();
                     } else {
                       composerRef.current?.submit();
                     }
                   }}
                   type="button"
-                  aria-label={isSessionBusy ? 'Stop generating' : isPlanMode ? 'Send as plan request' : 'Send message'}
+                  aria-label={
+                    isSessionBusy && !hasComposerContent && pendingAttachments.length === 0
+                      ? 'Stop generating'
+                      : isSessionBusy
+                        ? 'Steer agent'
+                        : isPlanMode
+                          ? 'Send as plan request'
+                          : 'Send message'
+                  }
                 >
-                  {isSessionBusy ? (
+                  {isSessionBusy && !hasComposerContent && pendingAttachments.length === 0 ? (
                     <Square className="size-3.5" fill="currentColor" />
                   ) : (
                     <ArrowUp className="size-4" />
@@ -591,7 +688,38 @@ export function ChatPane({
                 </span>
               </div>
             )}
+            {isSessionBusy && (hasComposerContent || pendingAttachments.length > 0) && (
+              <div className="flex items-center gap-1.5 px-3 pb-1.5 pt-0.5">
+                <div className="size-1.5 rounded-full bg-amber-500" />
+                <span className="text-[10px] font-medium text-amber-400/80">
+                  Steering — your message will be injected into the current turn
+                </span>
+              </div>
+            )}
           </div>
+
+          {/* Session usage bar */}
+          {sessionUsage && sessionUsage.tokenLimit > 0 && (
+            <div className="px-1 pt-1.5">
+              <div className="flex items-center gap-2 text-[10px] text-zinc-500">
+                <div className="h-1 flex-1 overflow-hidden rounded-full bg-zinc-800">
+                  <div
+                    className={`h-full rounded-full transition-all ${
+                      sessionUsage.currentTokens / sessionUsage.tokenLimit > 0.9
+                        ? 'bg-red-500'
+                        : sessionUsage.currentTokens / sessionUsage.tokenLimit > 0.7
+                          ? 'bg-amber-500'
+                          : 'bg-indigo-500/60'
+                    }`}
+                    style={{ width: `${Math.min(100, (sessionUsage.currentTokens / sessionUsage.tokenLimit) * 100)}%` }}
+                  />
+                </div>
+                <span className="tabular-nums">
+                  {Math.round((sessionUsage.currentTokens / sessionUsage.tokenLimit) * 100)}% context
+                </span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

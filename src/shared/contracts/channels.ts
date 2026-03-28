@@ -23,6 +23,7 @@ export const ipcChannels = {
   renameSession: 'sessions:rename',
   setSessionPinned: 'sessions:set-pinned',
   setSessionArchived: 'sessions:set-archived',
+  deleteSession: 'sessions:delete',
   sendSessionMessage: 'sessions:send-message',
   cancelSessionTurn: 'sessions:cancel-turn',
   resolveSessionApproval: 'sessions:resolve-approval',

@@ -780,6 +780,109 @@ public sealed class SidecarProtocolHostTests
         Assert.False(string.IsNullOrWhiteSpace(diagnostics.CheckedAt));
     }
 
+    [Fact]
+    public async Task ListSessionsCommand_ReturnsSessionsListedEvent()
+    {
+        SidecarProtocolHost host = new(
+            new PatternValidator(),
+            sessionManager: new FakeSessionManager
+            {
+                Sessions =
+                [
+                    new CopilotSessionInfoDto
+                    {
+                        CopilotSessionId = "aryx::session-1::agent-1",
+                        ManagedByAryx = true,
+                        SessionId = "session-1",
+                        AgentId = "agent-1",
+                        Summary = "Review session",
+                    },
+                ],
+            });
+
+        IReadOnlyList<JsonElement> events = await RunHostAsync(
+            new ListSessionsCommandDto
+            {
+                Type = "list-sessions",
+                RequestId = "list-1",
+            },
+            host);
+
+        JsonElement listedEvent = AssertSingleEvent(events, "sessions-listed", "list-1");
+        JsonElement session = Assert.Single(listedEvent.GetProperty("sessions").EnumerateArray());
+        Assert.Equal("aryx::session-1::agent-1", session.GetProperty("copilotSessionId").GetString());
+        Assert.Equal("session-1", session.GetProperty("sessionId").GetString());
+    }
+
+    [Fact]
+    public async Task DeleteSessionCommand_ReturnsDeletedSessionsEvent()
+    {
+        FakeSessionManager sessionManager = new()
+        {
+            DeletedSessions =
+            [
+                new CopilotSessionInfoDto
+                {
+                    CopilotSessionId = "aryx::session-1::agent-1",
+                    ManagedByAryx = true,
+                    SessionId = "session-1",
+                    AgentId = "agent-1",
+                },
+            ],
+        };
+        SidecarProtocolHost host = new(
+            new PatternValidator(),
+            sessionManager: sessionManager);
+
+        IReadOnlyList<JsonElement> events = await RunHostAsync(
+            new DeleteSessionCommandDto
+            {
+                Type = "delete-session",
+                RequestId = "delete-1",
+                SessionId = "session-1",
+            },
+            host);
+
+        JsonElement deletedEvent = AssertSingleEvent(events, "sessions-deleted", "delete-1");
+        JsonElement session = Assert.Single(deletedEvent.GetProperty("sessions").EnumerateArray());
+        Assert.Equal("session-1", deletedEvent.GetProperty("sessionId").GetString());
+        Assert.Equal("aryx::session-1::agent-1", session.GetProperty("copilotSessionId").GetString());
+        Assert.Equal("session-1", sessionManager.DeletedAryxSessionId);
+    }
+
+    [Fact]
+    public async Task DisconnectSessionCommand_CancelsActiveTurnsForSession()
+    {
+        FakeWorkflowRunner runner = new(async (command, onDelta, onActivity, onApproval, onUserInput, onMcpOAuthRequired, onExitPlanMode, cancellationToken) =>
+        {
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            return [];
+        });
+        SidecarProtocolHost host = new(new PatternValidator(), runner);
+
+        IReadOnlyList<JsonElement> events = await RunHostAsync(
+        [
+            CreateRunTurnCommand(requestId: "turn-1", sessionId: "session-1"),
+            new DisconnectSessionCommandDto
+            {
+                Type = "disconnect-session",
+                RequestId = "disconnect-1",
+                SessionId = "session-1",
+            },
+        ],
+        host);
+
+        JsonElement disconnectedEvent = AssertSingleEvent(events, "session-disconnected", "disconnect-1");
+        string[] cancelledRequestIds = disconnectedEvent.GetProperty("cancelledRequestIds")
+            .EnumerateArray()
+            .Select(value => value.GetString() ?? string.Empty)
+            .ToArray();
+        Assert.Equal(["turn-1"], cancelledRequestIds);
+
+        JsonElement turnComplete = AssertSingleEvent(events, "turn-complete", "turn-1");
+        Assert.True(turnComplete.GetProperty("cancelled").GetBoolean());
+    }
+
     private static async Task<IReadOnlyList<JsonElement>> RunHostAsync(
         object command,
         SidecarProtocolHost? host = null)
@@ -949,7 +1052,7 @@ public sealed class SidecarProtocolHostTests
         private readonly Func<
             RunTurnCommandDto,
             Func<TurnDeltaEventDto, Task>,
-            Func<AgentActivityEventDto, Task>,
+            Func<SidecarEventDto, Task>,
             Func<ApprovalRequestedEventDto, Task>,
             Func<UserInputRequestedEventDto, Task>,
             Func<McpOauthRequiredEventDto, Task>,
@@ -963,7 +1066,7 @@ public sealed class SidecarProtocolHostTests
             Func<
                 RunTurnCommandDto,
                 Func<TurnDeltaEventDto, Task>,
-                Func<AgentActivityEventDto, Task>,
+                Func<SidecarEventDto, Task>,
                 Func<ApprovalRequestedEventDto, Task>,
                 Func<UserInputRequestedEventDto, Task>,
                 Func<McpOauthRequiredEventDto, Task>,
@@ -981,7 +1084,7 @@ public sealed class SidecarProtocolHostTests
         public Task<IReadOnlyList<ChatMessageDto>> RunTurnAsync(
             RunTurnCommandDto command,
             Func<TurnDeltaEventDto, Task> onDelta,
-            Func<AgentActivityEventDto, Task> onActivity,
+            Func<SidecarEventDto, Task> onActivity,
             Func<ApprovalRequestedEventDto, Task> onApproval,
             Func<UserInputRequestedEventDto, Task> onUserInput,
             Func<McpOauthRequiredEventDto, Task> onMcpOAuthRequired,
@@ -1003,6 +1106,34 @@ public sealed class SidecarProtocolHostTests
             CancellationToken cancellationToken)
         {
             return _resolveUserInputHandler(command, cancellationToken);
+        }
+    }
+
+    private sealed class FakeSessionManager : ICopilotSessionManager
+    {
+        public IReadOnlyList<CopilotSessionInfoDto> Sessions { get; init; } = [];
+
+        public IReadOnlyList<CopilotSessionInfoDto> DeletedSessions { get; init; } = [];
+
+        public string? DeletedAryxSessionId { get; private set; }
+
+        public string? DeletedCopilotSessionId { get; private set; }
+
+        public Task<IReadOnlyList<CopilotSessionInfoDto>> ListSessionsAsync(
+            CopilotSessionListFilterDto? filter,
+            CancellationToken cancellationToken)
+        {
+            return Task.FromResult(Sessions);
+        }
+
+        public Task<IReadOnlyList<CopilotSessionInfoDto>> DeleteSessionsAsync(
+            string? aryxSessionId,
+            string? copilotSessionId,
+            CancellationToken cancellationToken)
+        {
+            DeletedAryxSessionId = aryxSessionId;
+            DeletedCopilotSessionId = copilotSessionId;
+            return Task.FromResult(DeletedSessions);
         }
     }
 }

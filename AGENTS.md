@@ -154,6 +154,7 @@ Every interactive component must include basic accessibility:
 - Keep changes focused and reviewable. Avoid mixing unrelated concerns into a single change.
 - Always commit completed repository changes before handing work off. If unrelated pre-existing changes are present in the worktree, stop and ask the user how to proceed before creating the commit.
 - Do not mark work as done until both the implementation and its verification are complete.
+- **Never use unscoped glob patterns** (e.g. `**/*`) at or near the repository root. The repository contains large `node_modules/` directories that will cause glob operations to hang or exhaust resources. Always scope globs to a specific subdirectory (e.g. `src/**/*.ts`, `sidecar/src/**/*.cs`) or use `view` on known directories instead.
 
 ## 8. Planning requirements
 

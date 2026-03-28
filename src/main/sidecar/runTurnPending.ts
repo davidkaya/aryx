@@ -5,8 +5,22 @@ import type {
   McpOauthRequiredEvent,
   TurnDeltaEvent,
   UserInputRequestedEvent,
+  SubagentEvent,
+  SkillInvokedEvent,
+  HookLifecycleEvent,
+  SessionUsageEvent,
+  SessionCompactionEvent,
+  PendingMessagesModifiedEvent,
 } from '@shared/contracts/sidecar';
 import type { ChatMessageRecord } from '@shared/domain/session';
+
+export type TurnScopedEvent =
+  | SubagentEvent
+  | SkillInvokedEvent
+  | HookLifecycleEvent
+  | SessionUsageEvent
+  | SessionCompactionEvent
+  | PendingMessagesModifiedEvent;
 
 export interface RunTurnPendingCommand {
   kind: 'run-turn';
@@ -18,6 +32,7 @@ export interface RunTurnPendingCommand {
   onUserInput: (event: UserInputRequestedEvent) => void | Promise<void>;
   onMcpOAuthRequired: (event: McpOauthRequiredEvent) => void | Promise<void>;
   onExitPlanMode: (event: ExitPlanModeRequestedEvent) => void | Promise<void>;
+  onTurnScopedEvent: (event: TurnScopedEvent) => void | Promise<void>;
   errored: boolean;
 }
 

@@ -26,7 +26,28 @@ internal static class WorkflowTranscriptProjector
             mapped.AuthorName = message.AuthorName;
         }
 
+        foreach (ChatMessageAttachmentDto attachment in message.Attachments)
+        {
+            mapped.Contents.Add(new AIContent
+            {
+                RawRepresentation = attachment,
+            });
+        }
+
         return mapped;
+    }
+
+    public static void AttachMessageMode(IList<ChatMessage> messages, string? messageMode)
+    {
+        if (messages.Count == 0 || string.IsNullOrWhiteSpace(messageMode))
+        {
+            return;
+        }
+
+        messages[^1].Contents.Add(new AIContent
+        {
+            RawRepresentation = new CopilotMessageOptionsMetadata(messageMode.Trim()),
+        });
     }
 
     public static List<ChatMessageDto> ProjectCompletedMessages(

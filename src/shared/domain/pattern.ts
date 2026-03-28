@@ -32,6 +32,8 @@ export const reasoningEffortOptions: ReadonlyArray<{ value: ReasoningEffort; lab
   { value: 'xhigh', label: 'Maximum' },
 ];
 
+import type { PatternAgentCopilotConfig } from '@shared/contracts/sidecar';
+
 export interface PatternAgentDefinition {
   id: string;
   name: string;
@@ -39,6 +41,7 @@ export interface PatternAgentDefinition {
   instructions: string;
   model: string;
   reasoningEffort?: ReasoningEffort;
+  copilot?: PatternAgentCopilotConfig;
 }
 
 export interface PatternGraphPosition {

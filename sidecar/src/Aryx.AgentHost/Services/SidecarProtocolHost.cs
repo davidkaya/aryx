@@ -15,6 +15,9 @@ public sealed class SidecarProtocolHost
     private const string CancelTurnCommandType = "cancel-turn";
     private const string ResolveApprovalCommandType = "resolve-approval";
     private const string ResolveUserInputCommandType = "resolve-user-input";
+    private const string ListSessionsCommandType = "list-sessions";
+    private const string DeleteSessionCommandType = "delete-session";
+    private const string DisconnectSessionCommandType = "disconnect-session";
     private const string AskUserToolName = "ask_user";
     private static readonly HashSet<string> ExcludedRuntimeToolNames = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -39,11 +42,14 @@ public sealed class SidecarProtocolHost
     private readonly Func<CancellationToken, Task<SidecarCapabilitiesDto>> _capabilitiesProvider;
     private readonly PatternValidator _patternValidator;
     private readonly ITurnWorkflowRunner _workflowRunner;
+    private readonly ICopilotSessionManager _sessionManager;
     private readonly JsonSerializerOptions _jsonOptions;
     private readonly IReadOnlyDictionary<string, Func<CommandContext, Task>> _commandHandlers;
     private readonly SemaphoreSlim _writeLock = new(1, 1);
     private readonly ConcurrentDictionary<string, Task> _inFlight = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, CancellationTokenSource> _turnCancellations = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, byte>> _turnRequestIdsBySessionId =
+        new(StringComparer.Ordinal);
 
     public SidecarProtocolHost()
         : this(new PatternValidator())
@@ -53,11 +59,13 @@ public sealed class SidecarProtocolHost
     public SidecarProtocolHost(
         PatternValidator patternValidator,
         ITurnWorkflowRunner? workflowRunner = null,
-        Func<CancellationToken, Task<SidecarCapabilitiesDto>>? capabilitiesProvider = null)
+        Func<CancellationToken, Task<SidecarCapabilitiesDto>>? capabilitiesProvider = null,
+        ICopilotSessionManager? sessionManager = null)
     {
         _patternValidator = patternValidator;
         _workflowRunner = workflowRunner ?? new CopilotWorkflowRunner(_patternValidator);
         _capabilitiesProvider = capabilitiesProvider ?? BuildCapabilitiesAsync;
+        _sessionManager = sessionManager ?? new CopilotSessionManager();
         _jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web)
         {
             DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
@@ -71,6 +79,9 @@ public sealed class SidecarProtocolHost
             [CancelTurnCommandType] = HandleCancelTurnAsync,
             [ResolveApprovalCommandType] = HandleResolveApprovalAsync,
             [ResolveUserInputCommandType] = HandleResolveUserInputAsync,
+            [ListSessionsCommandType] = HandleListSessionsAsync,
+            [DeleteSessionCommandType] = HandleDeleteSessionAsync,
+            [DisconnectSessionCommandType] = HandleDisconnectSessionAsync,
         };
     }
 
@@ -180,12 +191,13 @@ public sealed class SidecarProtocolHost
                 $"A turn with request ID '{context.Envelope.RequestId}' is already in progress.");
         }
 
+        RegisterTurnRequest(command.SessionId, context.Envelope.RequestId);
         try
         {
             IReadOnlyList<ChatMessageDto> messages = await _workflowRunner.RunTurnAsync(
                     command,
                     delta => WriteAsync(context.Output, delta, turnCancellation.Token),
-                    activity => WriteAsync(context.Output, activity, turnCancellation.Token),
+                    evt => WriteAsync(context.Output, evt, turnCancellation.Token),
                     approval => WriteAsync(context.Output, approval, turnCancellation.Token),
                     userInput => WriteAsync(context.Output, userInput, turnCancellation.Token),
                     mcpOauth => WriteAsync(context.Output, mcpOauth, turnCancellation.Token),
@@ -216,6 +228,7 @@ public sealed class SidecarProtocolHost
         finally
         {
             _turnCancellations.TryRemove(context.Envelope.RequestId, out _);
+            UnregisterTurnRequest(command.SessionId, context.Envelope.RequestId);
         }
     }
 
@@ -247,6 +260,57 @@ public sealed class SidecarProtocolHost
     {
         ResolveUserInputCommandDto command = DeserializeCommand<ResolveUserInputCommandDto>(context);
         await _workflowRunner.ResolveUserInputAsync(command, context.CancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task HandleListSessionsAsync(CommandContext context)
+    {
+        ListSessionsCommandDto command = DeserializeCommand<ListSessionsCommandDto>(context);
+        IReadOnlyList<CopilotSessionInfoDto> sessions = await _sessionManager.ListSessionsAsync(
+            command.Filter,
+            context.CancellationToken).ConfigureAwait(false);
+
+        await WriteAsync(context.Output, new SessionsListedEventDto
+        {
+            Type = "sessions-listed",
+            RequestId = context.Envelope.RequestId,
+            Sessions = sessions,
+        }, context.CancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task HandleDeleteSessionAsync(CommandContext context)
+    {
+        DeleteSessionCommandDto command = DeserializeCommand<DeleteSessionCommandDto>(context);
+        if (!string.IsNullOrWhiteSpace(command.SessionId))
+        {
+            CancelTurnRequestsForSession(command.SessionId);
+        }
+
+        IReadOnlyList<CopilotSessionInfoDto> deletedSessions = await _sessionManager.DeleteSessionsAsync(
+            command.SessionId,
+            command.CopilotSessionId,
+            context.CancellationToken).ConfigureAwait(false);
+
+        await WriteAsync(context.Output, new SessionsDeletedEventDto
+        {
+            Type = "sessions-deleted",
+            RequestId = context.Envelope.RequestId,
+            SessionId = string.IsNullOrWhiteSpace(command.SessionId) ? null : command.SessionId.Trim(),
+            Sessions = deletedSessions,
+        }, context.CancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task HandleDisconnectSessionAsync(CommandContext context)
+    {
+        DisconnectSessionCommandDto command = DeserializeCommand<DisconnectSessionCommandDto>(context);
+        IReadOnlyList<string> cancelledRequestIds = CancelTurnRequestsForSession(command.SessionId);
+
+        await WriteAsync(context.Output, new SessionDisconnectedEventDto
+        {
+            Type = "session-disconnected",
+            RequestId = context.Envelope.RequestId,
+            SessionId = command.SessionId,
+            CancelledRequestIds = cancelledRequestIds,
+        }, context.CancellationToken).ConfigureAwait(false);
     }
 
     private TCommand DeserializeCommand<TCommand>(CommandContext context)
@@ -307,6 +371,67 @@ public sealed class SidecarProtocolHost
         {
             _writeLock.Release();
         }
+    }
+
+    private void RegisterTurnRequest(string sessionId, string requestId)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId) || string.IsNullOrWhiteSpace(requestId))
+        {
+            return;
+        }
+
+        ConcurrentDictionary<string, byte> requestIds = _turnRequestIdsBySessionId.GetOrAdd(
+            sessionId.Trim(),
+            static _ => new ConcurrentDictionary<string, byte>(StringComparer.Ordinal));
+        requestIds[requestId.Trim()] = 0;
+    }
+
+    private void UnregisterTurnRequest(string sessionId, string requestId)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId) || string.IsNullOrWhiteSpace(requestId))
+        {
+            return;
+        }
+
+        if (!_turnRequestIdsBySessionId.TryGetValue(sessionId.Trim(), out ConcurrentDictionary<string, byte>? requestIds))
+        {
+            return;
+        }
+
+        requestIds.TryRemove(requestId.Trim(), out _);
+        if (requestIds.IsEmpty)
+        {
+            _turnRequestIdsBySessionId.TryRemove(sessionId.Trim(), out _);
+        }
+    }
+
+    private IReadOnlyList<string> CancelTurnRequestsForSession(string sessionId)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId)
+            || !_turnRequestIdsBySessionId.TryGetValue(sessionId.Trim(), out ConcurrentDictionary<string, byte>? requestIds))
+        {
+            return [];
+        }
+
+        List<string> cancelledRequestIds = [];
+        foreach (string requestId in requestIds.Keys)
+        {
+            if (!_turnCancellations.TryGetValue(requestId, out CancellationTokenSource? turnCancellation))
+            {
+                continue;
+            }
+
+            try
+            {
+                turnCancellation.Cancel();
+                cancelledRequestIds.Add(requestId);
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+        }
+
+        return cancelledRequestIds;
     }
 
     private static async Task<SidecarCapabilitiesDto> BuildCapabilitiesAsync(CancellationToken cancellationToken)

@@ -8,7 +8,15 @@ export type SessionEventKind =
   | 'message-complete'
   | 'agent-activity'
   | 'run-updated'
-  | 'error';
+  | 'error'
+  | 'subagent'
+  | 'skill-invoked'
+  | 'hook-lifecycle'
+  | 'session-usage'
+  | 'session-compaction'
+  | 'pending-messages-modified';
+
+export type SubagentEventKind = 'started' | 'completed' | 'failed' | 'selected' | 'deselected';
 
 export interface SessionEventRecord {
   sessionId: string;
@@ -27,4 +35,32 @@ export interface SessionEventRecord {
   toolName?: string;
   run?: SessionRunRecord;
   error?: string;
+
+  // Subagent event fields
+  subagentEventKind?: SubagentEventKind;
+  customAgentName?: string;
+  customAgentDisplayName?: string;
+
+  // Skill invoked fields
+  skillName?: string;
+  skillPath?: string;
+  pluginName?: string;
+
+  // Hook lifecycle fields
+  hookInvocationId?: string;
+  hookType?: string;
+  hookPhase?: 'start' | 'end';
+  hookSuccess?: boolean;
+
+  // Session usage fields
+  tokenLimit?: number;
+  currentTokens?: number;
+  messagesLength?: number;
+
+  // Session compaction fields
+  compactionPhase?: 'start' | 'complete';
+  compactionSuccess?: boolean;
+  preCompactionTokens?: number;
+  postCompactionTokens?: number;
+  tokensRemoved?: number;
 }

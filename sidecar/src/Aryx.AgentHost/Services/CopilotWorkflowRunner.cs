@@ -23,7 +23,7 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
     public async Task<IReadOnlyList<ChatMessageDto>> RunTurnAsync(
         RunTurnCommandDto command,
         Func<TurnDeltaEventDto, Task> onDelta,
-        Func<AgentActivityEventDto, Task> onActivity,
+        Func<SidecarEventDto, Task> onEvent,
         Func<ApprovalRequestedEventDto, Task> onApproval,
         Func<UserInputRequestedEventDto, Task> onUserInput,
         Func<McpOauthRequiredEventDto, Task> onMcpOAuthRequired,
@@ -77,15 +77,16 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
                 runCancellation.Token);
             Workflow workflow = bundle.BuildWorkflow(command.Pattern);
             List<ChatMessage> inputMessages = command.Messages.Select(WorkflowTranscriptProjector.ToChatMessage).ToList();
+            WorkflowTranscriptProjector.AttachMessageMode(inputMessages, command.MessageMode);
 
             await using StreamingRun run = await InProcessExecution.RunStreamingAsync(workflow, inputMessages).ConfigureAwait(false);
             await run.TrySendMessageAsync(new TurnToken(emitEvents: true)).ConfigureAwait(false);
 
             await foreach (WorkflowEvent evt in run.WatchStreamAsync(runCancellation.Token).ConfigureAwait(false))
             {
-                bool shouldEndTurn = await HandleWorkflowEventAsync(command, evt, inputMessages, state, onDelta, onActivity)
+                bool shouldEndTurn = await HandleWorkflowEventAsync(command, evt, inputMessages, state, onDelta, onEvent)
                     .ConfigureAwait(false);
-                await EmitPendingActivityEventsAsync(state, onActivity).ConfigureAwait(false);
+                await EmitPendingEventsAsync(state, onEvent).ConfigureAwait(false);
                 await EmitPendingMcpOauthRequestsAsync(state, onMcpOAuthRequired).ConfigureAwait(false);
                 if (shouldEndTurn)
                 {
@@ -93,13 +94,13 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
                 }
             }
 
-            await EmitPendingActivityEventsAsync(state, onActivity).ConfigureAwait(false);
+            await EmitPendingEventsAsync(state, onEvent).ConfigureAwait(false);
             await EmitPendingMcpOauthRequestsAsync(state, onMcpOAuthRequired).ConfigureAwait(false);
             return state.FinalizeCompletedMessages();
         }
         catch (OperationCanceledException) when (runCancellation.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
         {
-            await EmitPendingActivityEventsAsync(state, onActivity).ConfigureAwait(false);
+            await EmitPendingEventsAsync(state, onEvent).ConfigureAwait(false);
             await EmitPendingMcpOauthRequestsAsync(state, onMcpOAuthRequired).ConfigureAwait(false);
             ExitPlanModeRequestedEventDto? exitPlanModeEvent =
                 _exitPlanModeCoordinator.ConsumePendingRequest(command.RequestId);
@@ -117,13 +118,13 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
         }
     }
 
-    private static async Task EmitPendingActivityEventsAsync(
+    private static async Task EmitPendingEventsAsync(
         CopilotTurnExecutionState state,
-        Func<AgentActivityEventDto, Task> onActivity)
+        Func<SidecarEventDto, Task> onEvent)
     {
-        foreach (AgentActivityEventDto activity in state.DrainPendingActivityEvents())
+        foreach (SidecarEventDto pendingEvent in state.DrainPendingEvents())
         {
-            await onActivity(activity).ConfigureAwait(false);
+            await onEvent(pendingEvent).ConfigureAwait(false);
         }
     }
 
@@ -157,7 +158,7 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
         IReadOnlyList<ChatMessage> inputMessages,
         CopilotTurnExecutionState state,
         Func<TurnDeltaEventDto, Task> onDelta,
-        Func<AgentActivityEventDto, Task> onActivity)
+        Func<SidecarEventDto, Task> onEvent)
     {
         if (evt is ExecutorInvokedEvent invoked)
         {
@@ -167,7 +168,7 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
                 out AgentIdentity invokedAgent))
             {
                 TraceHandoff(command, $"Executor invoked: {invoked.ExecutorId} -> {invokedAgent.AgentName} ({invokedAgent.AgentId}).");
-                await state.EmitThinkingIfNeeded(invokedAgent, onActivity).ConfigureAwait(false);
+                await state.EmitThinkingIfNeeded(invokedAgent, onEvent).ConfigureAwait(false);
             }
             else
             {
@@ -194,13 +195,13 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
                 return requiresBoundary;
             }
 
-            await EmitActivityAsync(command, state, activity, onActivity).ConfigureAwait(false);
+            await EmitActivityAsync(command, state, activity, onEvent).ConfigureAwait(false);
             return false;
         }
 
         if (evt is AgentResponseUpdateEvent update)
         {
-            await HandleAgentResponseUpdateAsync(command, update, state, onDelta, onActivity).ConfigureAwait(false);
+            await HandleAgentResponseUpdateAsync(command, update, state, onDelta, onEvent).ConfigureAwait(false);
             return false;
         }
 
@@ -237,7 +238,7 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
         AgentResponseUpdateEvent update,
         CopilotTurnExecutionState state,
         Func<TurnDeltaEventDto, Task> onDelta,
-        Func<AgentActivityEventDto, Task> onActivity)
+        Func<SidecarEventDto, Task> onEvent)
     {
         AgentIdentity? updateAgent = null;
         string authorName = update.ExecutorId;
@@ -271,7 +272,7 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
                     $"Agent response update from {updateAgent.Value.AgentName} ({updateAgent.Value.AgentId}) requested handoff via {string.Join(", ", handoffFunctionCalls)}.");
             }
 
-            await state.EmitThinkingIfNeeded(updateAgent.Value, onActivity).ConfigureAwait(false);
+            await state.EmitThinkingIfNeeded(updateAgent.Value, onEvent).ConfigureAwait(false);
         }
         else if (!string.IsNullOrEmpty(update.Update.Text) || handoffFunctionCalls.Length > 0)
         {
@@ -307,13 +308,13 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
         RunTurnCommandDto command,
         CopilotTurnExecutionState state,
         AgentActivityEventDto activity,
-        Func<AgentActivityEventDto, Task> onActivity)
+        Func<SidecarEventDto, Task> onEvent)
     {
-        state.ApplyActivity(activity);
+        state.ApplyEvent(activity);
         TraceHandoff(
             command,
             $"Activity emitted: {activity.ActivityType} -> {activity.AgentName ?? activity.AgentId ?? "<unknown>"}.");
-        await onActivity(activity).ConfigureAwait(false);
+        await onEvent(activity).ConfigureAwait(false);
 
         if (string.Equals(activity.ActivityType, "handoff", StringComparison.Ordinal)
             && !string.IsNullOrWhiteSpace(activity.AgentId)
@@ -324,7 +325,7 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
                 $"Promoting handoff target to thinking: {activity.AgentName} ({activity.AgentId}).");
             await state.EmitThinkingIfNeeded(
                 new AgentIdentity(activity.AgentId, activity.AgentName),
-                onActivity).ConfigureAwait(false);
+                onEvent).ConfigureAwait(false);
         }
     }
 

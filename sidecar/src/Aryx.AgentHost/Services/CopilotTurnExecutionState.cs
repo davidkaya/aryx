@@ -9,7 +9,7 @@ internal sealed class CopilotTurnExecutionState
 {
     private readonly RunTurnCommandDto _command;
     private readonly HashSet<string> _startedAgents = new(StringComparer.OrdinalIgnoreCase);
-    private readonly ConcurrentQueue<AgentActivityEventDto> _pendingActivityEvents = new();
+    private readonly ConcurrentQueue<SidecarEventDto> _pendingEvents = new();
     private readonly ConcurrentQueue<McpOauthRequiredEventDto> _pendingMcpOauthRequests = new();
     private readonly ConcurrentDictionary<string, AgentIdentity> _observedAgentsByMessageId = new(StringComparer.Ordinal);
     private readonly StreamingTranscriptBuffer _transcriptBuffer = new();
@@ -30,7 +30,7 @@ internal sealed class CopilotTurnExecutionState
 
     public async Task EmitThinkingIfNeeded(
         AgentIdentity agent,
-        Func<AgentActivityEventDto, Task> onActivity)
+        Func<SidecarEventDto, Task> onEvent)
     {
         AgentActivityEventDto? thinkingActivity = CreateThinkingActivityIfNeeded(agent);
         if (thinkingActivity is null)
@@ -38,7 +38,7 @@ internal sealed class CopilotTurnExecutionState
             return;
         }
 
-        await onActivity(thinkingActivity).ConfigureAwait(false);
+        await onEvent(thinkingActivity).ConfigureAwait(false);
     }
 
     public void QueueThinkingIfNeeded(AgentIdentity agent)
@@ -46,13 +46,14 @@ internal sealed class CopilotTurnExecutionState
         AgentActivityEventDto? thinkingActivity = CreateThinkingActivityIfNeeded(agent);
         if (thinkingActivity is not null)
         {
-            _pendingActivityEvents.Enqueue(thinkingActivity);
+            _pendingEvents.Enqueue(thinkingActivity);
         }
     }
 
-    public void ApplyActivity(AgentActivityEventDto activity)
+    public void ApplyEvent(SidecarEventDto evt)
     {
-        if (string.Equals(activity.ActivityType, "handoff", StringComparison.Ordinal)
+        if (evt is AgentActivityEventDto activity
+            && string.Equals(activity.ActivityType, "handoff", StringComparison.Ordinal)
             && !string.IsNullOrWhiteSpace(activity.AgentId)
             && !string.IsNullOrWhiteSpace(activity.AgentName))
         {
@@ -86,6 +87,54 @@ internal sealed class CopilotTurnExecutionState
                 ActiveAgent = agent;
                 QueueThinkingIfNeeded(agent);
                 break;
+            case SubagentStartedEvent started:
+                ActiveAgent = agent;
+                _pendingEvents.Enqueue(CreateSubagentEvent(agent, "started", started.Data));
+                break;
+            case SubagentCompletedEvent completed:
+                ActiveAgent = agent;
+                _pendingEvents.Enqueue(CreateSubagentCompletedEvent(agent, completed.Data));
+                break;
+            case SubagentFailedEvent failed:
+                ActiveAgent = agent;
+                _pendingEvents.Enqueue(CreateSubagentFailedEvent(agent, failed.Data));
+                break;
+            case SubagentSelectedEvent selected:
+                ActiveAgent = agent;
+                _pendingEvents.Enqueue(CreateSubagentSelectedEvent(agent, selected.Data));
+                break;
+            case SubagentDeselectedEvent:
+                ActiveAgent = agent;
+                _pendingEvents.Enqueue(CreateSubagentDeselectedEvent(agent));
+                break;
+            case SkillInvokedEvent skillInvoked:
+                ActiveAgent = agent;
+                _pendingEvents.Enqueue(CreateSkillInvokedEvent(agent, skillInvoked.Data));
+                break;
+            case HookStartEvent hookStart:
+                ActiveAgent = agent;
+                _pendingEvents.Enqueue(CreateHookLifecycleEvent(agent, "start", hookStart.Data));
+                break;
+            case HookEndEvent hookEnd:
+                ActiveAgent = agent;
+                _pendingEvents.Enqueue(CreateHookLifecycleEvent(agent, "end", hookEnd.Data));
+                break;
+            case SessionUsageInfoEvent usageInfo:
+                ActiveAgent = agent;
+                _pendingEvents.Enqueue(CreateUsageEvent(agent, usageInfo.Data));
+                break;
+            case SessionCompactionStartEvent compactionStart:
+                ActiveAgent = agent;
+                _pendingEvents.Enqueue(CreateCompactionStartEvent(agent, compactionStart.Data));
+                break;
+            case SessionCompactionCompleteEvent compactionComplete:
+                ActiveAgent = agent;
+                _pendingEvents.Enqueue(CreateCompactionCompleteEvent(agent, compactionComplete.Data));
+                break;
+            case PendingMessagesModifiedEvent:
+                ActiveAgent = agent;
+                _pendingEvents.Enqueue(CreatePendingMessagesModifiedEvent(agent));
+                break;
             case McpOauthRequiredEvent:
                 ActiveAgent = agent;
                 break;
@@ -96,12 +145,12 @@ internal sealed class CopilotTurnExecutionState
         }
     }
 
-    public IReadOnlyList<AgentActivityEventDto> DrainPendingActivityEvents()
+    public IReadOnlyList<SidecarEventDto> DrainPendingEvents()
     {
-        List<AgentActivityEventDto> pending = [];
-        while (_pendingActivityEvents.TryDequeue(out AgentActivityEventDto? activity))
+        List<SidecarEventDto> pending = [];
+        while (_pendingEvents.TryDequeue(out SidecarEventDto? pendingEvent))
         {
-            pending.Add(activity);
+            pending.Add(pendingEvent);
         }
 
         return pending;
@@ -203,5 +252,230 @@ internal sealed class CopilotTurnExecutionState
         }
 
         return CompletedMessages;
+    }
+
+    private SubagentEventDto CreateSubagentEvent(
+        AgentIdentity agent,
+        string eventKind,
+        SubagentStartedData? data)
+    {
+        return new SubagentEventDto
+        {
+            Type = "subagent-event",
+            RequestId = _command.RequestId,
+            SessionId = _command.SessionId,
+            EventKind = eventKind,
+            AgentId = agent.AgentId,
+            AgentName = agent.AgentName,
+            ToolCallId = data?.ToolCallId,
+            CustomAgentName = data?.AgentName,
+            CustomAgentDisplayName = data?.AgentDisplayName,
+            CustomAgentDescription = data?.AgentDescription,
+        };
+    }
+
+    private SubagentEventDto CreateSubagentCompletedEvent(
+        AgentIdentity agent,
+        SubagentCompletedData? data)
+    {
+        return new SubagentEventDto
+        {
+            Type = "subagent-event",
+            RequestId = _command.RequestId,
+            SessionId = _command.SessionId,
+            EventKind = "completed",
+            AgentId = agent.AgentId,
+            AgentName = agent.AgentName,
+            ToolCallId = data?.ToolCallId,
+            CustomAgentName = data?.AgentName,
+            CustomAgentDisplayName = data?.AgentDisplayName,
+        };
+    }
+
+    private SubagentEventDto CreateSubagentFailedEvent(
+        AgentIdentity agent,
+        SubagentFailedData? data)
+    {
+        return new SubagentEventDto
+        {
+            Type = "subagent-event",
+            RequestId = _command.RequestId,
+            SessionId = _command.SessionId,
+            EventKind = "failed",
+            AgentId = agent.AgentId,
+            AgentName = agent.AgentName,
+            ToolCallId = data?.ToolCallId,
+            CustomAgentName = data?.AgentName,
+            CustomAgentDisplayName = data?.AgentDisplayName,
+            Error = data?.Error,
+        };
+    }
+
+    private SubagentEventDto CreateSubagentSelectedEvent(
+        AgentIdentity agent,
+        SubagentSelectedData? data)
+    {
+        return new SubagentEventDto
+        {
+            Type = "subagent-event",
+            RequestId = _command.RequestId,
+            SessionId = _command.SessionId,
+            EventKind = "selected",
+            AgentId = agent.AgentId,
+            AgentName = agent.AgentName,
+            CustomAgentName = data?.AgentName,
+            CustomAgentDisplayName = data?.AgentDisplayName,
+            Tools = data?.Tools,
+        };
+    }
+
+    private SubagentEventDto CreateSubagentDeselectedEvent(AgentIdentity agent)
+    {
+        return new SubagentEventDto
+        {
+            Type = "subagent-event",
+            RequestId = _command.RequestId,
+            SessionId = _command.SessionId,
+            EventKind = "deselected",
+            AgentId = agent.AgentId,
+            AgentName = agent.AgentName,
+        };
+    }
+
+    private SkillInvokedEventDto CreateSkillInvokedEvent(
+        AgentIdentity agent,
+        SkillInvokedData? data)
+    {
+        return new SkillInvokedEventDto
+        {
+            Type = "skill-invoked",
+            RequestId = _command.RequestId,
+            SessionId = _command.SessionId,
+            AgentId = agent.AgentId,
+            AgentName = agent.AgentName,
+            SkillName = data?.Name ?? string.Empty,
+            Path = data?.Path ?? string.Empty,
+            Content = data?.Content ?? string.Empty,
+            AllowedTools = data?.AllowedTools,
+            PluginName = data?.PluginName,
+            PluginVersion = data?.PluginVersion,
+        };
+    }
+
+    private HookLifecycleEventDto CreateHookLifecycleEvent(
+        AgentIdentity agent,
+        string phase,
+        HookStartData? data)
+    {
+        return new HookLifecycleEventDto
+        {
+            Type = "hook-lifecycle",
+            RequestId = _command.RequestId,
+            SessionId = _command.SessionId,
+            AgentId = agent.AgentId,
+            AgentName = agent.AgentName,
+            HookInvocationId = data?.HookInvocationId ?? string.Empty,
+            HookType = data?.HookType ?? string.Empty,
+            Phase = phase,
+            Input = data?.Input,
+        };
+    }
+
+    private HookLifecycleEventDto CreateHookLifecycleEvent(
+        AgentIdentity agent,
+        string phase,
+        HookEndData? data)
+    {
+        return new HookLifecycleEventDto
+        {
+            Type = "hook-lifecycle",
+            RequestId = _command.RequestId,
+            SessionId = _command.SessionId,
+            AgentId = agent.AgentId,
+            AgentName = agent.AgentName,
+            HookInvocationId = data?.HookInvocationId ?? string.Empty,
+            HookType = data?.HookType ?? string.Empty,
+            Phase = phase,
+            Success = data?.Success,
+            Output = data?.Output,
+            Error = data?.Error?.Message,
+        };
+    }
+
+    private SessionUsageEventDto CreateUsageEvent(AgentIdentity agent, SessionUsageInfoData? data)
+    {
+        return new SessionUsageEventDto
+        {
+            Type = "session-usage",
+            RequestId = _command.RequestId,
+            SessionId = _command.SessionId,
+            AgentId = agent.AgentId,
+            AgentName = agent.AgentName,
+            TokenLimit = data?.TokenLimit ?? 0,
+            CurrentTokens = data?.CurrentTokens ?? 0,
+            MessagesLength = data?.MessagesLength ?? 0,
+            SystemTokens = data?.SystemTokens,
+            ConversationTokens = data?.ConversationTokens,
+            ToolDefinitionsTokens = data?.ToolDefinitionsTokens,
+            IsInitial = data?.IsInitial,
+        };
+    }
+
+    private SessionCompactionEventDto CreateCompactionStartEvent(
+        AgentIdentity agent,
+        SessionCompactionStartData? data)
+    {
+        return new SessionCompactionEventDto
+        {
+            Type = "session-compaction",
+            RequestId = _command.RequestId,
+            SessionId = _command.SessionId,
+            AgentId = agent.AgentId,
+            AgentName = agent.AgentName,
+            Phase = "start",
+            SystemTokens = data?.SystemTokens,
+            ConversationTokens = data?.ConversationTokens,
+            ToolDefinitionsTokens = data?.ToolDefinitionsTokens,
+        };
+    }
+
+    private SessionCompactionEventDto CreateCompactionCompleteEvent(
+        AgentIdentity agent,
+        SessionCompactionCompleteData? data)
+    {
+        return new SessionCompactionEventDto
+        {
+            Type = "session-compaction",
+            RequestId = _command.RequestId,
+            SessionId = _command.SessionId,
+            AgentId = agent.AgentId,
+            AgentName = agent.AgentName,
+            Phase = "complete",
+            Success = data?.Success,
+            Error = data?.Error,
+            SystemTokens = data?.SystemTokens,
+            ConversationTokens = data?.ConversationTokens,
+            ToolDefinitionsTokens = data?.ToolDefinitionsTokens,
+            PreCompactionTokens = data?.PreCompactionTokens,
+            PostCompactionTokens = data?.PostCompactionTokens,
+            PreCompactionMessagesLength = data?.PreCompactionMessagesLength,
+            MessagesRemoved = data?.MessagesRemoved,
+            TokensRemoved = data?.TokensRemoved,
+            SummaryContent = data?.SummaryContent,
+            CheckpointNumber = data?.CheckpointNumber,
+            CheckpointPath = data?.CheckpointPath,
+        };
+    }
+
+    private PendingMessagesModifiedEventDto CreatePendingMessagesModifiedEvent(AgentIdentity agent)
+    {
+        return new PendingMessagesModifiedEventDto
+        {
+            Type = "pending-messages-modified",
+            RequestId = _command.RequestId,
+            SessionId = _command.SessionId,
+            AgentId = agent.AgentId,
+            AgentName = agent.AgentName,
+        };
     }
 }

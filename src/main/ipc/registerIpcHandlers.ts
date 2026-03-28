@@ -26,6 +26,7 @@ import type {
   UpdateSessionApprovalSettingsInput,
   UpdateSessionToolingInput,
   UpdateSessionModelConfigInput,
+  DeleteSessionInput,
 } from '@shared/contracts/ipc';
 import type { QuerySessionsInput } from '@shared/domain/sessionLibrary';
 import type { AppearanceTheme } from '@shared/domain/tooling';
@@ -106,8 +107,11 @@ export function registerIpcHandlers(window: BrowserWindow, service: AryxAppServi
   ipcMain.handle(ipcChannels.setSessionArchived, (_event, input: SetSessionArchivedInput) =>
     service.setSessionArchived(input.sessionId, input.isArchived),
   );
+  ipcMain.handle(ipcChannels.deleteSession, (_event, input: DeleteSessionInput) =>
+    service.deleteSession(input.sessionId),
+  );
   ipcMain.handle(ipcChannels.sendSessionMessage, (_event, input: SendSessionMessageInput) =>
-    service.sendSessionMessage(input.sessionId, input.content),
+    service.sendSessionMessage(input.sessionId, input.content, input.attachments, input.messageMode),
   );
   ipcMain.handle(ipcChannels.cancelSessionTurn, (_event, input: CancelSessionTurnInput) =>
     service.cancelSessionTurn(input.sessionId),

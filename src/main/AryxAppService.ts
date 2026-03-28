@@ -14,6 +14,7 @@ import type {
   TurnDeltaEvent,
   UserInputRequestedEvent,
 } from '@shared/contracts/sidecar';
+import type { TurnScopedEvent } from '@main/sidecar/runTurnPending';
 import {
   buildAvailableModelCatalog,
   findModel,
@@ -564,10 +565,40 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     return this.persistAndBroadcast(workspace);
   }
 
-  async sendSessionMessage(sessionId: string, content: string): Promise<void> {
+  async deleteSession(sessionId: string): Promise<WorkspaceState> {
+    const workspace = await this.loadWorkspace();
+    const sessionIndex = workspace.sessions.findIndex((s) => s.id === sessionId);
+    if (sessionIndex < 0) {
+      throw new Error(`Session ${sessionId} not found.`);
+    }
+
+    workspace.sessions.splice(sessionIndex, 1);
+
+    if (workspace.selectedSessionId === sessionId) {
+      workspace.selectedSessionId = workspace.sessions[0]?.id;
+    }
+
+    // Clean up corresponding Copilot SDK session data
+    try {
+      await this.sidecar.deleteSession(sessionId);
+    } catch {
+      // Best-effort — don't fail the deletion if SDK cleanup fails
+    }
+
+    return this.persistAndBroadcast(workspace);
+  }
+
+  async sendSessionMessage(
+    sessionId: string,
+    content: string,
+    attachments?: import('@shared/domain/attachment').ChatMessageAttachment[],
+    messageMode?: import('@shared/contracts/sidecar').MessageMode,
+  ): Promise<void> {
     const workspace = await this.loadWorkspace();
     const session = this.requireSession(workspace, sessionId);
-    if (session.status === 'running') {
+
+    // Steering/queueing: allow messages during an active turn when messageMode is set
+    if (session.status === 'running' && !messageMode) {
       throw new Error('Wait for the current response or approval checkpoint to finish before sending another message.');
     }
     const project = this.requireProject(workspace, session.projectId);
@@ -589,6 +620,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
       authorName: 'You',
       content: preparedContent,
       createdAt: occurredAt,
+      attachments: attachments?.length ? attachments : undefined,
     });
     session.title = resolveSessionTitle(session, effectivePattern, session.messages);
     session.status = 'running';
@@ -625,8 +657,10 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
           projectPath: project.path,
           workspaceKind,
           mode: session.interactionMode ?? 'interactive',
+          messageMode,
           pattern: effectivePattern,
           messages: session.messages,
+          attachments: attachments?.length ? attachments : undefined,
           tooling: this.buildRunTurnToolingConfig(workspace, session),
         },
         async (event) => {
@@ -648,6 +682,9 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
         },
         async (event) => {
           await this.handleExitPlanModeRequested(workspace, session.id, event);
+        },
+        async (event) => {
+          await this.handleTurnScopedEvent(workspace, session.id, event);
         },
       );
 
@@ -1523,6 +1560,89 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     session.updatedAt = requestedAt;
 
     await this.persistAndBroadcast(workspace);
+  }
+
+  private handleTurnScopedEvent(
+    _workspace: WorkspaceState,
+    sessionId: string,
+    event: TurnScopedEvent,
+  ): void {
+    const occurredAt = nowIso();
+
+    switch (event.type) {
+      case 'subagent-event':
+        this.emitSessionEvent({
+          sessionId,
+          kind: 'subagent',
+          occurredAt,
+          agentId: event.agentId,
+          agentName: event.agentName,
+          subagentEventKind: event.eventKind,
+          customAgentName: event.customAgentName,
+          customAgentDisplayName: event.customAgentDisplayName,
+        });
+        return;
+      case 'skill-invoked':
+        this.emitSessionEvent({
+          sessionId,
+          kind: 'skill-invoked',
+          occurredAt,
+          agentId: event.agentId,
+          agentName: event.agentName,
+          skillName: event.skillName,
+          skillPath: event.path,
+          pluginName: event.pluginName,
+        });
+        return;
+      case 'hook-lifecycle':
+        this.emitSessionEvent({
+          sessionId,
+          kind: 'hook-lifecycle',
+          occurredAt,
+          agentId: event.agentId,
+          agentName: event.agentName,
+          hookInvocationId: event.hookInvocationId,
+          hookType: event.hookType,
+          hookPhase: event.phase,
+          hookSuccess: event.success,
+        });
+        return;
+      case 'session-usage':
+        this.emitSessionEvent({
+          sessionId,
+          kind: 'session-usage',
+          occurredAt,
+          agentId: event.agentId,
+          agentName: event.agentName,
+          tokenLimit: event.tokenLimit,
+          currentTokens: event.currentTokens,
+          messagesLength: event.messagesLength,
+        });
+        return;
+      case 'session-compaction':
+        this.emitSessionEvent({
+          sessionId,
+          kind: 'session-compaction',
+          occurredAt,
+          agentId: event.agentId,
+          agentName: event.agentName,
+          compactionPhase: event.phase,
+          compactionSuccess: event.success,
+          preCompactionTokens: event.preCompactionTokens,
+          postCompactionTokens: event.postCompactionTokens,
+          tokensRemoved: event.tokensRemoved,
+        });
+        return;
+      case 'pending-messages-modified':
+        this.emitSessionEvent({
+          sessionId,
+          kind: 'pending-messages-modified',
+          occurredAt,
+          agentId: event.agentId,
+          agentName: event.agentName,
+        });
+        return;
+    }
   }
 
   private createPendingApprovalFromSidecarEvent(event: ApprovalRequestedEvent): PendingApprovalRecord {

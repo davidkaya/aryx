@@ -17,8 +17,10 @@ It works especially well when you want AI help that stays grounded in an actual 
 - **Start fast** with a scratchpad conversation for quick questions and ad-hoc work.
 - **Work against real projects** by attaching local folders and letting Aryx stay aware of repository context.
 - **Go beyond one assistant** with orchestration patterns such as single-agent, sequential, concurrent, handoff, and group-chat flows.
-- **See what is happening** with live activity for each agent while a run is in progress.
-- **Stay organized** with persistent sessions you can rename, pin, archive, and return to later.
+- **See what is happening** with live activity for each agent while a run is in progress, including sub-agent delegations, hook lifecycle, skill invocations, and context compaction.
+- **Stay organized** with persistent sessions you can rename, pin, archive, delete, and return to later.
+- **Steer while agents work** by sending follow-up messages mid-turn — the agent receives your input immediately.
+- **Attach images** to any message for visual context the model can reason about.
 - **Tune how you work** by choosing models and reusing saved patterns that fit different tasks.
 
 ## What you can do in the app
@@ -51,11 +53,19 @@ Patterns now require tool-call approval by default. They can also store default 
 
 ### Watch runs as they happen
 
-You can follow agent activity while a session is running, which makes longer or more complex workflows easier to trust and understand.
+You can follow agent activity while a session is running, which makes longer or more complex workflows easier to trust and understand. The activity panel shows sub-agent delegations, skill invocations, hook lifecycle events, and context compaction in real time. A context-usage bar below the composer shows how much of the model's context window the current session occupies.
+
+### Steer agents mid-turn
+
+While an agent is working, you can type a follow-up message that is delivered immediately into the current turn. This lets you redirect, refine, or add context without waiting for the turn to finish. The composer shows an amber "steering" indicator when a message will be injected into an active run.
+
+### Attach images
+
+You can attach images (JPEG, PNG, GIF, WebP) to any message using the clip button, drag-and-drop, or paste from clipboard. Image attachments are sent as base64-encoded blobs so the model can reason about visual content alongside your text.
 
 ### Keep important work around
 
-Sessions are persistent, so you can return to ongoing work instead of starting from scratch every time. You can also rename, pin, archive, and duplicate sessions as your workspace grows.
+Sessions are persistent, so you can return to ongoing work instead of starting from scratch every time. You can also rename, pin, archive, delete, and duplicate sessions as your workspace grows.
 
 ## Before you start
 

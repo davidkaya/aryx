@@ -14,6 +14,8 @@ import type {
   ExitPlanModeRequestedEvent,
   ValidatePatternCommand,
   RunTurnCommand,
+  CopilotSessionListFilter,
+  CopilotSessionInfo,
 } from '@shared/contracts/sidecar';
 import type { ApprovalDecision } from '@shared/domain/approval';
 import type { ChatMessageRecord } from '@shared/domain/session';
@@ -22,6 +24,7 @@ import {
   markRunTurnPendingErrored,
   shouldHandleRunTurnEvent,
   type RunTurnPendingCommand,
+  type TurnScopedEvent,
 } from '@main/sidecar/runTurnPending';
 import { TurnCancelledError } from '@main/sidecar/turnCancelledError';
 import { resolveSidecarProcess } from '@main/sidecar/sidecarRuntime';
@@ -56,6 +59,24 @@ type PendingCommand =
   | ({
       processId: number;
       kind: 'cancel-turn';
+      resolve: () => void;
+      reject: (error: Error) => void;
+    })
+  | ({
+      processId: number;
+      kind: 'list-sessions';
+      resolve: (sessions: CopilotSessionInfo[]) => void;
+      reject: (error: Error) => void;
+    })
+  | ({
+      processId: number;
+      kind: 'delete-session';
+      resolve: (sessions: CopilotSessionInfo[]) => void;
+      reject: (error: Error) => void;
+    })
+  | ({
+      processId: number;
+      kind: 'disconnect-session';
       resolve: () => void;
       reject: (error: Error) => void;
     })
@@ -106,8 +127,9 @@ export class SidecarClient {
     onUserInput: (event: UserInputRequestedEvent) => void | Promise<void>,
     onMcpOAuthRequired: (event: McpOauthRequiredEvent) => void | Promise<void>,
     onExitPlanMode: (event: ExitPlanModeRequestedEvent) => void | Promise<void>,
+    onTurnScopedEvent: (event: TurnScopedEvent) => void | Promise<void>,
   ): Promise<ChatMessageRecord[]> {
-    return this.dispatch<ChatMessageRecord[]>(command, onDelta, onActivity, onApproval, onUserInput, onMcpOAuthRequired, onExitPlanMode);
+    return this.dispatch<ChatMessageRecord[]>(command, onDelta, onActivity, onApproval, onUserInput, onMcpOAuthRequired, onExitPlanMode, onTurnScopedEvent);
   }
 
   async resolveUserInput(userInputId: string, answer: string, wasFreeform: boolean): Promise<void> {
@@ -136,6 +158,31 @@ export class SidecarClient {
       requestId: `cancel-${Date.now()}`,
       targetRequestId,
     } satisfies CancelTurnCommand);
+  }
+
+  async listSessions(filter?: CopilotSessionListFilter): Promise<CopilotSessionInfo[]> {
+    return this.dispatch<CopilotSessionInfo[]>({
+      type: 'list-sessions',
+      requestId: `list-sessions-${Date.now()}`,
+      filter,
+    });
+  }
+
+  async deleteSession(sessionId?: string, copilotSessionId?: string): Promise<CopilotSessionInfo[]> {
+    return this.dispatch<CopilotSessionInfo[]>({
+      type: 'delete-session',
+      requestId: `delete-session-${Date.now()}`,
+      sessionId,
+      copilotSessionId,
+    });
+  }
+
+  async disconnectSession(sessionId: string): Promise<void> {
+    return this.dispatch<void>({
+      type: 'disconnect-session',
+      requestId: `disconnect-session-${Date.now()}`,
+      sessionId,
+    });
   }
 
   async dispose(): Promise<void> {
@@ -225,6 +272,7 @@ export class SidecarClient {
     onUserInput?: (event: UserInputRequestedEvent) => void | Promise<void>,
     onMcpOAuthRequired?: (event: McpOauthRequiredEvent) => void | Promise<void>,
     onExitPlanMode?: (event: ExitPlanModeRequestedEvent) => void | Promise<void>,
+    onTurnScopedEvent?: (event: TurnScopedEvent) => void | Promise<void>,
   ): Promise<TResult> {
     const state = await this.ensureProcess();
 
@@ -241,6 +289,7 @@ export class SidecarClient {
           onUserInput: onUserInput ?? (() => undefined),
           onMcpOAuthRequired: onMcpOAuthRequired ?? (() => undefined),
           onExitPlanMode: onExitPlanMode ?? (() => undefined),
+          onTurnScopedEvent: onTurnScopedEvent ?? (() => undefined),
           errored: false,
         });
       } else if (command.type === 'validate-pattern') {
@@ -268,6 +317,27 @@ export class SidecarClient {
         this.pending.set(command.requestId, {
           processId: state.id,
           kind: 'cancel-turn',
+          resolve: resolve as () => void,
+          reject,
+        });
+      } else if (command.type === 'list-sessions') {
+        this.pending.set(command.requestId, {
+          processId: state.id,
+          kind: 'list-sessions',
+          resolve: resolve as (sessions: CopilotSessionInfo[]) => void,
+          reject,
+        });
+      } else if (command.type === 'delete-session') {
+        this.pending.set(command.requestId, {
+          processId: state.id,
+          kind: 'delete-session',
+          resolve: resolve as (sessions: CopilotSessionInfo[]) => void,
+          reject,
+        });
+      } else if (command.type === 'disconnect-session') {
+        this.pending.set(command.requestId, {
+          processId: state.id,
+          kind: 'disconnect-session',
           resolve: resolve as () => void,
           reject,
         });
@@ -346,6 +416,34 @@ export class SidecarClient {
       case 'exit-plan-mode-requested':
         if (pending.kind === 'run-turn' && shouldHandleRunTurnEvent(pending)) {
           this.invokeRunTurnHandler(event.requestId, pending, () => pending.onExitPlanMode(event));
+        }
+        return;
+      case 'subagent-event':
+      case 'skill-invoked':
+      case 'hook-lifecycle':
+      case 'session-usage':
+      case 'session-compaction':
+      case 'pending-messages-modified':
+        if (pending.kind === 'run-turn' && shouldHandleRunTurnEvent(pending)) {
+          this.invokeRunTurnHandler(event.requestId, pending, () => pending.onTurnScopedEvent(event));
+        }
+        return;
+      case 'sessions-listed':
+        if (pending.kind === 'list-sessions') {
+          pending.resolve(event.sessions);
+          this.pending.delete(event.requestId);
+        }
+        return;
+      case 'sessions-deleted':
+        if (pending.kind === 'delete-session') {
+          pending.resolve(event.sessions);
+          this.pending.delete(event.requestId);
+        }
+        return;
+      case 'session-disconnected':
+        if (pending.kind === 'disconnect-session') {
+          pending.resolve();
+          this.pending.delete(event.requestId);
         }
         return;
       case 'turn-complete':

@@ -10,6 +10,16 @@ public sealed class PatternAgentDefinitionDto
     public string Instructions { get; init; } = string.Empty;
     public string Model { get; init; } = string.Empty;
     public string? ReasoningEffort { get; init; }
+    public PatternAgentCopilotConfigDto? Copilot { get; init; }
+}
+
+public sealed class PatternAgentCopilotConfigDto
+{
+    public IReadOnlyList<RunTurnCustomAgentConfigDto> CustomAgents { get; init; } = [];
+    public string? Agent { get; init; }
+    public IReadOnlyList<string> SkillDirectories { get; init; } = [];
+    public IReadOnlyList<string> DisabledSkills { get; init; } = [];
+    public RunTurnInfiniteSessionsConfigDto? InfiniteSessions { get; init; }
 }
 
 public sealed class PatternGraphPositionDto
@@ -75,6 +85,16 @@ public sealed class ChatMessageDto
     public string AuthorName { get; init; } = string.Empty;
     public string Content { get; init; } = string.Empty;
     public string CreatedAt { get; init; } = string.Empty;
+    public IReadOnlyList<ChatMessageAttachmentDto> Attachments { get; init; } = [];
+}
+
+public sealed class ChatMessageAttachmentDto
+{
+    public string Type { get; init; } = string.Empty;
+    public string? Path { get; init; }
+    public string? Data { get; init; }
+    public string? MimeType { get; init; }
+    public string? DisplayName { get; init; }
 }
 
 public sealed class PatternValidationIssueDto
@@ -162,6 +182,7 @@ public sealed class RunTurnCommandDto : SidecarCommandEnvelope
     public string ProjectPath { get; init; } = string.Empty;
     public string WorkspaceKind { get; init; } = "project";
     public string Mode { get; init; } = "interactive";
+    public string MessageMode { get; init; } = "enqueue";
     public PatternDefinitionDto Pattern { get; init; } = new();
     public IReadOnlyList<ChatMessageDto> Messages { get; init; } = [];
     public RunTurnToolingConfigDto? Tooling { get; init; }
@@ -184,6 +205,22 @@ public sealed class ResolveUserInputCommandDto : SidecarCommandEnvelope
     public string UserInputId { get; init; } = string.Empty;
     public string Answer { get; init; } = string.Empty;
     public bool WasFreeform { get; init; }
+}
+
+public sealed class ListSessionsCommandDto : SidecarCommandEnvelope
+{
+    public CopilotSessionListFilterDto? Filter { get; init; }
+}
+
+public sealed class DeleteSessionCommandDto : SidecarCommandEnvelope
+{
+    public string? SessionId { get; init; }
+    public string? CopilotSessionId { get; init; }
+}
+
+public sealed class DisconnectSessionCommandDto : SidecarCommandEnvelope
+{
+    public string SessionId { get; init; } = string.Empty;
 }
 
 public sealed class RunTurnToolingConfigDto
@@ -215,6 +252,48 @@ public sealed class RunTurnLspProfileConfigDto
     public IReadOnlyList<string> Args { get; init; } = [];
     public string LanguageId { get; init; } = string.Empty;
     public IReadOnlyList<string> FileExtensions { get; init; } = [];
+}
+
+public sealed class RunTurnCustomAgentConfigDto
+{
+    public string Name { get; init; } = string.Empty;
+    public string? DisplayName { get; init; }
+    public string? Description { get; init; }
+    public IReadOnlyList<string>? Tools { get; init; }
+    public string Prompt { get; init; } = string.Empty;
+    public IReadOnlyList<RunTurnMcpServerConfigDto> McpServers { get; init; } = [];
+    public bool? Infer { get; init; }
+}
+
+public sealed class RunTurnInfiniteSessionsConfigDto
+{
+    public bool? Enabled { get; init; }
+    public double? BackgroundCompactionThreshold { get; init; }
+    public double? BufferExhaustionThreshold { get; init; }
+}
+
+public sealed class CopilotSessionListFilterDto
+{
+    public string? Cwd { get; init; }
+    public string? GitRoot { get; init; }
+    public string? Repository { get; init; }
+    public string? Branch { get; init; }
+}
+
+public sealed class CopilotSessionInfoDto
+{
+    public string CopilotSessionId { get; init; } = string.Empty;
+    public bool ManagedByAryx { get; init; }
+    public string? SessionId { get; init; }
+    public string? AgentId { get; init; }
+    public string StartTime { get; init; } = string.Empty;
+    public string ModifiedTime { get; init; } = string.Empty;
+    public string? Summary { get; init; }
+    public bool IsRemote { get; init; }
+    public string? Cwd { get; init; }
+    public string? GitRoot { get; init; }
+    public string? Repository { get; init; }
+    public string? Branch { get; init; }
 }
 
 public abstract class SidecarEventDto
@@ -258,6 +337,111 @@ public sealed class AgentActivityEventDto : SidecarEventDto
     public string? SourceAgentId { get; init; }
     public string? SourceAgentName { get; init; }
     public string? ToolName { get; init; }
+}
+
+public sealed class SubagentEventDto : SidecarEventDto
+{
+    public string SessionId { get; init; } = string.Empty;
+    public string EventKind { get; init; } = string.Empty;
+    public string? AgentId { get; init; }
+    public string? AgentName { get; init; }
+    public string? ToolCallId { get; init; }
+    public string? CustomAgentName { get; init; }
+    public string? CustomAgentDisplayName { get; init; }
+    public string? CustomAgentDescription { get; init; }
+    public string? Error { get; init; }
+    public string? Model { get; init; }
+    public double? TotalToolCalls { get; init; }
+    public double? TotalTokens { get; init; }
+    public double? DurationMs { get; init; }
+    public IReadOnlyList<string>? Tools { get; init; }
+}
+
+public sealed class SkillInvokedEventDto : SidecarEventDto
+{
+    public string SessionId { get; init; } = string.Empty;
+    public string? AgentId { get; init; }
+    public string? AgentName { get; init; }
+    public string SkillName { get; init; } = string.Empty;
+    public string Path { get; init; } = string.Empty;
+    public string Content { get; init; } = string.Empty;
+    public IReadOnlyList<string>? AllowedTools { get; init; }
+    public string? PluginName { get; init; }
+    public string? PluginVersion { get; init; }
+    public string? Description { get; init; }
+}
+
+public sealed class HookLifecycleEventDto : SidecarEventDto
+{
+    public string SessionId { get; init; } = string.Empty;
+    public string? AgentId { get; init; }
+    public string? AgentName { get; init; }
+    public string HookInvocationId { get; init; } = string.Empty;
+    public string HookType { get; init; } = string.Empty;
+    public string Phase { get; init; } = string.Empty;
+    public bool? Success { get; init; }
+    public object? Input { get; init; }
+    public object? Output { get; init; }
+    public string? Error { get; init; }
+}
+
+public sealed class SessionUsageEventDto : SidecarEventDto
+{
+    public string SessionId { get; init; } = string.Empty;
+    public string? AgentId { get; init; }
+    public string? AgentName { get; init; }
+    public double TokenLimit { get; init; }
+    public double CurrentTokens { get; init; }
+    public double MessagesLength { get; init; }
+    public double? SystemTokens { get; init; }
+    public double? ConversationTokens { get; init; }
+    public double? ToolDefinitionsTokens { get; init; }
+    public bool? IsInitial { get; init; }
+}
+
+public sealed class SessionCompactionEventDto : SidecarEventDto
+{
+    public string SessionId { get; init; } = string.Empty;
+    public string? AgentId { get; init; }
+    public string? AgentName { get; init; }
+    public string Phase { get; init; } = string.Empty;
+    public bool? Success { get; init; }
+    public string? Error { get; init; }
+    public double? SystemTokens { get; init; }
+    public double? ConversationTokens { get; init; }
+    public double? ToolDefinitionsTokens { get; init; }
+    public double? PreCompactionTokens { get; init; }
+    public double? PostCompactionTokens { get; init; }
+    public double? PreCompactionMessagesLength { get; init; }
+    public double? MessagesRemoved { get; init; }
+    public double? TokensRemoved { get; init; }
+    public string? SummaryContent { get; init; }
+    public double? CheckpointNumber { get; init; }
+    public string? CheckpointPath { get; init; }
+}
+
+public sealed class PendingMessagesModifiedEventDto : SidecarEventDto
+{
+    public string SessionId { get; init; } = string.Empty;
+    public string? AgentId { get; init; }
+    public string? AgentName { get; init; }
+}
+
+public sealed class SessionsListedEventDto : SidecarEventDto
+{
+    public IReadOnlyList<CopilotSessionInfoDto> Sessions { get; init; } = [];
+}
+
+public sealed class SessionsDeletedEventDto : SidecarEventDto
+{
+    public string? SessionId { get; init; }
+    public IReadOnlyList<CopilotSessionInfoDto> Sessions { get; init; } = [];
+}
+
+public sealed class SessionDisconnectedEventDto : SidecarEventDto
+{
+    public string SessionId { get; init; } = string.Empty;
+    public IReadOnlyList<string> CancelledRequestIds { get; init; } = [];
 }
 
 public sealed class PermissionDetailDto

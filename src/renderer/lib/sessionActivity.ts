@@ -8,8 +8,15 @@ export interface AgentActivityState {
   toolName?: string;
 }
 
+export interface SessionUsageState {
+  tokenLimit: number;
+  currentTokens: number;
+  messagesLength: number;
+}
+
 export type SessionActivityState = Record<string, AgentActivityState>;
 export type SessionActivityMap = Record<string, SessionActivityState | undefined>;
+export type SessionUsageMap = Record<string, SessionUsageState | undefined>;
 
 export interface AgentActivityRow {
   key: string;
@@ -183,4 +190,132 @@ function clearActiveSessionActivity(
 
 function resolveAgentKey(event: SessionEventRecord): string | undefined {
   return event.agentId?.trim() || event.agentName?.trim();
+}
+
+export function applySessionUsageEvent(
+  current: SessionUsageMap,
+  event: SessionEventRecord,
+): SessionUsageMap {
+  if (event.kind !== 'session-usage' || event.tokenLimit === undefined || event.currentTokens === undefined) {
+    return current;
+  }
+
+  return {
+    ...current,
+    [event.sessionId]: {
+      tokenLimit: event.tokenLimit,
+      currentTokens: event.currentTokens,
+      messagesLength: event.messagesLength ?? 0,
+    },
+  };
+}
+
+export function pruneSessionUsage(
+  current: SessionUsageMap,
+  sessionIds: Iterable<string>,
+): SessionUsageMap {
+  const allowed = new Set(sessionIds);
+  const next: SessionUsageMap = {};
+  let changed = false;
+
+  for (const [sessionId, usage] of Object.entries(current)) {
+    if (!allowed.has(sessionId)) {
+      changed = true;
+      continue;
+    }
+    next[sessionId] = usage;
+  }
+
+  return changed || Object.keys(next).length !== Object.keys(current).length ? next : current;
+}
+
+/* ── Turn-scoped event log ──────────────────────────────── */
+
+const TURN_EVENT_LOG_LIMIT = 50;
+
+export interface TurnEventEntry {
+  kind: SessionEventRecord['kind'];
+  occurredAt: string;
+  label: string;
+  detail?: string;
+  phase?: 'start' | 'end' | 'complete';
+  success?: boolean;
+}
+
+export type TurnEventLog = readonly TurnEventEntry[];
+export type TurnEventLogMap = Record<string, TurnEventLog | undefined>;
+
+function formatTurnEventEntry(event: SessionEventRecord): TurnEventEntry | undefined {
+  switch (event.kind) {
+    case 'subagent':
+      return {
+        kind: event.kind,
+        occurredAt: event.occurredAt,
+        label: `Sub-agent ${event.subagentEventKind ?? 'update'}: ${event.customAgentDisplayName ?? event.customAgentName ?? 'unknown'}`,
+        detail: event.agentName ? `from ${event.agentName}` : undefined,
+        phase: event.subagentEventKind === 'started' ? 'start' : event.subagentEventKind === 'completed' ? 'end' : undefined,
+        success: event.subagentEventKind === 'completed' ? true : event.subagentEventKind === 'failed' ? false : undefined,
+      };
+    case 'hook-lifecycle':
+      return {
+        kind: event.kind,
+        occurredAt: event.occurredAt,
+        label: `Hook ${event.hookType ?? 'unknown'}`,
+        detail: event.hookInvocationId,
+        phase: event.hookPhase,
+        success: event.hookSuccess,
+      };
+    case 'skill-invoked':
+      return {
+        kind: event.kind,
+        occurredAt: event.occurredAt,
+        label: `Skill: ${event.skillName ?? 'unknown'}`,
+        detail: event.pluginName ? `via ${event.pluginName}` : undefined,
+      };
+    case 'session-compaction':
+      return {
+        kind: event.kind,
+        occurredAt: event.occurredAt,
+        label: event.compactionPhase === 'start' ? 'Context compaction started' : 'Context compaction complete',
+        detail: event.compactionPhase === 'complete' && event.tokensRemoved
+          ? `${event.tokensRemoved.toLocaleString()} tokens freed`
+          : undefined,
+        phase: event.compactionPhase,
+        success: event.compactionSuccess,
+      };
+    default:
+      return undefined;
+  }
+}
+
+export function applyTurnEventLog(
+  current: TurnEventLogMap,
+  event: SessionEventRecord,
+): TurnEventLogMap {
+  const entry = formatTurnEventEntry(event);
+  if (!entry) return current;
+
+  const existing = current[event.sessionId] ?? [];
+  const next = [...existing, entry].slice(-TURN_EVENT_LOG_LIMIT);
+
+  return { ...current, [event.sessionId]: next };
+}
+
+export function pruneTurnEventLogs(
+  current: TurnEventLogMap,
+  sessionIds: Iterable<string>,
+): TurnEventLogMap {
+  const allowed = new Set(sessionIds);
+  const next: TurnEventLogMap = {};
+  let changed = false;
+
+  for (const [sessionId, log] of Object.entries(current)) {
+    if (!allowed.has(sessionId)) {
+      changed = true;
+      continue;
+    }
+    next[sessionId] = log;
+  }
+
+  return changed || Object.keys(next).length !== Object.keys(current).length ? next : current;
 }

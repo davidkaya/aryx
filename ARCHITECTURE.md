@@ -202,6 +202,17 @@ This is a structured stdio protocol used for:
 
 This protocol boundary keeps the AI execution runtime replaceable and prevents the Electron main process from becoming overloaded with workflow-specific behavior.
 
+The protocol also carries **turn-scoped lifecycle events** alongside output deltas. These events let the UI visualize execution internals without the main process having to interpret AI workflow semantics:
+
+- **Sub-agent events**: started, completed, failed, selected, deselected — surfaced when custom agents are defined
+- **Skill invocation events**: emitted when an agent-side skill is triggered
+- **Hook lifecycle events**: start and end of registered hooks (e.g. pre-turn, post-turn)
+- **Session compaction events**: start and complete, with token-reduction metrics when infinite sessions trigger context trimming
+- **Session usage events**: current token count and context-window limit for usage-bar rendering
+- **Pending-messages-modified events**: emitted when mid-turn steering changes the pending message queue
+
+These events flow through a single `onTurnScopedEvent` callback on the `runTurn` command, avoiding per-event-type callback proliferation. The main process maps each event to a `SessionEventRecord` and pushes it to the renderer, where lightweight state maps (activity, usage, turn-event log) consume them without touching the persisted workspace.
+
 ## Security model
 
 Security in this system is mostly about **desktop trust boundaries**.
@@ -273,10 +284,19 @@ The architecture treats execution as observable by design:
 
 - partial output is streamed
 - agent activity is surfaced
+- turn-scoped lifecycle events (sub-agent, hook, skill, compaction, usage) are streamed
 - runs are persisted as timeline history
 - failures are represented explicitly
 
 This improves trust and debuggability, especially for multi-agent workflows.
+
+### Mid-turn steering
+
+Aryx supports sending user messages while a turn is actively running. These messages are delivered with a `messageMode` flag (`immediate` or `enqueue`) that tells the sidecar to inject the content into the current Copilot session rather than starting a new turn. This enables real-time steering without waiting for turn completion. The main process allows the IPC call even when the session is in `running` status, and the renderer keeps the composer enabled throughout.
+
+### Image attachments
+
+User messages can carry image attachments as base64-encoded blobs. These flow from the renderer through IPC, the main process, and the sidecar protocol as `ChatMessageAttachmentDto` objects alongside the text content. The sidecar maps them into the Copilot SDK's `DataPart` model. Attachment metadata is persisted on the `ChatMessageRecord` so thumbnail previews render correctly when revisiting a session.
 
 ## Persistence and repair
 

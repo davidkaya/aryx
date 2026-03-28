@@ -47,6 +47,7 @@ internal sealed class CopilotAgentBundle : IAsyncDisposable
 
             SessionConfig sessionConfig = new()
             {
+                SessionId = CopilotManagedSessionIds.Build(command.SessionId, definition.Id),
                 Model = definition.Model,
                 ReasoningEffort = definition.ReasoningEffort,
                 SystemMessage = new SystemMessageConfig
@@ -61,8 +62,14 @@ internal sealed class CopilotAgentBundle : IAsyncDisposable
                 WorkingDirectory = command.ProjectPath,
                 OnPermissionRequest = (request, invocation) => onPermissionRequest(definition, request, invocation),
                 OnUserInputRequest = (request, invocation) => onUserInputRequest(definition, request, invocation),
+                Hooks = CopilotSessionHooks.Create(command, definition),
                 OnEvent = evt => onSessionEvent?.Invoke(definition, evt),
                 Streaming = true,
+                CustomAgents = CreateCustomAgents(definition.Copilot?.CustomAgents),
+                Agent = NormalizeOptionalString(definition.Copilot?.Agent),
+                SkillDirectories = CreateStringList(definition.Copilot?.SkillDirectories),
+                DisabledSkills = CreateStringList(definition.Copilot?.DisabledSkills),
+                InfiniteSessions = CreateInfiniteSessions(definition.Copilot?.InfiniteSessions),
             };
 
             ApplySessionTooling(sessionConfig, toolingBundle?.McpServers, toolingBundle?.Tools);
@@ -98,6 +105,55 @@ internal sealed class CopilotAgentBundle : IAsyncDisposable
         {
             sessionConfig.Tools = tools.ToList();
         }
+    }
+
+    internal static List<CustomAgentConfig>? CreateCustomAgents(
+        IReadOnlyList<RunTurnCustomAgentConfigDto>? customAgents)
+    {
+        if (customAgents is not { Count: > 0 })
+        {
+            return null;
+        }
+
+        return customAgents.Select(customAgent => new CustomAgentConfig
+        {
+            Name = customAgent.Name,
+            DisplayName = NormalizeOptionalString(customAgent.DisplayName),
+            Description = NormalizeOptionalString(customAgent.Description),
+            Tools = customAgent.Tools is null ? null : [.. customAgent.Tools],
+            Prompt = customAgent.Prompt,
+            McpServers = customAgent.McpServers.Count == 0
+                ? null
+                : SessionToolingBundle.BuildMcpServerConfigurations(customAgent.McpServers),
+            Infer = customAgent.Infer,
+        }).ToList();
+    }
+
+    internal static InfiniteSessionConfig? CreateInfiniteSessions(RunTurnInfiniteSessionsConfigDto? config)
+    {
+        if (config is null)
+        {
+            return null;
+        }
+
+        return new InfiniteSessionConfig
+        {
+            Enabled = config.Enabled,
+            BackgroundCompactionThreshold = config.BackgroundCompactionThreshold,
+            BufferExhaustionThreshold = config.BufferExhaustionThreshold,
+        };
+    }
+
+    private static List<string>? CreateStringList(IReadOnlyList<string>? values)
+    {
+        return values is { Count: > 0 }
+            ? [.. values]
+            : null;
+    }
+
+    private static string? NormalizeOptionalString(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
 
     public Workflow BuildWorkflow(PatternDefinitionDto pattern)

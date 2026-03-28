@@ -1,5 +1,5 @@
 import type { ApprovalDecision } from '@shared/domain/approval';
-import type { SidecarCapabilities, InteractionMode } from '@shared/contracts/sidecar';
+import type { SidecarCapabilities, InteractionMode, MessageMode } from '@shared/contracts/sidecar';
 import type { PatternDefinition, ReasoningEffort } from '@shared/domain/pattern';
 import type { ProjectRecord } from '@shared/domain/project';
 import type { QuerySessionsInput, SessionQueryResult } from '@shared/domain/sessionLibrary';
@@ -11,6 +11,7 @@ import type {
   AppearanceTheme,
 } from '@shared/domain/tooling';
 import type { WorkspaceState } from '@shared/domain/workspace';
+import type { ChatMessageAttachment } from '@shared/domain/attachment';
 
 export interface CreateSessionInput {
   projectId: string;
@@ -24,6 +25,8 @@ export interface SavePatternInput {
 export interface SendSessionMessageInput {
   sessionId: string;
   content: string;
+  attachments?: ChatMessageAttachment[];
+  messageMode?: MessageMode;
 }
 
 export interface CancelSessionTurnInput {
@@ -125,6 +128,10 @@ export interface StartSessionMcpAuthInput {
   sessionId: string;
 }
 
+export interface DeleteSessionInput {
+  sessionId: string;
+}
+
 export interface ElectronApi {
   describeSidecarCapabilities(): Promise<SidecarCapabilities>;
   refreshSidecarCapabilities(): Promise<SidecarCapabilities>;
@@ -148,6 +155,7 @@ export interface ElectronApi {
   renameSession(input: RenameSessionInput): Promise<WorkspaceState>;
   setSessionPinned(input: SetSessionPinnedInput): Promise<WorkspaceState>;
   setSessionArchived(input: SetSessionArchivedInput): Promise<WorkspaceState>;
+  deleteSession(input: DeleteSessionInput): Promise<WorkspaceState>;
   sendSessionMessage(input: SendSessionMessageInput): Promise<void>;
   cancelSessionTurn(input: CancelSessionTurnInput): Promise<void>;
   resolveSessionApproval(input: ResolveSessionApprovalInput): Promise<WorkspaceState>;

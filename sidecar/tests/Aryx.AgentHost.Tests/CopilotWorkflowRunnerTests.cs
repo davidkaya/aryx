@@ -649,7 +649,7 @@ public sealed class CopilotWorkflowRunnerTests
         Assert.Equal("agent-handoff-ux", observedAgent.AgentId);
         Assert.Equal("UX Specialist", observedAgent.AgentName);
         Assert.Equal("agent-handoff-ux", state.ActiveAgent?.AgentId);
-        AgentActivityEventDto activity = Assert.Single(state.DrainPendingActivityEvents());
+        AgentActivityEventDto activity = Assert.Single(state.DrainPendingEvents().OfType<AgentActivityEventDto>());
         Assert.Equal("thinking", activity.ActivityType);
         Assert.Equal("agent-handoff-ux", activity.AgentId);
     }
@@ -675,7 +675,7 @@ public sealed class CopilotWorkflowRunnerTests
 
         Assert.Equal("agent-handoff-ux", state.ActiveAgent?.AgentId);
         Assert.Equal("UX Specialist", state.ActiveAgent?.AgentName);
-        AgentActivityEventDto activity = Assert.Single(state.DrainPendingActivityEvents());
+        AgentActivityEventDto activity = Assert.Single(state.DrainPendingEvents().OfType<AgentActivityEventDto>());
         Assert.Equal("thinking", activity.ActivityType);
         Assert.Equal("agent-handoff-ux", activity.AgentId);
     }
@@ -699,7 +699,7 @@ public sealed class CopilotWorkflowRunnerTests
                   "timestamp": "2026-03-27T00:00:00Z"
                 }
                 """));
-        _ = state.DrainPendingActivityEvents();
+        _ = state.DrainPendingEvents();
         RequestInfoEvent requestInfo = CreateRequestInfoEvent(
             CreateHandoffTarget("agent-handoff-ux", "UX Specialist"));
         List<AgentActivityEventDto> activities = [];
@@ -715,9 +715,9 @@ public sealed class CopilotWorkflowRunnerTests
                 Array.Empty<ChatMessage>(),
                 state,
                 (Func<TurnDeltaEventDto, Task>)(_ => Task.CompletedTask),
-                (Func<AgentActivityEventDto, Task>)(activity =>
+                (Func<SidecarEventDto, Task>)(sidecarEvent =>
                 {
-                    activities.Add(activity);
+                    activities.Add(Assert.IsType<AgentActivityEventDto>(sidecarEvent));
                     return Task.CompletedTask;
                 }),
             ])!;

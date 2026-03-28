@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.Channels;
+using Aryx.AgentHost.Contracts;
 using GitHub.Copilot.SDK;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
@@ -140,11 +141,16 @@ internal sealed class AryxCopilotAgent : AIAgent, IAsyncDisposable
             try
             {
                 string prompt = string.Join("\n", messages.Select(message => message.Text));
-                (List<UserMessageDataAttachmentsItem>? attachments, tempDir) = await ProcessDataContentAttachmentsAsync(
+                (List<UserMessageDataAttachmentsItem>? attachments, string? messageMode, tempDir) = await ProcessMessageAttachmentsAsync(
                     messages,
                     cancellationToken).ConfigureAwait(false);
 
-                MessageOptions messageOptions = new() { Prompt = prompt };
+                MessageOptions messageOptions = new()
+                {
+                    Prompt = prompt,
+                    Mode = string.IsNullOrWhiteSpace(messageMode) ? null : messageMode,
+                };
+
                 if (attachments is not null)
                 {
                     messageOptions.Attachments = [.. attachments];
@@ -474,36 +480,103 @@ internal sealed class AryxCopilotAgent : AIAgent, IAsyncDisposable
         return JsonSerializer.Deserialize<Dictionary<string, object?>>(json);
     }
 
-    private static async Task<(List<UserMessageDataAttachmentsItem>? Attachments, string? TempDir)> ProcessDataContentAttachmentsAsync(
+    internal static async Task<(List<UserMessageDataAttachmentsItem>? Attachments, string? MessageMode, string? TempDir)> ProcessMessageAttachmentsAsync(
         IEnumerable<ChatMessage> messages,
         CancellationToken cancellationToken)
     {
         List<UserMessageDataAttachmentsItem>? attachments = null;
+        string? messageMode = null;
         string? tempDir = null;
         foreach (ChatMessage message in messages)
         {
             foreach (AIContent content in message.Contents)
             {
-                if (content is not DataContent dataContent)
+                if (content is DataContent dataContent)
                 {
+                    tempDir ??= Directory.CreateDirectory(
+                        Path.Combine(Path.GetTempPath(), $"af_copilot_{Guid.NewGuid():N}")).FullName;
+
+                    string tempFilePath = await dataContent.SaveToAsync(tempDir, cancellationToken).ConfigureAwait(false);
+
+                    attachments ??= [];
+                    attachments.Add(new UserMessageDataAttachmentsItemFile
+                    {
+                        Path = tempFilePath,
+                        DisplayName = Path.GetFileName(tempFilePath),
+                    });
                     continue;
                 }
 
-                tempDir ??= Directory.CreateDirectory(
-                    Path.Combine(Path.GetTempPath(), $"af_copilot_{Guid.NewGuid():N}")).FullName;
-
-                string tempFilePath = await dataContent.SaveToAsync(tempDir, cancellationToken).ConfigureAwait(false);
-
-                attachments ??= [];
-                attachments.Add(new UserMessageDataAttachmentsItemFile
+                if (content.RawRepresentation is ChatMessageAttachmentDto protocolAttachment)
                 {
-                    Path = tempFilePath,
-                    DisplayName = Path.GetFileName(tempFilePath),
-                });
+                    attachments ??= [];
+                    attachments.Add(CreateProtocolAttachment(protocolAttachment));
+                    continue;
+                }
+
+                if (content.RawRepresentation is CopilotMessageOptionsMetadata metadata
+                    && !string.IsNullOrWhiteSpace(metadata.MessageMode))
+                {
+                    messageMode = metadata.MessageMode.Trim();
+                }
             }
         }
 
-        return (attachments, tempDir);
+        return (attachments, messageMode, tempDir);
+    }
+
+    private static UserMessageDataAttachmentsItem CreateProtocolAttachment(ChatMessageAttachmentDto attachment)
+    {
+        ArgumentNullException.ThrowIfNull(attachment);
+
+        return attachment.Type switch
+        {
+            "file" => CreateFileAttachment(attachment),
+            "blob" => CreateBlobAttachment(attachment),
+            _ => throw new NotSupportedException($"Unsupported attachment type '{attachment.Type}'."),
+        };
+    }
+
+    private static UserMessageDataAttachmentsItemFile CreateFileAttachment(ChatMessageAttachmentDto attachment)
+    {
+        if (string.IsNullOrWhiteSpace(attachment.Path))
+        {
+            throw new InvalidOperationException("File attachments require an absolute path.");
+        }
+
+        string path = attachment.Path.Trim();
+        if (!Path.IsPathRooted(path))
+        {
+            throw new InvalidOperationException($"File attachment path '{path}' must be absolute.");
+        }
+
+        return new UserMessageDataAttachmentsItemFile
+        {
+            Path = path,
+            DisplayName = string.IsNullOrWhiteSpace(attachment.DisplayName)
+                ? Path.GetFileName(path)
+                : attachment.DisplayName.Trim(),
+        };
+    }
+
+    private static UserMessageDataAttachmentsItemBlob CreateBlobAttachment(ChatMessageAttachmentDto attachment)
+    {
+        if (string.IsNullOrWhiteSpace(attachment.Data))
+        {
+            throw new InvalidOperationException("Blob attachments require base64-encoded data.");
+        }
+
+        if (string.IsNullOrWhiteSpace(attachment.MimeType))
+        {
+            throw new InvalidOperationException("Blob attachments require a MIME type.");
+        }
+
+        return new UserMessageDataAttachmentsItemBlob
+        {
+            Data = attachment.Data.Trim(),
+            MimeType = attachment.MimeType.Trim(),
+            DisplayName = string.IsNullOrWhiteSpace(attachment.DisplayName) ? null : attachment.DisplayName.Trim(),
+        };
     }
 
     private static void CleanupTempDir(string? tempDir)

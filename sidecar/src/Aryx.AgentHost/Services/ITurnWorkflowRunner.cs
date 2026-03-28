@@ -7,7 +7,7 @@ public interface ITurnWorkflowRunner
     Task<IReadOnlyList<ChatMessageDto>> RunTurnAsync(
         RunTurnCommandDto command,
         Func<TurnDeltaEventDto, Task> onDelta,
-        Func<AgentActivityEventDto, Task> onActivity,
+        Func<SidecarEventDto, Task> onEvent,
         Func<ApprovalRequestedEventDto, Task> onApproval,
         Func<UserInputRequestedEventDto, Task> onUserInput,
         Func<McpOauthRequiredEventDto, Task> onMcpOAuthRequired,

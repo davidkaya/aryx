@@ -10,13 +10,14 @@ public sealed class AryxCopilotAgentMessageOptionsTests
     [Fact]
     public async Task ProcessMessageAttachmentsAsync_MapsProtocolAttachmentsAndMessageMode()
     {
+        string attachmentPath = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "aryx-tests", "assets", "diagram.png"));
         ChatMessage message = new(ChatRole.User, "Please inspect these images.");
         message.Contents.Add(new AIContent
         {
             RawRepresentation = new ChatMessageAttachmentDto
             {
                 Type = "file",
-                Path = @"C:\workspace\project\assets\diagram.png",
+                Path = attachmentPath,
                 DisplayName = "diagram.png",
             },
         });
@@ -47,7 +48,7 @@ public sealed class AryxCopilotAgentMessageOptionsTests
             first =>
             {
                 UserMessageDataAttachmentsItemFile file = Assert.IsType<UserMessageDataAttachmentsItemFile>(first);
-                Assert.Equal(@"C:\workspace\project\assets\diagram.png", file.Path);
+                Assert.Equal(attachmentPath, file.Path);
                 Assert.Equal("diagram.png", file.DisplayName);
             },
             second =>

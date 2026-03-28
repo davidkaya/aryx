@@ -1,11 +1,13 @@
 import { randomBytes, createHash } from 'node:crypto';
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from 'node:http';
 
-import { shell } from 'electron';
+import electron from 'electron';
 
 import type { McpOauthStaticClientConfig } from '@shared/domain/mcpAuth';
 
 import { storeToken, buildWellKnownUrl, buildWellKnownUrlFallback, type McpOAuthToken } from './mcpTokenStore';
+
+const { shell } = electron;
 
 /* ── Public API ──────────────────────────────────────────────── */
 

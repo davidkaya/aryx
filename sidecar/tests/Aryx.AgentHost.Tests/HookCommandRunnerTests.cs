@@ -71,8 +71,8 @@ public sealed class HookCommandRunnerTests
         string hooksDirectory = Directory.CreateDirectory(Path.Combine(project.Path, "scripts")).FullName;
         HookCommandDefinition hook = CreatePlatformHook(
             OperatingSystem.IsWindows()
-                ? "Write-Output ((Get-Location).Path + '|' + $env:HOOK_TEST_ENV)"
-                : "printf '%s|%s' \"$(pwd)\" \"$HOOK_TEST_ENV\"",
+                ? "$null = [Console]::In.ReadToEnd(); Write-Output ([Environment]::CurrentDirectory + '|' + $env:HOOK_TEST_ENV)"
+                : "cat >/dev/null; printf '%s|%s' \"$(pwd)\" \"$HOOK_TEST_ENV\"",
             cwd: "scripts",
             env: new Dictionary<string, string>
             {

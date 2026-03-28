@@ -416,7 +416,6 @@ export default function App() {
           runtimeTools={sidecarCapabilities?.runtimeTools}
           session={selectedSession}
           sessionUsage={usageForSession}
-          sessionRequestUsage={requestUsageForSession}
           activeSubagents={subagentsForSession}
           terminalOpen={terminalOpen}
           terminalRunning={terminalRunning}

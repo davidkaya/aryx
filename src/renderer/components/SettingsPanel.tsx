@@ -1,12 +1,12 @@
 import { useState, type ReactNode } from 'react';
-import { ChevronLeft, ChevronRight, Code, Cpu, FolderOpen, Palette, Plus, RefreshCw, Server, TriangleAlert, Workflow, Wrench } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Code, Cpu, FolderOpen, Palette, Plus, Server, TriangleAlert, Workflow, Wrench } from 'lucide-react';
 
 import { CopilotStatusCard } from '@renderer/components/CopilotStatusCard';
 import { PatternEditor } from '@renderer/components/PatternEditor';
 import { LspProfileEditor } from '@renderer/components/settings/LspProfileEditor';
 import { McpServerEditor } from '@renderer/components/settings/McpServerEditor';
 import type { SidecarCapabilities } from '@shared/contracts/sidecar';
-import type { DiscoveredMcpServer, DiscoveredToolingState, ProjectDiscoveredTooling } from '@shared/domain/discoveredTooling';
+import type { DiscoveredMcpServer, DiscoveredToolingState } from '@shared/domain/discoveredTooling';
 import { listAcceptedDiscoveredMcpServers, listPendingDiscoveredMcpServers } from '@shared/domain/discoveredTooling';
 import type { ModelDefinition } from '@shared/domain/models';
 import type { PatternDefinition } from '@shared/domain/pattern';
@@ -26,8 +26,6 @@ interface SettingsPanelProps {
   theme: AppearanceTheme;
   toolingSettings: WorkspaceToolingSettings;
   discoveredUserTooling: DiscoveredToolingState;
-  discoveredProjectTooling?: ProjectDiscoveredTooling;
-  selectedProjectName?: string;
   isRefreshingCapabilities: boolean;
   onRefreshCapabilities: () => void;
   onClose: () => void;
@@ -43,9 +41,7 @@ interface SettingsPanelProps {
   onSetTheme: (theme: AppearanceTheme) => void;
   onOpenAppDataFolder: () => void;
   onResetLocalWorkspace: () => Promise<void>;
-  onRescanProjectConfigs?: () => void;
   onResolveUserDiscoveredTooling?: (serverIds: string[], resolution: 'accept' | 'dismiss') => void;
-  onResolveProjectDiscoveredTooling?: (serverIds: string[], resolution: 'accept' | 'dismiss') => void;
 }
 
 type SettingsSection = 'appearance' | 'connection' | 'patterns' | 'mcp-servers' | 'lsp-profiles' | 'troubleshooting';
@@ -107,8 +103,6 @@ export function SettingsPanel({
   theme,
   toolingSettings,
   discoveredUserTooling,
-  discoveredProjectTooling,
-  selectedProjectName,
   isRefreshingCapabilities,
   onRefreshCapabilities,
   onClose,
@@ -124,9 +118,7 @@ export function SettingsPanel({
   onSetTheme,
   onOpenAppDataFolder,
   onResetLocalWorkspace,
-  onRescanProjectConfigs,
   onResolveUserDiscoveredTooling,
-  onResolveProjectDiscoveredTooling,
 }: SettingsPanelProps) {
   const [activeSection, setActiveSection] = useState<SettingsSection>('appearance');
   const [editingPattern, setEditingPattern] = useState<PatternDefinition | null>(null);
@@ -287,12 +279,8 @@ export function SettingsPanel({
             )}
             {activeSection === 'mcp-servers' && (
               <DiscoveredMcpSection
-                discoveredProjectTooling={discoveredProjectTooling}
                 discoveredUserTooling={discoveredUserTooling}
-                onRescanProjectConfigs={onRescanProjectConfigs}
-                onResolveProjectDiscoveredTooling={onResolveProjectDiscoveredTooling}
                 onResolveUserDiscoveredTooling={onResolveUserDiscoveredTooling}
-                selectedProjectName={selectedProjectName}
               />
             )}
             {activeSection === 'lsp-profiles' && (
@@ -607,68 +595,32 @@ function EmptyState({ children }: { children: ReactNode }) {
 
 function DiscoveredMcpSection({
   discoveredUserTooling,
-  discoveredProjectTooling,
-  selectedProjectName,
-  onRescanProjectConfigs,
   onResolveUserDiscoveredTooling,
-  onResolveProjectDiscoveredTooling,
 }: {
   discoveredUserTooling: DiscoveredToolingState;
-  discoveredProjectTooling?: ProjectDiscoveredTooling;
-  selectedProjectName?: string;
-  onRescanProjectConfigs?: () => void;
   onResolveUserDiscoveredTooling?: (serverIds: string[], resolution: 'accept' | 'dismiss') => void;
-  onResolveProjectDiscoveredTooling?: (serverIds: string[], resolution: 'accept' | 'dismiss') => void;
 }) {
   const acceptedUser = listAcceptedDiscoveredMcpServers(discoveredUserTooling);
   const pendingUser = listPendingDiscoveredMcpServers(discoveredUserTooling);
-  const acceptedProject = listAcceptedDiscoveredMcpServers(discoveredProjectTooling);
-  const pendingProject = listPendingDiscoveredMcpServers(discoveredProjectTooling);
 
-  const hasAny = acceptedUser.length + pendingUser.length + acceptedProject.length + pendingProject.length > 0;
+  const hasAny = acceptedUser.length + pendingUser.length > 0;
 
   if (!hasAny) return null;
 
   return (
     <div className="mt-8">
       <SectionHeader
-        description="MCP servers discovered from project and user config files. Accepted servers are available for session tooling."
+        description="MCP servers discovered from user config files. Accepted servers are available for session tooling."
         title="Discovered MCP Servers"
-      >
-        {onRescanProjectConfigs && (
-          <button
-            className="flex items-center gap-1.5 rounded-lg bg-zinc-800 px-3 py-1.5 text-[13px] font-medium text-zinc-200 transition hover:bg-zinc-700"
-            onClick={onRescanProjectConfigs}
-            title="Re-scan project config files"
-            type="button"
-          >
-            <RefreshCw className="size-3.5" />
-            Re-scan
-          </button>
-        )}
-      </SectionHeader>
+      />
 
-      {/* User-level discovered */}
-      {(acceptedUser.length > 0 || pendingUser.length > 0) && (
-        <DiscoveredSubSection
-          label="User-level"
-          description="From ~/.copilot/mcp.json"
-          accepted={acceptedUser}
-          pending={pendingUser}
-          onResolve={onResolveUserDiscoveredTooling}
-        />
-      )}
-
-      {/* Project-level discovered */}
-      {(acceptedProject.length > 0 || pendingProject.length > 0) && (
-        <DiscoveredSubSection
-          label={selectedProjectName ? `Project: ${selectedProjectName}` : 'Project-level'}
-          description="From .vscode/mcp.json, .mcp.json, or .copilot/mcp.json"
-          accepted={acceptedProject}
-          pending={pendingProject}
-          onResolve={onResolveProjectDiscoveredTooling}
-        />
-      )}
+      <DiscoveredSubSection
+        label="User-level"
+        description="From ~/.copilot/mcp.json"
+        accepted={acceptedUser}
+        pending={pendingUser}
+        onResolve={onResolveUserDiscoveredTooling}
+      />
     </div>
   );
 }

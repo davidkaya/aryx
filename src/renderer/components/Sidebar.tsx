@@ -42,6 +42,7 @@ interface SidebarProps {
   onProjectSelect: (projectId?: string) => void;
   onSessionSelect: (sessionId: string) => void;
   onOpenSettings: () => void;
+  onOpenProjectSettings: (projectId: string) => void;
   onRenameSession: (sessionId: string, title: string) => void;
   onDuplicateSession: (sessionId: string) => void;
   onSetSessionPinned: (sessionId: string, isPinned: boolean) => void;
@@ -328,6 +329,7 @@ function ProjectGroup({
   onRenameSubmit,
   onRenameCancel,
   onRefreshGitContext,
+  onOpenProjectSettings,
   onNewSession,
   newSessionLabel,
 }: {
@@ -341,6 +343,7 @@ function ProjectGroup({
   onRenameSubmit: (sessionId: string, title: string) => void;
   onRenameCancel: () => void;
   onRefreshGitContext?: (projectId: string) => void;
+  onOpenProjectSettings?: (projectId: string) => void;
   onNewSession?: () => void;
   newSessionLabel?: string;
 }){
@@ -394,6 +397,19 @@ function ProjectGroup({
         )}
 
         <div className="ml-auto flex items-center gap-1.5">
+          {!isScratchpad && onOpenProjectSettings && (
+            <span
+              className="flex size-5 items-center justify-center rounded text-zinc-600 opacity-0 transition hover:bg-zinc-700 hover:text-zinc-300 group-hover:opacity-100"
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenProjectSettings(project.id);
+              }}
+              role="button"
+              title="Project settings"
+            >
+              <Settings className="size-3" />
+            </span>
+          )}
           {!isScratchpad && onRefreshGitContext && (
             <span
               className="flex size-5 items-center justify-center rounded text-zinc-600 opacity-0 transition hover:bg-zinc-700 hover:text-zinc-300 group-hover:opacity-100"
@@ -415,8 +431,13 @@ function ProjectGroup({
           )}
           {pendingDiscoveryCount > 0 && (
             <span
-              className="flex items-center gap-1 rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-400"
-              title={`${pendingDiscoveryCount} MCP server${pendingDiscoveryCount === 1 ? '' : 's'} discovered`}
+              className="flex cursor-pointer items-center gap-1 rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-400 transition hover:bg-amber-500/20"
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenProjectSettings?.(project.id);
+              }}
+              role="button"
+              title={`${pendingDiscoveryCount} MCP server${pendingDiscoveryCount === 1 ? '' : 's'} discovered — click to review`}
             >
               {pendingDiscoveryCount} new
             </span>
@@ -475,6 +496,7 @@ export function Sidebar({
   onProjectSelect,
   onSessionSelect,
   onOpenSettings,
+  onOpenProjectSettings,
   onRenameSession,
   onDuplicateSession,
   onSetSessionPinned,
@@ -678,6 +700,7 @@ export function Sidebar({
                     onRenameSubmit={handleRenameSubmit}
                     onRenameCancel={() => setRenamingSessionId(undefined)}
                     onRefreshGitContext={onRefreshGitContext}
+                    onOpenProjectSettings={onOpenProjectSettings}
                     renamingSessionId={renamingSessionId}
                     patterns={workspace.patterns}
                     project={project}

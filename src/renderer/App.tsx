@@ -5,6 +5,7 @@ import { ActivityPanel } from '@renderer/components/ActivityPanel';
 import { ChatPane } from '@renderer/components/ChatPane';
 import { DiscoveredToolingModal } from '@renderer/components/DiscoveredToolingModal';
 import { NewSessionModal } from '@renderer/components/NewSessionModal';
+import { ProjectSettingsPanel } from '@renderer/components/ProjectSettingsPanel';
 import { SettingsPanel } from '@renderer/components/SettingsPanel';
 import { Sidebar } from '@renderer/components/Sidebar';
 import { resolveChatToolingSettings } from '@renderer/lib/chatTooling';
@@ -101,6 +102,7 @@ export default function App() {
   const [turnEventLogs, setTurnEventLogs] = useState<TurnEventLogMap>({});
 
   const [showSettings, setShowSettings] = useState(false);
+  const [projectSettingsId, setProjectSettingsId] = useState<string>();
   const [newSessionProjectId, setNewSessionProjectId] = useState<string>();
   const [showDiscoveryModal, setShowDiscoveryModal] = useState(false);
 
@@ -251,6 +253,16 @@ export default function App() {
     }
   }, [api, workspace]);
 
+  const projectForSettings = useMemo(
+    () => workspace?.projects.find((p) => p.id === projectSettingsId),
+    [workspace?.projects, projectSettingsId],
+  );
+
+  // Close project settings if the project was removed
+  useEffect(() => {
+    if (projectSettingsId && !projectForSettings) setProjectSettingsId(undefined);
+  }, [projectSettingsId, projectForSettings]);
+
   // Loading state
   if (!workspace) {
     return (
@@ -397,15 +409,9 @@ export default function App() {
         theme={workspace.settings.theme}
         toolingSettings={workspace.settings.tooling}
         discoveredUserTooling={workspace.settings.discoveredUserTooling}
-        discoveredProjectTooling={selectedProject?.discoveredTooling}
-        selectedProjectName={selectedProject?.name}
-        onRescanProjectConfigs={selectedProject ? () => void api.rescanProjectConfigs({ projectId: selectedProject.id }) : undefined}
         onResolveUserDiscoveredTooling={(serverIds, resolution) => {
           void api.resolveWorkspaceDiscoveredTooling({ serverIds, resolution });
         }}
-        onResolveProjectDiscoveredTooling={selectedProject ? (serverIds, resolution) => {
-          void api.resolveProjectDiscoveredTooling({ projectId: selectedProject.id, serverIds, resolution });
-        } : undefined}
       />
   ) : null;
 
@@ -423,6 +429,7 @@ export default function App() {
               setNewSessionProjectId(projectId);
             }}
             onOpenSettings={() => setShowSettings(true)}
+            onOpenProjectSettings={(projectId) => setProjectSettingsId(projectId)}
             onProjectSelect={(projectId) => {
               void api.selectProject(projectId);
             }}
@@ -482,6 +489,23 @@ export default function App() {
           projectDiscoveredTooling={selectedProject?.discoveredTooling}
           projectName={selectedProject?.name}
           userDiscoveredTooling={workspace.settings.discoveredUserTooling}
+        />
+      )}
+
+      {projectForSettings && (
+        <ProjectSettingsPanel
+          project={projectForSettings}
+          onClose={() => setProjectSettingsId(undefined)}
+          onRescanConfigs={() => {
+            void api.rescanProjectConfigs({ projectId: projectForSettings.id });
+          }}
+          onResolveDiscoveredTooling={(serverIds, resolution) => {
+            void api.resolveProjectDiscoveredTooling({ projectId: projectForSettings.id, serverIds, resolution });
+          }}
+          onRemoveProject={() => {
+            void api.removeProject(projectForSettings.id);
+            setProjectSettingsId(undefined);
+          }}
         />
       )}
     </>

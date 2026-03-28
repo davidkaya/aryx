@@ -66,14 +66,14 @@ export function InlinePromptPill({
       <button
         aria-expanded={open}
         aria-haspopup="listbox"
-        className="inline-flex items-center gap-1 rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-[11px] font-medium text-zinc-400 transition hover:border-zinc-600 hover:text-zinc-200"
+        className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-300"
         disabled={disabled}
         onClick={() => setOpen(!open)}
         type="button"
       >
         <FileText className="size-3" />
         Prompts
-        <span className="ml-0.5 text-zinc-600">({promptFiles.length})</span>
+        <span className="text-zinc-600">({promptFiles.length})</span>
       </button>
 
       {open && !disabled && (

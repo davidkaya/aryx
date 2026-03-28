@@ -488,14 +488,6 @@ export function ChatPane({
           {/* Session config pills — tools/approval left, model/reasoning right */}
           {isSingleAgent && (
             <div className="mb-2 flex items-center gap-2">
-              {onTerminalToggle && (
-                <InlineTerminalPill
-                  disabled={false}
-                  isOpen={!!terminalOpen}
-                  isRunning={!!terminalRunning}
-                  onToggle={onTerminalToggle}
-                />
-              )}
               {hasConfigurableTools && onUpdateSessionTooling && (
                 <InlineToolsPill
                   disabled={isComposerDisabled}
@@ -553,14 +545,6 @@ export function ChatPane({
           {/* Session config pills — tool & approval controls (multi-agent) */}
           {!isSingleAgent && (hasConfigurableTools || hasToolCallApproval) && (
             <div className="mb-2 flex items-center gap-2">
-              {onTerminalToggle && (
-                <InlineTerminalPill
-                  disabled={false}
-                  isOpen={!!terminalOpen}
-                  isRunning={!!terminalRunning}
-                  onToggle={onTerminalToggle}
-                />
-              )}
               {hasConfigurableTools && onUpdateSessionTooling && (
                 <InlineToolsPill
                   disabled={isComposerDisabled}
@@ -582,17 +566,6 @@ export function ChatPane({
                   toolingSettings={toolingSettings}
                 />
               )}
-            </div>
-          )}
-
-          {/* Prompt files pill */}
-          {!isScratchpad && promptFiles.length > 0 && (
-            <div className="mb-2 flex items-center gap-2">
-              <InlinePromptPill
-                disabled={isComposerDisabled}
-                onSubmit={(content) => void onSend(content)}
-                promptFiles={promptFiles}
-              />
             </div>
           )}
 
@@ -643,7 +616,29 @@ export function ChatPane({
                             : 'Message...'
               }
             >
-              <div className="absolute bottom-2 right-2 flex items-center gap-1">
+              {/* Bottom action bar: left = shortcuts, right = buttons */}
+              <div className="absolute inset-x-2 bottom-2 flex items-center justify-between pointer-events-none">
+                {/* Left: quick actions */}
+                <div className="flex items-center gap-1.5 pointer-events-auto">
+                  {onTerminalToggle && (
+                    <InlineTerminalPill
+                      disabled={false}
+                      isOpen={!!terminalOpen}
+                      isRunning={!!terminalRunning}
+                      onToggle={onTerminalToggle}
+                    />
+                  )}
+                  {!isScratchpad && promptFiles.length > 0 && (
+                    <InlinePromptPill
+                      disabled={isComposerDisabled}
+                      onSubmit={(content) => void onSend(content)}
+                      promptFiles={promptFiles}
+                    />
+                  )}
+                </div>
+
+                {/* Right: attach, plan mode, send */}
+                <div className="flex items-center gap-1 pointer-events-auto">
                 {/* Attachment picker */}
                 <button
                   aria-label="Attach image"
@@ -732,6 +727,7 @@ export function ChatPane({
                     <ArrowUp className="size-4" />
                   )}
                 </button>
+                </div>
               </div>
             </MarkdownComposer>
             {isPlanMode && !isSessionBusy && (

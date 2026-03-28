@@ -677,17 +677,17 @@ export function InlineTerminalPill({
   return (
     <button
       aria-pressed={isOpen}
-      className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-pill font-medium transition ${
+      className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium transition ${
         isOpen
-          ? 'border-indigo-500/40 bg-indigo-500/10 text-indigo-300'
-          : 'border-zinc-700/60 bg-zinc-800/40 text-zinc-400 hover:border-zinc-600 hover:text-zinc-300'
+          ? 'bg-indigo-500/15 text-indigo-300 hover:bg-indigo-500/20'
+          : 'text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300'
       } disabled:cursor-not-allowed disabled:opacity-50`}
       disabled={disabled}
       onClick={onToggle}
       type="button"
     >
       {isRunning && <span className="size-1.5 shrink-0 rounded-full bg-emerald-400" />}
-      <TerminalSquare className="size-2.5" />
+      <TerminalSquare className="size-3" />
       <span>Terminal</span>
     </button>
   );

@@ -1,15 +1,19 @@
 import { useCallback, useState } from 'react';
-import { ChevronLeft, FolderOpen, GitBranch, RefreshCw, Server, Trash2, AlertTriangle, Circle } from 'lucide-react';
+import { ChevronLeft, FileCode2, FileText, FolderOpen, GitBranch, RefreshCw, Server, Sparkles, Trash2, AlertTriangle, Circle } from 'lucide-react';
 
+import { ToggleSwitch } from '@renderer/components/ui';
 import type { ProjectRecord, ProjectGitContext } from '@shared/domain/project';
 import type { DiscoveredMcpServer } from '@shared/domain/discoveredTooling';
 import { listAcceptedDiscoveredMcpServers, listPendingDiscoveredMcpServers } from '@shared/domain/discoveredTooling';
+import type { ProjectAgentProfile, ProjectCustomizationState, ProjectInstructionFile, ProjectPromptFile } from '@shared/domain/projectCustomization';
 
 interface ProjectSettingsPanelProps {
   project: ProjectRecord;
   onClose: () => void;
   onRescanConfigs: () => void;
+  onRescanCustomization: () => void;
   onResolveDiscoveredTooling: (serverIds: string[], resolution: 'accept' | 'dismiss') => void;
+  onSetAgentProfileEnabled: (agentProfileId: string, enabled: boolean) => void;
   onRemoveProject: () => void;
 }
 
@@ -17,7 +21,9 @@ export function ProjectSettingsPanel({
   project,
   onClose,
   onRescanConfigs,
+  onRescanCustomization,
   onResolveDiscoveredTooling,
+  onSetAgentProfileEnabled,
   onRemoveProject,
 }: ProjectSettingsPanelProps) {
   const [confirmingRemove, setConfirmingRemove] = useState(false);
@@ -25,6 +31,11 @@ export function ProjectSettingsPanel({
   const acceptedServers = listAcceptedDiscoveredMcpServers(project.discoveredTooling);
   const pendingServers = listPendingDiscoveredMcpServers(project.discoveredTooling);
   const hasDiscoveredServers = acceptedServers.length + pendingServers.length > 0;
+  const customization = project.customization;
+  const hasCustomization =
+    (customization?.instructions?.length ?? 0) > 0 ||
+    (customization?.agentProfiles?.length ?? 0) > 0 ||
+    (customization?.promptFiles?.length ?? 0) > 0;
 
   const handleRemove = useCallback(() => {
     if (!confirmingRemove) {
@@ -80,6 +91,36 @@ export function ProjectSettingsPanel({
               </SectionHeader>
               <div className="rounded-xl border border-dashed border-zinc-800 bg-zinc-900/20 px-5 py-8 text-center text-[12px] leading-relaxed text-zinc-500">
                 No MCP servers discovered in this project yet. Click Scan to check project config files.
+              </div>
+            </div>
+          )}
+
+          {/* Copilot Customization */}
+          {hasCustomization ? (
+            <CustomizationSection
+              customization={customization!}
+              onRescan={onRescanCustomization}
+              onSetAgentProfileEnabled={onSetAgentProfileEnabled}
+            />
+          ) : (
+            <div>
+              <SectionHeader
+                description="Instructions, custom agents, and prompt files discovered from .github/ and AGENTS.md."
+                title="Copilot Customization"
+              >
+                <button
+                  className="flex items-center gap-1.5 rounded-lg bg-zinc-800 px-3 py-1.5 text-[13px] font-medium text-zinc-200 transition hover:bg-zinc-700"
+                  onClick={onRescanCustomization}
+                  title="Scan for Copilot customization files"
+                  type="button"
+                >
+                  <RefreshCw className="size-3.5" />
+                  Scan
+                </button>
+              </SectionHeader>
+              <div className="rounded-xl border border-dashed border-zinc-800 bg-zinc-900/20 px-5 py-8 text-center text-[12px] leading-relaxed text-zinc-500">
+                No customization files found. Add <code className="text-zinc-400">.github/copilot-instructions.md</code>, <code className="text-zinc-400">AGENTS.md</code>, or files
+                in <code className="text-zinc-400">.github/agents/</code> and <code className="text-zinc-400">.github/prompts/</code> to customize Copilot behavior.
               </div>
             </div>
           )}
@@ -319,6 +360,155 @@ function DiscoveredServerRow({
             {status === 'accepted' ? 'Remove' : 'Dismiss'}
           </button>
         )}
+      </div>
+    </div>
+  );
+}
+
+/* ── Copilot Customization ────────────────────────────────── */
+
+function CustomizationSection({
+  customization,
+  onRescan,
+  onSetAgentProfileEnabled,
+}: {
+  customization: ProjectCustomizationState;
+  onRescan: () => void;
+  onSetAgentProfileEnabled: (agentProfileId: string, enabled: boolean) => void;
+}) {
+  return (
+    <div>
+      <SectionHeader
+        description="Instructions, custom agents, and prompt files discovered from .github/ and AGENTS.md."
+        title="Copilot Customization"
+      >
+        <button
+          className="flex items-center gap-1.5 rounded-lg bg-zinc-800 px-3 py-1.5 text-[13px] font-medium text-zinc-200 transition hover:bg-zinc-700"
+          onClick={onRescan}
+          title="Re-scan for Copilot customization files"
+          type="button"
+        >
+          <RefreshCw className="size-3.5" />
+          Re-scan
+        </button>
+      </SectionHeader>
+
+      <div className="space-y-4">
+        {customization.instructions.length > 0 && (
+          <CustomizationInstructionsList instructions={customization.instructions} />
+        )}
+        {customization.agentProfiles.length > 0 && (
+          <CustomizationAgentsList
+            agents={customization.agentProfiles}
+            onSetEnabled={onSetAgentProfileEnabled}
+          />
+        )}
+        {customization.promptFiles.length > 0 && (
+          <CustomizationPromptsList promptFiles={customization.promptFiles} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CustomizationInstructionsList({ instructions }: { instructions: ProjectInstructionFile[] }) {
+  return (
+    <div>
+      <h4 className="mb-2 text-[12px] font-medium text-zinc-400">Instructions</h4>
+      <div className="space-y-1">
+        {instructions.map((instruction) => (
+          <div
+            key={instruction.id}
+            className="rounded-xl border border-zinc-800 bg-zinc-900/40 px-4 py-3"
+          >
+            <div className="flex items-center gap-2">
+              <FileCode2 className="size-3.5 shrink-0 text-indigo-400" />
+              <span className="text-[12px] font-medium text-zinc-200">{instruction.sourcePath}</span>
+            </div>
+            <p className="mt-1.5 line-clamp-3 text-[11px] leading-relaxed text-zinc-500">
+              {instruction.content}
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CustomizationAgentsList({
+  agents,
+  onSetEnabled,
+}: {
+  agents: ProjectAgentProfile[];
+  onSetEnabled: (agentProfileId: string, enabled: boolean) => void;
+}) {
+  return (
+    <div>
+      <h4 className="mb-2 text-[12px] font-medium text-zinc-400">Custom Agents</h4>
+      <div className="space-y-1">
+        {agents.map((agent) => (
+          <div
+            key={agent.id}
+            className="flex items-center gap-3 rounded-xl border border-transparent px-4 py-3 hover:border-zinc-800 hover:bg-zinc-900"
+          >
+            <Sparkles className="size-4 shrink-0 text-amber-400" />
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <span className="truncate text-[13px] font-medium text-zinc-200">
+                  {agent.displayName ?? agent.name}
+                </span>
+                {agent.tools && agent.tools.length > 0 && (
+                  <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] font-medium text-zinc-400">
+                    {agent.tools.length} tool{agent.tools.length === 1 ? '' : 's'}
+                  </span>
+                )}
+              </div>
+              {agent.description && (
+                <p className="mt-0.5 truncate text-[12px] text-zinc-500">{agent.description}</p>
+              )}
+              <p className="mt-0.5 truncate text-[11px] text-zinc-600">{agent.sourcePath}</p>
+            </div>
+            <button
+              aria-label={agent.enabled ? `Disable ${agent.name}` : `Enable ${agent.name}`}
+              aria-pressed={agent.enabled}
+              className="shrink-0"
+              onClick={() => onSetEnabled(agent.id, !agent.enabled)}
+              type="button"
+            >
+              <ToggleSwitch enabled={agent.enabled} size="sm" />
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CustomizationPromptsList({ promptFiles }: { promptFiles: ProjectPromptFile[] }) {
+  return (
+    <div>
+      <h4 className="mb-2 text-[12px] font-medium text-zinc-400">Prompt Files</h4>
+      <div className="space-y-1">
+        {promptFiles.map((prompt) => (
+          <div
+            key={prompt.id}
+            className="rounded-xl border border-transparent px-4 py-3 hover:border-zinc-800 hover:bg-zinc-900"
+          >
+            <div className="flex items-center gap-2">
+              <FileText className="size-3.5 shrink-0 text-emerald-400" />
+              <span className="text-[13px] font-medium text-zinc-200">{prompt.name}</span>
+              {prompt.variables.length > 0 && (
+                <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] font-medium text-zinc-400">
+                  {prompt.variables.length} variable{prompt.variables.length === 1 ? '' : 's'}
+                </span>
+              )}
+            </div>
+            {prompt.description && (
+              <p className="mt-0.5 text-[12px] text-zinc-500">{prompt.description}</p>
+            )}
+            <p className="mt-0.5 truncate text-[11px] text-zinc-600">{prompt.sourcePath}</p>
+          </div>
+        ))}
       </div>
     </div>
   );

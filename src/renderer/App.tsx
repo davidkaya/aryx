@@ -499,8 +499,14 @@ export default function App() {
           onRescanConfigs={() => {
             void api.rescanProjectConfigs({ projectId: projectForSettings.id });
           }}
+          onRescanCustomization={() => {
+            void api.rescanProjectCustomization({ projectId: projectForSettings.id });
+          }}
           onResolveDiscoveredTooling={(serverIds, resolution) => {
             void api.resolveProjectDiscoveredTooling({ projectId: projectForSettings.id, serverIds, resolution });
+          }}
+          onSetAgentProfileEnabled={(agentProfileId, enabled) => {
+            void api.setProjectAgentProfileEnabled({ projectId: projectForSettings.id, agentProfileId, enabled });
           }}
           onRemoveProject={() => {
             void api.removeProject(projectForSettings.id);

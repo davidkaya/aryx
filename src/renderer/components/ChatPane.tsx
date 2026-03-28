@@ -8,6 +8,7 @@ import { PlanReviewBanner } from '@renderer/components/chat/PlanReviewBanner';
 import { McpAuthBanner } from '@renderer/components/chat/McpAuthBanner';
 import { UserInputBanner } from '@renderer/components/chat/UserInputBanner';
 import { InlineApprovalPill, InlineModelPill, InlineThinkingPill, InlineToolsPill } from '@renderer/components/chat/InlinePills';
+import { InlinePromptPill } from '@renderer/components/chat/InlinePromptPill';
 import { ThinkingDots } from '@renderer/components/chat/ThinkingDots';
 import { getAssistantMessagePhase } from '@renderer/lib/messagePhase';
 import type { ApprovalDecision } from '@shared/domain/approval';
@@ -107,6 +108,7 @@ export function ChatPane({
   const isComposerDisabled = isUpdatingSessionModelConfig;
   const canSubmitInput = hasComposerContent && !isComposerDisabled;
   const [pendingAttachments, setPendingAttachments] = useState<ChatMessageAttachment[]>([]);
+  const promptFiles = useMemo(() => project.customization?.promptFiles ?? [], [project.customization?.promptFiles]);
 
   const toolSelection = useMemo(() => resolveSessionToolingSelection(session), [session]);
   const mcpServers = toolingSettings.mcpServers;
@@ -539,6 +541,17 @@ export function ChatPane({
                   onUpdate={onUpdateSessionApprovalSettings}
                 />
               )}
+            </div>
+          )}
+
+          {/* Prompt files pill */}
+          {!isScratchpad && promptFiles.length > 0 && (
+            <div className="mb-2 flex items-center gap-2">
+              <InlinePromptPill
+                disabled={isComposerDisabled}
+                onSubmit={(content) => void onSend(content)}
+                promptFiles={promptFiles}
+              />
             </div>
           )}
 

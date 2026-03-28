@@ -89,7 +89,29 @@ async function probeServerCore(
   server: McpServerDefinition,
   tokenLookup?: (serverUrl: string) => string | undefined,
 ): Promise<McpProbedTool[]> {
-  const transport = createTransport(server, tokenLookup);
+  if (server.transport === 'local' || server.transport === 'sse') {
+    return probeWithTransport(createTransport(server, tokenLookup));
+  }
+
+  // For HTTP servers, try Streamable HTTP first, then fall back to SSE.
+  // Many MCP servers only support SSE despite being configured as generic HTTP.
+  const headers = buildHeaders(server.url, server.headers, tokenLookup);
+  const headerOpts = headers ? { requestInit: { headers } } : undefined;
+
+  try {
+    return await probeWithTransport(
+      new StreamableHTTPClientTransport(new URL(server.url), headerOpts),
+    );
+  } catch {
+    return probeWithTransport(
+      new SSEClientTransport(new URL(server.url), headerOpts),
+    );
+  }
+}
+
+async function probeWithTransport(
+  transport: InstanceType<typeof StdioClientTransport> | InstanceType<typeof SSEClientTransport> | InstanceType<typeof StreamableHTTPClientTransport>,
+): Promise<McpProbedTool[]> {
   const client = new Client(CLIENT_INFO, { capabilities: {} });
 
   try {
@@ -133,15 +155,7 @@ function createTransport(
   }
 
   const headers = buildHeaders(server.url, server.headers, tokenLookup);
-
-  if (server.transport === 'sse') {
-    return new SSEClientTransport(
-      new URL(server.url),
-      headers ? { requestInit: { headers } } : undefined,
-    );
-  }
-
-  return new StreamableHTTPClientTransport(
+  return new SSEClientTransport(
     new URL(server.url),
     headers ? { requestInit: { headers } } : undefined,
   );

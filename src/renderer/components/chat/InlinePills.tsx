@@ -540,10 +540,12 @@ export function InlineApprovalPill({
                       {group.label}
                     </div>
                   ) : (
-                    <button
-                      className={`flex w-full items-center gap-1.5 px-2.5 py-1.5 text-left transition hover:bg-zinc-800/60 ${groupIdx > 0 ? 'mt-0.5' : ''}`}
+                    <div
+                      className={`flex w-full cursor-pointer items-center gap-1.5 px-2.5 py-1.5 text-left transition hover:bg-zinc-800/60 ${groupIdx > 0 ? 'mt-0.5' : ''}`}
                       onClick={() => toggleExpanded(group.id)}
-                      type="button"
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleExpanded(group.id); } }}
+                      role="button"
+                      tabIndex={0}
                     >
                       {group.tools.length > 0 ? (
                         <ChevronRight className={`size-3 shrink-0 text-zinc-600 transition ${expanded ? 'rotate-90' : ''}`} />
@@ -559,7 +561,7 @@ export function InlineApprovalPill({
                         someApproved={someApproved}
                         onToggle={(e) => { e.stopPropagation(); toggleGroup(group); }}
                       />
-                    </button>
+                    </div>
                   )}
 
                   {/* Group tools */}

@@ -443,7 +443,7 @@ describe('groupApprovalToolsByProvider', () => {
     expect(builtinGroups[0].tools.length).toBe(5);
   });
 
-  test('multi-provider tools go into first provider group, second provider gets empty group', () => {
+  test('multi-provider tools appear in all provider groups', () => {
     const tooling = makeTooling([
       makeMcpServer('git-a', 'Git A', ['git.status']),
       makeMcpServer('git-b', 'Git B', ['git.status']),
@@ -455,10 +455,12 @@ describe('groupApprovalToolsByProvider', () => {
     expect(mcpGroups.length).toBe(2);
     const gitA = mcpGroups.find((g) => g.label === 'Git A');
     expect(gitA).toBeDefined();
+    expect(gitA!.tools.length).toBe(1);
     expect(gitA!.tools[0].providerNames).toEqual(['Git A', 'Git B']);
     const gitB = mcpGroups.find((g) => g.label === 'Git B');
     expect(gitB).toBeDefined();
-    expect(gitB!.tools.length).toBe(0);
+    expect(gitB!.tools.length).toBe(1);
+    expect(gitB!.tools[0].id).toBe('git.status');
   });
 
   test('sorts builtin first, then MCP by name, then LSP by name', () => {

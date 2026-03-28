@@ -306,6 +306,22 @@ export function groupApprovalToolsByProvider(
   const groups = new Map<string, ApprovalToolGroup>();
 
   for (const tool of tools) {
+    // Place MCP tools in every provider group they belong to, so each server
+    // shows its own tools even when multiple servers share the same tool names.
+    if (tool.kind === 'mcp' && tool.providerIds.length > 1) {
+      for (const providerId of tool.providerIds) {
+        const groupId = `mcp:${providerId}`;
+        let group = groups.get(groupId);
+        if (!group) {
+          const label = serverNames.get(providerId) ?? providerId;
+          group = { id: groupId, label, kind: 'mcp', tools: [] };
+          groups.set(groupId, group);
+        }
+        group.tools.push(tool);
+      }
+      continue;
+    }
+
     const groupKey = resolveApprovalToolGroupKey(tool, serverNames, profileNames);
     let group = groups.get(groupKey.id);
     if (!group) {

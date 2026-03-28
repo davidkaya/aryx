@@ -131,15 +131,17 @@ export function ChatPane({
   );
   const effectiveAutoApprovedCount = useMemo(() => {
     const groups = groupApprovalToolsByProvider(approvalTools, toolingSettings);
-    let count = 0;
+    const counted = new Set<string>();
     for (const group of groups) {
       if (group.serverApprovalKey && effectiveAutoApproved.has(group.serverApprovalKey)) {
-        count += group.tools.length;
+        for (const tool of group.tools) counted.add(tool.id);
       } else {
-        count += group.tools.filter((t) => effectiveAutoApproved.has(t.id)).length;
+        for (const tool of group.tools) {
+          if (effectiveAutoApproved.has(tool.id)) counted.add(tool.id);
+        }
       }
     }
-    return count;
+    return counted.size;
   }, [approvalTools, effectiveAutoApproved, toolingSettings]);
 
   useEffect(() => {

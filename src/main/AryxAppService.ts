@@ -2130,10 +2130,14 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
   }
 
   private async probeAllAcceptedMcpServers(workspace: WorkspaceState): Promise<void> {
+    // Probe discovered MCP servers (from config files)
     await this.probeDiscoveredMcpServersFromState(workspace.settings.discoveredUserTooling);
     for (const project of workspace.projects) {
       await this.probeDiscoveredMcpServersFromState(project.discoveredTooling);
     }
+
+    // Probe manually configured MCP servers that have empty tools arrays
+    await this.probeManualMcpServers(workspace);
   }
 
   private async probeDiscoveredMcpServersFromState(
@@ -2182,6 +2186,30 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
 
     if (changed && this.workspace) {
       await this.persistAndBroadcast(this.workspace);
+    }
+  }
+
+  private async probeManualMcpServers(workspace: WorkspaceState): Promise<void> {
+    const manualServers = workspace.settings.tooling.mcpServers.filter(
+      (server) => server.tools.length === 0 && (!server.probedTools || server.probedTools.length === 0),
+    );
+    if (manualServers.length === 0) return;
+
+    const tokenLookup = (url: string) => getStoredToken(url)?.accessToken;
+    const results = await probeServers(manualServers, tokenLookup);
+
+    let changed = false;
+    for (const result of results) {
+      if (result.status !== 'success' || result.tools.length === 0) continue;
+      const server = workspace.settings.tooling.mcpServers.find((s) => s.id === result.serverId);
+      if (server) {
+        server.probedTools = result.tools;
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      await this.persistAndBroadcast(workspace);
     }
   }
 

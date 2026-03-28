@@ -19,7 +19,7 @@ export interface McpProbeResult {
 }
 
 const CLIENT_INFO = { name: 'aryx', version: '1.0.0' };
-const DEFAULT_TIMEOUT_MS = 10_000;
+const DEFAULT_TIMEOUT_MS = 30_000;
 const MAX_CONCURRENCY = 5;
 
 export async function probeServers(
@@ -65,6 +65,7 @@ export async function probeServer(
       `Probe timed out after ${timeoutMs}ms`,
     );
 
+    console.log(`[aryx mcp-probe] ${server.name}: discovered ${tools.length} tool(s)`);
     return {
       serverId: server.id,
       serverName: server.name,
@@ -72,12 +73,14 @@ export async function probeServer(
       status: 'success',
     };
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[aryx mcp-probe] ${server.name}: failed — ${message}`);
     return {
       serverId: server.id,
       serverName: server.name,
       tools: [],
       status: 'failed',
-      error: error instanceof Error ? error.message : String(error),
+      error: message,
     };
   }
 }

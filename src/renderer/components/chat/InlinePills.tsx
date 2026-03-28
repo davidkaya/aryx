@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ChevronDown, ChevronRight, Minus, Search, Sparkles } from 'lucide-react';
+import { ChevronDown, ChevronRight, Loader2, Minus, Search, Sparkles } from 'lucide-react';
 
 import { ProviderIcon } from '@renderer/components/ProviderIcons';
 import { PopoverToggleRow } from '@renderer/components/ui';
@@ -347,6 +347,7 @@ export function InlineApprovalPill({
   effectiveAutoApprovedCount,
   isOverridden,
   disabled,
+  mcpProbingServerIds,
   onUpdate,
 }: {
   approvalTools: ApprovalToolDefinition[];
@@ -355,12 +356,19 @@ export function InlineApprovalPill({
   effectiveAutoApprovedCount: number;
   isOverridden: boolean;
   disabled: boolean;
+  mcpProbingServerIds?: string[];
   onUpdate: (settings: { autoApprovedToolNames?: string[] }) => void;
 }){
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const ref = useClickOutside<HTMLDivElement>(() => { setOpen(false); setSearch(''); }, open);
+
+  const probingSet = useMemo(
+    () => new Set(mcpProbingServerIds ?? []),
+    [mcpProbingServerIds],
+  );
+  const isProbingAny = probingSet.size > 0;
 
   const groups = useMemo(
     () => groupApprovalToolsByProvider(approvalTools, toolingSettings),
@@ -439,6 +447,12 @@ export function InlineApprovalPill({
     return 'none';
   }
 
+  function isGroupProbing(group: ApprovalToolGroup): boolean {
+    if (group.kind !== 'mcp') return false;
+    const serverId = group.id.replace(/^mcp:/, '');
+    return probingSet.has(serverId);
+  }
+
   function toggleExpanded(groupId: string) {
     setExpandedGroups((prev) => {
       const next = new Set(prev);
@@ -472,8 +486,15 @@ export function InlineApprovalPill({
         onClick={() => setOpen(!open)}
         type="button"
       >
-        <ShieldCheck className="size-2.5" />
-        <span>{effectiveAutoApprovedCount}/{totalItemCount} auto-approved</span>
+        {isProbingAny ? (
+          <Loader2 className="size-2.5 animate-spin" aria-label="Probing MCP servers" />
+        ) : (
+          <ShieldCheck className="size-2.5" />
+        )}
+        <span>
+          {effectiveAutoApprovedCount}/{totalItemCount} auto-approved
+          {isProbingAny && <span className="text-zinc-500"> · probing…</span>}
+        </span>
         <ChevronDown className={`size-2.5 transition ${open ? 'rotate-180' : ''}`} />
       </button>
 
@@ -525,6 +546,7 @@ export function InlineApprovalPill({
               const isBuiltin = group.kind === 'builtin';
               const isCollapsible = !isBuiltin;
               const expanded = isBuiltin || isGroupExpanded(group.id);
+              const probing = isGroupProbing(group);
               const groupState = isGroupApproved(group);
               const allApproved = groupState === 'all';
               const someApproved = groupState === 'some';
@@ -547,20 +569,30 @@ export function InlineApprovalPill({
                       role="button"
                       tabIndex={0}
                     >
-                      {group.tools.length > 0 ? (
+                      {probing ? (
+                        <Loader2 className="size-3 shrink-0 animate-spin text-indigo-400" aria-label="Probing server" />
+                      ) : group.tools.length > 0 ? (
                         <ChevronRight className={`size-3 shrink-0 text-zinc-600 transition ${expanded ? 'rotate-90' : ''}`} />
                       ) : (
                         <Server className="size-3 shrink-0 text-zinc-600" />
                       )}
                       <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-zinc-300">{group.label}</span>
-                      <span className="shrink-0 rounded-full bg-zinc-800/80 px-1.5 py-px text-[9px] font-medium tabular-nums text-zinc-500">
-                        {approvedLabel}
-                      </span>
-                      <GroupToggle
-                        allApproved={allApproved}
-                        someApproved={someApproved}
-                        onToggle={(e) => { e.stopPropagation(); toggleGroup(group); }}
-                      />
+                      {probing ? (
+                        <span className="shrink-0 rounded-full bg-indigo-500/10 px-1.5 py-px text-[9px] font-medium text-indigo-400">
+                          probing…
+                        </span>
+                      ) : (
+                        <span className="shrink-0 rounded-full bg-zinc-800/80 px-1.5 py-px text-[9px] font-medium tabular-nums text-zinc-500">
+                          {approvedLabel}
+                        </span>
+                      )}
+                      {!probing && (
+                        <GroupToggle
+                          allApproved={allApproved}
+                          someApproved={someApproved}
+                          onToggle={(e) => { e.stopPropagation(); toggleGroup(group); }}
+                        />
+                      )}
                     </div>
                   )}
 

@@ -41,6 +41,7 @@ interface ChatPaneProps {
   session: SessionRecord;
   availableModels: ReadonlyArray<ModelDefinition>;
   toolingSettings: WorkspaceToolingSettings;
+  mcpProbingServerIds?: string[];
   runtimeTools?: ReadonlyArray<RuntimeToolDefinition>;
   sessionUsage?: SessionUsageState;
   onSend: (content: string, attachments?: ChatMessageAttachment[], messageMode?: MessageMode) => Promise<void>;
@@ -65,6 +66,7 @@ export function ChatPane({
   session,
   availableModels,
   toolingSettings,
+  mcpProbingServerIds,
   runtimeTools,
   sessionUsage,
   onSend,
@@ -143,6 +145,8 @@ export function ChatPane({
     }
     return counted.size;
   }, [approvalTools, effectiveAutoApproved, toolingSettings]);
+  const isProbingMcp = (mcpProbingServerIds?.length ?? 0) > 0;
+  const hasApprovalContent = approvalTools.length > 0 || isProbingMcp;
 
   useEffect(() => {
     transcriptRef.current?.scrollTo({
@@ -487,13 +491,14 @@ export function ChatPane({
                   selection={toolSelection}
                 />
               )}
-              {hasToolCallApproval && onUpdateSessionApprovalSettings && approvalTools.length > 0 && (
+              {hasToolCallApproval && onUpdateSessionApprovalSettings && hasApprovalContent && (
                 <InlineApprovalPill
                   approvalTools={approvalTools}
                   disabled={isComposerDisabled}
                   effectiveAutoApproved={effectiveAutoApproved}
                   effectiveAutoApprovedCount={effectiveAutoApprovedCount}
                   isOverridden={isApprovalOverridden}
+                  mcpProbingServerIds={mcpProbingServerIds}
                   onUpdate={onUpdateSessionApprovalSettings}
                   toolingSettings={toolingSettings}
                 />
@@ -543,13 +548,14 @@ export function ChatPane({
                   selection={toolSelection}
                 />
               )}
-              {hasToolCallApproval && onUpdateSessionApprovalSettings && approvalTools.length > 0 && (
+              {hasToolCallApproval && onUpdateSessionApprovalSettings && hasApprovalContent && (
                 <InlineApprovalPill
                   approvalTools={approvalTools}
                   disabled={isComposerDisabled}
                   effectiveAutoApproved={effectiveAutoApproved}
                   effectiveAutoApprovedCount={effectiveAutoApprovedCount}
                   isOverridden={isApprovalOverridden}
+                  mcpProbingServerIds={mcpProbingServerIds}
                   onUpdate={onUpdateSessionApprovalSettings}
                   toolingSettings={toolingSettings}
                 />

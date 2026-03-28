@@ -333,6 +333,7 @@ export default function App() {
             });
           }}
           availableModels={availableModels}
+          mcpProbingServerIds={workspace.mcpProbingServerIds}
           pattern={patternForSession}
           project={projectForSession}
           runtimeTools={sidecarCapabilities?.runtimeTools}

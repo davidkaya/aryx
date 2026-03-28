@@ -158,10 +158,13 @@ Every interactive component must include basic accessibility:
 
 ## 8. Planning requirements
 
-- If a task spans both backend and frontend work, the implementation plan must be split into **Part 1 — Backend** and **Part 2 — Frontend**. The Frontend part will be launched manually by the user.
-- Backend work must be planned and executed first.
-- Before frontend work begins, backend work must produce a handover artifact in the session workspace `files\` directory. Do not put this handover document in the repository.
+> **Hard rule — no exceptions.** Every task that touches both backend (C# / sidecar) and frontend (TypeScript / renderer) code **must** produce a plan with exactly two phases: **Part 1 — Backend** and **Part 2 — Frontend**. A single combined plan that mixes backend and frontend work is never acceptable, even if the changes seem small or tightly coupled. When in doubt about whether a task spans both surfaces, treat it as spanning both and split the plan.
+
+- **Part 1 — Backend** is always planned, implemented, tested, and committed first. No frontend work may begin until Part 1 is complete.
+- **Part 2 — Frontend** is launched manually by the user in a separate session. Do not start frontend implementation in the same session as backend work.
+- Before frontend work begins, backend work must produce a handover artifact in the session workspace `files\` directory. Do not put this handover document in the repository. The handover must describe every new or changed contract (DTOs, IPC messages, events, API shapes) that the frontend needs to consume.
 - The frontend phase must consume that backend handover artifact and build on it rather than rediscovering backend contracts from scratch.
+- If a task is frontend-only or backend-only, a two-part split is not required — but you must still confirm the scope before planning.
 
 ## 9. Validation checklist
 

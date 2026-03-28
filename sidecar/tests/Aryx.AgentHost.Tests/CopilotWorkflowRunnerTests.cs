@@ -161,6 +161,50 @@ public sealed class CopilotWorkflowRunnerTests
     }
 
     [Fact]
+    public void ProjectCompletedMessages_UsesFinalAssistantPayloadWhenStreamingTextIsMissing()
+    {
+        RunTurnCommandDto command = new()
+        {
+            RequestId = "turn-1",
+            SessionId = "session-1",
+            Pattern = new PatternDefinitionDto
+            {
+                Id = "pattern-single",
+                Name = "Single Agent",
+                Mode = "single",
+                Availability = "available",
+                Agents =
+                [
+                    CreateAgent(id: "agent-single-primary", name: "Primary Agent"),
+                ],
+            },
+        };
+
+        IReadOnlyList<ChatMessageDto> messages = WorkflowTranscriptProjector.ProjectCompletedMessages(
+            command,
+            [
+                new ChatMessage(ChatRole.Assistant, string.Empty)
+                {
+                    MessageId = "msg-1",
+                    RawRepresentation = new AssistantMessageEvent
+                    {
+                        Data = new AssistantMessageData
+                        {
+                            MessageId = "msg-1",
+                            Content = "Hello from the final assistant payload.",
+                        },
+                    },
+                },
+            ],
+            []);
+
+        ChatMessageDto message = Assert.Single(messages);
+        Assert.Equal("msg-1", message.Id);
+        Assert.Equal("Primary Agent", message.AuthorName);
+        Assert.Equal("Hello from the final assistant payload.", message.Content);
+    }
+
+    [Fact]
     public void ProjectCompletedMessages_PreservesSequentialConversationHistory()
     {
         RunTurnCommandDto command = new()

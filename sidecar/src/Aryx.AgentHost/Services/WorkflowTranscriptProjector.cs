@@ -1,5 +1,6 @@
 using System.Text;
 using Aryx.AgentHost.Contracts;
+using GitHub.Copilot.SDK;
 using Microsoft.Extensions.AI;
 
 namespace Aryx.AgentHost.Services;
@@ -85,7 +86,7 @@ internal static class WorkflowTranscriptProjector
                 assistantMessages.Count - messageIndex,
                 command.Pattern,
                 fallbackAgent);
-            string content = message.Text ?? matchedSegment?.Content ?? string.Empty;
+            string content = ResolveProjectedContent(message, matchedSegment);
             if (string.IsNullOrWhiteSpace(content))
             {
                 continue;
@@ -127,7 +128,9 @@ internal static class WorkflowTranscriptProjector
     {
         return new ChatMessageDto
         {
-            Id = matchedSegment?.MessageId ?? $"{command.RequestId}-final-{fallbackOutputIndex}",
+            Id = matchedSegment?.MessageId
+                ?? message.MessageId
+                ?? $"{command.RequestId}-final-{fallbackOutputIndex}",
             Role = message.Role == ChatRole.System ? "system" : "assistant",
             AuthorName = ResolveProjectedAuthorName(
                 command.Pattern,
@@ -137,6 +140,35 @@ internal static class WorkflowTranscriptProjector
             Content = content,
             CreatedAt = createdAt,
         };
+    }
+
+    private static string ResolveProjectedContent(
+        ChatMessage message,
+        TranscriptSegment? matchedSegment)
+    {
+        return FirstNonBlank(
+                message.Text,
+                matchedSegment?.Content,
+                TryGetAssistantMessageContent(message))
+            ?? string.Empty;
+    }
+
+    private static string? TryGetAssistantMessageContent(ChatMessage message)
+    {
+        if (TryGetAssistantMessageData(message.RawRepresentation, out AssistantMessageData? assistantMessageData))
+        {
+            return assistantMessageData?.Content;
+        }
+
+        foreach (AIContent content in message.Contents)
+        {
+            if (TryGetAssistantMessageData(content.RawRepresentation, out assistantMessageData))
+            {
+                return assistantMessageData?.Content;
+            }
+        }
+
+        return null;
     }
 
     private static ChatMessageDto CreateProjectedMessageFromSegment(
@@ -360,10 +392,56 @@ internal static class WorkflowTranscriptProjector
             return fallbackAgent.Value.AgentName;
         }
 
+        if (fallbackAgent.HasValue
+            && string.IsNullOrWhiteSpace(primaryIdentifier)
+            && string.IsNullOrWhiteSpace(fallbackIdentifier))
+        {
+            return fallbackAgent.Value.AgentName;
+        }
+
+        if (pattern.Agents.Count == 1
+            && string.IsNullOrWhiteSpace(primaryIdentifier)
+            && string.IsNullOrWhiteSpace(fallbackIdentifier))
+        {
+            PatternAgentDefinitionDto singleAgent = pattern.Agents[0];
+            return AgentIdentityResolver.ResolveDisplayAuthorName(pattern, singleAgent.Id, singleAgent.Name);
+        }
+
         return AgentIdentityResolver.ResolveDisplayAuthorName(
             pattern,
             primaryIdentifier,
             fallbackIdentifier);
+    }
+
+    private static bool TryGetAssistantMessageData(
+        object? rawRepresentation,
+        out AssistantMessageData? assistantMessageData)
+    {
+        switch (rawRepresentation)
+        {
+            case AssistantMessageEvent assistantMessage when !string.IsNullOrWhiteSpace(assistantMessage.Data.Content):
+                assistantMessageData = assistantMessage.Data;
+                return true;
+            case AssistantMessageData data when !string.IsNullOrWhiteSpace(data.Content):
+                assistantMessageData = data;
+                return true;
+            default:
+                assistantMessageData = null;
+                return false;
+        }
+    }
+
+    private static string? FirstNonBlank(params string?[] values)
+    {
+        foreach (string? value in values)
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                return value;
+            }
+        }
+
+        return null;
     }
 }
 

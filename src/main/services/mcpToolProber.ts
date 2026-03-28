@@ -123,12 +123,39 @@ async function probeWithTransport(
 
   try {
     await client.connect(transport);
-    const result = await client.listTools();
 
-    return (result.tools ?? [])
+    // Use listTools() which validates schemas. If a tool has a complex
+    // outputSchema with $ref that the SDK can't resolve, fall back to
+    // a raw JSON-RPC request that skips schema compilation.
+    let rawTools: Array<{ name?: string; description?: string }>;
+    try {
+      const result = await client.listTools();
+      rawTools = result.tools ?? [];
+    } catch {
+      // listTools failed (likely schema validation of outputSchema $ref).
+      // Send raw JSON-RPC and extract tool names without validation.
+      const response = await new Promise<{ tools?: Array<{ name?: string; description?: string }> }>((resolve, reject) => {
+        const id = Math.random().toString(36).slice(2);
+        const onMessage = (msg: { id?: string; result?: unknown; error?: unknown }) => {
+          if (msg.id !== id) return;
+          transport.onmessage = undefined;
+          if (msg.error) reject(new Error(JSON.stringify(msg.error)));
+          else resolve((msg.result ?? {}) as { tools?: Array<{ name?: string; description?: string }> });
+        };
+        const prevHandler = transport.onmessage;
+        transport.onmessage = (msg) => {
+          onMessage(msg as { id?: string; result?: unknown; error?: unknown });
+          if (prevHandler) (prevHandler as (msg: unknown) => void)(msg);
+        };
+        transport.send({ jsonrpc: '2.0', id, method: 'tools/list', params: {} }).catch(reject);
+      });
+      rawTools = response.tools ?? [];
+    }
+
+    return rawTools
       .filter((tool) => typeof tool.name === 'string' && tool.name.trim().length > 0)
       .map((tool) => ({
-        name: tool.name.trim(),
+        name: tool.name!.trim(),
         description: typeof tool.description === 'string' && tool.description.trim().length > 0
           ? tool.description.trim()
           : undefined,

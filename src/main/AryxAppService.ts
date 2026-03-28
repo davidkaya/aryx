@@ -1087,6 +1087,11 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     if (result.success) {
       sessionAfter.pendingMcpAuth.status = 'authenticated';
       sessionAfter.pendingMcpAuth.completedAt = nowIso();
+
+      // Re-probe the server now that we have a token
+      void this.reprobeServerByUrl(session.pendingMcpAuth.serverUrl).catch((error) => {
+        console.error('[aryx mcp-probe] re-probe after auth failed:', error);
+      });
     } else {
       sessionAfter.pendingMcpAuth.status = 'failed';
       sessionAfter.pendingMcpAuth.errorMessage = result.error ?? 'Authentication failed';
@@ -1137,6 +1142,9 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
 
         if (result.success) {
           console.log(`[aryx oauth] ${server.name} authenticated successfully`);
+          void this.reprobeServerByUrl(server.url).catch((error) => {
+            console.error('[aryx mcp-probe] re-probe after auth failed:', error);
+          });
         } else {
           console.warn(`[aryx oauth] Proactive auth failed for ${server.name}: ${result.error}`);
         }
@@ -2205,6 +2213,65 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
       if (server) {
         server.probedTools = result.tools;
         changed = true;
+      }
+    }
+
+    if (changed) {
+      await this.persistAndBroadcast(workspace);
+    }
+  }
+
+  /**
+   * Re-probes all MCP servers matching a given URL after OAuth authentication
+   * succeeds, so their tools appear in the approval pill without restart.
+   */
+  private async reprobeServerByUrl(serverUrl: string): Promise<void> {
+    const workspace = await this.loadWorkspace();
+    const tokenLookup = (url: string) => getStoredToken(url)?.accessToken;
+
+    // Collect matching servers from manual config and discovered tooling
+    const targets: McpServerDefinition[] = [];
+
+    for (const server of workspace.settings.tooling.mcpServers) {
+      if (server.transport !== 'local' && server.url === serverUrl) {
+        targets.push(server);
+      }
+    }
+
+    const allDiscovered = [
+      ...(workspace.settings.discoveredUserTooling?.mcpServers ?? []),
+      ...workspace.projects.flatMap((p) => p.discoveredTooling?.mcpServers ?? []),
+    ];
+    for (const server of allDiscovered) {
+      if (server.status === 'accepted' && server.transport !== 'local' && server.url === serverUrl) {
+        targets.push(this.discoveredServerToDefinition(server));
+      }
+    }
+
+    if (targets.length === 0) return;
+
+    const results = await probeServers(targets, tokenLookup);
+    const resultsById = new Map(results.map((r) => [r.serverId, r]));
+
+    let changed = false;
+
+    // Apply to manual servers
+    for (const server of workspace.settings.tooling.mcpServers) {
+      const result = resultsById.get(server.id);
+      if (result?.status === 'success' && result.tools.length > 0) {
+        server.probedTools = result.tools;
+        changed = true;
+      }
+    }
+
+    // Apply to discovered servers
+    for (const state of [workspace.settings.discoveredUserTooling, ...workspace.projects.map((p) => p.discoveredTooling)]) {
+      for (const server of state?.mcpServers ?? []) {
+        const result = resultsById.get(server.id);
+        if (result?.status === 'success' && result.tools.length > 0) {
+          server.probedTools = result.tools;
+          changed = true;
+        }
       }
     }
 

@@ -66,3 +66,8 @@ export function buildWellKnownUrlFallback(baseUrl: string, wellKnownSuffix: stri
   const base = baseUrl.replace(/\/+$/, '');
   return `${base}/.well-known/${wellKnownSuffix}`;
 }
+
+export function buildWellKnownUrlOriginOnly(baseUrl: string, wellKnownSuffix: string): string {
+  const parsed = new URL(baseUrl);
+  return `${parsed.origin}/.well-known/${wellKnownSuffix}`;
+}

@@ -5,7 +5,7 @@ import electron from 'electron';
 
 import type { McpOauthStaticClientConfig } from '@shared/domain/mcpAuth';
 
-import { storeToken, buildWellKnownUrl, buildWellKnownUrlFallback, type McpOAuthToken } from './mcpTokenStore';
+import { storeToken, buildWellKnownUrl, buildWellKnownUrlFallback, buildWellKnownUrlOriginOnly, type McpOAuthToken } from './mcpTokenStore';
 
 const { shell } = electron;
 
@@ -228,7 +228,18 @@ interface AuthServerMetadata {
 async function fetchWellKnownMetadata(baseUrl: string, suffix: string): Promise<Record<string, unknown> | undefined> {
   const rfcUrl = buildWellKnownUrl(baseUrl, suffix);
   const fallbackUrl = buildWellKnownUrlFallback(baseUrl, suffix);
-  const urls = rfcUrl === fallbackUrl ? [rfcUrl] : [rfcUrl, fallbackUrl];
+  const originOnlyUrl = buildWellKnownUrlOriginOnly(baseUrl, suffix);
+
+  // Deduplicate: RFC path, appended fallback, then origin-only (for servers
+  // that serve metadata at the origin without the resource path suffix).
+  const seen = new Set<string>();
+  const urls: string[] = [];
+  for (const url of [rfcUrl, fallbackUrl, originOnlyUrl]) {
+    if (!seen.has(url)) {
+      seen.add(url);
+      urls.push(url);
+    }
+  }
 
   for (const url of urls) {
     try {

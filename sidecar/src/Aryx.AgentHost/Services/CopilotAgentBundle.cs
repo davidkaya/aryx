@@ -30,6 +30,9 @@ internal sealed class CopilotAgentBundle : IAsyncDisposable
         List<IAsyncDisposable> disposables = [];
         List<AIAgent> agents = [];
         CopilotClientOptions clientOptions = CopilotCliPathResolver.CreateClientOptions();
+        ResolvedHookSet configuredHooks = await HookConfigLoader.LoadAsync(command.ProjectPath, cancellationToken)
+            .ConfigureAwait(false);
+        IHookCommandRunner hookCommandRunner = HookCommandRunner.Instance;
         SessionToolingBundle? toolingBundle = command.Tooling is null
             ? null
             : await SessionToolingBundle.CreateAsync(command.Tooling, command.ProjectPath, cancellationToken)
@@ -51,7 +54,9 @@ internal sealed class CopilotAgentBundle : IAsyncDisposable
                 agentIndex,
                 (request, invocation) => onPermissionRequest(definition, request, invocation),
                 (request, invocation) => onUserInputRequest(definition, request, invocation),
-                evt => onSessionEvent?.Invoke(definition, evt));
+                evt => onSessionEvent?.Invoke(definition, evt),
+                configuredHooks,
+                hookCommandRunner);
 
             ApplySessionTooling(sessionConfig, toolingBundle?.McpServers, toolingBundle?.Tools);
 
@@ -78,7 +83,9 @@ internal sealed class CopilotAgentBundle : IAsyncDisposable
         int agentIndex,
         PermissionRequestHandler? onPermissionRequest = null,
         UserInputHandler? onUserInputRequest = null,
-        SessionEventHandler? onSessionEvent = null)
+        SessionEventHandler? onSessionEvent = null,
+        ResolvedHookSet? configuredHooks = null,
+        IHookCommandRunner? hookCommandRunner = null)
     {
         // Let the Copilot SDK allocate session IDs. Explicit custom SessionId values currently
         // cause turns to complete without assistant output, even for simple single-agent prompts.
@@ -98,7 +105,7 @@ internal sealed class CopilotAgentBundle : IAsyncDisposable
             WorkingDirectory = command.ProjectPath,
             OnPermissionRequest = onPermissionRequest,
             OnUserInputRequest = onUserInputRequest,
-            Hooks = CopilotSessionHooks.Create(command, definition),
+            Hooks = CopilotSessionHooks.Create(command, definition, configuredHooks, hookCommandRunner),
             OnEvent = onSessionEvent,
             Streaming = true,
             CustomAgents = CreateCustomAgents(definition.Copilot?.CustomAgents),

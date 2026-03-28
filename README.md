@@ -51,6 +51,8 @@ This keeps machine-wide tooling reusable while still letting each session decide
 
 Patterns now require tool-call approval by default. They can also store default auto-approval for known MCP and LSP tools, and each session can override those auto-approval defaults from the Activity panel before a run starts.
 
+Project-backed sessions also honor GitHub Copilot CLI-style hook files from `.github/hooks/*.json`. Aryx discovers them automatically in the connected repository and runs the supported lifecycle hooks inside the sidecar, with `preToolUse` deny decisions applied before Aryx's own approval policy.
+
 ### Watch runs as they happen
 
 You can follow agent activity while a session is running, which makes longer or more complex workflows easier to trust and understand. The activity panel shows sub-agent delegations, skill invocations, hook lifecycle events, and context compaction in real time. A context-usage bar below the composer shows how much of the model's context window the current session occupies.

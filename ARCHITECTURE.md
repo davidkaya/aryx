@@ -206,12 +206,14 @@ The protocol also carries **turn-scoped lifecycle events** alongside output delt
 
 - **Sub-agent events**: started, completed, failed, selected, deselected — surfaced when custom agents are defined
 - **Skill invocation events**: emitted when an agent-side skill is triggered
-- **Hook lifecycle events**: start and end of registered hooks (e.g. pre-turn, post-turn)
+- **Hook lifecycle events**: start and end of registered hooks, including Aryx-managed SDK hooks and project hook files discovered from `.github/hooks/*.json`
 - **Session compaction events**: start and complete, with token-reduction metrics when infinite sessions trigger context trimming
 - **Session usage events**: current token count and context-window limit for usage-bar rendering
 - **Pending-messages-modified events**: emitted when mid-turn steering changes the pending message queue
 
 These events flow through a single `onTurnScopedEvent` callback on the `runTurn` command, avoiding per-event-type callback proliferation. The main process maps each event to a `SessionEventRecord` and pushes it to the renderer, where lightweight state maps (activity, usage, turn-event log) consume them without touching the persisted workspace.
+
+For project-backed sessions, the sidecar also discovers GitHub Copilot CLI hook definitions from `.github/hooks/*.json` under the repository root. Those files are parsed and merged once per run bundle, then projected onto the SDK session hook delegates. Hook commands run synchronously in the sidecar through the platform shell, with stdin JSON payloads shaped to match Copilot CLI hook expectations as closely as the SDK allows. Hook failures are logged to stderr and treated as non-fatal diagnostics, while `preToolUse` hook outputs can still deny a tool call before Aryx falls back to its built-in approval policy.
 
 ## Security model
 

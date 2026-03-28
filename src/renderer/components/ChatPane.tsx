@@ -617,9 +617,9 @@ export function ChatPane({
               }
             >
               {/* Bottom action bar: left = shortcuts, right = buttons */}
-              <div className="absolute inset-x-2 bottom-2 flex items-center justify-between pointer-events-none">
+              <div className="flex items-center justify-between px-2 pb-2">
                 {/* Left: quick actions */}
-                <div className="flex items-center gap-1.5 pointer-events-auto">
+                <div className="flex items-center gap-1.5">
                   {onTerminalToggle && (
                     <InlineTerminalPill
                       disabled={false}
@@ -638,7 +638,7 @@ export function ChatPane({
                 </div>
 
                 {/* Right: attach, plan mode, send */}
-                <div className="flex items-center gap-1 pointer-events-auto">
+                <div className="flex items-center gap-1">
                 {/* Attachment picker */}
                 <button
                   aria-label="Attach image"

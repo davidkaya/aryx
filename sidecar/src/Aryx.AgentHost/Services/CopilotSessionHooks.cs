@@ -11,14 +11,30 @@ internal static class CopilotSessionHooks
     private const string AllowDecision = "allow";
     private const string AskDecision = "ask";
     private const string DenyDecision = "deny";
+    private const string ExitPlanModeToolName = "exit_plan_mode";
+    private const string FetchCopilotCliDocumentationToolName = "fetch_copilot_cli_documentation";
     private const string HandoffToolPrefix = "handoff_to_";
+    private const string ListAgentsToolName = "list_agents";
+    private const string ReadAgentToolName = "read_agent";
     private const string ReportIntentToolName = "report_intent";
+    private const string SkillToolName = "skill";
+    private const string SqlToolName = "sql";
+    private const string TaskToolName = "task";
     private const string TaskCompleteToolName = "task_complete";
+    private const string UpdateTodoToolName = "update_todo";
     private static readonly HashSet<string> AlwaysAllowedToolNames = new(StringComparer.OrdinalIgnoreCase)
     {
         AskUserToolName,
+        ExitPlanModeToolName,
+        FetchCopilotCliDocumentationToolName,
+        ListAgentsToolName,
+        ReadAgentToolName,
         ReportIntentToolName,
+        SkillToolName,
+        SqlToolName,
+        TaskToolName,
         TaskCompleteToolName,
+        UpdateTodoToolName,
     };
     private static readonly JsonSerializerOptions HookJsonOptions = CreateHookJsonOptions();
 

@@ -108,11 +108,19 @@ public sealed class CopilotSessionHooksTests
 
     [Theory]
     [InlineData("ask_user")]
+    [InlineData("exit_plan_mode")]
+    [InlineData("fetch_copilot_cli_documentation")]
+    [InlineData("list_agents")]
+    [InlineData("read_agent")]
     [InlineData("report_intent")]
+    [InlineData("skill")]
+    [InlineData("sql")]
+    [InlineData("task")]
     [InlineData("task_complete")]
+    [InlineData("update_todo")]
     [InlineData("handoff_to_2")]
     [InlineData("handoff_to_specialist")]
-    public async Task Create_PreToolUseAutoAllowsInfrastructureTools(string toolName)
+    public async Task Create_PreToolUseAutoAllowsInternalOrchestrationTools(string toolName)
     {
         RunTurnCommandDto command = CreateCommandWithToolApproval();
         SessionHooks hooks = CopilotSessionHooks.Create(command, command.Pattern.Agents[0], ResolvedHookSet.Empty, new RecordingHookCommandRunner());
@@ -125,6 +133,22 @@ public sealed class CopilotSessionHooksTests
             null!);
 
         Assert.Equal("allow", decision?.PermissionDecision);
+    }
+
+    [Fact]
+    public async Task Create_PreToolUseKeepsStoreMemoryUnderApprovalPolicy()
+    {
+        RunTurnCommandDto command = CreateCommandWithToolApproval();
+        SessionHooks hooks = CopilotSessionHooks.Create(command, command.Pattern.Agents[0], ResolvedHookSet.Empty, new RecordingHookCommandRunner());
+
+        PreToolUseHookOutput? decision = await hooks.OnPreToolUse!(
+            new PreToolUseHookInput
+            {
+                ToolName = "store_memory",
+            },
+            null!);
+
+        Assert.Equal("ask", decision?.PermissionDecision);
     }
 
     [Fact]

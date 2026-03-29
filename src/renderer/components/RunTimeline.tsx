@@ -26,6 +26,7 @@ import {
 } from '@renderer/lib/runTimelineFormatting';
 import type { OrchestrationMode } from '@shared/domain/pattern';
 import type { RunTimelineEventRecord, SessionRunRecord } from '@shared/domain/runTimeline';
+import { FileChangePreview } from '@renderer/components/chat/FileChangePreview';
 
 /* ── Mode accent colours (shared with ActivityPanel) ───────── */
 
@@ -91,67 +92,76 @@ function TimelineEventRow({
   const terminal = isTerminalEvent(event.kind);
 
   return (
-    <button
-      className={`group relative flex w-full gap-2.5 text-left transition-all duration-200 ${terminal ? 'py-1' : 'py-1.5'} ${isClickable ? 'cursor-pointer' : 'cursor-default'}`}
-      disabled={!isClickable}
-      onClick={isClickable ? () => onJumpToMessage(event.messageId!) : undefined}
-      type="button"
-    >
+    <div className="relative">
       {/* Vertical connector line */}
       {!isLast && (
         <div className="absolute left-[7px] top-[22px] bottom-0 w-px bg-[var(--color-border)]" />
       )}
 
-      {/* Node */}
-      <div className="relative z-10 flex shrink-0 items-start pt-0.5">
-        <div className={`flex size-[15px] items-center justify-center rounded-full ${event.status === 'running' ? 'brand-gradient-bg' : 'bg-[var(--color-surface-2)]'}`}>
-          <EventIcon kind={event.kind} status={event.status} />
+      <button
+        className={`group flex w-full gap-2.5 text-left transition-all duration-200 ${terminal ? 'py-1' : 'py-1.5'} ${isClickable ? 'cursor-pointer' : 'cursor-default'}`}
+        disabled={!isClickable}
+        onClick={isClickable ? () => onJumpToMessage(event.messageId!) : undefined}
+        type="button"
+      >
+        {/* Node */}
+        <div className="relative z-10 flex shrink-0 items-start pt-0.5">
+          <div className={`flex size-[15px] items-center justify-center rounded-full ${event.status === 'running' ? 'brand-gradient-bg' : 'bg-[var(--color-surface-2)]'}`}>
+            <EventIcon kind={event.kind} status={event.status} />
+          </div>
         </div>
-      </div>
 
-      {/* Content */}
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1.5">
-          <span className={`text-[11px] font-medium ${terminal ? 'text-[var(--color-text-muted)]' : 'text-[var(--color-text-secondary)]'} ${isClickable ? 'group-hover:text-[var(--color-text-accent)]' : ''}`}>
-            {label}
-          </span>
-          {/* Approval kind badge */}
-          {event.kind === 'approval' && event.approvalKind && (
-            <span className={`rounded-full px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wider ${
-              event.status === 'running'
-                ? 'bg-[var(--color-status-warning)]/15 text-[var(--color-status-warning)]'
-                : event.status === 'completed'
-                  ? 'bg-[var(--color-status-success)]/15 text-[var(--color-status-success)]'
-                  : 'bg-[var(--color-status-error)]/15 text-[var(--color-status-error)]'
-            }`}>
-              {event.approvalKind === 'final-response' ? 'response' : 'tool'}
+        {/* Content */}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5">
+            <span className={`text-[11px] font-medium ${terminal ? 'text-[var(--color-text-muted)]' : 'text-[var(--color-text-secondary)]'} ${isClickable ? 'group-hover:text-[var(--color-text-accent)]' : ''}`}>
+              {label}
             </span>
+            {/* Approval kind badge */}
+            {event.kind === 'approval' && event.approvalKind && (
+              <span className={`rounded-full px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wider ${
+                event.status === 'running'
+                  ? 'bg-[var(--color-status-warning)]/15 text-[var(--color-status-warning)]'
+                  : event.status === 'completed'
+                    ? 'bg-[var(--color-status-success)]/15 text-[var(--color-status-success)]'
+                    : 'bg-[var(--color-status-error)]/15 text-[var(--color-status-error)]'
+              }`}>
+                {event.approvalKind === 'final-response' ? 'response' : 'tool'}
+              </span>
+            )}
+            <span className="font-mono ml-auto shrink-0 text-[9px] tabular-nums text-[var(--color-text-muted)]">{timestamp}</span>
+          </div>
+
+          {/* Content preview for message events */}
+          {preview && (
+            <p className={`mt-0.5 text-[10px] leading-snug text-[var(--color-text-muted)] ${isClickable ? 'group-hover:text-[var(--color-text-secondary)]' : ''}`}>
+              {preview}
+            </p>
           )}
-          <span className="font-mono ml-auto shrink-0 text-[9px] tabular-nums text-[var(--color-text-muted)]">{timestamp}</span>
+
+          {/* Approval detail */}
+          {event.kind === 'approval' && event.approvalDetail && (
+            <p className="mt-0.5 text-[10px] leading-snug text-[var(--color-text-muted)]">
+              {truncateContent(event.approvalDetail, 120)}
+            </p>
+          )}
+
+          {/* Error detail */}
+          {event.error && (
+            <p className="mt-0.5 text-[10px] leading-snug text-[var(--color-status-error)]/80">
+              {truncateContent(event.error, 120)}
+            </p>
+          )}
         </div>
+      </button>
 
-        {/* Content preview for message events */}
-        {preview && (
-          <p className={`mt-0.5 text-[10px] leading-snug text-[var(--color-text-muted)] ${isClickable ? 'group-hover:text-[var(--color-text-secondary)]' : ''}`}>
-            {preview}
-          </p>
-        )}
-
-        {/* Approval detail */}
-        {event.kind === 'approval' && event.approvalDetail && (
-          <p className="mt-0.5 text-[10px] leading-snug text-[var(--color-text-muted)]">
-            {truncateContent(event.approvalDetail, 120)}
-          </p>
-        )}
-
-        {/* Error detail */}
-        {event.error && (
-          <p className="mt-0.5 text-[10px] leading-snug text-[var(--color-status-error)]/80">
-            {truncateContent(event.error, 120)}
-          </p>
-        )}
-      </div>
-    </button>
+      {/* File change preview for tool-call events */}
+      {event.kind === 'tool-call' && event.fileChanges && event.fileChanges.length > 0 && (
+        <div className="relative z-10 ml-[25px] pb-1">
+          <FileChangePreview fileChanges={event.fileChanges} />
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -4,6 +4,7 @@ import {
   Copy,
   FolderOpen,
   FolderPlus,
+  Keyboard,
   MessageSquare,
   Monitor,
   Moon,
@@ -20,6 +21,7 @@ import {
 import type { AppearanceTheme } from '@shared/domain/tooling';
 import { isScratchpadProject } from '@shared/domain/project';
 import type { WorkspaceState } from '@shared/domain/workspace';
+import { shortcutKeys } from '@renderer/lib/keyboardShortcuts';
 
 interface PaletteCommand {
   id: string;
@@ -47,6 +49,7 @@ export interface CommandPaletteProps {
   onArchiveSession: (sessionId: string, isArchived: boolean) => void;
   onAddProject: () => void;
   onOpenAppDataFolder: () => void;
+  onShowShortcuts: () => void;
 }
 
 /** Score how well `query` matches `text` (and optional `keywords`). 0 = no match. */
@@ -86,6 +89,7 @@ export function CommandPalette({
   onArchiveSession,
   onAddProject,
   onOpenAppDataFolder,
+  onShowShortcuts,
 }: CommandPaletteProps) {
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -151,6 +155,7 @@ export function CommandPalette({
         label: 'New Session',
         category: 'Actions',
         keywords: 'create start',
+        shortcut: shortcutKeys('new-session'),
         icon: <Plus className={ICON} />,
         action: () => onNewSession(defaultProjectId),
       });
@@ -187,7 +192,8 @@ export function CommandPalette({
         id: 'archive-session',
         label: 'Archive Session',
         category: 'Session',
-        keywords: 'archive hide remove',
+        keywords: 'archive hide remove close',
+        shortcut: shortcutKeys('close-session'),
         icon: <Archive className={ICON} />,
         action: () => onArchiveSession(selectedSession.id, true),
       });
@@ -221,6 +227,7 @@ export function CommandPalette({
       label: 'Open Settings',
       category: 'General',
       keywords: 'preferences config options',
+      shortcut: shortcutKeys('settings'),
       icon: <Settings className={ICON} />,
       action: onOpenSettings,
     });
@@ -241,7 +248,7 @@ export function CommandPalette({
       label: 'Toggle Terminal',
       category: 'General',
       keywords: 'terminal console shell command',
-      shortcut: 'Ctrl+`',
+      shortcut: shortcutKeys('toggle-terminal'),
       icon: <Terminal className={ICON} />,
       action: onToggleTerminal,
     });
@@ -253,6 +260,16 @@ export function CommandPalette({
       keywords: 'data storage files folder workspace',
       icon: <FolderOpen className={ICON} />,
       action: onOpenAppDataFolder,
+    });
+
+    cmds.push({
+      id: 'keyboard-shortcuts',
+      label: 'Keyboard Shortcuts',
+      category: 'General',
+      keywords: 'keys keybindings hotkeys help cheatsheet',
+      shortcut: shortcutKeys('shortcut-help'),
+      icon: <Keyboard className={ICON} />,
+      action: onShowShortcuts,
     });
 
     // ── Theme ──
@@ -287,7 +304,7 @@ export function CommandPalette({
     onSelectSession, onSelectProject, onNewSession, onCreateScratchpad,
     onOpenSettings, onOpenProjectSettings, onToggleTerminal, onSetTheme,
     onDuplicateSession, onPinSession, onArchiveSession, onAddProject,
-    onOpenAppDataFolder,
+    onOpenAppDataFolder, onShowShortcuts,
   ]);
 
   const filteredCommands = useMemo(() => {

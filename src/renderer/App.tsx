@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { AppShell } from '@renderer/components/AppShell';
 import { ActivityPanel } from '@renderer/components/ActivityPanel';
 import { ChatPane } from '@renderer/components/ChatPane';
 import { CommandPalette } from '@renderer/components/CommandPalette';
 import { DiscoveredToolingModal } from '@renderer/components/DiscoveredToolingModal';
+import { KeyboardShortcutsPanel } from '@renderer/components/KeyboardShortcutsPanel';
 import { NewSessionModal } from '@renderer/components/NewSessionModal';
 import { ProjectSettingsPanel } from '@renderer/components/ProjectSettingsPanel';
 import { SettingsPanel } from '@renderer/components/SettingsPanel';
@@ -114,6 +115,7 @@ export default function App() {
   const [newSessionProjectId, setNewSessionProjectId] = useState<string>();
   const [showDiscoveryModal, setShowDiscoveryModal] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
 
   // Terminal state
   const [terminalOpen, setTerminalOpen] = useState(false);
@@ -266,18 +268,157 @@ export default function App() {
     if (hasPendingDiscoveries) setShowDiscoveryModal(true);
   }, [hasPendingDiscoveries]);
 
-  // Terminal: Ctrl+` toggle + Command palette: Ctrl+K / Cmd+K
+  // Keep refs for values the keyboard handler reads — avoids re-registering on every render.
+  const workspaceRef = useRef(workspace);
+  workspaceRef.current = workspace;
+  const showSettingsRef = useRef(showSettings);
+  showSettingsRef.current = showSettings;
+  const showShortcutsRef = useRef(showShortcuts);
+  showShortcutsRef.current = showShortcuts;
+  const commandPaletteOpenRef = useRef(commandPaletteOpen);
+  commandPaletteOpenRef.current = commandPaletteOpen;
+  const projectSettingsIdRef = useRef(projectSettingsId);
+  projectSettingsIdRef.current = projectSettingsId;
+  const newSessionProjectIdRef = useRef(newSessionProjectId);
+  newSessionProjectIdRef.current = newSessionProjectId;
+
+  // ── Global keyboard shortcuts ──
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      const mod = e.ctrlKey || e.metaKey;
+      const ws = workspaceRef.current;
+
+      // Ignore keyboard shortcuts while typing in inputs (except our global combos)
+      const target = e.target as HTMLElement;
+      const isInput = target.tagName === 'INPUT'
+        || target.tagName === 'TEXTAREA'
+        || target.isContentEditable;
+
+      // ── Ctrl+` — Toggle terminal ──
       if (e.ctrlKey && e.key === '`') {
         e.preventDefault();
         setTerminalOpen((prev) => !prev);
+        return;
       }
-      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+
+      // ── Ctrl/Cmd+K — Command palette ──
+      if (mod && e.key === 'k') {
         e.preventDefault();
         setCommandPaletteOpen((prev) => !prev);
+        return;
+      }
+
+      // ── Ctrl/Cmd+/ — Keyboard shortcuts cheat sheet ──
+      if (mod && e.key === '/') {
+        e.preventDefault();
+        setShowShortcuts((prev) => !prev);
+        return;
+      }
+
+      // ── Ctrl/Cmd+, — Open settings ──
+      if (mod && e.key === ',') {
+        e.preventDefault();
+        setShowSettings(true);
+        return;
+      }
+
+      // ── Escape — Close overlays or cancel running turn ──
+      if (e.key === 'Escape') {
+        // Close overlays in priority order (command palette and shortcuts use their own capture listeners)
+        if (projectSettingsIdRef.current) {
+          e.preventDefault();
+          setProjectSettingsId(undefined);
+          return;
+        }
+        if (showSettingsRef.current) {
+          e.preventDefault();
+          setShowSettings(false);
+          return;
+        }
+        if (newSessionProjectIdRef.current) {
+          e.preventDefault();
+          setNewSessionProjectId(undefined);
+          return;
+        }
+
+        // If nothing is open, cancel a running turn on the selected session
+        if (ws) {
+          const session = ws.sessions.find((s) => s.id === ws.selectedSessionId);
+          if (session?.status === 'running' && !isInput) {
+            e.preventDefault();
+            void api.cancelSessionTurn({ sessionId: session.id });
+            return;
+          }
+        }
+        return;
+      }
+
+      // Skip remaining shortcuts when focus is in an input field
+      if (isInput) return;
+
+      // ── Ctrl/Cmd+N — New session ──
+      if (mod && e.key === 'n') {
+        e.preventDefault();
+        if (ws) {
+          const defaultProjectId =
+            ws.selectedProjectId ??
+            ws.projects.find((p) => !isScratchpadProject(p))?.id;
+          if (defaultProjectId) {
+            setNewSessionProjectId(defaultProjectId);
+          }
+        }
+        return;
+      }
+
+      // ── Ctrl/Cmd+W — Archive / close current session ──
+      if (mod && e.key === 'w') {
+        e.preventDefault();
+        if (ws?.selectedSessionId) {
+          void api.setSessionArchived({ sessionId: ws.selectedSessionId, isArchived: true });
+        }
+        return;
+      }
+
+      // ── Ctrl+Tab / Ctrl+Shift+Tab — Cycle sessions ──
+      if (e.ctrlKey && e.key === 'Tab') {
+        e.preventDefault();
+        if (ws) {
+          const activeSessions = ws.sessions.filter((s) => !s.isArchived);
+          if (activeSessions.length > 1) {
+            const currentIdx = activeSessions.findIndex((s) => s.id === ws.selectedSessionId);
+            const direction = e.shiftKey ? -1 : 1;
+            const nextIdx = (currentIdx + direction + activeSessions.length) % activeSessions.length;
+            void api.selectSession(activeSessions[nextIdx].id);
+          }
+        }
+        return;
+      }
+
+      // ── Ctrl/Cmd+. — Quick approve pending tool call ──
+      if (mod && e.key === '.') {
+        e.preventDefault();
+        if (ws?.selectedSessionId) {
+          const session = ws.sessions.find((s) => s.id === ws.selectedSessionId);
+          if (session?.pendingApproval?.status === 'pending') {
+            void api.resolveSessionApproval({
+              sessionId: session.id,
+              approvalId: session.pendingApproval.id,
+              decision: 'approved',
+            });
+          }
+        }
+        return;
+      }
+
+      // ── Ctrl/Cmd+L — Focus the composer ──
+      if (mod && e.key === 'l') {
+        e.preventDefault();
+        const editor = document.querySelector<HTMLElement>('.markdown-composer-editable');
+        editor?.focus();
+        return;
       }
     };
+
     window.addEventListener('keydown', handleKeyDown);
 
     // Track terminal running state via exit events
@@ -645,7 +786,12 @@ export default function App() {
           }}
           onAddProject={() => void api.addProject()}
           onOpenAppDataFolder={() => void api.openAppDataFolder()}
+          onShowShortcuts={() => setShowShortcuts(true)}
         />
+      )}
+
+      {showShortcuts && (
+        <KeyboardShortcutsPanel onClose={() => setShowShortcuts(false)} />
       )}
     </>
   );

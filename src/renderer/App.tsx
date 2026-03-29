@@ -592,6 +592,7 @@ export default function App() {
     content = (
       <WelcomePane
         hasProjects={hasUserProjects}
+        connectionStatus={sidecarCapabilities?.connection.status}
         onAddProject={() => void api.addProject()}
         onNewScratchpad={() => handleCreateScratchpad()}
         onOpenSettings={() => setShowSettings(true)}

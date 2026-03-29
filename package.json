@@ -119,7 +119,7 @@
       ],
       "icon": "assets/icons/windows/icon.ico",
       "artifactName": "Aryx-windows-${arch}.${ext}",
-      "signAndEditExecutable": false,
+      "signAndEditExecutable": true,
       "verifyUpdateCodeSignature": false
     },
     "nsis": {

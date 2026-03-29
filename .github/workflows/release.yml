@@ -137,6 +137,18 @@ jobs:
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
+          write_github_env() {
+            local name="$1"
+            local value="$2"
+            local delimiter
+            delimiter="ARYX_ENV_$(uuidgen | tr '[:lower:]' '[:upper:]')"
+            {
+              printf '%s<<%s\n' "$name" "$delimiter"
+              printf '%s\n' "$value"
+              printf '%s\n' "$delimiter"
+            } >> "$GITHUB_ENV"
+          }
+
           if [[ -z "$APPLE_CERT_P12_BASE64" ]]; then
             echo "Missing required secret: APPLE_CERT_P12_BASE64" >&2
             exit 1
@@ -165,15 +177,40 @@ jobs:
           CERT_PATH="$RUNNER_TEMP/apple-signing.p12"
           API_KEY_PATH="$RUNNER_TEMP/AuthKey_${APPLE_API_KEY_ID}.p8"
 
-          echo "$APPLE_CERT_P12_BASE64" | base64 --decode > "$CERT_PATH"
+          CERT_PATH="$CERT_PATH" python3 - <<'PY'
+          import base64
+          import os
+          from pathlib import Path
+
+          raw_value = os.environ["APPLE_CERT_P12_BASE64"]
+          normalized_value = "".join(raw_value.split())
+          if not normalized_value:
+              raise SystemExit("APPLE_CERT_P12_BASE64 is empty after whitespace normalization")
+
+          decoded = base64.b64decode(normalized_value, validate=True)
+          if not decoded:
+              raise SystemExit("Decoded Apple signing certificate is empty")
+
+          Path(os.environ["CERT_PATH"]).write_bytes(decoded)
+          PY
           printf '%s' "$APPLE_API_KEY_P8" > "$API_KEY_PATH"
 
-          echo "CSC_LINK=$CERT_PATH" >> "$GITHUB_ENV"
-          echo "CSC_KEY_PASSWORD=$APPLE_CERT_PASSWORD" >> "$GITHUB_ENV"
-          echo "APPLE_API_KEY=$API_KEY_PATH" >> "$GITHUB_ENV"
-          echo "APPLE_API_KEY_ID=$APPLE_API_KEY_ID" >> "$GITHUB_ENV"
-          echo "APPLE_API_ISSUER=$APPLE_API_ISSUER" >> "$GITHUB_ENV"
-          echo "APPLE_TEAM_ID=$APPLE_TEAM_ID" >> "$GITHUB_ENV"
+          if [[ ! -s "$CERT_PATH" ]]; then
+            echo "Decoded Apple signing certificate file is empty." >&2
+            exit 1
+          fi
+
+          if ! openssl pkcs12 -in "$CERT_PATH" -noout -passin env:APPLE_CERT_PASSWORD >/dev/null 2>&1; then
+            echo "Decoded Apple signing certificate could not be opened with APPLE_CERT_PASSWORD." >&2
+            exit 1
+          fi
+
+          write_github_env "CSC_LINK" "$CERT_PATH"
+          write_github_env "CSC_KEY_PASSWORD" "$APPLE_CERT_PASSWORD"
+          write_github_env "APPLE_API_KEY" "$API_KEY_PATH"
+          write_github_env "APPLE_API_KEY_ID" "$APPLE_API_KEY_ID"
+          write_github_env "APPLE_API_ISSUER" "$APPLE_API_ISSUER"
+          write_github_env "APPLE_TEAM_ID" "$APPLE_TEAM_ID"
 
       - name: Build and publish release artifacts
         env:

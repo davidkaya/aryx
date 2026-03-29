@@ -340,6 +340,8 @@ public sealed class AgentActivityEventDto : SidecarEventDto
     public string? SourceAgentId { get; init; }
     public string? SourceAgentName { get; init; }
     public string? ToolName { get; init; }
+    public string? ToolCallId { get; init; }
+    public IReadOnlyList<ToolCallFileChangeDto>? FileChanges { get; init; }
 }
 
 public sealed class SubagentEventDto : SidecarEventDto
@@ -501,6 +503,13 @@ public sealed class PermissionDetailDto
     public string? Citations { get; init; }
     public string? ToolDescription { get; init; }
     public string? HookMessage { get; init; }
+}
+
+public sealed class ToolCallFileChangeDto
+{
+    public string Path { get; init; } = string.Empty;
+    public string? Diff { get; init; }
+    public string? NewFileContents { get; init; }
 }
 
 public sealed class ApprovalRequestedEventDto : SidecarEventDto

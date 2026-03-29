@@ -1369,6 +1369,70 @@ public sealed class CopilotWorkflowRunnerTests
     }
 
     [Fact]
+    public async Task RequestApprovalAsync_EmitsFileChangeActivityForWriteRequests()
+    {
+        CopilotApprovalCoordinator coordinator = new();
+        AgentActivityEventDto? observedActivity = null;
+        ApprovalRequestedEventDto? observedApproval = null;
+        RunTurnCommandDto command = CreateApprovalCommand();
+
+        Task<PermissionRequestResult> pending = coordinator.RequestApprovalAsync(
+            command,
+            command.Pattern.Agents[0],
+            new PermissionRequestWrite
+            {
+                Kind = "write",
+                ToolCallId = "tool-call-write-1",
+                Intention = "Update the README",
+                FileName = "README.md",
+                Diff = "@@ -1 +1 @@",
+                NewFileContents = "# Aryx\n",
+            },
+            new PermissionInvocation
+            {
+                SessionId = "copilot-session-1",
+            },
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["tool-call-write-1"] = "apply_patch",
+            },
+            activity =>
+            {
+                observedActivity = activity;
+                return Task.CompletedTask;
+            },
+            approval =>
+            {
+                observedApproval = approval;
+                return Task.CompletedTask;
+            },
+            CancellationToken.None);
+
+        Assert.False(pending.IsCompleted);
+        Assert.NotNull(observedActivity);
+        Assert.NotNull(observedApproval);
+        Assert.Equal("tool-calling", observedActivity!.ActivityType);
+        Assert.Equal("apply_patch", observedActivity.ToolName);
+        Assert.Equal("tool-call-write-1", observedActivity.ToolCallId);
+
+        ToolCallFileChangeDto preview = Assert.Single(observedActivity.FileChanges!);
+        Assert.Equal("README.md", preview.Path);
+        Assert.Equal("@@ -1 +1 @@", preview.Diff);
+        Assert.Equal("# Aryx\n", preview.NewFileContents);
+
+        await coordinator.ResolveApprovalAsync(
+            new ResolveApprovalCommandDto
+            {
+                ApprovalId = observedApproval!.ApprovalId,
+                Decision = "approved",
+            },
+            CancellationToken.None);
+
+        PermissionRequestResult result = await pending;
+        Assert.Equal(PermissionRequestResultKind.Approved, result.Kind);
+    }
+
+    [Fact]
     public async Task RequestApprovalAsync_AutoApprovesToolsThatDoNotRequireApproval()
     {
         CopilotApprovalCoordinator coordinator = new();

@@ -74,6 +74,7 @@ internal static class WorkflowRequestInfoInterpreter
             AgentId = activeAgent.AgentId,
             AgentName = activeAgent.AgentName,
             ToolName = tool.ToolName,
+            ToolCallId = tool.ToolCallId,
         };
     }
 

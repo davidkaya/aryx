@@ -167,6 +167,57 @@ describe('run timeline helpers', () => {
     });
   });
 
+  test('merges file change previews into a single tool-call event by toolCallId', () => {
+    const baseRun = createSessionRunRecord({
+      requestId: 'turn-1',
+      project: createProject(),
+      workspaceKind: 'project',
+      pattern: createPattern(),
+      triggerMessageId: 'msg-user-1',
+      startedAt: '2026-03-23T00:00:01.000Z',
+    });
+
+    const startedRun = appendRunActivityEvent(baseRun, {
+      activityType: 'tool-calling',
+      occurredAt: '2026-03-23T00:00:02.000Z',
+      agentId: 'agent-writer',
+      toolName: 'apply_patch',
+      toolCallId: 'tool-call-1',
+    });
+
+    const firstPreviewRun = appendRunActivityEvent(startedRun, {
+      activityType: 'tool-calling',
+      occurredAt: '2026-03-23T00:00:03.000Z',
+      agentId: 'agent-writer',
+      toolName: 'apply_patch',
+      toolCallId: 'tool-call-1',
+      fileChanges: [{ path: 'src\\alpha.ts', diff: '@@ -1 +1 @@' }],
+    });
+
+    const mergedRun = appendRunActivityEvent(firstPreviewRun, {
+      activityType: 'tool-calling',
+      occurredAt: '2026-03-23T00:00:04.000Z',
+      agentId: 'agent-writer',
+      toolCallId: 'tool-call-1',
+      fileChanges: [{ path: 'src\\beta.ts', newFileContents: 'export const beta = true;\n' }],
+    });
+
+    const toolCallEvents = mergedRun.events.filter((event) => event.kind === 'tool-call');
+    expect(toolCallEvents).toHaveLength(1);
+    expect(toolCallEvents[0]).toMatchObject({
+      agentId: 'agent-writer',
+      agentName: 'Writer',
+      toolName: 'apply_patch',
+      toolCallId: 'tool-call-1',
+      occurredAt: '2026-03-23T00:00:02.000Z',
+      updatedAt: '2026-03-23T00:00:04.000Z',
+    });
+    expect(toolCallEvents[0].fileChanges).toEqual([
+      { path: 'src\\alpha.ts', diff: '@@ -1 +1 @@' },
+      { path: 'src\\beta.ts', newFileContents: 'export const beta = true;\n' },
+    ]);
+  });
+
   test('normalizes missing run collections to an empty array', () => {
     expect(normalizeSessionRunRecords(undefined)).toEqual([]);
   });

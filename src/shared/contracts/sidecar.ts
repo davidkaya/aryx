@@ -241,6 +241,12 @@ export interface TurnCompleteEvent {
 
 export type AgentActivityType = 'thinking' | 'tool-calling' | 'handoff' | 'completed';
 
+export interface ToolCallFileChangePreview {
+  path: string;
+  diff?: string;
+  newFileContents?: string;
+}
+
 export interface AgentActivityEvent {
   type: 'agent-activity';
   requestId: string;
@@ -251,6 +257,8 @@ export interface AgentActivityEvent {
   sourceAgentId?: string;
   sourceAgentName?: string;
   toolName?: string;
+  toolCallId?: string;
+  fileChanges?: ToolCallFileChangePreview[];
 }
 
 export type SubagentEventKind = 'started' | 'completed' | 'failed' | 'selected' | 'deselected';

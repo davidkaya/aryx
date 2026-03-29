@@ -19,6 +19,7 @@ internal sealed class CopilotApprovalCoordinator
     private const string MemoryPermissionKind = "memory";
     private const string CustomToolPermissionKind = "custom-tool";
     private const string HookPermissionKind = "hook";
+    private const string ToolCallingActivityType = "tool-calling";
 
     private readonly ConcurrentDictionary<string, PendingApprovalRequest> _pendingApprovals = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, byte>> _requestApprovedTools = new(StringComparer.Ordinal);
@@ -55,10 +56,39 @@ internal sealed class CopilotApprovalCoordinator
         Func<ApprovalRequestedEventDto, Task> onApproval,
         CancellationToken cancellationToken)
     {
+        return await RequestApprovalAsync(
+                command,
+                agent,
+                request,
+                invocation,
+                toolNamesByCallId,
+                onActivity: null,
+                onApproval,
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    public async Task<PermissionRequestResult> RequestApprovalAsync(
+        RunTurnCommandDto command,
+        PatternAgentDefinitionDto agent,
+        PermissionRequest request,
+        PermissionInvocation invocation,
+        IReadOnlyDictionary<string, string> toolNamesByCallId,
+        Func<AgentActivityEventDto, Task>? onActivity,
+        Func<ApprovalRequestedEventDto, Task> onApproval,
+        CancellationToken cancellationToken)
+    {
         string? toolName = ResolveApprovalToolName(request, toolNamesByCallId);
         string? autoApprovedToolName = ResolveAutoApprovedToolName(request);
         string? mcpServerApprovalKey = ResolveMcpServerApprovalKey(request);
         string? approvalCacheKey = ResolveApprovalCacheKey(toolName, autoApprovedToolName);
+
+        AgentActivityEventDto? fileChangeActivity = BuildToolCallFileChangeActivity(command, agent, request, toolName);
+        if (fileChangeActivity is not null && onActivity is not null)
+        {
+            await onActivity(fileChangeActivity).ConfigureAwait(false);
+        }
+
         if (IsToolApprovedForRequest(command.RequestId, approvalCacheKey)
             || !RequiresToolCallApproval(command.Pattern.ApprovalPolicy, agent.Id, toolName, autoApprovedToolName, mcpServerApprovalKey))
         {
@@ -151,6 +181,46 @@ internal sealed class CopilotApprovalCoordinator
             Title = title,
             Detail = detail,
             PermissionDetail = BuildPermissionDetail(request),
+        };
+    }
+
+    internal static AgentActivityEventDto? BuildToolCallFileChangeActivity(
+        RunTurnCommandDto command,
+        PatternAgentDefinitionDto agent,
+        PermissionRequest request,
+        string? toolName)
+    {
+        if (request is not PermissionRequestWrite write)
+        {
+            return null;
+        }
+
+        string? filePath = NormalizeOptionalString(write.FileName);
+        if (filePath is null)
+        {
+            return null;
+        }
+
+        string agentName = string.IsNullOrWhiteSpace(agent.Name) ? agent.Id : agent.Name;
+        return new AgentActivityEventDto
+        {
+            Type = "agent-activity",
+            RequestId = command.RequestId,
+            SessionId = command.SessionId,
+            ActivityType = ToolCallingActivityType,
+            AgentId = NormalizeOptionalString(agent.Id),
+            AgentName = NormalizeOptionalString(agentName),
+            ToolName = NormalizeOptionalString(toolName),
+            ToolCallId = NormalizeOptionalString(write.ToolCallId),
+            FileChanges =
+            [
+                new ToolCallFileChangeDto
+                {
+                    Path = filePath,
+                    Diff = NormalizeOptionalPreviewText(write.Diff),
+                    NewFileContents = NormalizeOptionalPreviewText(write.NewFileContents),
+                },
+            ],
         };
     }
 
@@ -493,6 +563,11 @@ internal sealed class CopilotApprovalCoordinator
     private static string? NormalizeOptionalString(string? value)
     {
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    private static string? NormalizeOptionalPreviewText(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value;
     }
 
     private static IReadOnlyList<string>? NormalizeOptionalStringList(IEnumerable<string?> values)

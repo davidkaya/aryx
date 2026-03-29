@@ -3,6 +3,7 @@ import type {
   ApprovalDecision,
   PendingApprovalRecord,
 } from '@shared/domain/approval';
+import type { ToolCallFileChangePreview } from '@shared/contracts/sidecar';
 import type { PatternDefinition, ReasoningEffort } from '@shared/domain/pattern';
 import type { ProjectRecord } from '@shared/domain/project';
 import { createId } from '@shared/utils/ids';
@@ -41,6 +42,8 @@ export interface RunTimelineEventRecord {
   targetAgentId?: string;
   targetAgentName?: string;
   toolName?: string;
+  toolCallId?: string;
+  fileChanges?: ToolCallFileChangePreview[];
   approvalId?: string;
   approvalKind?: ApprovalCheckpointKind;
   approvalTitle?: string;
@@ -86,6 +89,8 @@ export interface AppendRunActivityEventInput {
   sourceAgentId?: string;
   sourceAgentName?: string;
   toolName?: string;
+  toolCallId?: string;
+  fileChanges?: ToolCallFileChangePreview[];
 }
 
 export interface UpsertRunMessageEventInput {
@@ -111,6 +116,87 @@ function approvalStatusToRunStatus(status: PendingApprovalRecord['status']): Run
 function normalizeOptionalString(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
   return trimmed ? trimmed : undefined;
+}
+
+function normalizeOptionalPreviewText(value: string | undefined): string | undefined {
+  return value?.trim() ? value : undefined;
+}
+
+function normalizeToolCallFileChange(
+  change: ToolCallFileChangePreview,
+): ToolCallFileChangePreview | undefined {
+  const path = normalizeOptionalString(change.path);
+  if (!path) {
+    return undefined;
+  }
+
+  const diff = normalizeOptionalPreviewText(change.diff);
+  const newFileContents = normalizeOptionalPreviewText(change.newFileContents);
+  return {
+    path,
+    diff,
+    newFileContents,
+  };
+}
+
+function mergeToolCallFileChange(
+  existing: ToolCallFileChangePreview,
+  incoming: ToolCallFileChangePreview,
+): ToolCallFileChangePreview {
+  return {
+    path: incoming.path,
+    diff: incoming.diff ?? existing.diff,
+    newFileContents: incoming.newFileContents ?? existing.newFileContents,
+  };
+}
+
+function normalizeToolCallFileChanges(
+  changes: readonly ToolCallFileChangePreview[] | undefined,
+): ToolCallFileChangePreview[] | undefined {
+  if (!changes || changes.length === 0) {
+    return undefined;
+  }
+
+  const normalized = new Map<string, ToolCallFileChangePreview>();
+  for (const change of changes) {
+    const nextChange = normalizeToolCallFileChange(change);
+    if (!nextChange) {
+      continue;
+    }
+
+    const previous = normalized.get(nextChange.path);
+    normalized.set(
+      nextChange.path,
+      previous ? mergeToolCallFileChange(previous, nextChange) : nextChange,
+    );
+  }
+
+  return normalized.size > 0 ? [...normalized.values()] : undefined;
+}
+
+function mergeToolCallFileChanges(
+  existing: readonly ToolCallFileChangePreview[] | undefined,
+  incoming: readonly ToolCallFileChangePreview[] | undefined,
+): ToolCallFileChangePreview[] | undefined {
+  const normalizedExisting = normalizeToolCallFileChanges(existing);
+  const normalizedIncoming = normalizeToolCallFileChanges(incoming);
+  if (!normalizedExisting) {
+    return normalizedIncoming;
+  }
+
+  if (!normalizedIncoming) {
+    return normalizedExisting;
+  }
+
+  const merged = new Map(
+    normalizedExisting.map((change) => [change.path, change] satisfies [string, ToolCallFileChangePreview]),
+  );
+  for (const change of normalizedIncoming) {
+    const previous = merged.get(change.path);
+    merged.set(change.path, previous ? mergeToolCallFileChange(previous, change) : change);
+  }
+
+  return [...merged.values()];
 }
 
 function normalizeRunTimelineAgent(
@@ -153,6 +239,8 @@ function normalizeRunTimelineEvent(
     targetAgentId: normalizeOptionalString(event.targetAgentId),
     targetAgentName: normalizeOptionalString(event.targetAgentName),
     toolName: normalizeOptionalString(event.toolName),
+    toolCallId: normalizeOptionalString(event.toolCallId),
+    fileChanges: normalizeToolCallFileChanges(event.fileChanges),
     approvalId: normalizeOptionalString(event.approvalId),
     approvalKind: event.approvalKind,
     approvalTitle: normalizeOptionalString(event.approvalTitle),
@@ -214,6 +302,28 @@ function appendRunTimelineEvent(
   return {
     ...run,
     events: [...run.events, nextEvent],
+  };
+}
+
+function upsertRunTimelineEventAt(
+  run: SessionRunRecord,
+  eventIndex: number,
+  event: RunTimelineEventRecord,
+): SessionRunRecord {
+  if (eventIndex < 0 || eventIndex >= run.events.length) {
+    return appendRunTimelineEvent(run, event);
+  }
+
+  const nextEvent = normalizeRunTimelineEvent(event);
+  if (!nextEvent) {
+    return run;
+  }
+
+  const nextEvents = run.events.slice();
+  nextEvents[eventIndex] = nextEvent;
+  return {
+    ...run,
+    events: nextEvents,
   };
 }
 
@@ -417,13 +527,26 @@ export function appendRunActivityEvent(
     }
     case 'tool-calling': {
       const agent = resolveRunTimelineAgent(run, input.agentId, input.agentName);
-      return appendRunTimelineEvent(run, {
+      const toolCallId = normalizeOptionalString(input.toolCallId);
+      const existingIndex = toolCallId
+        ? run.events.findIndex((event) => event.kind === 'tool-call' && event.toolCallId === toolCallId)
+        : -1;
+      const existingEvent = existingIndex >= 0 ? run.events[existingIndex] : undefined;
+      const nextEvent: RunTimelineEventRecord = {
+        id: existingEvent?.id ?? createId('run-event'),
         kind: 'tool-call',
-        occurredAt: input.occurredAt,
+        occurredAt: existingEvent?.occurredAt ?? input.occurredAt,
+        updatedAt: existingEvent ? input.occurredAt : undefined,
         status: 'completed',
-        ...agent,
-        toolName: normalizeOptionalString(input.toolName),
-      });
+        agentId: agent.agentId ?? existingEvent?.agentId,
+        agentName: agent.agentName ?? existingEvent?.agentName,
+        toolName: normalizeOptionalString(input.toolName) ?? existingEvent?.toolName,
+        toolCallId,
+        fileChanges: mergeToolCallFileChanges(existingEvent?.fileChanges, input.fileChanges),
+      };
+      return existingIndex >= 0
+        ? upsertRunTimelineEventAt(run, existingIndex, nextEvent)
+        : appendRunTimelineEvent(run, nextEvent);
     }
     case 'handoff': {
       const sourceAgent = resolveRunTimelineAgent(run, input.sourceAgentId, input.sourceAgentName);

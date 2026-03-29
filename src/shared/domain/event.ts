@@ -1,6 +1,6 @@
 import type { SessionRunRecord } from '@shared/domain/runTimeline';
 
-import type { QuotaSnapshot } from '@shared/contracts/sidecar';
+import type { QuotaSnapshot, ToolCallFileChangePreview } from '@shared/contracts/sidecar';
 
 export type SessionActivityType = 'thinking' | 'tool-calling' | 'handoff' | 'completed';
 
@@ -36,6 +36,8 @@ export interface SessionEventRecord {
   sourceAgentId?: string;
   sourceAgentName?: string;
   toolName?: string;
+  toolCallId?: string;
+  fileChanges?: ToolCallFileChangePreview[];
   run?: SessionRunRecord;
   error?: string;
 

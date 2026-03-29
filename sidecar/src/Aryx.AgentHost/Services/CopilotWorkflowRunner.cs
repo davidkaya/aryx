@@ -50,6 +50,7 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
                     request,
                     invocation,
                     state.ToolNamesByCallId,
+                    activity => EmitActivityAsync(command, state, activity, onEvent),
                     onApproval,
                     runCancellation.Token),
                 (agent, request, invocation) => _userInputCoordinator.RequestUserInputAsync(

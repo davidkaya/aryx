@@ -110,7 +110,8 @@
     "publish": {
       "provider": "github",
       "owner": "davidkaya",
-      "repo": "aryx"
+      "repo": "aryx",
+      "releaseType": "release"
     },
     "win": {
       "target": [

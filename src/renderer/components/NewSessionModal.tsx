@@ -57,8 +57,8 @@ export function NewSessionModal({
   const canCreate = projectId && patternId;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#07080e]/90 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="new-session-title">
-      <div className="w-full max-w-md rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-1)] shadow-[0_16px_64px_rgba(0,0,0,0.5)]">
+    <div className="overlay-backdrop-enter fixed inset-0 z-50 flex items-center justify-center bg-[#07080e]/90 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="new-session-title">
+      <div className="overlay-panel-enter w-full max-w-md rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-1)] shadow-[0_16px_64px_rgba(0,0,0,0.5)]">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[var(--color-border)] px-5 py-4">
           <h2 id="new-session-title" className="font-display text-[13px] font-semibold text-[var(--color-text-primary)]">New Session</h2>

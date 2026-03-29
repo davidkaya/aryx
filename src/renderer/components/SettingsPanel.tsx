@@ -212,7 +212,7 @@ export function SettingsPanel({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-[var(--color-surface-0)]">
+    <div className="overlay-slide-enter fixed inset-0 z-50 flex flex-col bg-[var(--color-surface-0)]">
       <div className="drag-region flex items-center gap-3 border-b border-[var(--color-border)] px-5 pb-3 pt-3">
         <button
           className="no-drag flex size-8 items-center justify-center rounded-lg text-[var(--color-text-secondary)] transition-all duration-200 hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-primary)]"

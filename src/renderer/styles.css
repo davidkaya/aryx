@@ -542,6 +542,92 @@ body {
   animation: palette-backdrop-enter 0.15s ease-out;
 }
 
+/* ── Overlay transitions ─────────────────────────────────────── */
+
+@keyframes overlay-backdrop-in {
+  from { opacity: 0; }
+}
+
+@keyframes overlay-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.99);
+  }
+}
+
+@keyframes overlay-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+}
+
+.overlay-backdrop-enter {
+  animation: overlay-backdrop-in 0.18s ease-out;
+}
+
+.overlay-panel-enter {
+  animation: overlay-panel-in 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.overlay-slide-enter {
+  animation: overlay-slide-in 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ── Chat message appearance ─────────────────────────────────── */
+
+@keyframes message-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+.message-enter {
+  animation: message-in 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* ── Sidebar session item ────────────────────────────────────── */
+
+@keyframes session-item-in {
+  from {
+    opacity: 0;
+    transform: translateX(-6px);
+  }
+}
+
+.session-item-enter {
+  animation: session-item-in 0.18s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* ── Approval banner slide ───────────────────────────────────── */
+
+@keyframes banner-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(-100%);
+  }
+}
+
+.banner-slide-enter {
+  animation: banner-slide-in 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ── Respect reduced motion ──────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .palette-enter,
+  .palette-backdrop-enter,
+  .overlay-backdrop-enter,
+  .overlay-panel-enter,
+  .overlay-slide-enter,
+  .message-enter,
+  .session-item-enter,
+  .banner-slide-enter {
+    animation: none;
+  }
+}
+
 /* ── Markdown prose styles ───────────────────────────────────── */
 
 .markdown-content {

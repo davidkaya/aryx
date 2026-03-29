@@ -345,7 +345,7 @@ export function ChatPane({
                   phase === 'thinking' ? 'Thinking' : phase === 'final' ? 'Final' : undefined;
 
                 return (
-                  <div className="group py-3" data-message-id={message.id} key={message.id}>
+                  <div className="message-enter group py-3" data-message-id={message.id} key={message.id}>
                     <div className="flex gap-3">
                       <div
                         className={`mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full ${
@@ -448,7 +448,7 @@ export function ChatPane({
         <div className="mx-auto max-w-3xl">
           {/* Pending approval banner */}
           {pendingApproval && (
-            <div className="mb-3 space-y-2">
+            <div className="banner-slide-enter mb-3 space-y-2">
               <ApprovalBanner
                 approval={pendingApproval}
                 isResolving={isResolvingApproval}

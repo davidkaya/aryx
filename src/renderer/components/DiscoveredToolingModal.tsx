@@ -81,10 +81,10 @@ export function DiscoveredToolingModal({
     <div
       aria-labelledby="discovered-tooling-title"
       aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-[#07080e]/90 backdrop-blur-sm"
+      className="overlay-backdrop-enter fixed inset-0 z-50 flex items-center justify-center bg-[#07080e]/90 backdrop-blur-sm"
       role="dialog"
     >
-      <div className="flex max-h-[80vh] w-full max-w-lg flex-col rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-1)] shadow-[0_16px_64px_rgba(0,0,0,0.5)]">
+      <div className="overlay-panel-enter flex max-h-[80vh] w-full max-w-lg flex-col rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-1)] shadow-[0_16px_64px_rgba(0,0,0,0.5)]">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[var(--color-border)] px-5 py-4">
           <div className="flex items-center gap-2.5">

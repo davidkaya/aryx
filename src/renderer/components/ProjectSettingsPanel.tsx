@@ -111,7 +111,7 @@ export function ProjectSettingsPanel({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-[var(--color-surface-0)]">
+    <div className="overlay-slide-enter fixed inset-0 z-50 flex flex-col bg-[var(--color-surface-0)]">
       {/* Header */}
       <div className="drag-region flex items-center gap-3 border-b border-[var(--color-border)] px-5 pb-3 pt-3">
         <button

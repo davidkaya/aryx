@@ -213,7 +213,7 @@ function SessionItem({
 
   return (
     <div
-      className={`group relative flex w-full cursor-pointer items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-all duration-200 ${
+      className={`session-item-enter group relative flex w-full cursor-pointer items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-all duration-200 ${
         isActive
           ? 'bg-[var(--color-accent-muted)] ring-1 ring-[var(--color-border-glow)]'
           : 'hover:bg-[var(--color-surface-2)]/60'

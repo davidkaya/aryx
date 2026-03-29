@@ -485,6 +485,13 @@ export default function App() {
     }
   }, [api, workspace]);
 
+  // Listen for tray "Quick Scratchpad" action
+  const scratchpadRef = useRef(handleCreateScratchpad);
+  scratchpadRef.current = handleCreateScratchpad;
+  useEffect(() => {
+    return api.onTrayCreateScratchpad(() => scratchpadRef.current());
+  }, [api]);
+
   const projectForSettings = useMemo(
     () => workspace?.projects.find((p) => p.id === projectSettingsId),
     [workspace?.projects, projectSettingsId],
@@ -638,6 +645,8 @@ export default function App() {
         onSetTheme={(theme) => void api.setTheme(theme)}
         notificationsEnabled={workspace.settings.notificationsEnabled !== false}
         onSetNotificationsEnabled={(enabled) => void api.setNotificationsEnabled(enabled)}
+        minimizeToTray={workspace.settings.minimizeToTray === true}
+        onSetMinimizeToTray={(enabled) => void api.setMinimizeToTray(enabled)}
         onOpenAppDataFolder={() => void api.openAppDataFolder()}
         onResetLocalWorkspace={async () => {
           const fresh = await api.resetLocalWorkspace();

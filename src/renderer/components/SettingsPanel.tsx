@@ -42,6 +42,8 @@ interface SettingsPanelProps {
   onSetTheme: (theme: AppearanceTheme) => void;
   notificationsEnabled: boolean;
   onSetNotificationsEnabled: (enabled: boolean) => void;
+  minimizeToTray: boolean;
+  onSetMinimizeToTray: (enabled: boolean) => void;
   onOpenAppDataFolder: () => void;
   onResetLocalWorkspace: () => Promise<void>;
   onResolveUserDiscoveredTooling?: (serverIds: string[], resolution: 'accept' | 'dismiss') => void;
@@ -122,6 +124,8 @@ export function SettingsPanel({
   onSetTheme,
   notificationsEnabled,
   onSetNotificationsEnabled,
+  minimizeToTray,
+  onSetMinimizeToTray,
   onOpenAppDataFolder,
   onResetLocalWorkspace,
   onResolveUserDiscoveredTooling,
@@ -265,6 +269,8 @@ export function SettingsPanel({
                 onSetTheme={onSetTheme}
                 notificationsEnabled={notificationsEnabled}
                 onSetNotificationsEnabled={onSetNotificationsEnabled}
+                minimizeToTray={minimizeToTray}
+                onSetMinimizeToTray={onSetMinimizeToTray}
               />
             )}
             {activeSection === 'connection' && (
@@ -327,12 +333,16 @@ function AppearanceSection({
   onSetTheme,
   notificationsEnabled,
   onSetNotificationsEnabled,
+  minimizeToTray,
+  onSetMinimizeToTray,
 }: {
   theme: AppearanceTheme;
   onSetTheme: (theme: AppearanceTheme) => void;
   notificationsEnabled: boolean;
   onSetNotificationsEnabled: (enabled: boolean) => void;
-}) {
+  minimizeToTray: boolean;
+  onSetMinimizeToTray: (enabled: boolean) => void;
+}){
   return (
     <div>
       <div className="mb-1">
@@ -396,6 +406,30 @@ function AppearanceSection({
           </p>
         </div>
         <ToggleSwitch enabled={notificationsEnabled} />
+      </button>
+
+      {/* System Tray */}
+      <div className="mt-8 mb-1">
+        <h3 className="font-display text-[13px] font-semibold text-[var(--color-text-primary)]">System Tray</h3>
+        <p className="mt-0.5 text-[12px] text-[var(--color-text-muted)]">
+          Control how Aryx behaves when you close the window
+        </p>
+      </div>
+
+      <button
+        className="mt-4 flex w-full items-center justify-between rounded-lg border border-[var(--color-border)] px-4 py-3 text-left transition hover:bg-[var(--color-surface-3)]/40"
+        onClick={() => onSetMinimizeToTray(!minimizeToTray)}
+        type="button"
+      >
+        <div>
+          <span className="text-[13px] font-medium text-[var(--color-text-primary)]">
+            Minimize to tray on close
+          </span>
+          <p className="text-[12px] text-[var(--color-text-muted)]">
+            Keep Aryx running in the system tray when you close the window instead of quitting
+          </p>
+        </div>
+        <ToggleSwitch enabled={minimizeToTray} />
       </button>
     </div>
   );

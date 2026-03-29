@@ -16,6 +16,7 @@ export const ipcChannels = {
   setTheme: 'settings:set-theme',
   setTerminalHeight: 'settings:set-terminal-height',
   setNotificationsEnabled: 'settings:set-notifications-enabled',
+  setMinimizeToTray: 'settings:set-minimize-to-tray',
   saveMcpServer: 'tooling:mcp:save',
   deleteMcpServer: 'tooling:mcp:delete',
   saveLspProfile: 'tooling:lsp:save',
@@ -54,4 +55,5 @@ export const ipcChannels = {
   workspaceUpdated: 'workspace:updated',
   sessionEvent: 'sessions:event',
   getQuota: 'sidecar:get-quota',
+  trayCreateScratchpad: 'tray:create-scratchpad',
 } as const;

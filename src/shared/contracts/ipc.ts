@@ -195,6 +195,7 @@ export interface ElectronApi {
   setTheme(theme: AppearanceTheme): Promise<WorkspaceState>;
   setTerminalHeight(input: SetTerminalHeightInput): Promise<WorkspaceState>;
   setNotificationsEnabled(enabled: boolean): Promise<WorkspaceState>;
+  setMinimizeToTray(enabled: boolean): Promise<WorkspaceState>;
   describeTerminal(): Promise<TerminalSnapshot | undefined>;
   createTerminal(): Promise<TerminalSnapshot>;
   restartTerminal(): Promise<TerminalSnapshot>;
@@ -208,6 +209,7 @@ export interface ElectronApi {
   onTerminalExit(listener: (info: TerminalExitInfo) => void): () => void;
   onWorkspaceUpdated(listener: (workspace: WorkspaceState) => void): () => void;
   onSessionEvent(listener: (event: SessionEventRecord) => void): () => void;
+  onTrayCreateScratchpad(listener: () => void): () => void;
 }
 
 export interface RendererSelectionState {

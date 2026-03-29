@@ -27,6 +27,7 @@ const api: ElectronApi = {
   setTheme: (theme) => ipcRenderer.invoke(ipcChannels.setTheme, theme),
   setTerminalHeight: (input) => ipcRenderer.invoke(ipcChannels.setTerminalHeight, input),
   setNotificationsEnabled: (enabled) => ipcRenderer.invoke(ipcChannels.setNotificationsEnabled, enabled),
+  setMinimizeToTray: (enabled) => ipcRenderer.invoke(ipcChannels.setMinimizeToTray, enabled),
   saveMcpServer: (input) => ipcRenderer.invoke(ipcChannels.saveMcpServer, input),
   deleteMcpServer: (serverId) => ipcRenderer.invoke(ipcChannels.deleteMcpServer, serverId),
   saveLspProfile: (input) => ipcRenderer.invoke(ipcChannels.saveLspProfile, input),
@@ -94,6 +95,12 @@ const api: ElectronApi = {
 
     ipcRenderer.on(ipcChannels.sessionEvent, handler);
     return () => ipcRenderer.off(ipcChannels.sessionEvent, handler);
+  },
+  onTrayCreateScratchpad: (listener) => {
+    const handler = () => listener();
+
+    ipcRenderer.on(ipcChannels.trayCreateScratchpad, handler);
+    return () => ipcRenderer.off(ipcChannels.trayCreateScratchpad, handler);
   },
 };
 

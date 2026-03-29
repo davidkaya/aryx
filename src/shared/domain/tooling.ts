@@ -65,6 +65,7 @@ export interface WorkspaceSettings {
   discoveredUserTooling: DiscoveredToolingState;
   terminalHeight?: number;
   notificationsEnabled?: boolean;
+  minimizeToTray?: boolean;
 }
 
 export interface SessionToolingSelection {
@@ -206,6 +207,8 @@ export function normalizeWorkspaceSettings(settings?: Partial<WorkspaceSettings>
     },
     discoveredUserTooling: normalizeDiscoveredToolingState(settings?.discoveredUserTooling),
     ...(terminalHeight !== undefined ? { terminalHeight } : {}),
+    ...(settings?.notificationsEnabled !== undefined ? { notificationsEnabled: settings.notificationsEnabled } : {}),
+    ...(settings?.minimizeToTray !== undefined ? { minimizeToTray: settings.minimizeToTray } : {}),
   };
 }
 

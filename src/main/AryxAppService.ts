@@ -514,6 +514,12 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     return this.persistAndBroadcast(workspace);
   }
 
+  async setMinimizeToTray(enabled: boolean): Promise<WorkspaceState> {
+    const workspace = await this.loadWorkspace();
+    workspace.settings.minimizeToTray = enabled;
+    return this.persistAndBroadcast(workspace);
+  }
+
   async describeTerminal(): Promise<TerminalSnapshot | undefined> {
     return this.ptyManager.getSnapshot();
   }

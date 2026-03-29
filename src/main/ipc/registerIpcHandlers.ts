@@ -91,6 +91,10 @@ export function registerIpcHandlers(window: BrowserWindow, service: AryxAppServi
     ipcChannels.setNotificationsEnabled,
     (_event, enabled: boolean) => service.setNotificationsEnabled(enabled),
   );
+  ipcMain.handle(
+    ipcChannels.setMinimizeToTray,
+    (_event, enabled: boolean) => service.setMinimizeToTray(enabled),
+  );
   ipcMain.handle(ipcChannels.saveMcpServer, (_event, input: SaveMcpServerInput) =>
     service.saveMcpServer(input.server),
   );

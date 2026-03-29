@@ -1,6 +1,14 @@
 import { describe, expect, test } from 'bun:test';
 
-import { branchSessionRecord, querySessions, duplicateSessionRecord, renameSessionRecord } from '@shared/domain/sessionLibrary';
+import {
+  branchSessionRecord,
+  duplicateSessionRecord,
+  editAndResendSessionRecord,
+  querySessions,
+  regenerateSessionRecord,
+  renameSessionRecord,
+  setSessionMessagePinnedRecord,
+} from '@shared/domain/sessionLibrary';
 import type { PatternDefinition } from '@shared/domain/pattern';
 import type { ProjectRecord } from '@shared/domain/project';
 import type { SessionRecord } from '@shared/domain/session';
@@ -176,6 +184,17 @@ describe('session library helpers', () => {
     expect(session.runs).toEqual([]);
   });
 
+  test('pins and unpins messages within a session', () => {
+    const pinned = setSessionMessagePinnedRecord(createSession(), 'msg-1', true, '2026-03-23T00:06:00.000Z');
+
+    expect(pinned.updatedAt).toBe('2026-03-23T00:06:00.000Z');
+    expect(pinned.messages[0]?.isPinned).toBe(true);
+
+    const unpinned = setSessionMessagePinnedRecord(pinned, 'msg-1', false, '2026-03-23T00:07:00.000Z');
+    expect(unpinned.messages[0]?.isPinned).toBeUndefined();
+    expect(pinned.messages[0]?.isPinned).toBe(true);
+  });
+
   test('branches sessions from a user message and retains only the prior transcript', () => {
     const sourceSession = createSession({
       title: 'Manual branch source',
@@ -349,6 +368,177 @@ describe('session library helpers', () => {
       sourceSessionId: 'session-1',
       sourceMessageId: 'msg-2',
       sourceMessageIndex: 1,
+      action: 'branch',
+    });
+  });
+
+  test('regenerates the last assistant message by truncating back to the prior user turn', () => {
+    const sourceSession = createSession({
+      messages: [
+        {
+          id: 'msg-1',
+          role: 'user',
+          authorName: 'You',
+          content: 'Investigate the refresh bug.',
+          createdAt: '2026-03-23T00:00:00.000Z',
+        },
+        {
+          id: 'msg-2',
+          role: 'assistant',
+          authorName: 'Reviewer',
+          content: 'I found two likely causes.',
+          createdAt: '2026-03-23T00:01:00.000Z',
+        },
+        {
+          id: 'msg-3',
+          role: 'user',
+          authorName: 'You',
+          content: 'Try a different approach.',
+          createdAt: '2026-03-23T00:02:00.000Z',
+        },
+        {
+          id: 'msg-4',
+          role: 'assistant',
+          authorName: 'Reviewer',
+          content: 'Here is the alternate plan.',
+          createdAt: '2026-03-23T00:03:00.000Z',
+          pending: true,
+        },
+      ],
+    });
+
+    const regenerated = regenerateSessionRecord(
+      sourceSession,
+      createPattern(),
+      'session-regenerated',
+      'msg-4',
+      '2026-03-23T00:06:00.000Z',
+    );
+
+    expect(regenerated.messages.map((message) => message.id)).toEqual(['msg-1', 'msg-2', 'msg-3']);
+    expect(regenerated.messages[2]?.role).toBe('user');
+    expect(regenerated.messages[1]?.pending).toBe(false);
+    expect(regenerated.branchOrigin).toMatchObject({
+      sourceSessionId: 'session-1',
+      sourceMessageId: 'msg-4',
+      sourceMessageIndex: 3,
+      action: 'regenerate',
+    });
+  });
+
+  test('rejects regenerating any assistant message except the last one', () => {
+    const sourceSession = createSession({
+      messages: [
+        {
+          id: 'msg-1',
+          role: 'user',
+          authorName: 'You',
+          content: 'Investigate the refresh bug.',
+          createdAt: '2026-03-23T00:00:00.000Z',
+        },
+        {
+          id: 'msg-2',
+          role: 'assistant',
+          authorName: 'Reviewer',
+          content: 'I found two likely causes.',
+          createdAt: '2026-03-23T00:01:00.000Z',
+        },
+        {
+          id: 'msg-3',
+          role: 'user',
+          authorName: 'You',
+          content: 'Try a different approach.',
+          createdAt: '2026-03-23T00:02:00.000Z',
+        },
+      ],
+    });
+
+    expect(() =>
+      regenerateSessionRecord(
+        sourceSession,
+        createPattern(),
+        'session-regenerated',
+        'msg-2',
+        '2026-03-23T00:06:00.000Z',
+      )).toThrow('Only the last assistant message can be regenerated.');
+  });
+
+  test('edits and resends a user message by creating an implicit branch', () => {
+    const sourceSession = createSession({
+      messages: [
+        {
+          id: 'msg-1',
+          role: 'user',
+          authorName: 'You',
+          content: 'Investigate the refresh bug.',
+          createdAt: '2026-03-23T00:00:00.000Z',
+        },
+        {
+          id: 'msg-2',
+          role: 'assistant',
+          authorName: 'Reviewer',
+          content: 'I found two likely causes.',
+          createdAt: '2026-03-23T00:01:00.000Z',
+        },
+        {
+          id: 'msg-3',
+          role: 'user',
+          authorName: 'You',
+          content: 'Try a different approach.',
+          createdAt: '2026-03-23T00:02:00.000Z',
+          attachments: [
+            {
+              type: 'file',
+              path: 'C:\\workspace\\alpha\\notes.txt',
+              displayName: 'notes.txt',
+            },
+          ],
+        },
+        {
+          id: 'msg-4',
+          role: 'assistant',
+          authorName: 'Reviewer',
+          content: 'Here is the alternate plan.',
+          createdAt: '2026-03-23T00:03:00.000Z',
+        },
+      ],
+    });
+
+    const edited = editAndResendSessionRecord(
+      sourceSession,
+      createPattern(),
+      'session-edited',
+      'msg-3',
+      'Focus on session state only.',
+      '2026-03-23T00:06:00.000Z',
+      [
+        {
+          type: 'file',
+          path: 'C:\\workspace\\alpha\\state-notes.txt',
+          displayName: 'state-notes.txt',
+        },
+      ],
+    );
+
+    expect(edited.messages.map((message) => message.id)).toEqual(['msg-1', 'msg-2', 'msg-3']);
+    expect(edited.messages[2]).toMatchObject({
+      id: 'msg-3',
+      role: 'user',
+      content: 'Focus on session state only.',
+      attachments: [
+        {
+          type: 'file',
+          path: 'C:\\workspace\\alpha\\state-notes.txt',
+          displayName: 'state-notes.txt',
+        },
+      ],
+    });
+    expect(edited.messages[2]?.attachments).not.toBe(sourceSession.messages[2]?.attachments);
+    expect(edited.branchOrigin).toMatchObject({
+      sourceSessionId: 'session-1',
+      sourceMessageId: 'msg-3',
+      sourceMessageIndex: 2,
+      action: 'edit-and-resend',
     });
   });
 

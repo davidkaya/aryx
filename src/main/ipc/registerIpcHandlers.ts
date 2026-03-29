@@ -9,6 +9,8 @@ import type {
   DismissSessionMcpAuthInput,
   DismissSessionPlanReviewInput,
   DeleteSessionInput,
+  EditAndResendSessionMessageInput,
+  RegenerateSessionMessageInput,
   StartSessionMcpAuthInput,
   DuplicateSessionInput,
   RenameSessionInput,
@@ -26,6 +28,7 @@ import type {
   SetProjectAgentProfileEnabledInput,
   SetSessionArchivedInput,
   SetSessionInteractionModeInput,
+  SetSessionMessagePinnedInput,
   SetSessionPinnedInput,
   SetTerminalHeightInput,
   ResizeTerminalInput,
@@ -149,6 +152,9 @@ export function registerIpcHandlers(
   ipcMain.handle(ipcChannels.branchSession, (_event, input: BranchSessionInput) =>
     service.branchSession(input.sessionId, input.messageId),
   );
+  ipcMain.handle(ipcChannels.setSessionMessagePinned, (_event, input: SetSessionMessagePinnedInput) =>
+    service.setSessionMessagePinned(input.sessionId, input.messageId, input.isPinned),
+  );
   ipcMain.handle(ipcChannels.renameSession, (_event, input: RenameSessionInput) =>
     service.renameSession(input.sessionId, input.title),
   );
@@ -160,6 +166,12 @@ export function registerIpcHandlers(
   );
   ipcMain.handle(ipcChannels.deleteSession, (_event, input: DeleteSessionInput) =>
     service.deleteSession(input.sessionId),
+  );
+  ipcMain.handle(ipcChannels.regenerateSessionMessage, (_event, input: RegenerateSessionMessageInput) =>
+    service.regenerateSessionMessage(input.sessionId, input.messageId),
+  );
+  ipcMain.handle(ipcChannels.editAndResendSessionMessage, (_event, input: EditAndResendSessionMessageInput) =>
+    service.editAndResendSessionMessage(input.sessionId, input.messageId, input.content, input.attachments),
   );
   ipcMain.handle(ipcChannels.sendSessionMessage, (_event, input: SendSessionMessageInput) =>
     service.sendSessionMessage(input.sessionId, input.content, input.attachments, input.messageMode),

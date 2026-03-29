@@ -8,12 +8,13 @@ import type {
   AgentActivityEvent,
   ApprovalRequestedEvent,
   ExitPlanModeRequestedEvent,
+  MessageMode,
   McpOauthRequiredEvent,
   RunTurnCustomAgentConfig,
   RunTurnToolingConfig,
   SidecarCapabilities,
-  TurnDeltaEvent,
   UserInputRequestedEvent,
+  TurnDeltaEvent,
 } from '@shared/contracts/sidecar';
 import type { TurnScopedEvent } from '@main/sidecar/runTurnPending';
 import {
@@ -64,13 +65,17 @@ import { isScratchpadProject, type ProjectRecord } from '@shared/domain/project'
 import {
   branchSessionRecord,
   duplicateSessionRecord,
+  editAndResendSessionRecord,
   querySessions as queryWorkspaceSessions,
+  regenerateSessionRecord,
   renameSessionRecord,
+  setSessionMessagePinnedRecord,
   type QuerySessionsInput,
   type SessionQueryResult,
 } from '@shared/domain/sessionLibrary';
 import type { SessionEventRecord } from '@shared/domain/event';
 import type { TerminalExitInfo, TerminalSnapshot } from '@shared/domain/terminal';
+import type { ChatMessageAttachment } from '@shared/domain/attachment';
 import {
   applySessionApprovalSettings,
   applySessionModelConfig,
@@ -721,6 +726,15 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     return this.persistAndBroadcast(workspace);
   }
 
+  async setSessionMessagePinned(sessionId: string, messageId: string, isPinned: boolean): Promise<WorkspaceState> {
+    const workspace = await this.loadWorkspace();
+    const session = this.requireSession(workspace, sessionId);
+    const updated = setSessionMessagePinnedRecord(session, messageId, isPinned, nowIso());
+
+    Object.assign(session, updated);
+    return this.persistAndBroadcast(workspace);
+  }
+
   async renameSession(sessionId: string, title: string): Promise<WorkspaceState> {
     const workspace = await this.loadWorkspace();
     const session = this.requireSession(workspace, sessionId);
@@ -779,11 +793,117 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     return this.persistAndBroadcast(workspace);
   }
 
+  async regenerateSessionMessage(sessionId: string, messageId: string): Promise<void> {
+    const workspace = await this.loadWorkspace();
+    const session = this.requireSession(workspace, sessionId);
+    if (session.status === 'running') {
+      throw new Error('Wait for the current response or approval checkpoint to finish before regenerating a message.');
+    }
+
+    const project = this.requireProject(workspace, session.projectId);
+    const pattern = this.requirePattern(workspace, session.patternId);
+    const effectivePattern = this.applyProjectCustomizationToPattern(
+      await this.buildEffectivePattern(pattern, session),
+      project,
+    );
+    const projectInstructions = resolveProjectInstructionsContent(project.customization);
+    const occurredAt = nowIso();
+    const regeneratedSession = regenerateSessionRecord(
+      session,
+      effectivePattern,
+      createId('session'),
+      messageId,
+      occurredAt,
+    );
+    if (isScratchpadProject(regeneratedSession.projectId)) {
+      regeneratedSession.cwd = undefined;
+    }
+
+    await this.ensureScratchpadSessionDirectory(regeneratedSession);
+    workspace.sessions.unshift(regeneratedSession);
+    workspace.selectedProjectId = regeneratedSession.projectId;
+    workspace.selectedPatternId = regeneratedSession.patternId;
+    workspace.selectedSessionId = regeneratedSession.id;
+
+    const triggerMessage = regeneratedSession.messages.at(-1);
+    if (!triggerMessage || triggerMessage.role !== 'user') {
+      throw new Error('Regenerated session is missing the user message needed to replay the turn.');
+    }
+
+    await this.runPreparedSessionTurn(workspace, regeneratedSession, project, effectivePattern, projectInstructions, {
+      occurredAt,
+      requestId: createId('turn'),
+      triggerMessageId: triggerMessage.id,
+    });
+  }
+
+  async editAndResendSessionMessage(
+    sessionId: string,
+    messageId: string,
+    content: string,
+    attachments?: ChatMessageAttachment[],
+  ): Promise<void> {
+    const workspace = await this.loadWorkspace();
+    const session = this.requireSession(workspace, sessionId);
+    if (session.status === 'running') {
+      throw new Error('Wait for the current response or approval checkpoint to finish before editing and resending a message.');
+    }
+
+    const sourceMessage = session.messages.find((message) => message.id === messageId);
+    if (!sourceMessage) {
+      throw new Error(`Message ${messageId} not found in session ${session.id}.`);
+    }
+
+    const preparedContent = prepareChatMessageContent(content);
+    if (!preparedContent) {
+      throw new Error('Message content is required.');
+    }
+
+    const project = this.requireProject(workspace, session.projectId);
+    const pattern = this.requirePattern(workspace, session.patternId);
+    const effectivePattern = this.applyProjectCustomizationToPattern(
+      await this.buildEffectivePattern(pattern, session),
+      project,
+    );
+    const projectInstructions = resolveProjectInstructionsContent(project.customization);
+    const occurredAt = nowIso();
+    const nextAttachments = attachments === undefined ? sourceMessage.attachments : attachments;
+    const editedSession = editAndResendSessionRecord(
+      session,
+      effectivePattern,
+      createId('session'),
+      messageId,
+      preparedContent,
+      occurredAt,
+      nextAttachments,
+    );
+    if (isScratchpadProject(editedSession.projectId)) {
+      editedSession.cwd = undefined;
+    }
+
+    await this.ensureScratchpadSessionDirectory(editedSession);
+    workspace.sessions.unshift(editedSession);
+    workspace.selectedProjectId = editedSession.projectId;
+    workspace.selectedPatternId = editedSession.patternId;
+    workspace.selectedSessionId = editedSession.id;
+
+    const triggerMessage = editedSession.messages.at(-1);
+    if (!triggerMessage || triggerMessage.role !== 'user') {
+      throw new Error('Edited session is missing the user message needed to replay the turn.');
+    }
+
+    await this.runPreparedSessionTurn(workspace, editedSession, project, effectivePattern, projectInstructions, {
+      occurredAt,
+      requestId: createId('turn'),
+      triggerMessageId: triggerMessage.id,
+    });
+  }
+
   async sendSessionMessage(
     sessionId: string,
     content: string,
-    attachments?: import('@shared/domain/attachment').ChatMessageAttachment[],
-    messageMode?: import('@shared/contracts/sidecar').MessageMode,
+    attachments?: ChatMessageAttachment[],
+    messageMode?: MessageMode,
   ): Promise<void> {
     const workspace = await this.loadWorkspace();
     const session = this.requireSession(workspace, sessionId);
@@ -806,7 +926,6 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     }
 
     const requestId = createId('turn');
-    const workspaceKind = isScratchpadProject(project) ? 'scratchpad' : 'project';
     const occurredAt = nowIso();
     const userMessageId = createId('msg');
     session.messages.push({
@@ -817,103 +936,13 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
       createdAt: occurredAt,
       attachments: attachments?.length ? attachments : undefined,
     });
-    session.title = resolveSessionTitle(session, effectivePattern, session.messages);
-    session.status = 'running';
-    session.lastError = undefined;
-    session.pendingPlanReview = undefined;
-    session.pendingMcpAuth = undefined;
-    session.updatedAt = occurredAt;
-    session.runs = [
-      createSessionRunRecord({
-        requestId,
-        project,
-        workspaceKind,
-        pattern: effectivePattern,
-        triggerMessageId: userMessageId,
-        startedAt: occurredAt,
-      }),
-      ...session.runs,
-    ];
-
-    await this.persistAndBroadcast(workspace);
-    this.emitSessionEvent({
-      sessionId: session.id,
-      kind: 'status',
-      status: 'running',
+    await this.runPreparedSessionTurn(workspace, session, project, effectivePattern, projectInstructions, {
       occurredAt,
+      requestId,
+      triggerMessageId: userMessageId,
+      messageMode,
+      attachments,
     });
-
-    try {
-      const responseMessages = await this.sidecar.runTurn(
-        {
-          type: 'run-turn',
-          requestId,
-          sessionId: session.id,
-          projectPath: session.cwd ?? project.path,
-          workspaceKind,
-          mode: session.interactionMode ?? 'interactive',
-          messageMode,
-          projectInstructions,
-          pattern: effectivePattern,
-          messages: session.messages,
-          attachments: attachments?.length ? attachments : undefined,
-          tooling: this.buildRunTurnToolingConfig(workspace, session),
-        },
-        async (event) => {
-          await this.applyTurnDelta(workspace, session.id, requestId, event);
-        },
-        async (event) => {
-          await this.applyAgentActivity(workspace, session.id, requestId, event);
-        },
-        async (event) => {
-          await this.handleApprovalRequested(workspace, session.id, requestId, event, (decision, alwaysApprove) =>
-            this.sidecar.resolveApproval(event.approvalId, decision, alwaysApprove));
-        },
-        async (event) => {
-          await this.handleUserInputRequested(workspace, session.id, requestId, event, (answer, wasFreeform) =>
-            this.sidecar.resolveUserInput(event.userInputId, answer, wasFreeform));
-        },
-        async (event) => {
-          await this.handleMcpOAuthRequired(workspace, session.id, event);
-        },
-        async (event) => {
-          await this.handleExitPlanModeRequested(workspace, session.id, event);
-        },
-        async (event) => {
-          await this.handleTurnScopedEvent(workspace, session.id, event);
-        },
-      );
-
-      await this.awaitFinalResponseApproval(workspace, session.id, requestId, effectivePattern, responseMessages);
-      this.finalizeTurn(workspace, session.id, requestId, responseMessages);
-      await this.persistAndBroadcast(workspace);
-    } catch (error) {
-      if (error instanceof TurnCancelledError) {
-        this.finalizeCancelledTurn(workspace, session, requestId);
-        await this.persistAndBroadcast(workspace);
-        return;
-      }
-
-      const failedAt = nowIso();
-      session.status = 'error';
-      session.lastError = error instanceof Error ? error.message : String(error);
-      session.updatedAt = failedAt;
-
-      const failedRun = this.updateSessionRun(session, requestId, (run) =>
-        failSessionRunRecord(run, failedAt, session.lastError ?? 'Unknown error.'));
-
-      this.emitSessionEvent({
-        sessionId: session.id,
-        kind: 'error',
-        occurredAt: failedAt,
-        error: session.lastError,
-      });
-      if (failedRun) {
-        this.emitRunUpdated(session.id, failedAt, failedRun);
-      }
-
-      await this.persistAndBroadcast(workspace);
-    }
   }
 
   async cancelSessionTurn(sessionId: string): Promise<void> {
@@ -1253,6 +1282,122 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
       } catch (err) {
         console.warn(`[aryx oauth] Proactive auth probe failed for ${server.name}:`, err);
       }
+    }
+  }
+
+  private async runPreparedSessionTurn(
+    workspace: WorkspaceState,
+    session: SessionRecord,
+    project: ProjectRecord,
+    effectivePattern: PatternDefinition,
+    projectInstructions: string | undefined,
+    options: {
+      occurredAt: string;
+      requestId: string;
+      triggerMessageId: string;
+      messageMode?: MessageMode;
+      attachments?: ChatMessageAttachment[];
+    },
+  ): Promise<void> {
+    const workspaceKind = isScratchpadProject(project) ? 'scratchpad' : 'project';
+    const { occurredAt, requestId, triggerMessageId, messageMode, attachments } = options;
+
+    session.title = resolveSessionTitle(session, effectivePattern, session.messages);
+    session.status = 'running';
+    session.lastError = undefined;
+    session.pendingPlanReview = undefined;
+    session.pendingMcpAuth = undefined;
+    session.updatedAt = occurredAt;
+    session.runs = [
+      createSessionRunRecord({
+        requestId,
+        project,
+        workspaceKind,
+        pattern: effectivePattern,
+        triggerMessageId,
+        startedAt: occurredAt,
+      }),
+      ...session.runs,
+    ];
+
+    await this.persistAndBroadcast(workspace);
+    this.emitSessionEvent({
+      sessionId: session.id,
+      kind: 'status',
+      status: 'running',
+      occurredAt,
+    });
+
+    try {
+      const responseMessages = await this.sidecar.runTurn(
+        {
+          type: 'run-turn',
+          requestId,
+          sessionId: session.id,
+          projectPath: session.cwd ?? project.path,
+          workspaceKind,
+          mode: session.interactionMode ?? 'interactive',
+          messageMode,
+          projectInstructions,
+          pattern: effectivePattern,
+          messages: session.messages,
+          attachments: attachments?.length ? attachments : undefined,
+          tooling: this.buildRunTurnToolingConfig(workspace, session),
+        },
+        async (event) => {
+          await this.applyTurnDelta(workspace, session.id, requestId, event);
+        },
+        async (event) => {
+          await this.applyAgentActivity(workspace, session.id, requestId, event);
+        },
+        async (event) => {
+          await this.handleApprovalRequested(workspace, session.id, requestId, event, (decision, alwaysApprove) =>
+            this.sidecar.resolveApproval(event.approvalId, decision, alwaysApprove));
+        },
+        async (event) => {
+          await this.handleUserInputRequested(workspace, session.id, requestId, event, (answer, wasFreeform) =>
+            this.sidecar.resolveUserInput(event.userInputId, answer, wasFreeform));
+        },
+        async (event) => {
+          await this.handleMcpOAuthRequired(workspace, session.id, event);
+        },
+        async (event) => {
+          await this.handleExitPlanModeRequested(workspace, session.id, event);
+        },
+        async (event) => {
+          await this.handleTurnScopedEvent(workspace, session.id, event);
+        },
+      );
+
+      await this.awaitFinalResponseApproval(workspace, session.id, requestId, effectivePattern, responseMessages);
+      this.finalizeTurn(workspace, session.id, requestId, responseMessages);
+      await this.persistAndBroadcast(workspace);
+    } catch (error) {
+      if (error instanceof TurnCancelledError) {
+        this.finalizeCancelledTurn(workspace, session, requestId);
+        await this.persistAndBroadcast(workspace);
+        return;
+      }
+
+      const failedAt = nowIso();
+      session.status = 'error';
+      session.lastError = error instanceof Error ? error.message : String(error);
+      session.updatedAt = failedAt;
+
+      const failedRun = this.updateSessionRun(session, requestId, (run) =>
+        failSessionRunRecord(run, failedAt, session.lastError ?? 'Unknown error.'));
+
+      this.emitSessionEvent({
+        sessionId: session.id,
+        kind: 'error',
+        occurredAt: failedAt,
+        error: session.lastError,
+      });
+      if (failedRun) {
+        this.emitRunUpdated(session.id, failedAt, failedRun);
+      }
+
+      await this.persistAndBroadcast(workspace);
     }
   }
 

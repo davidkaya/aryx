@@ -63,6 +63,24 @@ export interface BranchSessionInput {
   messageId: string;
 }
 
+export interface SetSessionMessagePinnedInput {
+  sessionId: string;
+  messageId: string;
+  isPinned: boolean;
+}
+
+export interface RegenerateSessionMessageInput {
+  sessionId: string;
+  messageId: string;
+}
+
+export interface EditAndResendSessionMessageInput {
+  sessionId: string;
+  messageId: string;
+  content: string;
+  attachments?: ChatMessageAttachment[];
+}
+
 export interface RenameSessionInput {
   sessionId: string;
   title: string;
@@ -198,10 +216,13 @@ export interface ElectronApi {
   createSession(input: CreateSessionInput): Promise<WorkspaceState>;
   duplicateSession(input: DuplicateSessionInput): Promise<WorkspaceState>;
   branchSession(input: BranchSessionInput): Promise<WorkspaceState>;
+  setSessionMessagePinned(input: SetSessionMessagePinnedInput): Promise<WorkspaceState>;
   renameSession(input: RenameSessionInput): Promise<WorkspaceState>;
   setSessionPinned(input: SetSessionPinnedInput): Promise<WorkspaceState>;
   setSessionArchived(input: SetSessionArchivedInput): Promise<WorkspaceState>;
   deleteSession(input: DeleteSessionInput): Promise<WorkspaceState>;
+  regenerateSessionMessage(input: RegenerateSessionMessageInput): Promise<void>;
+  editAndResendSessionMessage(input: EditAndResendSessionMessageInput): Promise<void>;
   sendSessionMessage(input: SendSessionMessageInput): Promise<void>;
   cancelSessionTurn(input: CancelSessionTurnInput): Promise<void>;
   resolveSessionApproval(input: ResolveSessionApprovalInput): Promise<WorkspaceState>;

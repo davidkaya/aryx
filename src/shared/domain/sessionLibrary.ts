@@ -1,6 +1,14 @@
 import type { PatternDefinition } from '@shared/domain/pattern';
 import { isScratchpadProject, type ProjectRecord } from '@shared/domain/project';
-import { resolveSessionTitle, type ChatMessageRecord, type SessionBranchOrigin, type SessionRecord, type SessionStatus } from '@shared/domain/session';
+import type { ChatMessageAttachment } from '@shared/domain/attachment';
+import {
+  resolveSessionTitle,
+  type ChatMessageRecord,
+  type SessionBranchOrigin,
+  type SessionBranchOriginAction,
+  type SessionRecord,
+  type SessionStatus,
+} from '@shared/domain/session';
 import type { WorkspaceState } from '@shared/domain/workspace';
 
 export type SessionQueryMatchField = 'title' | 'message' | 'project' | 'pattern';
@@ -162,11 +170,41 @@ function cloneBranchOrigin(branchOrigin?: SessionBranchOrigin): SessionBranchOri
   return branchOrigin ? { ...branchOrigin } : undefined;
 }
 
+function cloneAttachments(attachments?: ChatMessageAttachment[]): ChatMessageAttachment[] | undefined {
+  const cloned = attachments?.map((attachment) => ({ ...attachment }));
+  return cloned && cloned.length > 0 ? cloned : undefined;
+}
+
 function cloneChatMessageRecord(message: ChatMessageRecord): ChatMessageRecord {
   return {
     ...message,
     pending: false,
-    attachments: message.attachments?.map((attachment) => ({ ...attachment })),
+    attachments: cloneAttachments(message.attachments),
+  };
+}
+
+function requireMessageIndex(session: SessionRecord, messageId: string): number {
+  const sourceMessageIndex = session.messages.findIndex((message) => message.id === messageId);
+  if (sourceMessageIndex < 0) {
+    throw new Error(`Message ${messageId} not found in session ${session.id}.`);
+  }
+
+  return sourceMessageIndex;
+}
+
+function createBranchOrigin(
+  session: SessionRecord,
+  messageId: string,
+  sourceMessageIndex: number,
+  branchedAt: string,
+  action: SessionBranchOriginAction,
+): SessionBranchOrigin {
+  return {
+    sourceSessionId: session.id,
+    sourceMessageId: messageId,
+    sourceMessageIndex,
+    branchedAt,
+    action,
   };
 }
 
@@ -227,11 +265,7 @@ export function branchSessionRecord(
   messageId: string,
   branchedAt: string,
 ): SessionRecord {
-  const sourceMessageIndex = session.messages.findIndex((message) => message.id === messageId);
-  if (sourceMessageIndex < 0) {
-    throw new Error(`Message ${messageId} not found in session ${session.id}.`);
-  }
-
+  const sourceMessageIndex = requireMessageIndex(session, messageId);
   const sourceMessage = session.messages[sourceMessageIndex];
   if (!sourceMessage) {
     throw new Error(`Message ${messageId} not found in session ${session.id}.`);
@@ -247,12 +281,117 @@ export function branchSessionRecord(
     ...createDerivedSessionRecord(session, sessionId, branchedAt),
     title: resolveSessionTitle(session, pattern, branchedMessages),
     messages: branchedMessages,
-    branchOrigin: {
-      sourceSessionId: session.id,
-      sourceMessageId: messageId,
-      sourceMessageIndex,
-      branchedAt,
-    },
+    branchOrigin: createBranchOrigin(session, messageId, sourceMessageIndex, branchedAt, 'branch'),
+  };
+}
+
+export function setSessionMessagePinnedRecord(
+  session: SessionRecord,
+  messageId: string,
+  isPinned: boolean,
+  updatedAt: string,
+): SessionRecord {
+  const sourceMessageIndex = requireMessageIndex(session, messageId);
+
+  return {
+    ...session,
+    updatedAt,
+    messages: session.messages.map((message, index) => {
+      if (index !== sourceMessageIndex) {
+        return message;
+      }
+
+      if (isPinned) {
+        return {
+          ...message,
+          isPinned: true,
+        };
+      }
+
+      return {
+        ...message,
+        isPinned: undefined,
+      };
+    }),
+  };
+}
+
+export function regenerateSessionRecord(
+  session: SessionRecord,
+  pattern: PatternDefinition,
+  sessionId: string,
+  messageId: string,
+  regeneratedAt: string,
+): SessionRecord {
+  const sourceMessageIndex = requireMessageIndex(session, messageId);
+  const sourceMessage = session.messages[sourceMessageIndex];
+  if (!sourceMessage) {
+    throw new Error(`Message ${messageId} not found in session ${session.id}.`);
+  }
+
+  if (sourceMessage.role !== 'assistant') {
+    throw new Error('Only assistant messages can be regenerated.');
+  }
+
+  if (sourceMessageIndex !== session.messages.length - 1) {
+    throw new Error('Only the last assistant message can be regenerated.');
+  }
+
+  const priorUserMessageIndex = session.messages
+    .slice(0, sourceMessageIndex)
+    .map((message, index) => ({ message, index }))
+    .filter((candidate) => candidate.message.role === 'user')
+    .at(-1)?.index;
+
+  if (priorUserMessageIndex === undefined) {
+    throw new Error('Assistant message cannot be regenerated because no prior user message exists.');
+  }
+
+  const regeneratedMessages = session.messages
+    .slice(0, priorUserMessageIndex + 1)
+    .map(cloneChatMessageRecord);
+
+  return {
+    ...createDerivedSessionRecord(session, sessionId, regeneratedAt),
+    title: resolveSessionTitle(session, pattern, regeneratedMessages),
+    messages: regeneratedMessages,
+    branchOrigin: createBranchOrigin(session, messageId, sourceMessageIndex, regeneratedAt, 'regenerate'),
+  };
+}
+
+export function editAndResendSessionRecord(
+  session: SessionRecord,
+  pattern: PatternDefinition,
+  sessionId: string,
+  messageId: string,
+  content: string,
+  editedAt: string,
+  attachments?: ChatMessageAttachment[],
+): SessionRecord {
+  const sourceMessageIndex = requireMessageIndex(session, messageId);
+  const sourceMessage = session.messages[sourceMessageIndex];
+  if (!sourceMessage) {
+    throw new Error(`Message ${messageId} not found in session ${session.id}.`);
+  }
+
+  if (sourceMessage.role !== 'user') {
+    throw new Error('Only user messages can be edited and resent.');
+  }
+
+  const editedMessages = session.messages.slice(0, sourceMessageIndex + 1).map(cloneChatMessageRecord);
+  const editedMessage = editedMessages[sourceMessageIndex];
+  if (!editedMessage) {
+    throw new Error(`Message ${messageId} not found in session ${session.id}.`);
+  }
+
+  editedMessage.content = content;
+  editedMessage.attachments = cloneAttachments(attachments);
+
+  return {
+    ...createDerivedSessionRecord(session, sessionId, editedAt),
+    title: resolveSessionTitle(session, pattern, editedMessages),
+    messages: editedMessages,
+    branchOrigin: createBranchOrigin(session, messageId, sourceMessageIndex, editedAt, 'edit-and-resend'),
   };
 }
 

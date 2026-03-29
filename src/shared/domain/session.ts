@@ -20,6 +20,7 @@ import type { InteractionMode } from '@shared/contracts/sidecar';
 export type ChatRole = 'system' | 'user' | 'assistant';
 export type SessionStatus = 'idle' | 'running' | 'error';
 export type SessionTitleSource = 'auto' | 'manual';
+export type SessionBranchOriginAction = 'branch' | 'regenerate' | 'edit-and-resend';
 
 export interface SessionModelConfig {
   model: string;
@@ -32,6 +33,7 @@ export interface ChatMessageRecord {
   authorName: string;
   content: string;
   createdAt: string;
+  isPinned?: boolean;
   pending?: boolean;
   attachments?: ChatMessageAttachment[];
 }
@@ -41,6 +43,7 @@ export interface SessionBranchOrigin {
   sourceMessageId: string;
   sourceMessageIndex: number;
   branchedAt: string;
+  action?: SessionBranchOriginAction;
 }
 
 export interface SessionRecord {
@@ -82,6 +85,10 @@ export function normalizeSessionBranchOrigin(
   const sourceMessageId = normalizeOptionalString(branchOrigin?.sourceMessageId);
   const branchedAt = normalizeOptionalString(branchOrigin?.branchedAt);
   const sourceMessageIndex = branchOrigin?.sourceMessageIndex;
+  const action = branchOrigin?.action;
+  const normalizedAction = action === 'branch' || action === 'regenerate' || action === 'edit-and-resend'
+    ? action
+    : undefined;
 
   if (
     !sourceSessionId
@@ -99,6 +106,7 @@ export function normalizeSessionBranchOrigin(
     sourceMessageId,
     sourceMessageIndex,
     branchedAt,
+    action: normalizedAction,
   };
 }
 

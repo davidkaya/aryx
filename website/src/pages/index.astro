@@ -3,42 +3,85 @@ import Base from '../layouts/Base.astro';
 ---
 
 <Base>
-  <!-- Hero -->
+  <!-- ════════════════════════════════════════════ Hero ════════════════════════════════════════════ -->
   <section class="relative overflow-hidden">
-    <!-- Background gradient -->
-    <div class="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-900/20 via-zinc-950 to-zinc-950"></div>
+    <!-- Dot grid background -->
+    <div class="dot-grid pointer-events-none absolute inset-0"></div>
+    <!-- Warm radial glow -->
+    <div
+      class="pointer-events-none absolute left-1/2 top-1/4 -translate-x-1/2 -translate-y-1/2"
+      style="width: 800px; height: 600px; background: radial-gradient(ellipse, rgba(36,92,249,0.06) 0%, transparent 70%)"
+    >
+    </div>
+    <!-- Ambient pulsing dots -->
+    <div
+      class="pointer-events-none absolute left-[28%] top-[22%] size-2 rounded-full bg-brand/30"
+      style="animation: glow-pulse 5s ease-in-out infinite"
+    >
+    </div>
+    <div
+      class="pointer-events-none absolute right-[32%] top-[36%] size-1.5 rounded-full bg-accent/25"
+      style="animation: glow-pulse 5s ease-in-out 1.5s infinite"
+    >
+    </div>
+    <div
+      class="pointer-events-none absolute left-[62%] top-[18%] size-1.5 rounded-full bg-brand/20"
+      style="animation: glow-pulse 5s ease-in-out 3s infinite"
+    >
+    </div>
 
-    <div class="relative mx-auto max-w-6xl px-6 pb-20 pt-24 md:pb-32 md:pt-36">
+    <div class="relative mx-auto max-w-6xl px-6 pb-20 pt-24 md:pb-32 md:pt-40">
       <div class="mx-auto max-w-3xl text-center">
-        <div class="mb-6 inline-flex items-center gap-2 rounded-full border border-indigo-500/20 bg-indigo-500/10 px-4 py-1.5 text-sm text-indigo-300">
-          <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+        <div
+          class="mb-8 inline-flex items-center gap-2.5 rounded-full border border-brand/15 bg-brand/[0.06] px-4 py-1.5 text-sm text-brand"
+          data-reveal
+        >
+          <svg class="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M13 10V3L4 14h7v7l9-11h-7z"></path>
           </svg>
           Desktop AI Workspace
         </div>
 
-        <h1 class="text-4xl font-bold leading-tight tracking-tight md:text-6xl">
+        <h1
+          class="text-4xl font-light leading-[1.1] tracking-tight text-warm-50 md:text-7xl"
+          data-reveal
+          data-reveal-d="1"
+        >
           Your control room for
-          <span class="bg-gradient-to-r from-indigo-400 to-violet-400 bg-clip-text text-transparent">
-            Copilot-powered
-          </span>
+          <span class="text-gradient-brand font-display"> Copilot-powered</span>
           work
         </h1>
 
-        <p class="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-zinc-400 md:text-xl">
-          Aryx gives you a persistent workspace to ask questions, connect real projects,
-          orchestrate multi-agent patterns, and keep ongoing AI work organized in one app.
+        <p
+          class="mx-auto mt-8 max-w-2xl text-lg leading-relaxed text-warm-300 md:text-xl"
+          data-reveal
+          data-reveal-d="2"
+        >
+          Aryx gives you a persistent workspace to ask questions, connect real projects, orchestrate
+          multi-agent patterns, and keep ongoing AI work organized in one app.
         </p>
 
-        <div class="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
+        <div
+          class="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row"
+          data-reveal
+          data-reveal-d="3"
+        >
           <a
             href="https://github.com/davidkaya/aryx/releases"
             target="_blank"
             rel="noopener noreferrer"
-            class="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-500/20 transition hover:bg-indigo-500 hover:shadow-indigo-500/30"
+            class="inline-flex items-center gap-2 rounded-xl bg-brand px-7 py-3.5 text-sm font-semibold text-deep shadow-lg shadow-brand/20 transition hover:bg-brand-bright hover:shadow-brand/30"
           >
             <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
             </svg>
             Download Latest Release
           </a>
@@ -46,20 +89,24 @@ import Base from '../layouts/Base.astro';
             href="https://github.com/davidkaya/aryx"
             target="_blank"
             rel="noopener noreferrer"
-            class="inline-flex items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 px-6 py-3 text-sm font-semibold text-zinc-300 transition hover:border-zinc-600 hover:bg-zinc-800"
+            class="inline-flex items-center gap-2 rounded-xl border border-border bg-raised px-7 py-3.5 text-sm font-semibold text-warm-100 transition hover:border-warm-600 hover:bg-card"
           >
             <svg class="size-4" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
+              <path
+                d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"
+              ></path>
             </svg>
             View on GitHub
           </a>
         </div>
       </div>
 
-      <!-- Screenshot -->
-      <div class="mx-auto mt-16 max-w-5xl md:mt-24">
-        <div class="relative rounded-2xl border border-zinc-800 bg-zinc-900/50 p-2 shadow-2xl shadow-black/40 ring-1 ring-white/5">
-          <div class="overflow-hidden rounded-xl">
+      <!-- Screenshot with perspective tilt -->
+      <div class="relative mx-auto mt-16 max-w-5xl md:mt-24" data-reveal data-reveal-d="4">
+        <div
+          class="screenshot-frame relative rounded-2xl border border-border bg-card/60 p-1.5 shadow-2xl shadow-black/50 ring-1 ring-white/[0.04]"
+        >
+          <div class="overflow-hidden rounded-[13px]">
             <img
               src="/images/screenshot.png"
               alt="Aryx application screenshot showing the workspace with chat, sidebar, and activity panel"
@@ -68,445 +115,757 @@ import Base from '../layouts/Base.astro';
               height="800"
             />
           </div>
-          <!-- Glow effect under screenshot -->
-          <div class="pointer-events-none absolute -inset-px rounded-2xl bg-gradient-to-t from-indigo-500/10 via-transparent to-transparent opacity-0 transition-opacity group-hover:opacity-100"></div>
         </div>
-        <p class="mt-4 text-center text-xs text-zinc-600">
-          The Aryx workspace — sessions, live activity, and agent orchestration in one place.
-        </p>
+        <!-- Warm glow under screenshot -->
+        <div
+          class="pointer-events-none absolute -bottom-20 left-1/2 h-24 w-2/3 -translate-x-1/2 rounded-full bg-brand/[0.04] blur-3xl"
+        >
+        </div>
       </div>
+      <p class="mt-5 text-center text-xs text-warm-500" data-reveal data-reveal-d="5">
+        The Aryx workspace — sessions, live activity, and agent orchestration in one place.
+      </p>
     </div>
   </section>
 
-  <!-- Features -->
-  <section id="features" class="relative border-t border-zinc-800/80">
+  <!-- ════════════════════════════════════ Pillar Features ═════════════════════════════════════ -->
+  <section id="features" class="relative border-t border-border-subtle/50">
     <div class="mx-auto max-w-6xl px-6 py-24 md:py-32">
-      <div class="mx-auto max-w-2xl text-center">
-        <h2 class="text-3xl font-bold tracking-tight md:text-4xl">
+      <div class="mx-auto max-w-2xl text-center" data-reveal>
+        <h2 class="text-3xl font-light tracking-tight text-warm-50 md:text-5xl">
           Everything you need for
-          <span class="text-indigo-400">structured AI work</span>
+          <span class="text-gradient-brand font-display"> structured AI work</span>
         </h2>
-        <p class="mt-4 text-lg text-zinc-400">
-          More than a chat window. Aryx is built for people who want AI help that stays grounded in real projects.
+        <p class="mt-5 text-lg text-warm-300">
+          More than a chat window. Aryx is built for people who want AI help that stays grounded in
+          real projects.
         </p>
       </div>
 
-      <div class="mx-auto mt-16 grid max-w-5xl gap-6 md:grid-cols-2 lg:grid-cols-3">
-        <!-- Feature 1: Scratchpad -->
-        <div class="group rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6 transition hover:border-zinc-700 hover:bg-zinc-900/60">
-          <div class="mb-4 flex size-10 items-center justify-center rounded-xl bg-indigo-500/10 text-indigo-400">
+      <!-- Three pillar features -->
+      <div class="mx-auto mt-16 grid max-w-5xl gap-6 md:grid-cols-3">
+        <!-- Agent Orchestration -->
+        <div
+          class="feature-card rounded-2xl border border-border bg-card/50 p-7"
+          data-reveal
+          data-reveal-d="1"
+        >
+          <div
+            class="flex size-11 items-center justify-center rounded-xl bg-brand/[0.08] text-brand"
+          >
             <svg class="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z"
+              ></path>
             </svg>
           </div>
-          <h3 class="text-base font-semibold">Start Fast</h3>
-          <p class="mt-2 text-sm leading-relaxed text-zinc-400">
-            Open a scratchpad session for quick questions and ad-hoc work — no project setup needed.
+          <h3 class="mt-5 text-lg font-semibold text-warm-50">Agent Orchestration</h3>
+          <p class="mt-2.5 text-sm leading-relaxed text-warm-300">
+            Go beyond one assistant. Create multi-agent patterns — sequential pipelines, concurrent
+            exploration, handoff delegation, and group-chat collaboration.
           </p>
+          <!-- Mini flow diagram -->
+          <div class="mt-6 flex items-center gap-2">
+            <div class="size-2.5 rounded-full bg-brand/60"></div>
+            <div class="h-px w-6 bg-border"></div>
+            <div class="size-2.5 rounded-full bg-accent/60"></div>
+            <div class="h-px w-6 bg-border"></div>
+            <div class="size-2.5 rounded-full bg-brand/60"></div>
+            <div class="h-px w-6 bg-border"></div>
+            <div class="size-2.5 rounded-full bg-accent/60"></div>
+          </div>
         </div>
 
-        <!-- Feature 2: Projects -->
-        <div class="group rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6 transition hover:border-zinc-700 hover:bg-zinc-900/60">
-          <div class="mb-4 flex size-10 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-400">
+        <!-- Live Visibility -->
+        <div
+          class="feature-card rounded-2xl border border-border bg-card/50 p-7"
+          data-reveal
+          data-reveal-d="2"
+        >
+          <div
+            class="flex size-11 items-center justify-center rounded-xl bg-accent/[0.08] text-accent"
+          >
             <svg class="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+              ></path>
             </svg>
           </div>
-          <h3 class="text-base font-semibold">Real Project Context</h3>
-          <p class="mt-2 text-sm leading-relaxed text-zinc-400">
-            Attach local folders and repos so conversations stay grounded in your actual codebase. See branch name, dirty state, and ahead/behind status — the agent works with full awareness of your project.
+          <h3 class="mt-5 text-lg font-semibold text-warm-50">Live Visibility</h3>
+          <p class="mt-2.5 text-sm leading-relaxed text-warm-300">
+            Watch each agent think, delegate to sub-agents, invoke skills, and run hooks in real
+            time. Track token usage and account quota alongside the context-window bar.
           </p>
-        </div>
-
-        <!-- Feature 3: Orchestration -->
-        <div class="group rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6 transition hover:border-zinc-700 hover:bg-zinc-900/60">
-          <div class="mb-4 flex size-10 items-center justify-center rounded-xl bg-violet-500/10 text-violet-400">
-            <svg class="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
-            </svg>
-          </div>
-          <h3 class="text-base font-semibold">Agent Orchestration</h3>
-          <p class="mt-2 text-sm leading-relaxed text-zinc-400">
-            Go beyond one assistant with reusable patterns — sequential, concurrent, handoff, and group-chat flows.
-          </p>
-        </div>
-
-        <!-- Feature 4: Live Activity -->
-        <div class="group rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6 transition hover:border-zinc-700 hover:bg-zinc-900/60">
-          <div class="mb-4 flex size-10 items-center justify-center rounded-xl bg-sky-500/10 text-sky-400">
-            <svg class="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-            </svg>
-          </div>
-          <h3 class="text-base font-semibold">Live Visibility</h3>
-          <p class="mt-2 text-sm leading-relaxed text-zinc-400">
-            Watch each agent think, delegate to sub-agents, invoke skills, and run hooks in real time. Track premium request consumption, per-agent token usage, and account quota remaining alongside the context-window bar.
-          </p>
-        </div>
-
-        <!-- Feature 5: Sessions -->
-        <div class="group rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6 transition hover:border-zinc-700 hover:bg-zinc-900/60">
-          <div class="mb-4 flex size-10 items-center justify-center rounded-xl bg-amber-500/10 text-amber-400">
-            <svg class="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-            </svg>
-          </div>
-          <h3 class="text-base font-semibold">Persistent Sessions</h3>
-          <p class="mt-2 text-sm leading-relaxed text-zinc-400">
-            Rename, pin, archive, duplicate, and return to sessions later. Search across all sessions by title, content, or project to find past work instantly.
-          </p>
-        </div>
-
-        <!-- Feature 6: Mid-turn Steering -->
-        <div class="group rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6 transition hover:border-zinc-700 hover:bg-zinc-900/60">
-          <div class="mb-4 flex size-10 items-center justify-center rounded-xl bg-yellow-500/10 text-yellow-400">
-            <svg class="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-            </svg>
-          </div>
-          <h3 class="text-base font-semibold">Steer While It Works</h3>
-          <p class="mt-2 text-sm leading-relaxed text-zinc-400">
-            Send follow-up messages while an agent is running. Your input is injected immediately so you can redirect without waiting.
-          </p>
-        </div>
-
-        <!-- Feature 7: Image Attachments -->
-        <div class="group rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6 transition hover:border-zinc-700 hover:bg-zinc-900/60">
-          <div class="mb-4 flex size-10 items-center justify-center rounded-xl bg-pink-500/10 text-pink-400">
-            <svg class="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-          </div>
-          <h3 class="text-base font-semibold">Image Input</h3>
-          <p class="mt-2 text-sm leading-relaxed text-zinc-400">
-            Attach screenshots, diagrams, or photos to any message. The model sees the image alongside your text for visual reasoning.
-          </p>
-        </div>
-
-        <!-- Feature 8: Model Selection -->
-        <div class="group rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6 transition hover:border-zinc-700 hover:bg-zinc-900/60">
-          <div class="mb-4 flex size-10 items-center justify-center rounded-xl bg-rose-500/10 text-rose-400">
-            <svg class="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
-            </svg>
-          </div>
-          <h3 class="text-base font-semibold">Tune Your Workflow</h3>
-          <p class="mt-2 text-sm leading-relaxed text-zinc-400">
-            Choose models, adjust reasoning effort, and set interaction modes. Fine-tune how each agent works without leaving the session.
-          </p>
-        </div>
-
-        <!-- Feature 9: Visual Pattern Editor -->
-        <div class="group rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6 transition hover:border-zinc-700 hover:bg-zinc-900/60">
-          <div class="mb-4 flex size-10 items-center justify-center rounded-xl bg-fuchsia-500/10 text-fuchsia-400">
-            <svg class="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
-            </svg>
-          </div>
-          <h3 class="text-base font-semibold">Visual Pattern Editor</h3>
-          <p class="mt-2 text-sm leading-relaxed text-zinc-400">
-            Design orchestration patterns visually. Drag agent nodes, draw connections, and inspect each step — all in an interactive graph canvas.
-          </p>
-        </div>
-
-        <!-- Feature 10: Extensible Tooling -->
-        <div class="group rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6 transition hover:border-zinc-700 hover:bg-zinc-900/60">
-          <div class="mb-4 flex size-10 items-center justify-center rounded-xl bg-teal-500/10 text-teal-400">
-            <svg class="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.573-1.066z" />
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-          </div>
-          <h3 class="text-base font-semibold">Extensible Tooling</h3>
-          <p class="mt-2 text-sm leading-relaxed text-zinc-400">
-            Add MCP servers and LSP profiles for code intelligence. Set tool approval policies to keep runs safe, and integrate project hooks for custom automation.
-          </p>
-        </div>
-
-        <!-- Feature 11: Tooling Discovery -->
-        <div class="group rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6 transition hover:border-zinc-700 hover:bg-zinc-900/60">
-          <div class="mb-4 flex size-10 items-center justify-center rounded-xl bg-cyan-500/10 text-cyan-400">
-            <svg class="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-          </div>
-          <h3 class="text-base font-semibold">Tooling Discovery</h3>
-          <p class="mt-2 text-sm leading-relaxed text-zinc-400">
-            Aryx automatically discovers MCP servers from your project and user configs. Review, accept, or dismiss discovered tools before they join your sessions.
-          </p>
-        </div>
-
-        <!-- Feature 12: Plan Review & Agent Questions -->
-        <div class="group rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6 transition hover:border-zinc-700 hover:bg-zinc-900/60">
-          <div class="mb-4 flex size-10 items-center justify-center rounded-xl bg-lime-500/10 text-lime-400">
-            <svg class="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-            </svg>
-          </div>
-          <h3 class="text-base font-semibold">Plan Review &amp; Agent Questions</h3>
-          <p class="mt-2 text-sm leading-relaxed text-zinc-400">
-            Agents can propose plans for your review and ask clarifying questions mid-run. You stay in control of direction without micromanaging every step.
-          </p>
-        </div>
-
-        <!-- Feature 13: Run Timeline -->
-        <div class="group rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6 transition hover:border-zinc-700 hover:bg-zinc-900/60">
-          <div class="mb-4 flex size-10 items-center justify-center rounded-xl bg-orange-500/10 text-orange-400">
-            <svg class="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          </div>
-          <h3 class="text-base font-semibold">Run Timeline</h3>
-          <p class="mt-2 text-sm leading-relaxed text-zinc-400">
-            Every turn is recorded in a structured run timeline — see tool calls, agent delegation, hook execution, and context usage at a glance.
-          </p>
-        </div>
-
-          <!-- Feature 14: Copilot Customization Files -->
-          <div class="group rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6 transition hover:border-zinc-700 hover:bg-zinc-900/60">
-            <div class="mb-4 flex size-10 items-center justify-center rounded-xl bg-violet-500/10 text-violet-400">
-              <svg class="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-              </svg>
+          <!-- Mini timeline -->
+          <div class="mt-6 flex flex-col gap-2">
+            <div class="flex items-center gap-2">
+              <div class="size-1.5 rounded-full bg-accent/70"></div>
+              <div class="h-px flex-1 bg-border"></div>
+              <span class="text-[10px] text-warm-500">thinking</span>
             </div>
-            <h3 class="text-base font-semibold">Copilot Customization</h3>
-            <p class="mt-2 text-sm leading-relaxed text-zinc-400">
-              Automatically discovers <code class="text-zinc-300">.github/copilot-instructions.md</code>, <code class="text-zinc-300">AGENTS.md</code>, custom agent profiles, and prompt files from your repository. Zero configuration needed.
-            </p>
-          </div>
-
-          <!-- Feature 15: Integrated Terminal -->
-          <div class="group rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6 transition hover:border-zinc-700 hover:bg-zinc-900/60">
-            <div class="mb-4 flex size-10 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-400">
-              <svg class="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
+            <div class="flex items-center gap-2">
+              <div class="size-1.5 rounded-full bg-brand/70"></div>
+              <div class="h-px flex-1 bg-border"></div>
+              <span class="text-[10px] text-warm-500">tool call</span>
             </div>
-            <h3 class="text-base font-semibold">Integrated Terminal</h3>
-            <p class="mt-2 text-sm leading-relaxed text-zinc-400">
-              A full PTY-backed terminal panel right inside the workspace. Toggle with <kbd class="text-zinc-300">Ctrl+`</kbd>, resize by dragging, and run commands alongside your agent sessions.
-            </p>
+            <div class="flex items-center gap-2">
+              <div class="size-1.5 rounded-full bg-accent/70"></div>
+              <div class="h-px flex-1 bg-border"></div>
+              <span class="text-[10px] text-warm-500">complete</span>
+            </div>
           </div>
+        </div>
+
+        <!-- Persistent Sessions -->
+        <div
+          class="feature-card rounded-2xl border border-border bg-card/50 p-7"
+          data-reveal
+          data-reveal-d="3"
+        >
+          <div
+            class="flex size-11 items-center justify-center rounded-xl bg-brand/[0.08] text-brand"
+          >
+            <svg class="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
+              ></path>
+            </svg>
+          </div>
+          <h3 class="mt-5 text-lg font-semibold text-warm-50">Persistent Sessions</h3>
+          <p class="mt-2.5 text-sm leading-relaxed text-warm-300">
+            Rename, pin, archive, duplicate, and return to sessions later. Search across all
+            sessions by title, content, or project to find past work instantly.
+          </p>
+          <!-- Mini sidebar -->
+          <div class="mt-6 flex max-w-[140px] flex-col gap-1.5">
+            <div class="flex items-center gap-2 rounded-md bg-card-hover px-2.5 py-1">
+              <div class="size-1.5 rounded-full bg-brand/70"></div>
+              <div class="h-1.5 w-14 rounded bg-warm-600"></div>
+            </div>
+            <div class="flex items-center gap-2 rounded-md px-2.5 py-1">
+              <div class="size-1.5 rounded-full bg-warm-500/50"></div>
+              <div class="h-1.5 w-10 rounded bg-warm-700"></div>
+            </div>
+            <div class="flex items-center gap-2 rounded-md px-2.5 py-1">
+              <div class="size-1.5 rounded-full bg-warm-500/50"></div>
+              <div class="h-1.5 w-16 rounded bg-warm-700"></div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </section>
 
-  <!-- Orchestration Patterns -->
-  <section id="patterns" class="relative border-t border-zinc-800/80 bg-zinc-900/30">
+  <!-- ════════════════════════════════════ Feature Grid ════════════════════════════════════ -->
+  <section class="relative bg-raised/50">
     <div class="mx-auto max-w-6xl px-6 py-24 md:py-32">
-      <div class="mx-auto max-w-2xl text-center">
-        <h2 class="text-3xl font-bold tracking-tight md:text-4xl">
+      <div class="mx-auto grid max-w-5xl gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <!-- Start Fast -->
+        <div
+          class="feature-card rounded-xl border border-border-subtle bg-card/40 p-5 hover:border-border hover:bg-card/70"
+          data-reveal
+          data-reveal-d="1"
+        >
+          <div
+            class="mb-3 flex size-9 items-center justify-center rounded-lg bg-brand/[0.07] text-brand"
+          >
+            <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+            </svg>
+          </div>
+          <h3 class="text-sm font-semibold text-warm-50">Start Fast</h3>
+          <p class="mt-1.5 text-xs leading-relaxed text-warm-400">
+            Open a scratchpad session for quick questions — no project setup needed.
+          </p>
+        </div>
+
+        <!-- Real Project Context -->
+        <div
+          class="feature-card rounded-xl border border-border-subtle bg-card/40 p-5 hover:border-border hover:bg-card/70"
+          data-reveal
+          data-reveal-d="2"
+        >
+          <div
+            class="mb-3 flex size-9 items-center justify-center rounded-lg bg-accent/[0.07] text-accent"
+          >
+            <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
+              ></path>
+            </svg>
+          </div>
+          <h3 class="text-sm font-semibold text-warm-50">Real Project Context</h3>
+          <p class="mt-1.5 text-xs leading-relaxed text-warm-400">
+            Attach local folders and repos. See branch name, dirty state, and ahead/behind status.
+          </p>
+        </div>
+
+        <!-- Mid-turn Steering -->
+        <div
+          class="feature-card rounded-xl border border-border-subtle bg-card/40 p-5 hover:border-border hover:bg-card/70"
+          data-reveal
+          data-reveal-d="3"
+        >
+          <div
+            class="mb-3 flex size-9 items-center justify-center rounded-lg bg-brand/[0.07] text-brand"
+          >
+            <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+            </svg>
+          </div>
+          <h3 class="text-sm font-semibold text-warm-50">Steer While It Works</h3>
+          <p class="mt-1.5 text-xs leading-relaxed text-warm-400">
+            Send follow-up messages while an agent is running — your input is injected immediately.
+          </p>
+        </div>
+
+        <!-- Image Input -->
+        <div
+          class="feature-card rounded-xl border border-border-subtle bg-card/40 p-5 hover:border-border hover:bg-card/70"
+          data-reveal
+          data-reveal-d="4"
+        >
+          <div
+            class="mb-3 flex size-9 items-center justify-center rounded-lg bg-accent/[0.07] text-accent"
+          >
+            <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+              ></path>
+            </svg>
+          </div>
+          <h3 class="text-sm font-semibold text-warm-50">Image Input</h3>
+          <p class="mt-1.5 text-xs leading-relaxed text-warm-400">
+            Attach screenshots, diagrams, or photos to any message for visual reasoning.
+          </p>
+        </div>
+
+        <!-- Model Selection -->
+        <div
+          class="feature-card rounded-xl border border-border-subtle bg-card/40 p-5 hover:border-border hover:bg-card/70"
+          data-reveal
+          data-reveal-d="5"
+        >
+          <div
+            class="mb-3 flex size-9 items-center justify-center rounded-lg bg-brand/[0.07] text-brand"
+          >
+            <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"
+              ></path>
+            </svg>
+          </div>
+          <h3 class="text-sm font-semibold text-warm-50">Tune Your Workflow</h3>
+          <p class="mt-1.5 text-xs leading-relaxed text-warm-400">
+            Choose models, adjust reasoning effort, and set interaction modes per session.
+          </p>
+        </div>
+
+        <!-- Visual Pattern Editor -->
+        <div
+          class="feature-card rounded-xl border border-border-subtle bg-card/40 p-5 hover:border-border hover:bg-card/70"
+          data-reveal
+          data-reveal-d="6"
+        >
+          <div
+            class="mb-3 flex size-9 items-center justify-center rounded-lg bg-accent/[0.07] text-accent"
+          >
+            <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z"
+              ></path>
+            </svg>
+          </div>
+          <h3 class="text-sm font-semibold text-warm-50">Visual Pattern Editor</h3>
+          <p class="mt-1.5 text-xs leading-relaxed text-warm-400">
+            Design orchestration patterns visually. Drag nodes, draw connections, inspect each step.
+          </p>
+        </div>
+
+        <!-- Extensible Tooling -->
+        <div
+          class="feature-card rounded-xl border border-border-subtle bg-card/40 p-5 hover:border-border hover:bg-card/70"
+          data-reveal
+          data-reveal-d="7"
+        >
+          <div
+            class="mb-3 flex size-9 items-center justify-center rounded-lg bg-brand/[0.07] text-brand"
+          >
+            <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.573-1.066z"
+              ></path>
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+            </svg>
+          </div>
+          <h3 class="text-sm font-semibold text-warm-50">Extensible Tooling</h3>
+          <p class="mt-1.5 text-xs leading-relaxed text-warm-400">
+            Add MCP servers and LSP profiles. Set tool approval policies and integrate project
+            hooks.
+          </p>
+        </div>
+
+        <!-- Tooling Discovery -->
+        <div
+          class="feature-card rounded-xl border border-border-subtle bg-card/40 p-5 hover:border-border hover:bg-card/70"
+          data-reveal
+          data-reveal-d="8"
+        >
+          <div
+            class="mb-3 flex size-9 items-center justify-center rounded-lg bg-accent/[0.07] text-accent"
+          >
+            <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+            </svg>
+          </div>
+          <h3 class="text-sm font-semibold text-warm-50">Tooling Discovery</h3>
+          <p class="mt-1.5 text-xs leading-relaxed text-warm-400">
+            Auto-discovers MCP servers from project and user configs. Review and accept before use.
+          </p>
+        </div>
+
+        <!-- Plan Review -->
+        <div
+          class="feature-card rounded-xl border border-border-subtle bg-card/40 p-5 hover:border-border hover:bg-card/70"
+          data-reveal
+          data-reveal-d="9"
+        >
+          <div
+            class="mb-3 flex size-9 items-center justify-center rounded-lg bg-brand/[0.07] text-brand"
+          >
+            <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
+              ></path>
+            </svg>
+          </div>
+          <h3 class="text-sm font-semibold text-warm-50">Plan Review &amp; Questions</h3>
+          <p class="mt-1.5 text-xs leading-relaxed text-warm-400">
+            Agents propose plans and ask clarifying questions. You stay in control of direction.
+          </p>
+        </div>
+
+        <!-- Run Timeline -->
+        <div
+          class="feature-card rounded-xl border border-border-subtle bg-card/40 p-5 hover:border-border hover:bg-card/70"
+          data-reveal
+          data-reveal-d="10"
+        >
+          <div
+            class="mb-3 flex size-9 items-center justify-center rounded-lg bg-accent/[0.07] text-accent"
+          >
+            <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+          </div>
+          <h3 class="text-sm font-semibold text-warm-50">Run Timeline</h3>
+          <p class="mt-1.5 text-xs leading-relaxed text-warm-400">
+            Structured history of tool calls, agent delegation, hook execution, and context usage.
+          </p>
+        </div>
+
+        <!-- Copilot Customization -->
+        <div
+          class="feature-card rounded-xl border border-border-subtle bg-card/40 p-5 hover:border-border hover:bg-card/70"
+          data-reveal
+          data-reveal-d="11"
+        >
+          <div
+            class="mb-3 flex size-9 items-center justify-center rounded-lg bg-brand/[0.07] text-brand"
+          >
+            <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+              ></path>
+            </svg>
+          </div>
+          <h3 class="text-sm font-semibold text-warm-50">Copilot Customization</h3>
+          <p class="mt-1.5 text-xs leading-relaxed text-warm-400">
+            Auto-discovers instructions, agent profiles, and prompt files from your repository.
+          </p>
+        </div>
+
+        <!-- Integrated Terminal -->
+        <div
+          class="feature-card rounded-xl border border-border-subtle bg-card/40 p-5 hover:border-border hover:bg-card/70"
+          data-reveal
+          data-reveal-d="12"
+        >
+          <div
+            class="mb-3 flex size-9 items-center justify-center rounded-lg bg-accent/[0.07] text-accent"
+          >
+            <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+              ></path>
+            </svg>
+          </div>
+          <h3 class="text-sm font-semibold text-warm-50">Integrated Terminal</h3>
+          <p class="mt-1.5 text-xs leading-relaxed text-warm-400">
+            Full PTY-backed terminal inside the workspace. Toggle with <kbd class="text-warm-200"
+              >Ctrl+`</kbd
+            >.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════ Orchestration Patterns ═══════════════════════════════ -->
+  <section id="patterns" class="relative border-t border-border-subtle/50">
+    <div class="mx-auto max-w-6xl px-6 py-24 md:py-32">
+      <div class="mx-auto max-w-2xl text-center" data-reveal>
+        <h2 class="text-3xl font-light tracking-tight text-warm-50 md:text-5xl">
           Five ways to
-          <span class="text-violet-400">orchestrate agents</span>
+          <span class="text-gradient-brand font-display"> orchestrate agents</span>
         </h2>
-        <p class="mt-4 text-lg text-zinc-400">
-          Choose how agents collaborate — from simple one-on-one help to complex multi-agent workflows.
-          Save patterns and reuse them across projects.
+        <p class="mt-5 text-lg text-warm-300">
+          Choose how agents collaborate — from simple one-on-one help to complex multi-agent
+          workflows. Save patterns and reuse them across projects.
         </p>
       </div>
 
-      <div class="mx-auto mt-16 grid max-w-5xl gap-4 md:grid-cols-2 lg:grid-cols-5">
+      <div class="mx-auto mt-16 grid max-w-5xl grid-cols-2 gap-3 md:grid-cols-5">
         <!-- Single -->
-        <div class="flex flex-col items-center rounded-2xl border border-zinc-800 bg-zinc-950/60 p-6 text-center transition hover:border-indigo-500/30 hover:bg-zinc-900/40">
-          <div class="mb-3 flex size-12 items-center justify-center rounded-full bg-indigo-500/10">
-            <svg class="size-6 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+        <div
+          class="feature-card flex flex-col items-center rounded-xl border border-border-subtle border-l-brand/30 bg-card/40 p-5 text-center hover:border-border hover:bg-card/70"
+          data-reveal
+          data-reveal-d="1"
+        >
+          <div
+            class="mb-3 flex size-10 items-center justify-center rounded-full bg-brand/[0.08] text-brand"
+          >
+            <svg class="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
             </svg>
           </div>
-          <h3 class="text-sm font-semibold">Single</h3>
-          <p class="mt-2 text-xs leading-relaxed text-zinc-500">
+          <h3 class="text-sm font-semibold text-warm-50">Single</h3>
+          <p class="mt-1.5 text-xs leading-relaxed text-warm-400">
             Direct one-on-one help with a single agent.
           </p>
         </div>
 
         <!-- Sequential -->
-        <div class="flex flex-col items-center rounded-2xl border border-zinc-800 bg-zinc-950/60 p-6 text-center transition hover:border-emerald-500/30 hover:bg-zinc-900/40">
-          <div class="mb-3 flex size-12 items-center justify-center rounded-full bg-emerald-500/10">
-            <svg class="size-6 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+        <div
+          class="feature-card flex flex-col items-center rounded-xl border border-border-subtle border-l-accent/30 bg-card/40 p-5 text-center hover:border-border hover:bg-card/70"
+          data-reveal
+          data-reveal-d="2"
+        >
+          <div
+            class="mb-3 flex size-10 items-center justify-center rounded-full bg-accent/[0.08] text-accent"
+          >
+            <svg class="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M13 5l7 7-7 7M5 5l7 7-7 7"></path>
             </svg>
           </div>
-          <h3 class="text-sm font-semibold">Sequential</h3>
-          <p class="mt-2 text-xs leading-relaxed text-zinc-500">
+          <h3 class="text-sm font-semibold text-warm-50">Sequential</h3>
+          <p class="mt-1.5 text-xs leading-relaxed text-warm-400">
             Pipeline-style work where each agent builds on the previous.
           </p>
         </div>
 
         <!-- Concurrent -->
-        <div class="flex flex-col items-center rounded-2xl border border-zinc-800 bg-zinc-950/60 p-6 text-center transition hover:border-sky-500/30 hover:bg-zinc-900/40">
-          <div class="mb-3 flex size-12 items-center justify-center rounded-full bg-sky-500/10">
-            <svg class="size-6 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+        <div
+          class="feature-card flex flex-col items-center rounded-xl border border-border-subtle border-l-brand/30 bg-card/40 p-5 text-center hover:border-border hover:bg-card/70"
+          data-reveal
+          data-reveal-d="3"
+        >
+          <div
+            class="mb-3 flex size-10 items-center justify-center rounded-full bg-brand/[0.08] text-brand"
+          >
+            <svg class="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path>
             </svg>
           </div>
-          <h3 class="text-sm font-semibold">Concurrent</h3>
-          <p class="mt-2 text-xs leading-relaxed text-zinc-500">
+          <h3 class="text-sm font-semibold text-warm-50">Concurrent</h3>
+          <p class="mt-1.5 text-xs leading-relaxed text-warm-400">
             Parallel exploration with aggregated results.
           </p>
         </div>
 
         <!-- Handoff -->
-        <div class="flex flex-col items-center rounded-2xl border border-zinc-800 bg-zinc-950/60 p-6 text-center transition hover:border-amber-500/30 hover:bg-zinc-900/40">
-          <div class="mb-3 flex size-12 items-center justify-center rounded-full bg-amber-500/10">
-            <svg class="size-6 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4M16 17H4m0 0l4 4m-4-4l4-4" />
+        <div
+          class="feature-card flex flex-col items-center rounded-xl border border-border-subtle border-l-accent/30 bg-card/40 p-5 text-center hover:border-border hover:bg-card/70"
+          data-reveal
+          data-reveal-d="4"
+        >
+          <div
+            class="mb-3 flex size-10 items-center justify-center rounded-full bg-accent/[0.08] text-accent"
+          >
+            <svg class="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M8 7h12m0 0l-4-4m4 4l-4 4M16 17H4m0 0l4 4m-4-4l4-4"></path>
             </svg>
           </div>
-          <h3 class="text-sm font-semibold">Handoff</h3>
-          <p class="mt-2 text-xs leading-relaxed text-zinc-500">
+          <h3 class="text-sm font-semibold text-warm-50">Handoff</h3>
+          <p class="mt-1.5 text-xs leading-relaxed text-warm-400">
             Agent-to-agent delegation with specialist routing.
           </p>
         </div>
 
         <!-- Group Chat -->
-        <div class="flex flex-col items-center rounded-2xl border border-zinc-800 bg-zinc-950/60 p-6 text-center transition hover:border-violet-500/30 hover:bg-zinc-900/40">
-          <div class="mb-3 flex size-12 items-center justify-center rounded-full bg-violet-500/10">
-            <svg class="size-6 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+        <div
+          class="feature-card col-span-2 flex flex-col items-center rounded-xl border border-border-subtle border-l-brand/30 bg-card/40 p-5 text-center hover:border-border hover:bg-card/70 md:col-span-1"
+          data-reveal
+          data-reveal-d="5"
+        >
+          <div
+            class="mb-3 flex size-10 items-center justify-center rounded-full bg-brand/[0.08] text-brand"
+          >
+            <svg class="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
+              ></path>
             </svg>
           </div>
-          <h3 class="text-sm font-semibold">Group Chat</h3>
-          <p class="mt-2 text-xs leading-relaxed text-zinc-500">
+          <h3 class="text-sm font-semibold text-warm-50">Group Chat</h3>
+          <p class="mt-1.5 text-xs leading-relaxed text-warm-400">
             Round-robin collaborative refinement across agents.
           </p>
         </div>
       </div>
 
-      <div class="mx-auto mt-16 max-w-5xl">
-        <div class="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-2 shadow-2xl shadow-black/30 ring-1 ring-white/5">
-          <div class="overflow-hidden rounded-xl">
+      <!-- Orchestration screenshot -->
+      <div class="mx-auto mt-16 max-w-5xl" data-reveal>
+        <div
+          class="rounded-2xl border border-border bg-card/60 p-1.5 shadow-2xl shadow-black/40 ring-1 ring-white/[0.04]"
+        >
+          <div class="overflow-hidden rounded-[13px]">
             <img
               src="/images/screenshot-orchestration.png"
-              alt="Aryx workspace showing the app interface for agent-driven work across real projects"
+              alt="Aryx workspace showing multi-agent orchestration in action"
               class="w-full"
               width="1280"
               height="800"
             />
           </div>
         </div>
-        <p class="mt-4 text-center text-sm text-zinc-500">
-          See how Aryx keeps multi-agent runs visible in one workspace while patterns stay reusable across projects.
+        <p class="mt-4 text-center text-sm text-warm-400">
+          Multi-agent runs stay visible in one workspace while patterns stay reusable across
+          projects.
         </p>
       </div>
     </div>
   </section>
 
-  <!-- How It Works -->
-  <section id="get-started" class="relative border-t border-zinc-800/80">
+  <!-- ═══════════════════════════════════ Get Started ═══════════════════════════════════ -->
+  <section id="get-started" class="relative border-t border-border-subtle/50 bg-raised/50">
     <div class="mx-auto max-w-6xl px-6 py-24 md:py-32">
-      <div class="mx-auto max-w-2xl text-center">
-        <h2 class="text-3xl font-bold tracking-tight md:text-4xl">
+      <div class="mx-auto max-w-2xl text-center" data-reveal>
+        <h2 class="text-3xl font-light tracking-tight text-warm-50 md:text-5xl">
           Get started in
-          <span class="text-emerald-400">four steps</span>
+          <span class="text-gradient-brand font-display"> four steps</span>
         </h2>
-        <p class="mt-4 text-lg text-zinc-400">
+        <p class="mt-5 text-lg text-warm-300">
           From download to your first AI-powered session in minutes.
         </p>
       </div>
 
-      <div class="mx-auto mt-16 grid max-w-4xl gap-8 md:grid-cols-2">
-        <!-- Step 1 -->
-        <div class="relative flex gap-4 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
-          <div class="flex size-10 shrink-0 items-center justify-center rounded-xl bg-indigo-500/10 text-lg font-bold text-indigo-400">
-            1
-          </div>
-          <div>
-            <h3 class="text-base font-semibold">Download &amp; Launch</h3>
-            <p class="mt-2 text-sm leading-relaxed text-zinc-400">
-              Grab the latest release from GitHub and open Aryx. The app shows your Copilot connection status so you'll know right away if authentication is ready.
-            </p>
-          </div>
+      <!-- Vertical timeline -->
+      <div class="relative mx-auto mt-16 max-w-2xl">
+        <!-- Connecting line -->
+        <div
+          class="absolute left-[19px] top-0 hidden h-full w-px bg-gradient-to-b from-brand/30 via-brand/15 to-transparent md:block"
+        >
         </div>
 
-        <!-- Step 2 -->
-        <div class="relative flex gap-4 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
-          <div class="flex size-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-lg font-bold text-emerald-400">
-            2
+        <div class="flex flex-col gap-8">
+          <!-- Step 1 -->
+          <div class="flex gap-5" data-reveal data-reveal-d="1">
+            <div
+              class="flex size-10 shrink-0 items-center justify-center rounded-xl bg-brand/[0.08] text-lg font-bold text-brand"
+            >
+              1
+            </div>
+            <div class="pt-1">
+              <h3 class="text-base font-semibold text-warm-50">Download &amp; Launch</h3>
+              <p class="mt-2 text-sm leading-relaxed text-warm-300">
+                Grab the latest release from GitHub and open Aryx. The app shows your Copilot
+                connection status so you'll know right away if authentication is ready.
+              </p>
+            </div>
           </div>
-          <div>
-            <h3 class="text-base font-semibold">Connect a Project</h3>
-            <p class="mt-2 text-sm leading-relaxed text-zinc-400">
-              Add a local folder or git repository, or start with a scratchpad for quick questions without project setup.
-            </p>
-          </div>
-        </div>
 
-        <!-- Step 3 -->
-        <div class="relative flex gap-4 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
-          <div class="flex size-10 shrink-0 items-center justify-center rounded-xl bg-violet-500/10 text-lg font-bold text-violet-400">
-            3
+          <!-- Step 2 -->
+          <div class="flex gap-5" data-reveal data-reveal-d="2">
+            <div
+              class="flex size-10 shrink-0 items-center justify-center rounded-xl bg-accent/[0.08] text-lg font-bold text-accent"
+            >
+              2
+            </div>
+            <div class="pt-1">
+              <h3 class="text-base font-semibold text-warm-50">Connect a Project</h3>
+              <p class="mt-2 text-sm leading-relaxed text-warm-300">
+                Add a local folder or git repository, or start with a scratchpad for quick questions
+                without project setup.
+              </p>
+            </div>
           </div>
-          <div>
-            <h3 class="text-base font-semibold">Pick a Pattern</h3>
-            <p class="mt-2 text-sm leading-relaxed text-zinc-400">
-              Choose a single-agent chat for direct help, or select a multi-agent orchestration pattern for more structured workflows.
-            </p>
-          </div>
-        </div>
 
-        <!-- Step 4 -->
-        <div class="relative flex gap-4 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
-          <div class="flex size-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-lg font-bold text-amber-400">
-            4
+          <!-- Step 3 -->
+          <div class="flex gap-5" data-reveal data-reveal-d="3">
+            <div
+              class="flex size-10 shrink-0 items-center justify-center rounded-xl bg-brand/[0.08] text-lg font-bold text-brand"
+            >
+              3
+            </div>
+            <div class="pt-1">
+              <h3 class="text-base font-semibold text-warm-50">Pick a Pattern</h3>
+              <p class="mt-2 text-sm leading-relaxed text-warm-300">
+                Choose a single-agent chat for direct help, or select a multi-agent orchestration
+                pattern for more structured workflows.
+              </p>
+            </div>
           </div>
-          <div>
-            <h3 class="text-base font-semibold">Start Working</h3>
-            <p class="mt-2 text-sm leading-relaxed text-zinc-400">
-              Ask questions, describe tasks, or explore your codebase. Watch agents work in real time and keep sessions for later.
-            </p>
+
+          <!-- Step 4 -->
+          <div class="flex gap-5" data-reveal data-reveal-d="4">
+            <div
+              class="flex size-10 shrink-0 items-center justify-center rounded-xl bg-accent/[0.08] text-lg font-bold text-accent"
+            >
+              4
+            </div>
+            <div class="pt-1">
+              <h3 class="text-base font-semibold text-warm-50">Start Working</h3>
+              <p class="mt-2 text-sm leading-relaxed text-warm-300">
+                Ask questions, describe tasks, or explore your codebase. Watch agents work in real
+                time and keep sessions for later.
+              </p>
+            </div>
           </div>
         </div>
       </div>
 
       <!-- CTA -->
-      <div class="mt-16 text-center">
+      <div class="mt-20 text-center" data-reveal>
         <a
           href="https://github.com/davidkaya/aryx/releases"
           target="_blank"
           rel="noopener noreferrer"
-          class="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-8 py-3.5 text-sm font-semibold text-white shadow-lg shadow-indigo-500/20 transition hover:bg-indigo-500 hover:shadow-indigo-500/30"
+          class="inline-flex items-center gap-2 rounded-xl bg-brand px-8 py-3.5 text-sm font-semibold text-deep shadow-lg shadow-brand/20 transition hover:bg-brand-bright hover:shadow-brand/30"
         >
           <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
           </svg>
           Download Aryx
         </a>
-        <p class="mt-4 text-sm text-zinc-600">
-          Available for Windows, macOS, and Linux
-        </p>
+        <p class="mt-4 text-sm text-warm-500">Available for Windows, macOS, and Linux</p>
       </div>
     </div>
   </section>
 
-  <!-- Tech Banner -->
-  <section class="border-t border-zinc-800/80 bg-zinc-900/30">
-    <div class="mx-auto max-w-6xl px-6 py-16">
-      <div class="flex flex-wrap items-center justify-center gap-x-12 gap-y-6 text-sm text-zinc-500">
+  <!-- ═══════════════════════════════════ Tech Banner ═══════════════════════════════════ -->
+  <section class="border-t border-border-subtle/50">
+    <div class="mx-auto max-w-6xl px-6 py-14">
+      <div
+        class="flex flex-wrap items-center justify-center gap-x-10 gap-y-5 text-sm text-warm-500"
+      >
         <div class="flex items-center gap-2">
-          <svg class="size-5 text-zinc-600" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
+          <svg class="size-4 text-warm-600" viewBox="0 0 24 24" fill="currentColor">
+            <path
+              d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"
+            ></path>
           </svg>
           Powered by GitHub Copilot
         </div>
-        <span class="hidden text-zinc-800 md:inline">·</span>
+        <span class="hidden text-warm-700 md:inline">·</span>
         <div class="flex items-center gap-2">
-          <span class="text-zinc-600">🔧</span>
+          <span class="text-warm-600">⚙</span>
           MCP &amp; LSP Tooling
         </div>
-        <span class="hidden text-zinc-800 md:inline">·</span>
+        <span class="hidden text-warm-700 md:inline">·</span>
         <div class="flex items-center gap-2">
-          <span class="text-zinc-600">🛡️</span>
+          <span class="text-warm-600">🛡</span>
           Tool Approval Controls
         </div>
-        <span class="hidden text-zinc-800 md:inline">·</span>
+        <span class="hidden text-warm-700 md:inline">·</span>
         <div class="flex items-center gap-2">
-          <span class="text-zinc-600">🧩</span>
-          React Flow Graph Editor
+          <span class="text-warm-600">◇</span>
+          Graph Pattern Editor
         </div>
-        <span class="hidden text-zinc-800 md:inline">·</span>
+        <span class="hidden text-warm-700 md:inline">·</span>
         <div class="flex items-center gap-2">
-          <span class="text-zinc-600">📦</span>
+          <span class="text-warm-600">◈</span>
           Open Source
         </div>
       </div>

@@ -1,1 +1,118 @@
 @import 'tailwindcss';
+
+@theme {
+  --font-display: 'Instrument Serif', Georgia, serif;
+  --font-body: 'Outfit', system-ui, sans-serif;
+
+  --color-deep: #08080a;
+  --color-base: #0e0e11;
+  --color-raised: #14141a;
+  --color-card: #1a1a21;
+  --color-card-hover: #21212a;
+  --color-border: #2a2a34;
+  --color-border-subtle: #1e1e27;
+
+  --color-warm-50: #ede9e2;
+  --color-warm-100: #dbd6cd;
+  --color-warm-200: #c4bfb5;
+  --color-warm-300: #a09a90;
+  --color-warm-400: #7d776e;
+  --color-warm-500: #5e5950;
+  --color-warm-600: #403d38;
+  --color-warm-700: #2e2c28;
+  --color-warm-800: #1d1c19;
+
+  --color-brand: #245CF9;
+  --color-brand-bright: #248CFD;
+  --color-brand-dim: #0E13A4;
+
+  --color-accent: #8A29E6;
+  --color-accent-dim: #5A20E0;
+}
+
+/* ── Grain overlay ── */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: 0.026;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.7' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 256px 256px;
+}
+
+/* ── Dot grid ── */
+.dot-grid {
+  background-image: radial-gradient(
+    circle,
+    rgba(42, 42, 52, 0.55) 1px,
+    transparent 1px
+  );
+  background-size: 28px 28px;
+}
+
+/* ── Screenshot perspective tilt ── */
+.screenshot-frame {
+  transform: perspective(2400px) rotateX(2.5deg);
+  transition: transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.screenshot-frame:hover {
+  transform: perspective(2400px) rotateX(0deg);
+}
+
+/* ── Scroll reveal ── */
+[data-reveal] {
+  opacity: 0;
+  transform: translateY(18px);
+  transition:
+    opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+}
+[data-reveal].revealed {
+  opacity: 1;
+  transform: none;
+}
+[data-reveal-d='1'] { transition-delay: 80ms; }
+[data-reveal-d='2'] { transition-delay: 160ms; }
+[data-reveal-d='3'] { transition-delay: 240ms; }
+[data-reveal-d='4'] { transition-delay: 320ms; }
+[data-reveal-d='5'] { transition-delay: 400ms; }
+[data-reveal-d='6'] { transition-delay: 480ms; }
+[data-reveal-d='7'] { transition-delay: 560ms; }
+[data-reveal-d='8'] { transition-delay: 640ms; }
+[data-reveal-d='9'] { transition-delay: 720ms; }
+[data-reveal-d='10'] { transition-delay: 800ms; }
+[data-reveal-d='11'] { transition-delay: 880ms; }
+[data-reveal-d='12'] { transition-delay: 960ms; }
+
+/* ── Feature card hover ── */
+.feature-card {
+  transition:
+    transform 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 0.3s ease,
+    background-color 0.3s ease;
+}
+.feature-card:hover {
+  transform: translateY(-2px);
+}
+
+/* ── Ambient glow pulse ── */
+@keyframes glow-pulse {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+/* ── Gradient text utility ── */
+.text-gradient-brand {
+  background: linear-gradient(135deg, #245CF9, #8A29E6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}

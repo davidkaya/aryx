@@ -270,302 +270,269 @@ import Base from '../layouts/Base.astro';
     </div>
   </section>
 
-  <!-- ════════════════════════════════════ Feature Grid ════════════════════════════════════ -->
+  <!-- ════════════════════════════════════ Feature Showcase ════════════════════════════════════ -->
   <section class="relative bg-raised/50">
     <div class="mx-auto max-w-6xl px-6 py-24 md:py-32">
-      <div class="mx-auto grid max-w-5xl gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <!-- Start Fast -->
-        <div
-          class="feature-card rounded-xl border border-border-subtle bg-card/40 p-5 hover:border-border hover:bg-card/70"
-          data-reveal
-          data-reveal-d="1"
-        >
-          <div
-            class="mb-3 flex size-9 items-center justify-center rounded-lg bg-brand/[0.07] text-brand"
-          >
-            <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M13 10V3L4 14h7v7l9-11h-7z"></path>
-            </svg>
-          </div>
-          <h3 class="text-sm font-semibold text-warm-50">Start Fast</h3>
-          <p class="mt-1.5 text-xs leading-relaxed text-warm-400">
-            Open a scratchpad session for quick questions — no project setup needed.
-          </p>
-        </div>
 
-        <!-- Real Project Context -->
-        <div
-          class="feature-card rounded-xl border border-border-subtle bg-card/40 p-5 hover:border-border hover:bg-card/70"
-          data-reveal
-          data-reveal-d="2"
-        >
-          <div
-            class="mb-3 flex size-9 items-center justify-center rounded-lg bg-accent/[0.07] text-accent"
-          >
-            <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
-              ></path>
-            </svg>
-          </div>
-          <h3 class="text-sm font-semibold text-warm-50">Real Project Context</h3>
-          <p class="mt-1.5 text-xs leading-relaxed text-warm-400">
-            Attach local folders and repos. See branch name, dirty state, and ahead/behind status.
-          </p>
+      <!-- ── Category: Workspace & Sessions ── -->
+      <div class="mx-auto max-w-5xl" data-reveal>
+        <div class="mb-8 flex items-center gap-4">
+          <div class="h-px w-8 bg-gradient-to-r from-brand to-brand/0"></div>
+          <h3 class="text-xs font-semibold uppercase tracking-[0.2em] text-brand">Workspace &amp; Sessions</h3>
+          <div class="h-px flex-1 bg-border-subtle"></div>
         </div>
-
-        <!-- Mid-turn Steering -->
-        <div
-          class="feature-card rounded-xl border border-border-subtle bg-card/40 p-5 hover:border-border hover:bg-card/70"
-          data-reveal
-          data-reveal-d="3"
-        >
-          <div
-            class="mb-3 flex size-9 items-center justify-center rounded-lg bg-brand/[0.07] text-brand"
-          >
-            <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M13 10V3L4 14h7v7l9-11h-7z"></path>
-            </svg>
+        <div class="grid gap-x-8 gap-y-6 sm:grid-cols-2 lg:grid-cols-3">
+          <!-- Start Fast -->
+          <div class="group flex gap-3.5 rounded-xl px-3 py-2.5 transition hover:bg-card/60" data-reveal data-reveal-d="1">
+            <div class="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-brand/[0.07] text-brand transition group-hover:bg-brand/[0.12]">
+              <svg class="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+            </div>
+            <div>
+              <h4 class="text-sm font-medium text-warm-50">Start Fast</h4>
+              <p class="mt-0.5 text-xs leading-relaxed text-warm-400">Scratchpad sessions for quick questions — no project setup.</p>
+            </div>
           </div>
-          <h3 class="text-sm font-semibold text-warm-50">Steer While It Works</h3>
-          <p class="mt-1.5 text-xs leading-relaxed text-warm-400">
-            Send follow-up messages while an agent is running — your input is injected immediately.
-          </p>
-        </div>
-
-        <!-- Image Input -->
-        <div
-          class="feature-card rounded-xl border border-border-subtle bg-card/40 p-5 hover:border-border hover:bg-card/70"
-          data-reveal
-          data-reveal-d="4"
-        >
-          <div
-            class="mb-3 flex size-9 items-center justify-center rounded-lg bg-accent/[0.07] text-accent"
-          >
-            <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-              ></path>
-            </svg>
+          <!-- Persistent Sessions -->
+          <div class="group flex gap-3.5 rounded-xl px-3 py-2.5 transition hover:bg-card/60" data-reveal data-reveal-d="2">
+            <div class="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-brand/[0.07] text-brand transition group-hover:bg-brand/[0.12]">
+              <svg class="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+            </div>
+            <div>
+              <h4 class="text-sm font-medium text-warm-50">Persistent Sessions</h4>
+              <p class="mt-0.5 text-xs leading-relaxed text-warm-400">Rename, pin, archive, duplicate, and return to sessions across restarts.</p>
+            </div>
           </div>
-          <h3 class="text-sm font-semibold text-warm-50">Image Input</h3>
-          <p class="mt-1.5 text-xs leading-relaxed text-warm-400">
-            Attach screenshots, diagrams, or photos to any message for visual reasoning.
-          </p>
-        </div>
-
-        <!-- Model Selection -->
-        <div
-          class="feature-card rounded-xl border border-border-subtle bg-card/40 p-5 hover:border-border hover:bg-card/70"
-          data-reveal
-          data-reveal-d="5"
-        >
-          <div
-            class="mb-3 flex size-9 items-center justify-center rounded-lg bg-brand/[0.07] text-brand"
-          >
-            <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"
-              ></path>
-            </svg>
+          <!-- Session Branching -->
+          <div class="group flex gap-3.5 rounded-xl px-3 py-2.5 transition hover:bg-card/60" data-reveal data-reveal-d="3">
+            <div class="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-brand/[0.07] text-brand transition group-hover:bg-brand/[0.12]">
+              <svg class="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2"></path></svg>
+            </div>
+            <div>
+              <h4 class="text-sm font-medium text-warm-50">Session Branching</h4>
+              <p class="mt-0.5 text-xs leading-relaxed text-warm-400">Fork a session at any user message to explore a different direction.</p>
+            </div>
           </div>
-          <h3 class="text-sm font-semibold text-warm-50">Tune Your Workflow</h3>
-          <p class="mt-1.5 text-xs leading-relaxed text-warm-400">
-            Choose models, adjust reasoning effort, and set interaction modes per session.
-          </p>
-        </div>
-
-        <!-- Visual Pattern Editor -->
-        <div
-          class="feature-card rounded-xl border border-border-subtle bg-card/40 p-5 hover:border-border hover:bg-card/70"
-          data-reveal
-          data-reveal-d="6"
-        >
-          <div
-            class="mb-3 flex size-9 items-center justify-center rounded-lg bg-accent/[0.07] text-accent"
-          >
-            <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z"
-              ></path>
-            </svg>
+          <!-- Session Search -->
+          <div class="group flex gap-3.5 rounded-xl px-3 py-2.5 transition hover:bg-card/60" data-reveal data-reveal-d="4">
+            <div class="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-brand/[0.07] text-brand transition group-hover:bg-brand/[0.12]">
+              <svg class="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+            </div>
+            <div>
+              <h4 class="text-sm font-medium text-warm-50">Session Search</h4>
+              <p class="mt-0.5 text-xs leading-relaxed text-warm-400">Full-text search across all session messages — not just titles.</p>
+            </div>
           </div>
-          <h3 class="text-sm font-semibold text-warm-50">Visual Pattern Editor</h3>
-          <p class="mt-1.5 text-xs leading-relaxed text-warm-400">
-            Design orchestration patterns visually. Drag nodes, draw connections, inspect each step.
-          </p>
-        </div>
-
-        <!-- Extensible Tooling -->
-        <div
-          class="feature-card rounded-xl border border-border-subtle bg-card/40 p-5 hover:border-border hover:bg-card/70"
-          data-reveal
-          data-reveal-d="7"
-        >
-          <div
-            class="mb-3 flex size-9 items-center justify-center rounded-lg bg-brand/[0.07] text-brand"
-          >
-            <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.573-1.066z"
-              ></path>
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-            </svg>
+          <!-- Message Actions -->
+          <div class="group flex gap-3.5 rounded-xl px-3 py-2.5 transition hover:bg-card/60" data-reveal data-reveal-d="5">
+            <div class="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-brand/[0.07] text-brand transition group-hover:bg-brand/[0.12]">
+              <svg class="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+            </div>
+            <div>
+              <h4 class="text-sm font-medium text-warm-50">Message Actions</h4>
+              <p class="mt-0.5 text-xs leading-relaxed text-warm-400">Copy, pin, edit-and-resend, and regenerate individual messages.</p>
+            </div>
           </div>
-          <h3 class="text-sm font-semibold text-warm-50">Extensible Tooling</h3>
-          <p class="mt-1.5 text-xs leading-relaxed text-warm-400">
-            Add MCP servers and LSP profiles. Set tool approval policies and integrate project
-            hooks.
-          </p>
-        </div>
-
-        <!-- Tooling Discovery -->
-        <div
-          class="feature-card rounded-xl border border-border-subtle bg-card/40 p-5 hover:border-border hover:bg-card/70"
-          data-reveal
-          data-reveal-d="8"
-        >
-          <div
-            class="mb-3 flex size-9 items-center justify-center rounded-lg bg-accent/[0.07] text-accent"
-          >
-            <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
-            </svg>
+          <!-- System Tray -->
+          <div class="group flex gap-3.5 rounded-xl px-3 py-2.5 transition hover:bg-card/60" data-reveal data-reveal-d="6">
+            <div class="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-brand/[0.07] text-brand transition group-hover:bg-brand/[0.12]">
+              <svg class="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+            </div>
+            <div>
+              <h4 class="text-sm font-medium text-warm-50">System Tray</h4>
+              <p class="mt-0.5 text-xs leading-relaxed text-warm-400">Minimize to tray, quick-launch scratchpads, see running session count.</p>
+            </div>
           </div>
-          <h3 class="text-sm font-semibold text-warm-50">Tooling Discovery</h3>
-          <p class="mt-1.5 text-xs leading-relaxed text-warm-400">
-            Auto-discovers MCP servers from project and user configs. Review and accept before use.
-          </p>
-        </div>
-
-        <!-- Plan Review -->
-        <div
-          class="feature-card rounded-xl border border-border-subtle bg-card/40 p-5 hover:border-border hover:bg-card/70"
-          data-reveal
-          data-reveal-d="9"
-        >
-          <div
-            class="mb-3 flex size-9 items-center justify-center rounded-lg bg-brand/[0.07] text-brand"
-          >
-            <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
-              ></path>
-            </svg>
+          <!-- Desktop Notifications -->
+          <div class="group flex gap-3.5 rounded-xl px-3 py-2.5 transition hover:bg-card/60" data-reveal data-reveal-d="7">
+            <div class="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-brand/[0.07] text-brand transition group-hover:bg-brand/[0.12]">
+              <svg class="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path></svg>
+            </div>
+            <div>
+              <h4 class="text-sm font-medium text-warm-50">Desktop Notifications</h4>
+              <p class="mt-0.5 text-xs leading-relaxed text-warm-400">Native OS alerts when runs complete, fail, or need approval.</p>
+            </div>
           </div>
-          <h3 class="text-sm font-semibold text-warm-50">Plan Review &amp; Questions</h3>
-          <p class="mt-1.5 text-xs leading-relaxed text-warm-400">
-            Agents propose plans and ask clarifying questions. You stay in control of direction.
-          </p>
-        </div>
-
-        <!-- Run Timeline -->
-        <div
-          class="feature-card rounded-xl border border-border-subtle bg-card/40 p-5 hover:border-border hover:bg-card/70"
-          data-reveal
-          data-reveal-d="10"
-        >
-          <div
-            class="mb-3 flex size-9 items-center justify-center rounded-lg bg-accent/[0.07] text-accent"
-          >
-            <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-            </svg>
+          <!-- Onboarding -->
+          <div class="group flex gap-3.5 rounded-xl px-3 py-2.5 transition hover:bg-card/60" data-reveal data-reveal-d="8">
+            <div class="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-brand/[0.07] text-brand transition group-hover:bg-brand/[0.12]">
+              <svg class="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path></svg>
+            </div>
+            <div>
+              <h4 class="text-sm font-medium text-warm-50">Guided Onboarding</h4>
+              <p class="mt-0.5 text-xs leading-relaxed text-warm-400">First-launch walkthrough, interactive tooltips, and a "try it" quickstart.</p>
+            </div>
           </div>
-          <h3 class="text-sm font-semibold text-warm-50">Run Timeline</h3>
-          <p class="mt-1.5 text-xs leading-relaxed text-warm-400">
-            Structured history of tool calls, agent delegation, hook execution, and context usage.
-          </p>
-        </div>
-
-        <!-- Copilot Customization -->
-        <div
-          class="feature-card rounded-xl border border-border-subtle bg-card/40 p-5 hover:border-border hover:bg-card/70"
-          data-reveal
-          data-reveal-d="11"
-        >
-          <div
-            class="mb-3 flex size-9 items-center justify-center rounded-lg bg-brand/[0.07] text-brand"
-          >
-            <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-              ></path>
-            </svg>
-          </div>
-          <h3 class="text-sm font-semibold text-warm-50">Copilot Customization</h3>
-          <p class="mt-1.5 text-xs leading-relaxed text-warm-400">
-            Auto-discovers instructions, agent profiles, and prompt files from your repository.
-          </p>
-        </div>
-
-        <!-- Integrated Terminal -->
-        <div
-          class="feature-card rounded-xl border border-border-subtle bg-card/40 p-5 hover:border-border hover:bg-card/70"
-          data-reveal
-          data-reveal-d="12"
-        >
-          <div
-            class="mb-3 flex size-9 items-center justify-center rounded-lg bg-accent/[0.07] text-accent"
-          >
-            <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-              ></path>
-            </svg>
-          </div>
-          <h3 class="text-sm font-semibold text-warm-50">Integrated Terminal</h3>
-          <p class="mt-1.5 text-xs leading-relaxed text-warm-400">
-            Full PTY-backed terminal inside the workspace. Toggle with <kbd class="text-warm-200"
-              >Ctrl+`</kbd
-            >.
-          </p>
         </div>
       </div>
+
+      <!-- Divider -->
+      <div class="mx-auto my-16 max-w-5xl border-t border-border-subtle/50"></div>
+
+      <!-- ── Category: Agent Intelligence ── -->
+      <div class="mx-auto max-w-5xl" data-reveal>
+        <div class="mb-8 flex items-center gap-4">
+          <div class="h-px w-8 bg-gradient-to-r from-accent to-accent/0"></div>
+          <h3 class="text-xs font-semibold uppercase tracking-[0.2em] text-accent">Agent Intelligence</h3>
+          <div class="h-px flex-1 bg-border-subtle"></div>
+        </div>
+        <div class="grid gap-x-8 gap-y-6 sm:grid-cols-2 lg:grid-cols-3">
+          <!-- Mid-turn Steering -->
+          <div class="group flex gap-3.5 rounded-xl px-3 py-2.5 transition hover:bg-card/60" data-reveal data-reveal-d="1">
+            <div class="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-accent/[0.07] text-accent transition group-hover:bg-accent/[0.12]">
+              <svg class="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+            </div>
+            <div>
+              <h4 class="text-sm font-medium text-warm-50">Mid-Turn Steering</h4>
+              <p class="mt-0.5 text-xs leading-relaxed text-warm-400">Send follow-ups while the agent works — input is injected immediately.</p>
+            </div>
+          </div>
+          <!-- Plan Review -->
+          <div class="group flex gap-3.5 rounded-xl px-3 py-2.5 transition hover:bg-card/60" data-reveal data-reveal-d="2">
+            <div class="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-accent/[0.07] text-accent transition group-hover:bg-accent/[0.12]">
+              <svg class="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path></svg>
+            </div>
+            <div>
+              <h4 class="text-sm font-medium text-warm-50">Plan Review &amp; Questions</h4>
+              <p class="mt-0.5 text-xs leading-relaxed text-warm-400">Agents propose plans and ask clarifying questions before acting.</p>
+            </div>
+          </div>
+          <!-- Run Timeline -->
+          <div class="group flex gap-3.5 rounded-xl px-3 py-2.5 transition hover:bg-card/60" data-reveal data-reveal-d="3">
+            <div class="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-accent/[0.07] text-accent transition group-hover:bg-accent/[0.12]">
+              <svg class="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            </div>
+            <div>
+              <h4 class="text-sm font-medium text-warm-50">Run Timeline</h4>
+              <p class="mt-0.5 text-xs leading-relaxed text-warm-400">Structured history of tool calls, delegations, hooks, and context usage.</p>
+            </div>
+          </div>
+          <!-- Visual Pattern Editor -->
+          <div class="group flex gap-3.5 rounded-xl px-3 py-2.5 transition hover:bg-card/60" data-reveal data-reveal-d="4">
+            <div class="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-accent/[0.07] text-accent transition group-hover:bg-accent/[0.12]">
+              <svg class="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z"></path></svg>
+            </div>
+            <div>
+              <h4 class="text-sm font-medium text-warm-50">Visual Pattern Editor</h4>
+              <p class="mt-0.5 text-xs leading-relaxed text-warm-400">Drag nodes, draw connections, and inspect each step in a graph view.</p>
+            </div>
+          </div>
+          <!-- Copilot Customization -->
+          <div class="group flex gap-3.5 rounded-xl px-3 py-2.5 transition hover:bg-card/60" data-reveal data-reveal-d="5">
+            <div class="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-accent/[0.07] text-accent transition group-hover:bg-accent/[0.12]">
+              <svg class="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+            </div>
+            <div>
+              <h4 class="text-sm font-medium text-warm-50">Copilot Customization</h4>
+              <p class="mt-0.5 text-xs leading-relaxed text-warm-400">Auto-discovers instructions, agent profiles, and prompt files from your repo.</p>
+            </div>
+          </div>
+          <!-- Model & Effort Tuning -->
+          <div class="group flex gap-3.5 rounded-xl px-3 py-2.5 transition hover:bg-card/60" data-reveal data-reveal-d="6">
+            <div class="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-accent/[0.07] text-accent transition group-hover:bg-accent/[0.12]">
+              <svg class="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path></svg>
+            </div>
+            <div>
+              <h4 class="text-sm font-medium text-warm-50">Model &amp; Effort Tuning</h4>
+              <p class="mt-0.5 text-xs leading-relaxed text-warm-400">Choose models, adjust reasoning effort, and set interaction modes per session.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Divider -->
+      <div class="mx-auto my-16 max-w-5xl border-t border-border-subtle/50"></div>
+
+      <!-- ── Category: Developer Tooling ── -->
+      <div class="mx-auto max-w-5xl" data-reveal>
+        <div class="mb-8 flex items-center gap-4">
+          <div class="h-px w-8 bg-gradient-to-r from-brand-bright to-brand-bright/0"></div>
+          <h3 class="text-xs font-semibold uppercase tracking-[0.2em] text-brand-bright">Developer Tooling</h3>
+          <div class="h-px flex-1 bg-border-subtle"></div>
+        </div>
+        <div class="grid gap-x-8 gap-y-6 sm:grid-cols-2 lg:grid-cols-3">
+          <!-- Real Project Context -->
+          <div class="group flex gap-3.5 rounded-xl px-3 py-2.5 transition hover:bg-card/60" data-reveal data-reveal-d="1">
+            <div class="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-brand-bright/[0.07] text-brand-bright transition group-hover:bg-brand-bright/[0.12]">
+              <svg class="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path></svg>
+            </div>
+            <div>
+              <h4 class="text-sm font-medium text-warm-50">Real Project Context</h4>
+              <p class="mt-0.5 text-xs leading-relaxed text-warm-400">Attach folders and repos — see branch, dirty state, and ahead/behind.</p>
+            </div>
+          </div>
+          <!-- MCP Servers -->
+          <div class="group flex gap-3.5 rounded-xl px-3 py-2.5 transition hover:bg-card/60" data-reveal data-reveal-d="2">
+            <div class="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-brand-bright/[0.07] text-brand-bright transition group-hover:bg-brand-bright/[0.12]">
+              <svg class="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.573-1.066z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+            </div>
+            <div>
+              <h4 class="text-sm font-medium text-warm-50">MCP Servers</h4>
+              <p class="mt-0.5 text-xs leading-relaxed text-warm-400">Define globally, enable per session, auto-discover from project configs.</p>
+            </div>
+          </div>
+          <!-- Tool Approval -->
+          <div class="group flex gap-3.5 rounded-xl px-3 py-2.5 transition hover:bg-card/60" data-reveal data-reveal-d="3">
+            <div class="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-brand-bright/[0.07] text-brand-bright transition group-hover:bg-brand-bright/[0.12]">
+              <svg class="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
+            </div>
+            <div>
+              <h4 class="text-sm font-medium text-warm-50">Tool Approval Controls</h4>
+              <p class="mt-0.5 text-xs leading-relaxed text-warm-400">Fine-grained policies with pattern defaults and per-session overrides.</p>
+            </div>
+          </div>
+          <!-- Integrated Terminal -->
+          <div class="group flex gap-3.5 rounded-xl px-3 py-2.5 transition hover:bg-card/60" data-reveal data-reveal-d="4">
+            <div class="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-brand-bright/[0.07] text-brand-bright transition group-hover:bg-brand-bright/[0.12]">
+              <svg class="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+            </div>
+            <div>
+              <h4 class="text-sm font-medium text-warm-50">Integrated Terminal</h4>
+              <p class="mt-0.5 text-xs leading-relaxed text-warm-400">Full PTY-backed terminal inside the workspace. Toggle with <kbd class="text-warm-200">Ctrl+`</kbd>.</p>
+            </div>
+          </div>
+          <!-- Image Input -->
+          <div class="group flex gap-3.5 rounded-xl px-3 py-2.5 transition hover:bg-card/60" data-reveal data-reveal-d="5">
+            <div class="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-brand-bright/[0.07] text-brand-bright transition group-hover:bg-brand-bright/[0.12]">
+              <svg class="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+            </div>
+            <div>
+              <h4 class="text-sm font-medium text-warm-50">Image Input</h4>
+              <p class="mt-0.5 text-xs leading-relaxed text-warm-400">Attach screenshots, diagrams, or photos for visual reasoning.</p>
+            </div>
+          </div>
+          <!-- Command Palette -->
+          <div class="group flex gap-3.5 rounded-xl px-3 py-2.5 transition hover:bg-card/60" data-reveal data-reveal-d="6">
+            <div class="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-brand-bright/[0.07] text-brand-bright transition group-hover:bg-brand-bright/[0.12]">
+              <svg class="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14"></path></svg>
+            </div>
+            <div>
+              <h4 class="text-sm font-medium text-warm-50">Command Palette</h4>
+              <p class="mt-0.5 text-xs leading-relaxed text-warm-400"><kbd class="text-warm-200">Ctrl+K</kbd> fuzzy search across actions, sessions, and settings.</p>
+            </div>
+          </div>
+          <!-- Keyboard Shortcuts -->
+          <div class="group flex gap-3.5 rounded-xl px-3 py-2.5 transition hover:bg-card/60" data-reveal data-reveal-d="7">
+            <div class="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-brand-bright/[0.07] text-brand-bright transition group-hover:bg-brand-bright/[0.12]">
+              <svg class="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
+            </div>
+            <div>
+              <h4 class="text-sm font-medium text-warm-50">Keyboard Shortcuts</h4>
+              <p class="mt-0.5 text-xs leading-relaxed text-warm-400">Comprehensive keybindings with a cheat sheet via <kbd class="text-warm-200">Ctrl+/</kbd>.</p>
+            </div>
+          </div>
+          <!-- Project Hooks -->
+          <div class="group flex gap-3.5 rounded-xl px-3 py-2.5 transition hover:bg-card/60" data-reveal data-reveal-d="8">
+            <div class="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-brand-bright/[0.07] text-brand-bright transition group-hover:bg-brand-bright/[0.12]">
+              <svg class="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path></svg>
+            </div>
+            <div>
+              <h4 class="text-sm font-medium text-warm-50">Project Hooks</h4>
+              <p class="mt-0.5 text-xs leading-relaxed text-warm-400">Auto-discovers <code class="text-warm-300">.github/hooks</code> and runs lifecycle hooks in the sidecar.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
     </div>
   </section>
 

@@ -8,138 +8,89 @@
   A desktop workspace for Copilot-powered work across real projects.
 </p>
 
-Aryx is built for people who want more than a generic AI chat window. It gives you a place to ask quick questions, connect real projects, run reusable agent patterns, and keep ongoing work organized in one app.
+<p align="center">
+  <a href="https://github.com/davidkaya/aryx/releases">Download</a>&nbsp;&nbsp;·&nbsp;&nbsp;<a href="https://aryx.dev">Website</a>&nbsp;&nbsp;·&nbsp;&nbsp;<a href="https://github.com/davidkaya/aryx/issues">Issues</a>
+</p>
 
-It works especially well when you want AI help that stays grounded in an actual codebase: your folders, your repository state, your current branch, and your active work.
+---
 
-## Why use Aryx?
+Aryx is a desktop app that turns GitHub Copilot into a full workspace. Connect real projects, orchestrate multi-agent workflows, and keep persistent sessions organized — instead of starting from scratch in a blank chat window every time. It runs on Windows, macOS, and Linux.
 
-- **Start fast** with a scratchpad conversation for quick questions and ad-hoc work.
-- **Work against real projects** by attaching local folders and letting Aryx stay aware of repository context.
-- **Go beyond one assistant** with orchestration patterns such as single-agent, sequential, concurrent, handoff, and group-chat flows.
-- **See what is happening** with live activity for each agent while a run is in progress, including sub-agent delegations, hook lifecycle, skill invocations, and context compaction.
-- **Stay organized** with persistent sessions you can rename, pin, archive, delete, and return to later.
-- **Steer while agents work** by sending follow-up messages mid-turn — the agent receives your input immediately.
-- **Attach images** to any message for visual context the model can reason about.
-- **Tune how you work** by choosing models and reusing saved patterns that fit different tasks.
+## Highlights
 
-## What you can do in the app
+- **Multi-agent orchestration** — single, sequential, concurrent, handoff, and group-chat patterns with a visual graph editor.
+- **Project-grounded** — attach local folders and repos so every conversation has real codebase context.
+- **Live execution visibility** — watch agents think, delegate, call tools, and consume context in real time.
+- **Persistent workspace** — sessions survive restarts. Search, pin, archive, branch, and return to past work.
+- **Extensible tooling** — MCP servers, LSP profiles, project hooks, and fine-grained tool approval controls.
+- **Keyboard-first** — command palette, rich shortcuts, mid-turn steering, and a built-in terminal.
 
-### Ask quick questions in a scratchpad
+## How it works
 
-If you just want to think through an idea, draft something, or ask for help without connecting a project, start a scratchpad session and begin chatting.
-Each scratchpad session keeps its own isolated working directory, so files created in one scratchpad do not leak into another.
+1. **Launch Aryx** — the app checks your Copilot CLI connection and shows status on the home screen.
+2. **Connect a project** or open a scratchpad for quick questions without any setup.
+3. **Pick a pattern** — choose a single-agent chat or a saved multi-agent orchestration workflow.
+4. **Work** — ask questions, steer agents mid-turn, watch live activity, and keep the session for later.
 
-### Connect a real project
+## Features
 
-Add a local folder when you want help that is grounded in your work. Aryx is designed to feel strongest when it is attached to a real project instead of acting like a general-purpose chatbot.
+### Workspace & sessions
 
-### Choose how agents collaborate
+| Feature | Description |
+|---------|-------------|
+| Scratchpad sessions | Quick questions with isolated working directories — no project setup needed |
+| Persistent sessions | Rename, pin, archive, duplicate, and return to sessions across restarts |
+| Session branching | Fork a session at any user message to explore a different direction |
+| Session search | Full-text search across all session messages, not just titles |
+| Message actions | Copy, pin, edit-and-resend, and regenerate individual messages |
+| System tray | Minimize to tray, quick-launch scratchpads, and see running session count |
+| Desktop notifications | Native OS alerts when runs complete, fail, or need approval |
+| Onboarding | First-launch walkthrough, interactive tooltips, and a "try it" quickstart |
 
-Aryx supports several ways of working:
+### Agent intelligence
 
-- **Single** for direct one-agent help
-- **Sequential** for pipeline-style work where each agent sees the full conversation and appends its contribution
-- **Concurrent** for parallel exploration where the final turn aggregates multiple independent responses
-- **Handoff** for agent-to-agent delegation, with the next user turn continuing when a specialist needs more input
-- **Group chat** for round-robin collaborative refinement across multiple agent turns
+| Feature | Description |
+|---------|-------------|
+| Orchestration patterns | Single, sequential, concurrent, handoff, and group-chat agent flows |
+| Visual pattern editor | Drag nodes, draw connections, and inspect each step in a graph view |
+| Mid-turn steering | Send follow-up messages while an agent is running — input is injected immediately |
+| Plan review & questions | Agents propose plans and ask clarifying questions before acting |
+| Run timeline | Structured history of tool calls, delegations, hooks, and context usage |
+| Copilot customization | Auto-discovers instructions, agent profiles, and prompt files from your repo |
+| Model & effort tuning | Choose models, adjust reasoning effort, and set interaction modes per session |
 
-### Add global MCPs and LSPs
+### Developer tooling
 
-You can define MCP servers and LSP profiles once in **Settings**, then enable the ones you want for each project-backed session from the right-side **Activity** panel.
+| Feature | Description |
+|---------|-------------|
+| Real project context | Attach folders and repos — see branch, dirty state, and ahead/behind status |
+| MCP servers | Define servers globally, enable per session, auto-discover from project configs |
+| LSP profiles | Language server integration for code intelligence in agent workflows |
+| Tool approval | Fine-grained approval policies with pattern-level defaults and per-session overrides |
+| Project hooks | Auto-discovers `.github/hooks/*.json` and runs lifecycle hooks in the sidecar |
+| Image input | Attach screenshots, diagrams, or photos for visual reasoning |
+| Integrated terminal | Full PTY-backed terminal inside the workspace (`Ctrl+\``) |
+| Command palette | `Ctrl+K` fuzzy search across actions, sessions, and settings |
+| Keyboard shortcuts | Comprehensive keybindings with a cheat sheet via `Ctrl+/` |
 
-This keeps machine-wide tooling reusable while still letting each session decide which external tools the agent can use.
+## Prerequisites
 
-Patterns now require tool-call approval by default. They can also store default auto-approval for known MCP and LSP tools, and each session can override those auto-approval defaults from the Activity panel before a run starts.
-
-Project-backed sessions also honor GitHub Copilot CLI-style hook files from `.github/hooks/*.json`. Aryx discovers them automatically in the connected repository and runs the supported lifecycle hooks inside the sidecar, with `preToolUse` deny decisions applied before Aryx's own approval policy.
-
-### Watch runs as they happen
-
-You can follow agent activity while a session is running, which makes longer or more complex workflows easier to trust and understand. The activity panel shows sub-agent delegations, skill invocations, hook lifecycle events, and context compaction in real time. A context-usage bar below the composer shows how much of the model's context window the current session occupies.
-
-### Steer agents mid-turn
-
-While an agent is working, you can type a follow-up message that is delivered immediately into the current turn. This lets you redirect, refine, or add context without waiting for the turn to finish. The composer shows an amber "steering" indicator when a message will be injected into an active run.
-
-### Attach images
-
-You can attach images (JPEG, PNG, GIF, WebP) to any message using the clip button, drag-and-drop, or paste from clipboard. Image attachments are sent as base64-encoded blobs so the model can reason about visual content alongside your text.
-
-### Keep important work around
-
-Sessions are persistent, so you can return to ongoing work instead of starting from scratch every time. You can also rename, pin, archive, delete, and duplicate sessions as your workspace grows.
-
-## Before you start
-
-To use Aryx comfortably, make sure you have:
-
-- a **Windows machine**
 - **GitHub Copilot CLI** installed and available as `copilot`
-- an active **GitHub Copilot sign-in**
-- a local folder or git repository ready to connect if you want project-aware help
-- any MCP servers or language servers you want to use installed and reachable from your machine
+- An active **GitHub Copilot** sign-in
+- Windows, macOS, or Linux
 
-Aryx includes connection status in the app so you can quickly tell whether Copilot is ready before you start a session.
+Aryx shows your Copilot connection status in the app so you know if authentication is ready before starting a session.
 
-## Getting started
+## Development
 
-1. **Open Aryx**
-   Launch the app and head to settings if you want to confirm your Copilot connection first.
+```sh
+bun run test           # typecheck + unit tests
+bun run sidecar:test   # backend tests
+bun run build          # full build (electron + sidecar)
 
-2. **Check that Copilot is ready**
-   Make sure the app shows that Copilot is installed and authenticated.
+bun run package        # package for current platform → release/
+bun run installer      # create installable artifact
+bun run publish-release # publish to GitHub Releases
+```
 
-3. **Choose how you want to begin**
-   Start a scratchpad session for quick work, or add a project if you want the conversation grounded in a local codebase.
-
-4. **Pick a pattern**
-   Use a simple single-agent setup to begin, or choose a saved multi-agent pattern when you want a more structured workflow.
-
-5. **Configure optional tooling**
-   If you want MCP or LSP support, add the global definitions in settings and then enable the ones you want for the current session from the Activity panel. Aryx also surfaces Copilot CLI runtime tools for approval management: tool calls require approval by default, and you can set pattern-level auto-approval defaults and override them per session.
-
-6. **Start working**
-   Ask a question, describe a task, or explore a project. As the run progresses, you can watch the participating agents and keep the session for later.
-
-## When Aryx feels most useful
-
-Aryx shines when you want to:
-
-- move from quick chat to deeper multi-step work without leaving the app
-- keep AI conversations tied to actual projects instead of isolated prompts
-- compare different ways of approaching the same task
-- reuse patterns for recurring workflows
-- maintain a history of meaningful sessions instead of disposable chats
-
-## Build and release automation
-
-For local validation, run:
-
-- `bun run test`
-- `bun run sidecar:test`
-- `bun run build`
-
-To package the current platform into `release/`, run:
-
-- `bun run package`
-
-To create the installable artifacts for the current platform, run:
-
-- `bun run installer`
-
-To publish packaged artifacts and update metadata to GitHub Releases, run:
-
-- `bun run publish-release`
-
-GitHub Actions runs validation on pushes and pull requests, and tagged releases now use `electron-builder` to publish Windows (NSIS), macOS (DMG + ZIP for updater metadata), and Linux (AppImage) artifacts directly to GitHub Releases. Packaged builds use `electron-updater` against those releases for in-app updates.
-
-Tagged macOS release jobs now prepare signing assets from the GitHub secrets `APPLE_CERT_P12_BASE64`, `APPLE_CERT_PASSWORD`, `APPLE_API_KEY_P8`, `APPLE_API_KEY_ID`, `APPLE_API_ISSUER`, and `APPLE_TEAM_ID`, normalize the decoded PKCS#12 into a macOS-compatible container, preflight `security import` against a temporary keychain, and then export the standard `electron-builder` environment variables (`CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_API_KEY`, `APPLE_API_KEY_ID`, `APPLE_API_ISSUER`, `APPLE_TEAM_ID`) before packaging. That same release path signs and notarizes the macOS artifacts as part of publication.
-
-Windows builds are currently packaged without Authenticode signing, so Aryx disables `electron-updater`'s Windows signature verification until a signing certificate is configured. macOS auto-update metadata still requires a ZIP artifact alongside the DMG build.
-
-## Current focus
-
-Aryx is focused on local, project-based work with your GitHub Copilot account. It already covers the essentials for working with projects, sessions, and reusable orchestration patterns, and it is growing toward a fuller AI workstation experience over time.
-
-If you want an AI app that feels closer to a control room for real work than a blank chat box, Aryx is built for that.
+Tagged releases use GitHub Actions to build and publish Windows (NSIS), macOS (DMG, signed + notarized), and Linux (AppImage) artifacts. The app uses `electron-updater` for in-app updates.

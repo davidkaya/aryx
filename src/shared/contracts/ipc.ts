@@ -157,6 +157,24 @@ export interface SetTerminalHeightInput {
   height?: number;
 }
 
+export type UpdateStatusState = 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'error';
+
+export interface UpdateDownloadProgress {
+  bytesPerSecond: number;
+  percent: number;
+  total: number;
+  transferred: number;
+}
+
+export interface UpdateStatus {
+  state: UpdateStatusState;
+  version?: string;
+  releaseDate?: string;
+  releaseNotes?: string;
+  downloadProgress?: UpdateDownloadProgress;
+  error?: string;
+}
+
 export interface ElectronApi {
   describeSidecarCapabilities(): Promise<SidecarCapabilities>;
   refreshSidecarCapabilities(): Promise<SidecarCapabilities>;
@@ -202,6 +220,8 @@ export interface ElectronApi {
   setTerminalHeight(input: SetTerminalHeightInput): Promise<WorkspaceState>;
   setNotificationsEnabled(enabled: boolean): Promise<WorkspaceState>;
   setMinimizeToTray(enabled: boolean): Promise<WorkspaceState>;
+  checkForUpdates(): Promise<UpdateStatus>;
+  installUpdate(): Promise<void>;
   describeTerminal(): Promise<TerminalSnapshot | undefined>;
   createTerminal(): Promise<TerminalSnapshot>;
   restartTerminal(): Promise<TerminalSnapshot>;
@@ -215,6 +235,7 @@ export interface ElectronApi {
   onTerminalExit(listener: (info: TerminalExitInfo) => void): () => void;
   onWorkspaceUpdated(listener: (workspace: WorkspaceState) => void): () => void;
   onSessionEvent(listener: (event: SessionEventRecord) => void): () => void;
+  onUpdateStatus(listener: (status: UpdateStatus) => void): () => void;
   onTrayCreateScratchpad(listener: () => void): () => void;
 }
 

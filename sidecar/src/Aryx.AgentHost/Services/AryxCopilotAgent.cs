@@ -15,6 +15,7 @@ internal sealed class AryxCopilotAgent : AIAgent, IAsyncDisposable
     private const string DefaultName = "GitHub Copilot Agent";
     private const string DefaultDescription = "An AI agent powered by GitHub Copilot";
     private const string HandoffToolPrefix = "handoff_to_";
+    private static readonly JsonSerializerOptions ToolArgumentJsonOptions = JsonSerialization.CreateWebOptions();
     private readonly CopilotClient _copilotClient;
     private readonly string? _id;
     private readonly string _name;
@@ -473,11 +474,11 @@ internal sealed class AryxCopilotAgent : AIAgent, IAsyncDisposable
                 return null;
             }
 
-            return JsonSerializer.Deserialize<Dictionary<string, object?>>(jsonElement.GetRawText());
+            return JsonSerializer.Deserialize<Dictionary<string, object?>>(jsonElement.GetRawText(), ToolArgumentJsonOptions);
         }
 
-        string json = JsonSerializer.Serialize(arguments, arguments.GetType());
-        return JsonSerializer.Deserialize<Dictionary<string, object?>>(json);
+        string json = JsonSerializer.Serialize(arguments, arguments.GetType(), ToolArgumentJsonOptions);
+        return JsonSerializer.Deserialize<Dictionary<string, object?>>(json, ToolArgumentJsonOptions);
     }
 
     internal static async Task<(List<UserMessageDataAttachmentsItem>? Attachments, string? MessageMode, string? TempDir)> ProcessMessageAttachmentsAsync(
@@ -601,6 +602,8 @@ internal sealed class AryxCopilotAgent : AIAgent, IAsyncDisposable
 
 internal sealed class AryxCopilotAgentSession : AgentSession
 {
+    private static readonly JsonSerializerOptions DefaultJsonOptions = JsonSerialization.CreateWebOptions();
+
     public AryxCopilotAgentSession()
     {
     }
@@ -617,7 +620,7 @@ internal sealed class AryxCopilotAgentSession : AgentSession
 
     internal JsonElement Serialize(JsonSerializerOptions? jsonSerializerOptions = null)
     {
-        JsonSerializerOptions options = jsonSerializerOptions ?? new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        JsonSerializerOptions options = jsonSerializerOptions ?? DefaultJsonOptions;
         return JsonSerializer.SerializeToElement(this, options);
     }
 
@@ -630,7 +633,7 @@ internal sealed class AryxCopilotAgentSession : AgentSession
             throw new ArgumentException("The serialized session state must be a JSON object.", nameof(serializedState));
         }
 
-        JsonSerializerOptions options = jsonSerializerOptions ?? new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        JsonSerializerOptions options = jsonSerializerOptions ?? DefaultJsonOptions;
         return serializedState.Deserialize<AryxCopilotAgentSession>(options)
             ?? new AryxCopilotAgentSession();
     }

@@ -67,11 +67,9 @@ public sealed class SidecarProtocolHost
         _workflowRunner = workflowRunner ?? new CopilotWorkflowRunner(_patternValidator);
         _capabilitiesProvider = capabilitiesProvider ?? BuildCapabilitiesAsync;
         _sessionManager = sessionManager ?? new CopilotSessionManager();
-        _jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web)
-        {
-            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-            PropertyNameCaseInsensitive = true,
-        };
+        _jsonOptions = JsonSerialization.CreateWebOptions();
+        _jsonOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
+        _jsonOptions.PropertyNameCaseInsensitive = true;
         _commandHandlers = new Dictionary<string, Func<CommandContext, Task>>(StringComparer.Ordinal)
         {
             [DescribeCapabilitiesCommandType] = HandleDescribeCapabilitiesAsync,

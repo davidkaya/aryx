@@ -17,6 +17,8 @@ export const ipcChannels = {
   setTerminalHeight: 'settings:set-terminal-height',
   setNotificationsEnabled: 'settings:set-notifications-enabled',
   setMinimizeToTray: 'settings:set-minimize-to-tray',
+  checkForUpdates: 'app:check-for-updates',
+  installUpdate: 'app:install-update',
   saveMcpServer: 'tooling:mcp:save',
   deleteMcpServer: 'tooling:mcp:delete',
   saveLspProfile: 'tooling:lsp:save',
@@ -55,6 +57,7 @@ export const ipcChannels = {
   terminalExit: 'terminal:exit',
   workspaceUpdated: 'workspace:updated',
   sessionEvent: 'sessions:event',
+  updateStatus: 'app:update-status',
   getQuota: 'sidecar:get-quota',
   trayCreateScratchpad: 'tray:create-scratchpad',
 } as const;

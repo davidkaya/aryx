@@ -5,12 +5,7 @@ namespace Aryx.AgentHost.Services;
 
 internal static class HookConfigLoader
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
-    {
-        AllowTrailingCommas = true,
-        PropertyNameCaseInsensitive = true,
-        ReadCommentHandling = JsonCommentHandling.Skip,
-    };
+    private static readonly JsonSerializerOptions JsonOptions = CreateJsonOptions();
 
     public static async Task<ResolvedHookSet> LoadAsync(string projectPath, CancellationToken cancellationToken)
     {
@@ -204,4 +199,13 @@ internal static class HookConfigLoader
 
     private static string? NormalizeOptionalString(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static JsonSerializerOptions CreateJsonOptions()
+    {
+        JsonSerializerOptions options = JsonSerialization.CreateWebOptions();
+        options.AllowTrailingCommas = true;
+        options.PropertyNameCaseInsensitive = true;
+        options.ReadCommentHandling = JsonCommentHandling.Skip;
+        return options;
+    }
 }

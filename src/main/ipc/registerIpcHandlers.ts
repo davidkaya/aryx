@@ -37,12 +37,18 @@ import type { QuerySessionsInput } from '@shared/domain/sessionLibrary';
 import type { AppearanceTheme } from '@shared/domain/tooling';
 
 import { AryxAppService } from '@main/AryxAppService';
+import { AutoUpdateService } from '@main/services/autoUpdater';
 import { createDesktopNotificationHandler } from '@main/services/desktopNotifications';
 import { applyTitleBarTheme } from '@main/windows/titleBarTheme';
+import type { UpdateStatus } from '@shared/contracts/ipc';
 
 const { ipcMain } = electron;
 
-export function registerIpcHandlers(window: BrowserWindow, service: AryxAppService): void {
+export function registerIpcHandlers(
+  window: BrowserWindow,
+  service: AryxAppService,
+  autoUpdateService: AutoUpdateService,
+): void {
   ipcMain.handle(ipcChannels.describeSidecarCapabilities, () => service.describeSidecarCapabilities());
   ipcMain.handle(ipcChannels.refreshSidecarCapabilities, () => service.refreshSidecarCapabilities());
   ipcMain.handle(ipcChannels.loadWorkspace, () => service.loadWorkspace());
@@ -96,6 +102,10 @@ export function registerIpcHandlers(window: BrowserWindow, service: AryxAppServi
     ipcChannels.setMinimizeToTray,
     (_event, enabled: boolean) => service.setMinimizeToTray(enabled),
   );
+  ipcMain.handle(ipcChannels.checkForUpdates, () => autoUpdateService.checkForUpdates());
+  ipcMain.handle(ipcChannels.installUpdate, () => {
+    autoUpdateService.installUpdate();
+  });
   ipcMain.handle(ipcChannels.saveMcpServer, (_event, input: SaveMcpServerInput) =>
     service.saveMcpServer(input.server),
   );
@@ -203,6 +213,16 @@ export function registerIpcHandlers(window: BrowserWindow, service: AryxAppServi
     (sessionId) => service.selectSession(sessionId),
   );
   service.on('session-event', handleNotification);
+
+  const sendUpdateStatus = (status: UpdateStatus) => {
+    if (!window.isDestroyed()) {
+      window.webContents.send(ipcChannels.updateStatus, status);
+    }
+  };
+  autoUpdateService.onStatus(sendUpdateStatus);
+  window.webContents.on('did-finish-load', () => {
+    sendUpdateStatus(autoUpdateService.getStatus());
+  });
 
   service.on('terminal-data', (data) => {
     window.webContents.send(ipcChannels.terminalData, data);

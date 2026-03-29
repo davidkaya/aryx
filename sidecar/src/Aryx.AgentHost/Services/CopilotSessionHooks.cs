@@ -20,10 +20,7 @@ internal static class CopilotSessionHooks
         ReportIntentToolName,
         TaskCompleteToolName,
     };
-    private static readonly JsonSerializerOptions HookJsonOptions = new(JsonSerializerDefaults.Web)
-    {
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-    };
+    private static readonly JsonSerializerOptions HookJsonOptions = CreateHookJsonOptions();
 
     public static SessionHooks Create(
         RunTurnCommandDto command,
@@ -280,6 +277,13 @@ internal static class CopilotSessionHooks
 
     private static string SerializeHookValue(object? value)
         => JsonSerializer.Serialize(value, HookJsonOptions);
+
+    private static JsonSerializerOptions CreateHookJsonOptions()
+    {
+        JsonSerializerOptions options = JsonSerialization.CreateWebOptions();
+        options.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
+        return options;
+    }
 
     private static bool IsAlwaysAllowedTool(string? toolName)
     {

@@ -3,6 +3,7 @@ import type { BrowserWindow as BrowserWindowType } from 'electron';
 
 import { registerIpcHandlers } from '@main/ipc/registerIpcHandlers';
 import { AryxAppService } from '@main/AryxAppService';
+import { AutoUpdateService } from '@main/services/autoUpdater';
 import { createMainWindow } from '@main/windows/createMainWindow';
 import { applyTitleBarTheme } from '@main/windows/titleBarTheme';
 import { SystemTray, setupCloseToTray, showAndFocusWindow } from '@main/services/systemTray';
@@ -12,12 +13,15 @@ const { app, BrowserWindow } = electron;
 let mainWindow: BrowserWindowType | undefined;
 let appService: AryxAppService | undefined;
 let systemTray: SystemTray | undefined;
+let autoUpdateService: AutoUpdateService | undefined;
 
 async function bootstrap(): Promise<void> {
   appService = new AryxAppService();
+  autoUpdateService?.dispose();
+  autoUpdateService = new AutoUpdateService({ isPackaged: app.isPackaged });
 
   mainWindow = createMainWindow();
-  registerIpcHandlers(mainWindow, appService);
+  registerIpcHandlers(mainWindow, appService, autoUpdateService);
 
   // Apply persisted theme to the title bar overlay
   const workspace = await appService.loadWorkspace();
@@ -49,6 +53,8 @@ async function bootstrap(): Promise<void> {
   if (!app.isPackaged) {
     mainWindow.webContents.openDevTools({ mode: 'detach' });
   }
+
+  autoUpdateService.start();
 }
 
 app.whenReady().then(bootstrap);
@@ -73,6 +79,8 @@ app.on('activate', async () => {
 });
 
 app.on('before-quit', async () => {
+  autoUpdateService?.dispose();
+  autoUpdateService = undefined;
   systemTray?.dispose();
   await appService?.dispose();
 });

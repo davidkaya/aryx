@@ -28,6 +28,8 @@ const api: ElectronApi = {
   setTerminalHeight: (input) => ipcRenderer.invoke(ipcChannels.setTerminalHeight, input),
   setNotificationsEnabled: (enabled) => ipcRenderer.invoke(ipcChannels.setNotificationsEnabled, enabled),
   setMinimizeToTray: (enabled) => ipcRenderer.invoke(ipcChannels.setMinimizeToTray, enabled),
+  checkForUpdates: () => ipcRenderer.invoke(ipcChannels.checkForUpdates),
+  installUpdate: () => ipcRenderer.invoke(ipcChannels.installUpdate),
   saveMcpServer: (input) => ipcRenderer.invoke(ipcChannels.saveMcpServer, input),
   deleteMcpServer: (serverId) => ipcRenderer.invoke(ipcChannels.deleteMcpServer, serverId),
   saveLspProfile: (input) => ipcRenderer.invoke(ipcChannels.saveLspProfile, input),
@@ -96,6 +98,13 @@ const api: ElectronApi = {
 
     ipcRenderer.on(ipcChannels.sessionEvent, handler);
     return () => ipcRenderer.off(ipcChannels.sessionEvent, handler);
+  },
+  onUpdateStatus: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, status: Parameters<typeof listener>[0]) =>
+      listener(status);
+
+    ipcRenderer.on(ipcChannels.updateStatus, handler);
+    return () => ipcRenderer.off(ipcChannels.updateStatus, handler);
   },
   onTrayCreateScratchpad: (listener) => {
     const handler = () => listener();

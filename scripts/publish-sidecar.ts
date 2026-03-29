@@ -3,8 +3,6 @@ import { rm } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { resolveReleaseTarget } from './releaseTarget';
-
 function runCommand(command: string, args: string[], cwd: string): Promise<void> {
   return new Promise((resolvePromise, rejectPromise) => {
     const child = spawn(command, args, {
@@ -29,9 +27,40 @@ function runCommand(command: string, args: string[], cwd: string): Promise<void>
   });
 }
 
+type SupportedPlatform = 'win32' | 'darwin' | 'linux';
+type SupportedArch = 'x64' | 'arm64';
+
+function resolveDotnetRuntime(platform: NodeJS.Platform, arch: NodeJS.Architecture): `${string}-${SupportedArch}` {
+  if (arch !== 'x64' && arch !== 'arm64') {
+    throw new Error(`Unsupported architecture for sidecar publish: ${arch}`);
+  }
+
+  switch (platform) {
+    case 'win32':
+      return `win-${arch}`;
+    case 'darwin':
+      return `osx-${arch}`;
+    case 'linux':
+      return `linux-${arch}`;
+    default:
+      throw new Error(`Unsupported platform for sidecar publish: ${platform}`);
+  }
+}
+
+function resolvePlatformLabel(platform: SupportedPlatform): 'windows' | 'macos' | 'linux' {
+  switch (platform) {
+    case 'win32':
+      return 'windows';
+    case 'darwin':
+      return 'macos';
+    case 'linux':
+      return 'linux';
+  }
+}
+
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = resolve(scriptDirectory, '..');
-const releaseTarget = resolveReleaseTarget(process.platform, process.arch);
+const dotnetRuntime = resolveDotnetRuntime(process.platform, process.arch);
 const sidecarProjectPath = join(
   repositoryRoot,
   'sidecar',
@@ -39,7 +68,7 @@ const sidecarProjectPath = join(
   'Aryx.AgentHost',
   'Aryx.AgentHost.csproj',
 );
-const outputDirectory = join(repositoryRoot, 'dist-sidecar', releaseTarget.dotnetRuntime);
+const outputDirectory = join(repositoryRoot, 'dist-sidecar');
 
 await rm(outputDirectory, { recursive: true, force: true });
 
@@ -51,7 +80,7 @@ await runCommand(
     '-c',
     'Release',
     '-r',
-    releaseTarget.dotnetRuntime,
+    dotnetRuntime,
     '--self-contained',
     'true',
     '-p:DebugType=None',
@@ -65,4 +94,4 @@ await runCommand(
   repositoryRoot,
 );
 
-console.log(`Published sidecar for ${releaseTarget.platformLabel} (${releaseTarget.dotnetRuntime}) to ${outputDirectory}`);
+console.log(`Published sidecar for ${resolvePlatformLabel(process.platform as SupportedPlatform)} (${dotnetRuntime}) to ${outputDirectory}`);

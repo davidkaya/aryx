@@ -124,7 +124,17 @@ To package the current platform into `release/`, run:
 
 - `bun run package`
 
-GitHub Actions now runs validation on pushes and pull requests, and pushing a git tag creates a GitHub release with Windows, macOS (x64 and arm64), and Linux assets uploaded directly to the release.
+To create the installable artifacts for the current platform, run:
+
+- `bun run installer`
+
+To publish packaged artifacts and update metadata to GitHub Releases, run:
+
+- `bun run publish-release`
+
+GitHub Actions runs validation on pushes and pull requests, and tagged releases now use `electron-builder` to publish Windows (NSIS), macOS (DMG + ZIP for updater metadata), and Linux (AppImage) artifacts directly to GitHub Releases. Packaged builds use `electron-updater` against those releases for in-app updates.
+
+Windows builds are currently packaged without Authenticode signing, so Aryx disables `electron-updater`'s Windows signature verification until a signing certificate is configured. macOS auto-update metadata still requires a ZIP artifact alongside the DMG build.
 
 ## Current focus
 

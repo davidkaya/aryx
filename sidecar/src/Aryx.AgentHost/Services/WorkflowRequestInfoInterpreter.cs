@@ -12,6 +12,7 @@ internal static class WorkflowRequestInfoInterpreter
     private const string ToolCallingActivityType = "tool-calling";
     private const string CodeInterpreterToolName = "code interpreter";
     private const string ImageGenerationToolName = "image generation";
+    private static readonly JsonSerializerOptions JsonOptions = JsonSerialization.CreateWebOptions();
 
     public static AgentActivityEventDto? TryCreateActivityFromRequest(
         RunTurnCommandDto command,
@@ -193,8 +194,8 @@ internal static class WorkflowRequestInfoInterpreter
 
     private static WorkflowRequestHandoffPayload? DeserializeHandoffPayload(object handoffValue)
     {
-        string json = JsonSerializer.Serialize(handoffValue, handoffValue.GetType());
-        return JsonSerializer.Deserialize<WorkflowRequestHandoffPayload>(json);
+        string json = JsonSerializer.Serialize(handoffValue, handoffValue.GetType(), JsonOptions);
+        return JsonSerializer.Deserialize<WorkflowRequestHandoffPayload>(json, JsonOptions);
     }
 
     private abstract record RequestInterpretation;

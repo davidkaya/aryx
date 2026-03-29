@@ -6,10 +6,7 @@ namespace Aryx.AgentHost.Services;
 
 internal static class QuotaSnapshotMapper
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
-    {
-        PropertyNameCaseInsensitive = true,
-    };
+    private static readonly JsonSerializerOptions JsonOptions = CreateJsonOptions();
 
     public static Dictionary<string, QuotaSnapshotDto> Map(
         IReadOnlyDictionary<string, AccountGetQuotaResultQuotaSnapshotsValue>? snapshots)
@@ -101,5 +98,12 @@ internal static class QuotaSnapshotMapper
             element.Deserialize<AccountGetQuotaResultQuotaSnapshotsValue>(JsonOptions);
 
         return deserialized is null ? null : Map(deserialized);
+    }
+
+    private static JsonSerializerOptions CreateJsonOptions()
+    {
+        JsonSerializerOptions options = JsonSerialization.CreateWebOptions();
+        options.PropertyNameCaseInsensitive = true;
+        return options;
     }
 }

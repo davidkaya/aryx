@@ -344,9 +344,11 @@ The build pipeline is organized around three layers:
 
 - building the Electron renderer and main process assets
 - publishing the sidecar for the target runtime
-- assembling a platform-specific release bundle
+- packaging platform artifacts with electron-builder
 
-Release automation validates the app across Windows, macOS, and Linux, and tag-based releases publish platform bundles directly to GitHub Releases, including both macOS x64 and arm64 artifacts.
+electron-builder bundles the packaged Electron app, copies the published sidecar into `resources/sidecar`, produces Windows NSIS installers, macOS DMG + ZIP artifacts, and Linux AppImages, and uploads the release assets plus update metadata to GitHub Releases. The main process consumes that metadata through `electron-updater`, which checks GitHub Releases for packaged builds and can stage a restart-based update install.
+
+Current Windows builds are unsigned, so the packaging config disables executable resource editing/signing and skips Windows update signature verification until a code-signing certificate is available. The packaging scripts also clear `release/` before each build so local packaging runs cannot accidentally mix stale artifacts with current ones.
 
 This packaging model matches the runtime architecture: one desktop shell plus one dedicated AI execution process.
 

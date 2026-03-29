@@ -64,6 +64,8 @@ interface ChatPaneProps {
   }) => Promise<unknown>;
   onUpdateSessionTooling?: (selection: SessionToolingSelection) => void;
   onUpdateSessionApprovalSettings?: (settings: { autoApprovedToolNames?: string[] }) => void;
+  onBranchFromMessage?: (messageId: string) => void;
+  branchOriginLabel?: string;
 }
 
 export function ChatPane({
@@ -90,6 +92,8 @@ export function ChatPane({
   onUpdateSessionModelConfig,
   onUpdateSessionTooling,
   onUpdateSessionApprovalSettings,
+  onBranchFromMessage,
+  branchOriginLabel,
 }: ChatPaneProps) {
   const [hasComposerContent, setHasComposerContent] = useState(false);
   const [configError, setConfigError] = useState<string>();
@@ -327,6 +331,18 @@ export function ChatPane({
           </div>
         ) : (
           <div className="mx-auto max-w-3xl px-6 py-4">
+            {/* Branch origin banner */}
+            {session.branchOrigin && (
+              <div className="mb-4 flex items-center gap-2.5 rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-1)]/60 px-3.5 py-2.5 text-[12px] text-[var(--color-text-secondary)]">
+                <GitBranch className="size-3.5 shrink-0 text-[var(--color-accent)]" />
+                <span>
+                  Branched from{' '}
+                  <span className="font-medium text-[var(--color-text-primary)]">
+                    {branchOriginLabel ?? 'a previous session'}
+                  </span>
+                </span>
+              </div>
+            )}
             <div className="space-y-1">
               {session.messages.map((message, index) => {
                 const isUser = message.role === 'user';
@@ -363,6 +379,17 @@ export function ChatPane({
                             >
                               {phaseLabel}
                             </span>
+                          )}
+                          {isUser && onBranchFromMessage && (
+                            <button
+                              className="ml-auto flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-[var(--color-text-muted)] opacity-0 transition-all duration-150 hover:bg-[var(--color-surface-2)] hover:text-[var(--color-accent)] group-hover:opacity-100"
+                              onClick={() => onBranchFromMessage(message.id)}
+                              title="Branch from here — create a new session starting from this message"
+                              type="button"
+                            >
+                              <GitBranch className="size-3" />
+                              Branch
+                            </button>
                           )}
                         </div>
                         <div

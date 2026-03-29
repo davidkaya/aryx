@@ -571,6 +571,14 @@ export default function App() {
               autoApprovedToolNames: settings.autoApprovedToolNames,
             });
           }}
+          onBranchFromMessage={(messageId) => {
+            void api.branchSession({ sessionId: selectedSession.id, messageId });
+          }}
+          branchOriginLabel={
+            selectedSession.branchOrigin
+              ? workspace.sessions.find((s) => s.id === selectedSession.branchOrigin!.sourceSessionId)?.title
+              : undefined
+          }
           availableModels={availableModels}
           mcpProbingServerIds={workspace.mcpProbingServerIds}
           onTerminalToggle={handleTerminalToggle}

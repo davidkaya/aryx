@@ -296,6 +296,11 @@ function SessionItem({
               Archived
             </span>
           )}
+          {session.branchOrigin && (
+            <span className="inline-flex items-center gap-0.5 text-[10px] text-[var(--color-text-muted)]" title="Branched session">
+              <GitBranch className="size-2.5" />
+            </span>
+          )}
           <span className="ml-auto text-[10px] text-[var(--color-text-muted)] group-hover:text-[var(--color-text-secondary)]">
             {relativeTime(session.updatedAt)}
           </span>

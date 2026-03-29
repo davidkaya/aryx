@@ -50,6 +50,7 @@ export interface CommandPaletteProps {
   onAddProject: () => void;
   onOpenAppDataFolder: () => void;
   onShowShortcuts: () => void;
+  onShowSearch: () => void;
 }
 
 /** Score how well `query` matches `text` (and optional `keywords`). 0 = no match. */
@@ -90,6 +91,7 @@ export function CommandPalette({
   onAddProject,
   onOpenAppDataFolder,
   onShowShortcuts,
+  onShowSearch,
 }: CommandPaletteProps) {
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -223,6 +225,16 @@ export function CommandPalette({
 
     // ── General ──
     cmds.push({
+      id: 'search-sessions',
+      label: 'Search Sessions',
+      category: 'General',
+      keywords: 'find search messages content text',
+      shortcut: shortcutKeys('search-sessions'),
+      icon: <Search className={ICON} />,
+      action: onShowSearch,
+    });
+
+    cmds.push({
       id: 'settings',
       label: 'Open Settings',
       category: 'General',
@@ -304,7 +316,7 @@ export function CommandPalette({
     onSelectSession, onSelectProject, onNewSession, onCreateScratchpad,
     onOpenSettings, onOpenProjectSettings, onToggleTerminal, onSetTheme,
     onDuplicateSession, onPinSession, onArchiveSession, onAddProject,
-    onOpenAppDataFolder, onShowShortcuts,
+    onOpenAppDataFolder, onShowShortcuts, onShowSearch,
   ]);
 
   const filteredCommands = useMemo(() => {

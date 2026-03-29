@@ -8,6 +8,7 @@ import { DiscoveredToolingModal } from '@renderer/components/DiscoveredToolingMo
 import { KeyboardShortcutsPanel } from '@renderer/components/KeyboardShortcutsPanel';
 import { NewSessionModal } from '@renderer/components/NewSessionModal';
 import { ProjectSettingsPanel } from '@renderer/components/ProjectSettingsPanel';
+import { SessionSearchPanel } from '@renderer/components/SessionSearchPanel';
 import { SettingsPanel } from '@renderer/components/SettingsPanel';
 import { Sidebar } from '@renderer/components/Sidebar';
 import { TerminalPanel, DEFAULT_HEIGHT as DEFAULT_TERMINAL_HEIGHT, MIN_HEIGHT as MIN_TERMINAL_HEIGHT } from '@renderer/components/TerminalPanel';
@@ -116,6 +117,7 @@ export default function App() {
   const [showDiscoveryModal, setShowDiscoveryModal] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
 
   // Terminal state
   const [terminalOpen, setTerminalOpen] = useState(false);
@@ -312,6 +314,13 @@ export default function App() {
       if (mod && e.key === '/') {
         e.preventDefault();
         setShowShortcuts((prev) => !prev);
+        return;
+      }
+
+      // ── Ctrl/Cmd+Shift+F — Search sessions ──
+      if (mod && e.shiftKey && e.key === 'F') {
+        e.preventDefault();
+        setShowSearch((prev) => !prev);
         return;
       }
 
@@ -787,11 +796,22 @@ export default function App() {
           onAddProject={() => void api.addProject()}
           onOpenAppDataFolder={() => void api.openAppDataFolder()}
           onShowShortcuts={() => setShowShortcuts(true)}
+          onShowSearch={() => setShowSearch(true)}
         />
       )}
 
       {showShortcuts && (
         <KeyboardShortcutsPanel onClose={() => setShowShortcuts(false)} />
+      )}
+
+      {showSearch && workspace && (
+        <SessionSearchPanel
+          workspace={workspace}
+          onClose={() => setShowSearch(false)}
+          onSelectSession={(sessionId) => {
+            void api.selectSession(sessionId);
+          }}
+        />
       )}
     </>
   );

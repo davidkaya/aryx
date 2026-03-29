@@ -29,7 +29,7 @@ export function McpServerEditor({
       title={server.name || 'Untitled MCP Server'}
     >
       <section className="space-y-4">
-        <h4 className="text-[12px] font-semibold uppercase tracking-wider text-zinc-500">
+        <h4 className="text-[12px] font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
           General
         </h4>
         <div className="grid gap-4 sm:grid-cols-2">
@@ -54,7 +54,7 @@ export function McpServerEditor({
       </section>
 
       <section className="space-y-4">
-        <h4 className="text-[12px] font-semibold uppercase tracking-wider text-zinc-500">
+        <h4 className="text-[12px] font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
           {server.transport === 'local' ? 'Process' : 'Endpoint'}
         </h4>
         {server.transport === 'local' ? (
@@ -94,7 +94,7 @@ export function McpServerEditor({
       </section>
 
       <section className="space-y-4">
-        <h4 className="text-[12px] font-semibold uppercase tracking-wider text-zinc-500">
+        <h4 className="text-[12px] font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
           Advanced
         </h4>
         <div className="grid gap-4 sm:grid-cols-2">

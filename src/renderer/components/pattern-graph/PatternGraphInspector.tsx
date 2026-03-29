@@ -44,10 +44,10 @@ function InputField({
   placeholder?: string;
 }) {
   const base =
-    'w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-[13px] text-zinc-100 placeholder-zinc-600 outline-none transition focus:border-indigo-500/50';
+    'w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-1)] px-3 py-2 text-[13px] text-[var(--color-text-primary)] placeholder-[var(--color-text-muted)] outline-none transition focus:border-[var(--color-accent)]/50';
   return (
     <label className="block space-y-1.5">
-      <span className="text-[12px] font-medium text-zinc-400">{label}</span>
+      <span className="text-[12px] font-medium text-[var(--color-text-secondary)]">{label}</span>
       {multiline ? (
         <textarea
           className={`${base} min-h-20 resize-y`}
@@ -97,17 +97,17 @@ function SystemNodeInspector({ kind }: { kind: PatternGraphNodeKind }) {
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2.5">
-        <div className="flex size-8 items-center justify-center rounded-lg bg-indigo-500/10">
-          <Icon className="size-4 text-indigo-400" />
+        <div className="flex size-8 items-center justify-center rounded-lg bg-[var(--color-accent)]/10">
+          <Icon className="size-4 text-[var(--color-accent-sky)]" />
         </div>
         <div>
-          <div className="text-[13px] font-semibold text-zinc-200">{kindLabels[kind]}</div>
-          <span className="rounded bg-zinc-700/50 px-1.5 py-0.5 text-[9px] font-medium text-zinc-500">
+          <div className="text-[13px] font-semibold text-[var(--color-text-primary)]">{kindLabels[kind]}</div>
+          <span className="rounded bg-[var(--color-surface-3)]/50 px-1.5 py-0.5 text-[9px] font-medium text-[var(--color-text-muted)]">
             System node
           </span>
         </div>
       </div>
-      <p className="text-[12px] leading-relaxed text-zinc-500">{kindDescriptions[kind]}</p>
+      <p className="text-[12px] leading-relaxed text-[var(--color-text-muted)]">{kindDescriptions[kind]}</p>
     </div>
   );
 }
@@ -140,16 +140,16 @@ function AgentNodeInspector({
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2.5">
-          <div className="flex size-8 items-center justify-center rounded-lg bg-zinc-800">
-            <Bot className="size-4 text-zinc-300" />
+          <div className="flex size-8 items-center justify-center rounded-lg bg-[var(--color-surface-2)]">
+            <Bot className="size-4 text-[var(--color-text-secondary)]" />
           </div>
-          <div className="text-[13px] font-semibold text-zinc-200">{agent.name || 'Unnamed'}</div>
+          <div className="text-[13px] font-semibold text-[var(--color-text-primary)]">{agent.name || 'Unnamed'}</div>
         </div>
         <div className="flex items-center gap-1">
           {showReorder && (
             <>
               <button
-                className="flex size-6 items-center justify-center rounded text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-300 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-zinc-500"
+                className="flex size-6 items-center justify-center rounded text-[var(--color-text-muted)] transition hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-secondary)] disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-[var(--color-text-muted)]"
                 disabled={!canUp}
                 onClick={() => onGraphChange(swapSequentialOrder(graph, nodeId, 'up'))}
                 title="Move earlier in sequence"
@@ -158,7 +158,7 @@ function AgentNodeInspector({
                 <ChevronUp className="size-3.5" />
               </button>
               <button
-                className="flex size-6 items-center justify-center rounded text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-300 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-zinc-500"
+                className="flex size-6 items-center justify-center rounded text-[var(--color-text-muted)] transition hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-secondary)] disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-[var(--color-text-muted)]"
                 disabled={!canDown}
                 onClick={() => onGraphChange(swapSequentialOrder(graph, nodeId, 'down'))}
                 title="Move later in sequence"
@@ -169,7 +169,7 @@ function AgentNodeInspector({
             </>
           )}
           <button
-            className="flex items-center gap-1 text-[12px] text-zinc-600 transition hover:text-red-400"
+            className="flex items-center gap-1 text-[12px] text-[var(--color-text-muted)] transition hover:text-red-400"
             onClick={() => onAgentRemove(agent.id)}
             type="button"
           >
@@ -235,7 +235,7 @@ export function PatternGraphInspector({
   if (!selectedNodeId) {
     return (
       <div className="flex h-full items-center justify-center p-4">
-        <p className="text-center text-[12px] text-zinc-600">
+        <p className="text-center text-[12px] text-[var(--color-text-muted)]">
           Select a node on the graph to inspect it
         </p>
       </div>

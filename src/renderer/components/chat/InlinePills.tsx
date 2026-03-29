@@ -15,9 +15,9 @@ import { RotateCcw, Server, ShieldCheck } from 'lucide-react';
 function TierBadge({ tier }: { tier: ModelDefinition['tier'] }) {
   if (!tier) return null;
   const styles = {
-    premium: 'bg-amber-500/10 text-amber-400',
-    standard: 'bg-zinc-700/50 text-zinc-500',
-    fast: 'bg-emerald-500/10 text-emerald-400',
+    premium: 'bg-[var(--color-status-warning)]/10 text-[var(--color-status-warning)]',
+    standard: 'bg-[var(--color-surface-3)]/50 text-[var(--color-text-muted)]',
+    fast: 'bg-[var(--color-status-success)]/10 text-[var(--color-status-success)]',
   };
   return (
     <span className={`ml-auto rounded px-1.5 py-0.5 text-[9px] font-medium ${styles[tier]}`}>
@@ -64,10 +64,10 @@ export function InlineModelPill({
       <button
         aria-expanded={open}
         aria-haspopup="listbox"
-        className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-pill font-medium transition ${
+        className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-pill font-medium transition-all duration-200 ${
           open
-            ? 'border-indigo-500/40 bg-indigo-500/10 text-indigo-300'
-            : 'border-zinc-700/60 bg-zinc-800/40 text-zinc-400 hover:border-zinc-600 hover:text-zinc-300'
+            ? 'border-[var(--color-border-glow)] bg-[var(--color-accent-muted)] text-[var(--color-text-accent)]'
+            : 'border-[var(--color-border-subtle)] bg-[var(--color-surface-2)]/40 text-[var(--color-text-secondary)] hover:border-[var(--color-border)] hover:text-[var(--color-text-primary)]'
         } disabled:cursor-not-allowed disabled:opacity-50`}
         disabled={disabled}
         onClick={() => setOpen(!open)}
@@ -79,19 +79,19 @@ export function InlineModelPill({
       </button>
 
       {open && !disabled && (
-        <div className="absolute bottom-full right-0 z-40 mb-1.5 max-h-72 w-64 overflow-y-auto rounded-lg border border-zinc-700 bg-zinc-900 py-1 shadow-2xl" role="listbox">
+        <div className="absolute bottom-full right-0 z-40 mb-1.5 max-h-72 w-64 overflow-y-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-1)] py-1 shadow-2xl" role="listbox">
           {groupedModels.map((pg) => (
             <div key={pg.id}>
               <div className="flex items-center gap-2 px-3 pb-1 pt-2.5">
                 <ProviderIcon provider={pg.id} className="size-3.5" />
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
                   {pg.label}
                 </span>
               </div>
               {pg.models.map((model) => (
                 <button
-                  className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] transition hover:bg-zinc-800 ${
-                    model.id === value ? 'bg-indigo-500/10 text-indigo-200' : 'text-zinc-300'
+                  className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] transition-all duration-200 hover:bg-[var(--color-surface-3)] ${
+                    model.id === value ? 'bg-[var(--color-accent-muted)] text-[var(--color-text-accent)]' : 'text-[var(--color-text-primary)]'
                   }`}
                   key={model.id}
                   onClick={() => { onChange(model.id); setOpen(false); }}
@@ -107,13 +107,13 @@ export function InlineModelPill({
           ))}
           {otherModels.length > 0 && (
             <div>
-              <div className="px-3 pb-1 pt-2.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+              <div className="px-3 pb-1 pt-2.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
                 Other
               </div>
               {otherModels.map((model) => (
                 <button
-                  className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] transition hover:bg-zinc-800 ${
-                    model.id === value ? 'bg-indigo-500/10 text-indigo-200' : 'text-zinc-300'
+                  className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] transition-all duration-200 hover:bg-[var(--color-surface-3)] ${
+                    model.id === value ? 'bg-[var(--color-accent-muted)] text-[var(--color-text-accent)]' : 'text-[var(--color-text-primary)]'
                   }`}
                   key={model.id}
                   onClick={() => { onChange(model.id); setOpen(false); }}
@@ -155,7 +155,7 @@ export function InlineThinkingPill({
 
   if (supportedEfforts && supportedEfforts.length === 0) {
     return (
-      <span className="inline-flex items-center gap-1 rounded border border-zinc-800/40 bg-zinc-800/20 px-1.5 py-0.5 text-pill text-zinc-600">
+      <span className="inline-flex items-center gap-1 rounded border border-[var(--color-border-subtle)] bg-[var(--color-surface-2)]/20 px-1.5 py-0.5 text-pill text-[var(--color-text-muted)]">
         <Sparkles className="size-2.5" />
         N/A
       </span>
@@ -169,10 +169,10 @@ export function InlineThinkingPill({
       <button
         aria-expanded={open}
         aria-haspopup="listbox"
-        className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-pill font-medium transition ${
+        className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-pill font-medium transition-all duration-200 ${
           open
-            ? 'border-indigo-500/40 bg-indigo-500/10 text-indigo-300'
-            : 'border-zinc-700/60 bg-zinc-800/40 text-zinc-400 hover:border-zinc-600 hover:text-zinc-300'
+            ? 'border-[var(--color-border-glow)] bg-[var(--color-accent-muted)] text-[var(--color-text-accent)]'
+            : 'border-[var(--color-border-subtle)] bg-[var(--color-surface-2)]/40 text-[var(--color-text-secondary)] hover:border-[var(--color-border)] hover:text-[var(--color-text-primary)]'
         } disabled:cursor-not-allowed disabled:opacity-50`}
         disabled={disabled}
         onClick={() => setOpen(!open)}
@@ -184,11 +184,11 @@ export function InlineThinkingPill({
       </button>
 
       {open && !disabled && (
-        <div className="absolute bottom-full right-0 z-40 mb-1.5 w-36 overflow-hidden rounded-lg border border-zinc-700 bg-zinc-900 py-1 shadow-2xl" role="listbox">
+        <div className="absolute bottom-full right-0 z-40 mb-1.5 w-36 overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-1)] py-1 shadow-2xl" role="listbox">
           {options.map((option) => (
             <button
-              className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] transition hover:bg-zinc-800 ${
-                option.value === value ? 'bg-indigo-500/10 text-indigo-200' : 'text-zinc-300'
+              className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] transition-all duration-200 hover:bg-[var(--color-surface-3)] ${
+                option.value === value ? 'bg-[var(--color-accent-muted)] text-[var(--color-text-accent)]' : 'text-[var(--color-text-primary)]'
               }`}
               key={option.value}
               onClick={() => { onChange(option.value); setOpen(false); }}
@@ -235,10 +235,10 @@ export function InlineToolsPill({
       <button
         aria-expanded={open}
         aria-haspopup="listbox"
-        className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-pill font-medium transition ${
+        className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-pill font-medium transition-all duration-200 ${
           open
-            ? 'border-indigo-500/40 bg-indigo-500/10 text-indigo-300'
-            : 'border-zinc-700/60 bg-zinc-800/40 text-zinc-400 hover:border-zinc-600 hover:text-zinc-300'
+            ? 'border-[var(--color-border-glow)] bg-[var(--color-accent-muted)] text-[var(--color-text-accent)]'
+            : 'border-[var(--color-border-subtle)] bg-[var(--color-surface-2)]/40 text-[var(--color-text-secondary)] hover:border-[var(--color-border)] hover:text-[var(--color-text-primary)]'
         } disabled:cursor-not-allowed disabled:opacity-50`}
         disabled={disabled}
         onClick={() => setOpen(!open)}
@@ -250,7 +250,7 @@ export function InlineToolsPill({
       </button>
 
       {open && !disabled && (
-        <div className="absolute bottom-full left-0 z-40 mb-1.5 w-64 overflow-y-auto rounded-lg border border-zinc-700 bg-zinc-900 py-1 shadow-2xl">
+        <div className="absolute bottom-full left-0 z-40 mb-1.5 w-64 overflow-y-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-1)] py-1 shadow-2xl">
           {workspaceMcpServers.length > 0 && (
             <McpServerGroup
               label="Workspace MCP"
@@ -277,7 +277,7 @@ export function InlineToolsPill({
           )}
           {lspProfiles.length > 0 && (
             <div>
-              <div className="px-3 pb-1 pt-2 text-[9px] font-semibold uppercase tracking-wider text-zinc-600">
+              <div className="px-3 pb-1 pt-2 text-[9px] font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
                 Language Servers
               </div>
               {lspProfiles.map((profile) => (
@@ -315,7 +315,7 @@ function McpServerGroup({
 }) {
   return (
     <div>
-      <div className="px-3 pb-1 pt-2 text-[9px] font-semibold uppercase tracking-wider text-zinc-600">
+      <div className="px-3 pb-1 pt-2 text-[9px] font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
         {label}
       </div>
       {servers.map((server) => (
@@ -475,12 +475,12 @@ export function InlineApprovalPill({
       <button
         aria-expanded={open}
         aria-haspopup="listbox"
-        className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-pill font-medium transition ${
+        className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-pill font-medium transition-all duration-200 ${
           open
-            ? 'border-indigo-500/40 bg-indigo-500/10 text-indigo-300'
+            ? 'border-[var(--color-border-glow)] bg-[var(--color-accent-muted)] text-[var(--color-text-accent)]'
             : isOverridden
-              ? 'border-amber-500/30 bg-amber-500/5 text-amber-400 hover:border-amber-500/50'
-              : 'border-zinc-700/60 bg-zinc-800/40 text-zinc-400 hover:border-zinc-600 hover:text-zinc-300'
+              ? 'border-[var(--color-status-warning)]/30 bg-[var(--color-status-warning)]/5 text-[var(--color-status-warning)] hover:border-[var(--color-status-warning)]/50'
+              : 'border-[var(--color-border-subtle)] bg-[var(--color-surface-2)]/40 text-[var(--color-text-secondary)] hover:border-[var(--color-border)] hover:text-[var(--color-text-primary)]'
         } disabled:cursor-not-allowed disabled:opacity-50`}
         disabled={disabled}
         onClick={() => setOpen(!open)}
@@ -493,26 +493,26 @@ export function InlineApprovalPill({
         )}
         <span>
           {effectiveAutoApprovedCount}/{totalItemCount} auto-approved
-          {isProbingAny && <span className="text-zinc-500"> · probing…</span>}
+          {isProbingAny && <span className="text-[var(--color-text-muted)]"> · probing…</span>}
         </span>
         <ChevronDown className={`size-2.5 transition ${open ? 'rotate-180' : ''}`} />
       </button>
 
       {open && !disabled && (
-        <div className="absolute bottom-full left-0 z-40 mb-1.5 max-h-[28rem] w-80 overflow-y-auto rounded-lg border border-zinc-700 bg-zinc-900 shadow-2xl">
+        <div className="absolute bottom-full left-0 z-40 mb-1.5 max-h-[28rem] w-80 overflow-y-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-1)] shadow-2xl">
           {/* Header: session override / pattern defaults */}
-          <div className="sticky top-0 z-10 border-b border-zinc-800 bg-zinc-900">
+          <div className="sticky top-0 z-10 border-b border-[var(--color-border)] bg-[var(--color-surface-1)]">
             <div className="flex items-center gap-2 px-3 py-2">
               <span className={`rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider ${
                 isOverridden
-                  ? 'bg-amber-500/15 text-amber-400'
-                  : 'bg-zinc-800 text-zinc-500'
+                  ? 'bg-[var(--color-status-warning)]/15 text-[var(--color-status-warning)]'
+                  : 'bg-[var(--color-surface-2)] text-[var(--color-text-muted)]'
               }`}>
                 {isOverridden ? 'Session override' : 'Pattern defaults'}
               </span>
               {isOverridden && (
                 <button
-                  className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-medium text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-300"
+                  className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-medium text-[var(--color-text-muted)] transition-all duration-200 hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-primary)]"
                   onClick={() => onUpdate({})}
                   type="button"
                 >
@@ -524,12 +524,12 @@ export function InlineApprovalPill({
 
             {/* Search */}
             {showSearch && (
-              <div className="border-t border-zinc-800/50 px-3 py-1.5">
-                <div className="flex items-center gap-2 rounded border border-zinc-800 bg-zinc-800/30 px-2 py-1">
-                  <Search className="size-3 shrink-0 text-zinc-600" />
+              <div className="border-t border-[var(--color-border-subtle)] px-3 py-1.5">
+                <div className="flex items-center gap-2 rounded border border-[var(--color-border)] bg-[var(--color-surface-2)]/30 px-2 py-1">
+                  <Search className="size-3 shrink-0 text-[var(--color-text-muted)]" />
                   <input
                     autoFocus
-                    className="w-full bg-transparent text-[12px] text-zinc-300 placeholder-zinc-600 outline-none"
+                    className="w-full bg-transparent text-[12px] text-[var(--color-text-primary)] placeholder-[var(--color-text-muted)] outline-none"
                     onChange={(e) => setSearch(e.target.value)}
                     placeholder="Filter tools…"
                     type="text"
@@ -558,31 +558,31 @@ export function InlineApprovalPill({
                 <div key={group.id}>
                   {/* Group header */}
                   {isBuiltin ? (
-                    <div className={`px-3 pb-1 ${groupIdx > 0 ? 'pt-2.5' : 'pt-1'} text-[9px] font-semibold uppercase tracking-wider text-zinc-600`}>
+                    <div className={`px-3 pb-1 ${groupIdx > 0 ? 'pt-2.5' : 'pt-1'} text-[9px] font-semibold uppercase tracking-wider text-[var(--color-text-muted)]`}>
                       {group.label}
                     </div>
                   ) : (
                     <div
-                      className={`flex w-full cursor-pointer items-center gap-1.5 px-2.5 py-1.5 text-left transition hover:bg-zinc-800/60 ${groupIdx > 0 ? 'mt-0.5' : ''}`}
+                      className={`flex w-full cursor-pointer items-center gap-1.5 px-2.5 py-1.5 text-left transition-all duration-200 hover:bg-[var(--color-surface-3)]/60 ${groupIdx > 0 ? 'mt-0.5' : ''}`}
                       onClick={() => toggleExpanded(group.id)}
                       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleExpanded(group.id); } }}
                       role="button"
                       tabIndex={0}
                     >
                       {probing ? (
-                        <Loader2 className="size-3 shrink-0 animate-spin text-indigo-400" aria-label="Probing server" />
+                        <Loader2 className="size-3 shrink-0 animate-spin text-[var(--color-text-accent)]" aria-label="Probing server" />
                       ) : group.tools.length > 0 ? (
-                        <ChevronRight className={`size-3 shrink-0 text-zinc-600 transition ${expanded ? 'rotate-90' : ''}`} />
+                        <ChevronRight className={`size-3 shrink-0 text-[var(--color-text-muted)] transition ${expanded ? 'rotate-90' : ''}`} />
                       ) : (
-                        <Server className="size-3 shrink-0 text-zinc-600" />
+                        <Server className="size-3 shrink-0 text-[var(--color-text-muted)]" />
                       )}
-                      <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-zinc-300">{group.label}</span>
+                      <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-[var(--color-text-primary)]">{group.label}</span>
                       {probing ? (
-                        <span className="shrink-0 rounded-full bg-indigo-500/10 px-1.5 py-px text-[9px] font-medium text-indigo-400">
+                        <span className="shrink-0 rounded-full bg-[var(--color-accent-muted)] px-1.5 py-px text-[9px] font-medium text-[var(--color-text-accent)]">
                           probing…
                         </span>
                       ) : (
-                        <span className="shrink-0 rounded-full bg-zinc-800/80 px-1.5 py-px text-[9px] font-medium tabular-nums text-zinc-500">
+                        <span className="shrink-0 rounded-full bg-[var(--color-surface-2)]/80 px-1.5 py-px text-[9px] font-medium tabular-nums text-[var(--color-text-muted)]">
                           {approvedLabel}
                         </span>
                       )}
@@ -619,7 +619,7 @@ export function InlineApprovalPill({
             })}
 
             {filteredGroups.length === 0 && searchLower && (
-              <div className="px-3 py-4 text-center text-[12px] text-zinc-600">
+              <div className="px-3 py-4 text-center text-[12px] text-[var(--color-text-muted)]">
                 No tools match "{search}"
               </div>
             )}
@@ -643,13 +643,13 @@ function GroupToggle({
     <button
       aria-pressed={allApproved}
       className={`relative inline-flex h-[16px] w-[28px] shrink-0 items-center rounded-full transition-colors ${
-        allApproved ? 'bg-indigo-500' : someApproved ? 'bg-zinc-600' : 'bg-zinc-700'
+        allApproved ? 'bg-[var(--color-accent)]' : someApproved ? 'bg-[var(--color-surface-3)]' : 'bg-[var(--color-surface-3)]'
       }`}
       onClick={onToggle}
       type="button"
     >
       {someApproved ? (
-        <Minus className="absolute left-1/2 size-2 -translate-x-1/2 text-zinc-300" strokeWidth={3} />
+        <Minus className="absolute left-1/2 size-2 -translate-x-1/2 text-[var(--color-text-primary)]" strokeWidth={3} />
       ) : (
         <span
           className={`inline-block size-[12px] rounded-full bg-white shadow transition-transform ${
@@ -677,16 +677,16 @@ export function InlineTerminalPill({
   return (
     <button
       aria-pressed={isOpen}
-      className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium transition ${
+      className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium transition-all duration-200 ${
         isOpen
-          ? 'bg-indigo-500/15 text-indigo-300 hover:bg-indigo-500/20'
-          : 'text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300'
+          ? 'bg-[var(--color-accent-muted)] text-[var(--color-text-accent)] hover:bg-[var(--color-accent)]/20'
+          : 'text-[var(--color-text-muted)] hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-primary)]'
       } disabled:cursor-not-allowed disabled:opacity-50`}
       disabled={disabled}
       onClick={onToggle}
       type="button"
     >
-      {isRunning && <span className="size-1.5 shrink-0 rounded-full bg-emerald-400" />}
+      {isRunning && <span className="size-1.5 shrink-0 rounded-full bg-[var(--color-status-success)]" />}
       <TerminalSquare className="size-3" />
       <span>Terminal</span>
     </button>

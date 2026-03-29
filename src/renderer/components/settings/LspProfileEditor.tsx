@@ -29,7 +29,7 @@ export function LspProfileEditor({
       title={profile.name || 'Untitled LSP Profile'}
     >
       <section className="space-y-4">
-        <h4 className="text-[12px] font-semibold uppercase tracking-wider text-zinc-500">
+        <h4 className="text-[12px] font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
           General
         </h4>
         <div className="grid gap-4 sm:grid-cols-2">
@@ -50,7 +50,7 @@ export function LspProfileEditor({
       </section>
 
       <section className="space-y-4">
-        <h4 className="text-[12px] font-semibold uppercase tracking-wider text-zinc-500">
+        <h4 className="text-[12px] font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
           Server
         </h4>
         <FormField label="Command" required>
@@ -71,7 +71,7 @@ export function LspProfileEditor({
       </section>
 
       <section className="space-y-4">
-        <h4 className="text-[12px] font-semibold uppercase tracking-wider text-zinc-500">
+        <h4 className="text-[12px] font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
           File matching
         </h4>
         <FormField label="File extensions" required>

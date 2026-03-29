@@ -57,13 +57,13 @@ export function NewSessionModal({
   const canCreate = projectId && patternId;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="new-session-title">
-      <div className="w-full max-w-md rounded-xl border border-zinc-800 bg-zinc-900 shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#07080e]/90 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="new-session-title">
+      <div className="w-full max-w-md rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-1)] shadow-[0_16px_64px_rgba(0,0,0,0.5)]">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-zinc-800 px-5 py-4">
-          <h2 id="new-session-title" className="text-[13px] font-semibold text-zinc-100">New Session</h2>
+        <div className="flex items-center justify-between border-b border-[var(--color-border)] px-5 py-4">
+          <h2 id="new-session-title" className="font-display text-[13px] font-semibold text-[var(--color-text-primary)]">New Session</h2>
           <button
-            className="flex size-7 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-300"
+            className="flex size-7 items-center justify-center rounded-lg text-[var(--color-text-muted)] transition hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-secondary)]"
             onClick={onClose}
             type="button"
           >
@@ -74,9 +74,9 @@ export function NewSessionModal({
         {/* Body */}
         <div className="space-y-4 px-5 py-5">
           <label className="block space-y-1.5">
-            <span className="text-[12px] font-medium text-zinc-400">Project</span>
+            <span className="text-[12px] font-medium text-[var(--color-text-secondary)]">Project</span>
             <select
-              className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-[13px] text-zinc-100 outline-none transition focus:border-indigo-500/50"
+              className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-0)] px-3 py-2 text-[13px] text-[var(--color-text-primary)] outline-none transition focus:border-[var(--color-accent)]/50"
               onChange={(e) => setProjectId(e.target.value)}
               value={projectId}
             >
@@ -89,28 +89,28 @@ export function NewSessionModal({
           </label>
 
           <label className="block space-y-1.5">
-            <span className="text-[12px] font-medium text-zinc-400">Pattern</span>
-            <div className="space-y-1 rounded-lg border border-zinc-700 bg-zinc-950 p-1.5">
+            <span className="text-[12px] font-medium text-[var(--color-text-secondary)]">Pattern</span>
+            <div className="space-y-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-0)] p-1.5">
               {availablePatterns.map((p) => (
                 <div
                   key={p.id}
                   className={`flex cursor-pointer items-center gap-2 rounded-md px-2.5 py-1.5 text-[13px] transition ${
                     patternId === p.id
-                      ? 'bg-indigo-500/15 text-zinc-100 ring-1 ring-indigo-500/25'
-                      : 'text-zinc-300 hover:bg-zinc-800/60'
+                      ? 'bg-[var(--color-accent-muted)] text-[var(--color-text-primary)] ring-1 ring-[var(--color-border-glow)]'
+                      : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-glass-hover)]'
                   }`}
                   onClick={() => setPatternId(p.id)}
                 >
                   <span className="flex-1 truncate">
                     {p.name}
-                    <span className="ml-1.5 text-[11px] text-zinc-500">({p.mode})</span>
+                    <span className="ml-1.5 text-[11px] text-[var(--color-text-muted)]">({p.mode})</span>
                   </span>
                   {onTogglePatternFavorite && (
                     <button
                       className={`shrink-0 transition ${
                         p.isFavorite
-                          ? 'text-amber-400 hover:text-amber-300'
-                          : 'text-zinc-700 hover:text-zinc-400'
+                          ? 'text-[var(--color-status-warning)] hover:text-[var(--color-status-warning)]'
+                          : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]'
                       }`}
                       onClick={(e) => {
                         e.stopPropagation();
@@ -126,7 +126,7 @@ export function NewSessionModal({
               ))}
             </div>
             {patternId && (
-              <p className="text-[12px] text-zinc-600">
+              <p className="text-[12px] text-[var(--color-text-muted)]">
                 {availablePatterns.find((p) => p.id === patternId)?.description}
               </p>
             )}
@@ -134,16 +134,16 @@ export function NewSessionModal({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-2 border-t border-zinc-800 px-5 py-3">
+        <div className="flex items-center justify-end gap-2 border-t border-[var(--color-border)] px-5 py-3">
           <button
-            className="rounded-lg px-4 py-1.5 text-[13px] text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-200"
+            className="rounded-lg px-4 py-1.5 text-[13px] text-[var(--color-text-secondary)] transition hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-primary)]"
             onClick={onClose}
             type="button"
           >
             Cancel
           </button>
           <button
-            className="rounded-lg bg-indigo-600 px-4 py-1.5 text-[13px] font-medium text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-lg bg-[var(--color-accent)] px-4 py-1.5 text-[13px] font-medium text-white transition hover:bg-[var(--color-accent-sky)] disabled:cursor-not-allowed disabled:opacity-40"
             disabled={!canCreate}
             onClick={() => canCreate && onCreate(projectId, patternId)}
             type="button"

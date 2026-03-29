@@ -105,10 +105,10 @@ function InputField({
   placeholder?: string;
 }) {
   const baseClasses =
-    'w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-[13px] text-zinc-100 placeholder-zinc-600 outline-none transition focus:border-indigo-500/50';
+    'w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-1)] px-3 py-2 text-[13px] text-[var(--color-text-primary)] placeholder-[var(--color-text-muted)] outline-none transition-all duration-200 focus:border-[var(--color-accent)]/50';
   return (
     <label className="block space-y-1.5">
-      <span className="text-[12px] font-medium text-zinc-400">{label}</span>
+      <span className="text-[12px] font-medium text-[var(--color-text-secondary)]">{label}</span>
       {multiline ? (
         <textarea
           className={`${baseClasses} min-h-20 resize-y`}
@@ -242,17 +242,17 @@ export function PatternEditor({
       <div className="drag-region flex items-center justify-between border-b border-[var(--color-border)] pb-3 pl-5 pr-36 pt-3">
         <div className="flex items-center gap-3">
           <button
-            className="no-drag flex size-8 items-center justify-center rounded-lg text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-200"
+            className="no-drag flex size-8 items-center justify-center rounded-lg text-[var(--color-text-secondary)] transition-all duration-200 hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-primary)]"
             onClick={onBack}
             type="button"
           >
             <ChevronLeft className="size-4" />
           </button>
           <div>
-            <h3 className="text-[13px] font-semibold text-zinc-100">
+            <h3 className="font-display text-[13px] font-semibold text-[var(--color-text-primary)]">
               {pattern.name || 'Untitled pattern'}
             </h3>
-            <p className="text-[12px] text-zinc-500">
+            <p className="text-[12px] text-[var(--color-text-muted)]">
               {isBuiltin ? 'Built-in pattern' : 'Custom pattern'}
             </p>
           </div>
@@ -260,7 +260,7 @@ export function PatternEditor({
         <div className="no-drag flex items-center gap-2">
           {!isBuiltin && onDelete && (
             <button
-              className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[13px] text-red-400 transition hover:bg-red-500/10"
+              className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[13px] text-[var(--color-status-error)] transition-all duration-200 hover:bg-[var(--color-status-error)]/10"
               onClick={onDelete}
               type="button"
             >
@@ -269,7 +269,7 @@ export function PatternEditor({
             </button>
           )}
           <button
-            className="rounded-lg bg-indigo-600 px-4 py-1.5 text-[13px] font-medium text-white transition hover:bg-indigo-500"
+            className="rounded-lg bg-[var(--color-accent)] px-4 py-1.5 text-[13px] font-medium text-white transition-all duration-200 hover:bg-[var(--color-accent-sky)]"
             onClick={onSave}
             type="button"
           >
@@ -290,8 +290,8 @@ export function PatternEditor({
                   <div
                     className={`flex items-start gap-2 rounded-lg px-3 py-2 text-[12px] ${
                       issue.level === 'error'
-                        ? 'bg-red-500/10 text-red-300'
-                        : 'bg-amber-500/10 text-amber-300'
+                        ? 'bg-[var(--color-status-error)]/10 text-[var(--color-status-error)]'
+                        : 'bg-[var(--color-status-warning)]/10 text-[var(--color-status-warning)]'
                     }`}
                     key={`${issue.field ?? 'v'}-${i}`}
                   >
@@ -301,7 +301,7 @@ export function PatternEditor({
                 ))}
               </div>
             ) : (
-              <div className="flex items-center gap-2 rounded-lg bg-emerald-500/10 px-3 py-2 text-[12px] text-emerald-300">
+              <div className="flex items-center gap-2 rounded-lg bg-[var(--color-status-success)]/10 px-3 py-2 text-[12px] text-[var(--color-status-success)]">
                 <CheckCircle className="size-3.5" />
                 Pattern is valid
               </div>
@@ -310,11 +310,11 @@ export function PatternEditor({
 
           {/* Graph canvas */}
           <div className="flex items-center justify-between px-5 pt-4">
-            <h4 className="text-[12px] font-semibold uppercase tracking-wider text-zinc-500">
+            <h4 className="text-[12px] font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
               Topology
             </h4>
             <button
-              className="flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[12px] font-medium text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-200"
+              className="flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[12px] font-medium text-[var(--color-text-secondary)] transition-all duration-200 hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-primary)]"
               onClick={addAgent}
               type="button"
             >
@@ -335,11 +335,11 @@ export function PatternEditor({
           </div>
 
           {/* Scrollable settings below graph */}
-          <div className="max-h-[45%] overflow-y-auto border-t border-zinc-800/50 px-5 py-5">
+          <div className="max-h-[45%] overflow-y-auto border-t border-[var(--color-border-subtle)] px-5 py-5">
             <div className="space-y-8">
               {/* General */}
               <section className="space-y-4">
-                <h4 className="text-[12px] font-semibold uppercase tracking-wider text-zinc-500">
+                <h4 className="text-[12px] font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
                   General
                 </h4>
                 <div className="grid gap-3 sm:grid-cols-2">
@@ -360,7 +360,7 @@ export function PatternEditor({
 
               {/* Mode selector */}
               <section className="space-y-4">
-                <h4 className="text-[12px] font-semibold uppercase tracking-wider text-zinc-500">
+                <h4 className="text-[12px] font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
                   Orchestration Mode
                 </h4>
                 <div className="grid grid-cols-3 gap-2">
@@ -372,12 +372,12 @@ export function PatternEditor({
 
                     return (
                       <button
-                        className={`flex flex-col rounded-xl border p-2.5 text-left transition ${
+                        className={`flex flex-col rounded-xl border p-2.5 text-left transition-all duration-200 ${
                           selected
-                            ? 'border-indigo-500/40 bg-indigo-500/5 ring-1 ring-indigo-500/20'
+                            ? 'border-[var(--color-border-glow)] bg-[var(--color-accent-muted)] ring-1 ring-[var(--color-border-glow)]'
                             : disabled
-                              ? 'cursor-not-allowed border-zinc-800/50 opacity-40'
-                              : 'border-zinc-800 hover:border-zinc-700 hover:bg-zinc-900/60'
+                              ? 'cursor-not-allowed border-[var(--color-border-subtle)] opacity-40'
+                              : 'border-[var(--color-border)] hover:border-[var(--color-border)] hover:bg-[var(--color-glass)]'
                         }`}
                         disabled={disabled}
                         key={mode}
@@ -386,17 +386,17 @@ export function PatternEditor({
                       >
                         <div className="flex items-center gap-1.5">
                           <Icon
-                            className={`size-3.5 ${selected ? 'text-indigo-400' : 'text-zinc-500'}`}
+                            className={`size-3.5 ${selected ? 'text-[var(--color-text-accent)]' : 'text-[var(--color-text-muted)]'}`}
                           />
                           <span
                             className={`text-[11px] font-semibold ${
-                              selected ? 'text-indigo-200' : 'text-zinc-300'
+                              selected ? 'text-[var(--color-text-accent)]' : 'text-[var(--color-text-secondary)]'
                             }`}
                           >
                             {info.label}
                           </span>
                         </div>
-                        <p className="mt-1 text-[10px] leading-snug text-zinc-500">
+                        <p className="mt-1 text-[10px] leading-snug text-[var(--color-text-muted)]">
                           {info.description}
                         </p>
                       </button>
@@ -407,12 +407,11 @@ export function PatternEditor({
 
               {/* Approval checkpoints */}
               <section className="space-y-4">
-                <h4 className="text-[12px] font-semibold uppercase tracking-wider text-zinc-500">
+                <h4 className="text-[12px] font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
                   Approval Checkpoints
                 </h4>
 
-                <p className="text-[11px] leading-relaxed text-zinc-600">
-                  Pause the run for human review before risky actions or publishing responses.
+                <p className="text-[11px] leading-relaxed text-[var(--color-text-muted)]">
                 </p>
 
                 <div className="space-y-3">
@@ -426,15 +425,15 @@ export function PatternEditor({
                     scopedAgentIds={checkpointAgentIds('tool-call')}
                     onScopeChange={(agentIds) => setCheckpointAgentScope('tool-call', agentIds)}
                   >
-                    <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+                    <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
                       Auto-approved tools
                     </div>
-                    <p className="mb-3 text-[11px] leading-relaxed text-zinc-600">
+                    <p className="mb-3 text-[11px] leading-relaxed text-[var(--color-text-muted)]">
                       Tools marked as auto-approved will skip manual review.
                       Sessions can override these defaults from the Activity panel.
                     </p>
                     {approvalTools.length === 0 ? (
-                      <p className="py-2 text-center text-[11px] text-zinc-600">
+                      <p className="py-2 text-center text-[11px] text-[var(--color-text-muted)]">
                         No tools available yet. Connect MCP servers or wait for runtime capabilities to load.
                       </p>
                     ) : (
@@ -462,9 +461,9 @@ export function PatternEditor({
         </div>
 
         {/* Right column: node inspector */}
-        <div className="w-[320px] shrink-0 overflow-y-auto border-l border-zinc-800/50 bg-zinc-900/30">
-          <div className="border-b border-zinc-800/50 px-4 py-3">
-            <h4 className="text-[12px] font-semibold uppercase tracking-wider text-zinc-500">
+        <div className="w-[320px] shrink-0 overflow-y-auto border-l border-[var(--color-border-subtle)] bg-[var(--color-glass)]">
+          <div className="border-b border-[var(--color-border-subtle)] px-4 py-3">
+            <h4 className="text-[12px] font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
               Inspector
             </h4>
           </div>
@@ -518,26 +517,26 @@ function ApprovalCheckpointRow({
   }
 
   return (
-    <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+    <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-glass)] p-4">
       <button className="flex w-full items-center gap-3 text-left" onClick={() => onToggle(!enabled)} type="button">
-        <ShieldCheck className={`size-4 shrink-0 ${enabled ? 'text-indigo-400' : 'text-zinc-600'}`} />
+        <ShieldCheck className={`size-4 shrink-0 ${enabled ? 'text-[var(--color-text-accent)]' : 'text-[var(--color-text-muted)]'}`} />
         <div className="min-w-0 flex-1">
-          <span className="text-[12px] font-medium text-zinc-200">{label}</span>
-          <p className="text-[11px] text-zinc-500">{description}</p>
+          <span className="text-[12px] font-medium text-[var(--color-text-primary)]">{label}</span>
+          <p className="text-[11px] text-[var(--color-text-muted)]">{description}</p>
         </div>
         <ToggleSwitch enabled={enabled} />
       </button>
 
       {/* Agent scope selector */}
       {enabled && agents.length > 1 && (
-        <div className="mt-3 border-t border-zinc-800/50 pt-3">
+        <div className="mt-3 border-t border-[var(--color-border-subtle)] pt-3">
           <div className="mb-2 flex items-center gap-2">
-            <span className="text-[11px] font-medium text-zinc-400">Scope</span>
+            <span className="text-[11px] font-medium text-[var(--color-text-secondary)]">Scope</span>
             <button
-              className={`rounded-full px-2 py-0.5 text-[10px] font-medium transition ${
+              className={`rounded-full px-2 py-0.5 text-[10px] font-medium transition-all duration-200 ${
                 isAllAgents
-                  ? 'bg-indigo-500/15 text-indigo-300'
-                  : 'bg-zinc-800 text-zinc-500 hover:text-zinc-400'
+                  ? 'bg-[var(--color-accent-muted)] text-[var(--color-text-accent)]'
+                  : 'bg-[var(--color-surface-3)] text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]'
               }`}
               onClick={() => onScopeChange(undefined)}
               type="button"
@@ -545,10 +544,10 @@ function ApprovalCheckpointRow({
               All agents
             </button>
             <button
-              className={`rounded-full px-2 py-0.5 text-[10px] font-medium transition ${
+              className={`rounded-full px-2 py-0.5 text-[10px] font-medium transition-all duration-200 ${
                 !isAllAgents
-                  ? 'bg-indigo-500/15 text-indigo-300'
-                  : 'bg-zinc-800 text-zinc-500 hover:text-zinc-400'
+                  ? 'bg-[var(--color-accent-muted)] text-[var(--color-text-accent)]'
+                  : 'bg-[var(--color-surface-3)] text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]'
               }`}
               onClick={() => onScopeChange([])}
               type="button"
@@ -563,10 +562,10 @@ function ApprovalCheckpointRow({
                 const isSelected = scopedAgentIds?.includes(agent.id) ?? false;
                 return (
                   <button
-                    className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition ${
+                    className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-all duration-200 ${
                       isSelected
-                        ? 'bg-indigo-500/20 text-indigo-300 ring-1 ring-indigo-500/30'
-                        : 'bg-zinc-800 text-zinc-500 hover:bg-zinc-700 hover:text-zinc-400'
+                        ? 'bg-[var(--color-accent-muted)] text-[var(--color-text-accent)] ring-1 ring-[var(--color-border-glow)]'
+                        : 'bg-[var(--color-surface-3)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-secondary)]'
                     }`}
                     key={agent.id}
                     onClick={() => toggleAgentScope(agent.id)}
@@ -583,7 +582,7 @@ function ApprovalCheckpointRow({
 
       {/* Optional additional content (e.g. tool auto-approval list) */}
       {enabled && children && (
-        <div className="mt-3 border-t border-zinc-800/50 pt-3">
+        <div className="mt-3 border-t border-[var(--color-border-subtle)] pt-3">
           {children}
         </div>
       )}
@@ -620,7 +619,7 @@ function ToolApprovalGroupedList({
       {groups.map((group, i) => (
         <div key={group.kind}>
           {showHeaders && (
-            <div className={`text-[9px] font-semibold uppercase tracking-wider text-zinc-600 ${i > 0 ? 'mt-3' : ''} mb-1`}>
+            <div className={`text-[9px] font-semibold uppercase tracking-wider text-[var(--color-text-muted)] ${i > 0 ? 'mt-3' : ''} mb-1`}>
               {approvalKindLabels[group.kind]}
             </div>
           )}
@@ -650,13 +649,13 @@ function ToolApprovalToggleRow({
   const detail = tool.description || (tool.providerNames.length > 0 ? tool.providerNames.join(', ') : undefined);
   return (
     <button
-      className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition hover:bg-zinc-800/60"
+      className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-all duration-200 hover:bg-[var(--color-surface-3)]/60"
       onClick={onToggle}
       type="button"
     >
       <div className="min-w-0 flex-1">
-        <span className="truncate text-[12px] font-medium text-zinc-300">{tool.label}</span>
-        {detail && <div className="truncate text-[10px] text-zinc-600">{detail}</div>}
+        <span className="truncate text-[12px] font-medium text-[var(--color-text-secondary)]">{tool.label}</span>
+        {detail && <div className="truncate text-[10px] text-[var(--color-text-muted)]">{detail}</div>}
       </div>
       <ToggleSwitch enabled={enabled} />
     </button>

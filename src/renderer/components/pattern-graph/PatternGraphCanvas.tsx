@@ -169,7 +169,7 @@ function PatternGraphCanvasInner({
   }, [graph, onGraphChange, fitView]);
 
   return (
-    <div className="h-full w-full rounded-xl border border-zinc-800 bg-zinc-950/50">
+    <div className="h-full w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-0)]/50">
       <ReactFlow
         nodes={nodes.map((n) => ({
           ...n,
@@ -189,18 +189,18 @@ function PatternGraphCanvasInner({
         proOptions={{ hideAttribution: true }}
         defaultEdgeOptions={{
           type: 'default',
-          style: { stroke: '#6366f1', strokeWidth: 1.5 },
-          markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16, color: '#6366f1' },
+          style: { stroke: '#245CF9', strokeWidth: 1.5 },
+          markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16, color: '#245CF9' },
         }}
-        connectionLineStyle={{ stroke: '#6366f1', strokeWidth: 1.5 }}
+        connectionLineStyle={{ stroke: '#245CF9', strokeWidth: 1.5 }}
         deleteKeyCode="Delete"
       >
-        <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#27272a" />
+        <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#1a1e2e" />
         <Panel position="top-right">
           <button
             type="button"
             onClick={handleAutoLayout}
-            className="flex items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-800/90 px-2.5 py-1.5 text-[11px] font-medium text-zinc-300 shadow-sm backdrop-blur transition hover:border-zinc-600 hover:bg-zinc-700/90 hover:text-zinc-100"
+            className="flex items-center gap-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]/90 px-2.5 py-1.5 text-[11px] font-medium text-[var(--color-text-secondary)] shadow-sm backdrop-blur transition hover:border-[var(--color-border-glow)] hover:bg-[var(--color-surface-3)]/90 hover:text-[var(--color-text-primary)]"
             title="Auto-layout nodes"
           >
             <LayoutGrid className="size-3.5" />

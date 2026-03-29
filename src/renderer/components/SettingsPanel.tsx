@@ -93,8 +93,8 @@ const navGroups: NavGroup[] = [
 ];
 
 function modeBadgeClasses(pattern: PatternDefinition) {
-  if (pattern.availability === 'unavailable') return 'bg-amber-500/10 text-amber-400';
-  return 'bg-zinc-800 text-zinc-400';
+  if (pattern.availability === 'unavailable') return 'bg-[var(--color-status-warning)]/10 text-[var(--color-status-warning)]';
+  return 'bg-[var(--color-surface-3)] text-[var(--color-text-secondary)]';
 }
 
 export function SettingsPanel({
@@ -210,13 +210,13 @@ export function SettingsPanel({
     <div className="fixed inset-0 z-50 flex flex-col bg-[var(--color-surface-0)]">
       <div className="drag-region flex items-center gap-3 border-b border-[var(--color-border)] px-5 pb-3 pt-3">
         <button
-          className="no-drag flex size-8 items-center justify-center rounded-lg text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-200"
+          className="no-drag flex size-8 items-center justify-center rounded-lg text-[var(--color-text-secondary)] transition-all duration-200 hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-primary)]"
           onClick={onClose}
           type="button"
         >
           <ChevronLeft className="size-4" />
         </button>
-        <h2 className="text-[13px] font-semibold text-zinc-100">Settings</h2>
+        <h2 className="font-display text-[13px] font-semibold text-[var(--color-text-primary)]">Settings</h2>
       </div>
 
       <div className="flex min-h-0 flex-1">
@@ -224,7 +224,7 @@ export function SettingsPanel({
           <div className="space-y-4">
             {navGroups.map((group) => (
               <div key={group.label}>
-                <span className="mb-1 block px-3 text-[10px] font-semibold uppercase tracking-wider text-zinc-600">
+                <span className="mb-1 block px-3 text-[10px] font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
                   {group.label}
                 </span>
                 <div className="space-y-0.5">
@@ -232,16 +232,16 @@ export function SettingsPanel({
                     const isActive = item.id === activeSection;
                     return (
                       <button
-                        className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] transition ${
+                        className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] transition-all duration-200 ${
                           isActive
-                            ? 'bg-zinc-800 font-medium text-zinc-100'
-                            : 'text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-300'
+                            ? 'bg-[var(--color-surface-3)] font-medium text-[var(--color-text-primary)]'
+                            : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-3)]/50 hover:text-[var(--color-text-secondary)]'
                         }`}
                         key={item.id}
                         onClick={() => setActiveSection(item.id)}
                         type="button"
                       >
-                        <span className={isActive ? 'text-zinc-300' : 'text-zinc-500'}>{item.icon}</span>
+                        <span className={isActive ? 'text-[var(--color-text-secondary)]' : 'text-[var(--color-text-muted)]'}>{item.icon}</span>
                         {item.label}
                       </button>
                     );
@@ -322,8 +322,8 @@ function AppearanceSection({
   return (
     <div>
       <div className="mb-1">
-        <h3 className="text-[13px] font-semibold text-zinc-200">Appearance</h3>
-        <p className="mt-0.5 text-[12px] text-zinc-500">
+        <h3 className="font-display text-[13px] font-semibold text-[var(--color-text-primary)]">Appearance</h3>
+        <p className="mt-0.5 text-[12px] text-[var(--color-text-muted)]">
           Choose how Aryx looks on your device
         </p>
       </div>
@@ -333,27 +333,27 @@ function AppearanceSection({
           const isSelected = option.value === theme;
           return (
             <button
-              className={`flex w-full items-center gap-3 rounded-lg border px-4 py-3 text-left transition ${
+              className={`flex w-full items-center gap-3 rounded-lg border px-4 py-3 text-left transition-all duration-200 ${
                 isSelected
-                  ? 'border-indigo-500/50 bg-indigo-500/10'
-                  : 'border-[var(--color-border)] hover:border-zinc-600 hover:bg-zinc-800/40'
+                  ? 'border-[var(--color-border-glow)] bg-[var(--color-accent-muted)]'
+                  : 'border-[var(--color-border)] hover:border-[var(--color-border)] hover:bg-[var(--color-surface-3)]/40'
               }`}
               key={option.value}
               onClick={() => onSetTheme(option.value)}
               type="button"
             >
               <div
-                className={`flex size-4 shrink-0 items-center justify-center rounded-full border-2 transition ${
-                  isSelected ? 'border-indigo-500' : 'border-zinc-600'
+                className={`flex size-4 shrink-0 items-center justify-center rounded-full border-2 transition-all duration-200 ${
+                  isSelected ? 'border-[var(--color-accent)]' : 'border-[var(--color-border)]'
                 }`}
               >
-                {isSelected && <div className="size-2 rounded-full bg-indigo-500" />}
+                {isSelected && <div className="size-2 rounded-full bg-[var(--color-accent)]" />}
               </div>
               <div>
-                <span className={`text-[13px] font-medium ${isSelected ? 'text-zinc-100' : 'text-zinc-300'}`}>
+                <span className={`text-[13px] font-medium ${isSelected ? 'text-[var(--color-text-primary)]' : 'text-[var(--color-text-secondary)]'}`}>
                   {option.label}
                 </span>
-                <p className="text-[12px] text-zinc-500">{option.description}</p>
+                <p className="text-[12px] text-[var(--color-text-muted)]">{option.description}</p>
               </div>
             </button>
           );
@@ -379,12 +379,12 @@ function ConnectionSection({
   return (
     <div>
       <div className="mb-1">
-        <h3 className="text-[13px] font-semibold text-zinc-200">GitHub Copilot</h3>
-        <p className="mt-0.5 text-[12px] text-zinc-500">
+        <h3 className="font-display text-[13px] font-semibold text-[var(--color-text-primary)]">GitHub Copilot</h3>
+        <p className="mt-0.5 text-[12px] text-[var(--color-text-muted)]">
           Aryx uses your installed GitHub Copilot CLI for AI capabilities
         </p>
       </div>
-      <div className="mt-4 rounded-xl border border-[var(--color-border)] bg-zinc-900/30 p-4">
+      <div className="mt-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-glass)] p-4">
         <CopilotStatusCard
           connection={connection}
           isRefreshing={isRefreshing}
@@ -418,25 +418,25 @@ function PatternsSection({
       <div className="space-y-1">
         {patterns.map((pattern) => (
           <button
-            className="group flex w-full items-center gap-3 rounded-xl border border-transparent px-4 py-3 text-left transition hover:border-zinc-800 hover:bg-zinc-900"
+            className="group flex w-full items-center gap-3 rounded-xl border border-transparent px-4 py-3 text-left transition-all duration-200 hover:border-[var(--color-border)] hover:bg-[var(--color-surface-1)]"
             key={pattern.id}
             onClick={() => onEditPattern(pattern)}
             type="button"
           >
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
-                <span className="text-[13px] font-medium text-zinc-200">{pattern.name}</span>
+                <span className="text-[13px] font-medium text-[var(--color-text-primary)]">{pattern.name}</span>
                 <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ${modeBadgeClasses(pattern)}`}>
                   {pattern.mode}
                 </span>
               </div>
-              <p className="mt-0.5 truncate text-[12px] text-zinc-500">{pattern.description}</p>
+              <p className="mt-0.5 truncate text-[12px] text-[var(--color-text-muted)]">{pattern.description}</p>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-[12px] text-zinc-600">
+              <span className="text-[12px] text-[var(--color-text-muted)]">
                 {pattern.agents.length} agent{pattern.agents.length === 1 ? '' : 's'}
               </span>
-              <ChevronRight className="size-4 text-zinc-700 transition group-hover:text-zinc-500" />
+              <ChevronRight className="size-4 text-[var(--color-text-muted)] transition-all duration-200 group-hover:text-[var(--color-text-muted)]" />
             </div>
           </button>
         ))}
@@ -537,8 +537,8 @@ function SectionHeader({
   return (
     <div className="mb-4 flex items-center justify-between gap-3">
       <div>
-        <h3 className="text-[13px] font-semibold text-zinc-200">{title}</h3>
-        <p className="mt-0.5 text-[12px] text-zinc-500">{description}</p>
+        <h3 className="font-display text-[13px] font-semibold text-[var(--color-text-primary)]">{title}</h3>
+        <p className="mt-0.5 text-[12px] text-[var(--color-text-muted)]">{description}</p>
       </div>
       {children}
     </div>
@@ -548,7 +548,7 @@ function SectionHeader({
 function SectionAction({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <button
-      className="flex items-center gap-1.5 rounded-lg bg-zinc-800 px-3 py-1.5 text-[13px] font-medium text-zinc-200 transition hover:bg-zinc-700"
+      className="flex items-center gap-1.5 rounded-lg bg-[var(--color-surface-3)] px-3 py-1.5 text-[13px] font-medium text-[var(--color-text-primary)] transition-all duration-200 hover:bg-[var(--color-surface-3)]"
       onClick={onClick}
       type="button"
     >
@@ -571,27 +571,27 @@ function ToolingListButton({
 }) {
   return (
     <button
-      className="group flex w-full items-center gap-3 rounded-xl border border-transparent px-4 py-3 text-left transition hover:border-zinc-800 hover:bg-zinc-900"
+      className="group flex w-full items-center gap-3 rounded-xl border border-transparent px-4 py-3 text-left transition-all duration-200 hover:border-[var(--color-border)] hover:bg-[var(--color-surface-1)]"
       onClick={onClick}
       type="button"
     >
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <span className="truncate text-[13px] font-medium text-zinc-200">{label}</span>
-          <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-zinc-400">
+          <span className="truncate text-[13px] font-medium text-[var(--color-text-primary)]">{label}</span>
+          <span className="rounded-full bg-[var(--color-surface-3)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[var(--color-text-secondary)]">
             {meta}
           </span>
         </div>
-        <p className="mt-0.5 truncate text-[12px] text-zinc-500">{detail}</p>
+        <p className="mt-0.5 truncate text-[12px] text-[var(--color-text-muted)]">{detail}</p>
       </div>
-      <ChevronRight className="size-4 text-zinc-700 transition group-hover:text-zinc-500" />
+      <ChevronRight className="size-4 text-[var(--color-text-muted)] transition-all duration-200 group-hover:text-[var(--color-text-muted)]" />
     </button>
   );
 }
 
 function EmptyState({ children }: { children: ReactNode }) {
   return (
-    <div className="rounded-xl border border-dashed border-zinc-800 bg-zinc-900/20 px-5 py-8 text-center text-[12px] leading-relaxed text-zinc-500">
+    <div className="rounded-xl border border-dashed border-[var(--color-border)] bg-[var(--color-surface-1)]/20 px-5 py-8 text-center text-[12px] leading-relaxed text-[var(--color-text-muted)]">
       {children}
     </div>
   );
@@ -648,8 +648,8 @@ function DiscoveredSubSection({
     <div className="mb-4">
       <div className="mb-2 flex items-center justify-between">
         <div>
-          <span className="text-[12px] font-medium text-zinc-300">{label}</span>
-          <p className="text-[11px] text-zinc-600">{description}</p>
+          <span className="text-[12px] font-medium text-[var(--color-text-secondary)]">{label}</span>
+          <p className="text-[11px] text-[var(--color-text-muted)]">{description}</p>
         </div>
       </div>
       <div className="space-y-1">
@@ -692,30 +692,30 @@ function DiscoveredServerRow({
       : server.url || 'No URL';
 
   const statusBadge = status === 'accepted'
-    ? 'bg-emerald-500/10 text-emerald-400'
-    : 'bg-amber-500/10 text-amber-400';
+    ? 'bg-[var(--color-status-success)]/10 text-[var(--color-status-success)]'
+    : 'bg-[var(--color-status-warning)]/10 text-[var(--color-status-warning)]';
 
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-transparent px-4 py-3 hover:border-zinc-800 hover:bg-zinc-900">
+    <div className="flex items-center gap-3 rounded-xl border border-transparent px-4 py-3 hover:border-[var(--color-border)] hover:bg-[var(--color-surface-1)]">
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <span className="truncate text-[13px] font-medium text-zinc-200">{server.name}</span>
-          <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-zinc-400">
+          <span className="truncate text-[13px] font-medium text-[var(--color-text-primary)]">{server.name}</span>
+          <span className="rounded-full bg-[var(--color-surface-3)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[var(--color-text-secondary)]">
             {server.transport}
           </span>
           <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${statusBadge}`}>
             {status}
           </span>
         </div>
-        <p className="mt-0.5 truncate text-[12px] text-zinc-500">
+        <p className="mt-0.5 truncate text-[12px] text-[var(--color-text-muted)]">
           {detail}
-          <span className="ml-2 text-zinc-700">· {server.sourceLabel}</span>
+          <span className="ml-2 text-[var(--color-text-muted)]">· {server.sourceLabel}</span>
         </p>
       </div>
       <div className="flex items-center gap-1">
         {onAccept && (
           <button
-            className="rounded-lg px-2.5 py-1 text-[12px] font-medium text-emerald-400 transition hover:bg-emerald-500/10"
+            className="rounded-lg px-2.5 py-1 text-[12px] font-medium text-[var(--color-status-success)] transition-all duration-200 hover:bg-[var(--color-status-success)]/10"
             onClick={onAccept}
             type="button"
           >
@@ -724,7 +724,7 @@ function DiscoveredServerRow({
         )}
         {onDismiss && (
           <button
-            className="rounded-lg px-2.5 py-1 text-[12px] font-medium text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-300"
+            className="rounded-lg px-2.5 py-1 text-[12px] font-medium text-[var(--color-text-muted)] transition-all duration-200 hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-secondary)]"
             onClick={onDismiss}
             type="button"
           >
@@ -772,12 +772,12 @@ function TroubleshootingSection({
         />
       </div>
 
-      <div className="mt-8 rounded-xl border border-red-500/20 bg-red-500/5 p-5">
+      <div className="mt-8 rounded-xl border border-[var(--color-status-error)]/20 bg-[var(--color-status-error)]/5 p-5">
         <div className="flex items-start gap-3">
-          <TriangleAlert className="mt-0.5 size-4 shrink-0 text-red-400" />
+          <TriangleAlert className="mt-0.5 size-4 shrink-0 text-[var(--color-status-error)]" />
           <div className="min-w-0 flex-1">
-            <h4 className="text-[13px] font-semibold text-red-300">Reset Local Workspace</h4>
-            <p className="mt-1 text-[12px] leading-relaxed text-zinc-400">
+            <h4 className="text-[13px] font-semibold text-[var(--color-status-error)]">Reset Local Workspace</h4>
+            <p className="mt-1 text-[12px] leading-relaxed text-[var(--color-text-secondary)]">
               Restore Aryx to its initial state. This permanently removes all sessions, custom patterns,
               MCP server definitions, LSP profiles, and scratchpad contents. Your GitHub Copilot sign-in
               is not affected.
@@ -785,7 +785,7 @@ function TroubleshootingSection({
 
             {!confirmingReset ? (
               <button
-                className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3.5 py-1.5 text-[13px] font-medium text-red-300 transition hover:border-red-500/50 hover:bg-red-500/20"
+                className="mt-3 rounded-lg border border-[var(--color-status-error)]/30 bg-[var(--color-status-error)]/10 px-3.5 py-1.5 text-[13px] font-medium text-[var(--color-status-error)] transition-all duration-200 hover:border-[var(--color-status-error)]/50 hover:bg-[var(--color-status-error)]/20"
                 onClick={() => setConfirmingReset(true)}
                 type="button"
               >
@@ -794,7 +794,7 @@ function TroubleshootingSection({
             ) : (
               <div className="mt-3 flex items-center gap-2">
                 <button
-                  className="rounded-lg bg-red-600 px-3.5 py-1.5 text-[13px] font-medium text-white transition hover:bg-red-500 disabled:opacity-50"
+                  className="rounded-lg bg-[var(--color-status-error)] px-3.5 py-1.5 text-[13px] font-medium text-white transition-all duration-200 hover:bg-[var(--color-status-error)] disabled:opacity-50"
                   disabled={isResetting}
                   onClick={() => void handleReset()}
                   type="button"
@@ -802,7 +802,7 @@ function TroubleshootingSection({
                   {isResetting ? 'Resetting…' : 'Confirm reset'}
                 </button>
                 <button
-                  className="rounded-lg border border-[var(--color-border)] px-3.5 py-1.5 text-[13px] font-medium text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-200"
+                  className="rounded-lg border border-[var(--color-border)] px-3.5 py-1.5 text-[13px] font-medium text-[var(--color-text-secondary)] transition-all duration-200 hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-primary)]"
                   disabled={isResetting}
                   onClick={() => setConfirmingReset(false)}
                   type="button"
@@ -831,16 +831,16 @@ function TroubleshootingAction({
 }) {
   return (
     <button
-      className="group flex w-full items-center gap-3 rounded-xl border border-transparent px-4 py-3 text-left transition hover:border-zinc-800 hover:bg-zinc-900"
+      className="group flex w-full items-center gap-3 rounded-xl border border-transparent px-4 py-3 text-left transition-all duration-200 hover:border-[var(--color-border)] hover:bg-[var(--color-surface-1)]"
       onClick={onClick}
       type="button"
     >
-      <span className="text-zinc-500 transition group-hover:text-zinc-300">{icon}</span>
+      <span className="text-[var(--color-text-muted)] transition-all duration-200 group-hover:text-[var(--color-text-secondary)]">{icon}</span>
       <div className="min-w-0 flex-1">
-        <span className="text-[13px] font-medium text-zinc-200">{label}</span>
-        <p className="mt-0.5 text-[12px] text-zinc-500">{description}</p>
+        <span className="text-[13px] font-medium text-[var(--color-text-primary)]">{label}</span>
+        <p className="mt-0.5 text-[12px] text-[var(--color-text-muted)]">{description}</p>
       </div>
-      <ChevronRight className="size-4 text-zinc-700 transition group-hover:text-zinc-500" />
+      <ChevronRight className="size-4 text-[var(--color-text-muted)] transition-all duration-200 group-hover:text-[var(--color-text-muted)]" />
     </button>
   );
 }

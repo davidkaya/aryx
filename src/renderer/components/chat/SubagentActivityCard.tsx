@@ -14,11 +14,11 @@ function formatElapsed(startedAt: string): string {
 function StatusIcon({ status }: { status: ActiveSubagent['status'] }) {
   switch (status) {
     case 'running':
-      return <Loader2 className="size-3.5 animate-spin text-sky-400" aria-label="Running" />;
+      return <Loader2 className="size-3.5 animate-spin text-[var(--color-accent-sky)]" aria-label="Running" />;
     case 'completed':
-      return <CheckCircle2 className="size-3.5 text-emerald-400" aria-label="Completed" />;
+      return <CheckCircle2 className="size-3.5 text-[var(--color-status-success)]" aria-label="Completed" />;
     case 'failed':
-      return <XCircle className="size-3.5 text-red-400" aria-label="Failed" />;
+      return <XCircle className="size-3.5 text-[var(--color-status-error)]" aria-label="Failed" />;
   }
 }
 
@@ -31,7 +31,7 @@ function ElapsedTimer({ startedAt }: { startedAt: string }) {
   }, [startedAt]);
 
   return (
-    <span className="ml-auto shrink-0 text-[10px] tabular-nums text-zinc-600">{elapsed}</span>
+    <span className="ml-auto shrink-0 text-[10px] tabular-nums text-[var(--color-text-muted)]">{elapsed}</span>
   );
 }
 
@@ -42,25 +42,25 @@ interface SubagentActivityCardProps {
 function SubagentActivityCard({ subagent }: SubagentActivityCardProps) {
   const borderClass =
     subagent.status === 'running'
-      ? 'border-sky-500/20'
+      ? 'border-[var(--color-accent-sky)]/20'
       : subagent.status === 'failed'
-        ? 'border-red-500/20'
-        : 'border-emerald-500/20';
+        ? 'border-[var(--color-status-error)]/20'
+        : 'border-[var(--color-status-success)]/20';
 
   return (
     <div
-      className={`flex items-center gap-2 rounded-lg border bg-zinc-900/60 px-3 py-1.5 ${borderClass}`}
+      className={`flex items-center gap-2 rounded-lg border bg-[var(--color-glass)] px-3 py-1.5 transition-all duration-200 ${borderClass}`}
       role="status"
       aria-label={`Sub-agent ${subagent.name}: ${subagent.activityLabel}`}
     >
       <StatusIcon status={subagent.status} />
-      <Bot className="size-3 text-zinc-500" />
-      <span className="text-[11px] font-medium text-zinc-300">{subagent.name}</span>
-      <span className="text-[10px] text-zinc-600">—</span>
-      <span className="text-[10px] text-zinc-500">{subagent.activityLabel}</span>
+      <Bot className="size-3 text-[var(--color-text-muted)]" />
+      <span className="text-[11px] font-medium text-[var(--color-text-primary)]">{subagent.name}</span>
+      <span className="text-[10px] text-[var(--color-text-muted)]">—</span>
+      <span className="text-[10px] text-[var(--color-text-secondary)]">{subagent.activityLabel}</span>
       {subagent.status === 'running' && <ElapsedTimer startedAt={subagent.startedAt} />}
       {subagent.error && (
-        <span className="truncate text-[10px] text-red-400" title={subagent.error}>
+        <span className="truncate text-[10px] text-[var(--color-status-error)]" title={subagent.error}>
           {subagent.error}
         </span>
       )}

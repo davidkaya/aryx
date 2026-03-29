@@ -10,8 +10,8 @@ export function ToggleSwitch({ enabled, size = 'md' }: ToggleSwitchProps) {
 
   return (
     <span
-      className={`relative inline-flex ${trackSize} shrink-0 items-center rounded-full transition-colors ${
-        enabled ? 'bg-indigo-500' : 'bg-zinc-700'
+      className={`relative inline-flex ${trackSize} shrink-0 items-center rounded-full transition-all duration-200 ${
+        enabled ? 'brand-gradient-bg shadow-[0_0_8px_rgba(36,92,249,0.3)]' : 'bg-[var(--color-surface-3)]'
       }`}
     >
       <span

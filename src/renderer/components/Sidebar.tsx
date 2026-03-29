@@ -54,12 +54,12 @@ interface SidebarProps {
 /* ── Mode icon + accent colour mapping ─────────────────────── */
 
 const modeVisuals: Record<OrchestrationMode, { icon: LucideIcon; color: string }> = {
-  single: { icon: MessageSquare, color: 'text-indigo-400' },
-  sequential: { icon: ListOrdered, color: 'text-amber-400' },
-  concurrent: { icon: GitFork, color: 'text-emerald-400' },
-  handoff: { icon: ArrowLeftRight, color: 'text-sky-400' },
-  'group-chat': { icon: Users, color: 'text-violet-400' },
-  magentic: { icon: Lock, color: 'text-zinc-500' },
+  single: { icon: MessageSquare, color: 'text-[#245CF9]' },
+  sequential: { icon: ListOrdered, color: 'text-[var(--color-status-warning)]' },
+  concurrent: { icon: GitFork, color: 'text-[var(--color-status-success)]' },
+  handoff: { icon: ArrowLeftRight, color: 'text-[var(--color-accent-sky)]' },
+  'group-chat': { icon: Users, color: 'text-[var(--color-accent-purple)]' },
+  magentic: { icon: Lock, color: 'text-[var(--color-text-muted)]' },
 };
 
 /* ── Relative time helper ──────────────────────────────────── */
@@ -83,7 +83,7 @@ function relativeTime(iso: string): string {
 function GitContextBadge({ git }: { git: ProjectGitContext }) {
   if (git.status === 'not-repository') {
     return (
-      <span className="text-[10px] text-zinc-600" title="Not a git repository">
+      <span className="text-[10px] text-[var(--color-text-muted)]" title="Not a git repository">
         no repo
       </span>
     );
@@ -117,7 +117,7 @@ function GitContextBadge({ git }: { git: ProjectGitContext }) {
   if (git.behind) parts.push(`↓${git.behind}`);
 
   return (
-    <span className="flex items-center gap-1 text-[10px] text-zinc-500" title={parts.join(' · ') || branchLabel}>
+    <span className="flex items-center gap-1 text-[10px] text-[var(--color-text-muted)]" title={parts.join(' · ') || branchLabel}>
       <GitBranch className="size-2.5 shrink-0" />
       <span className="max-w-[80px] truncate">{branchLabel}</span>
       {git.isDirty && <Circle className="size-1.5 shrink-0 fill-amber-500 text-amber-500" />}
@@ -140,7 +140,7 @@ function ActionMenuItem({
 }) {
   return (
     <button
-      className={`flex w-full items-center gap-2 px-3 py-1.5 text-[12px] transition hover:bg-zinc-800 ${className ?? 'text-zinc-300'}`}
+      className={`flex w-full items-center gap-2 px-3 py-1.5 text-[12px] transition-all duration-150 hover:bg-[var(--color-surface-2)] ${className ?? 'text-[var(--color-text-primary)]'}`}
       onClick={onClick}
       role="menuitem"
       type="button"
@@ -213,10 +213,10 @@ function SessionItem({
 
   return (
     <div
-      className={`group relative flex w-full cursor-pointer items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-all duration-150 ${
+      className={`group relative flex w-full cursor-pointer items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-all duration-200 ${
         isActive
-          ? 'bg-indigo-500/10 ring-1 ring-indigo-500/25'
-          : 'hover:bg-zinc-800/60'
+          ? 'bg-[var(--color-accent-muted)] ring-1 ring-[var(--color-border-glow)]'
+          : 'hover:bg-[var(--color-surface-2)]/60'
       } ${isRunning ? 'sidebar-running' : ''} ${session.isArchived ? 'opacity-50' : ''}`}
       onClick={isRenaming ? undefined : onSelect}
       role="button"
@@ -225,19 +225,19 @@ function SessionItem({
     >
       {/* Running/approval left accent bar */}
       {isRunning && !hasPendingApproval && (
-        <span className="absolute inset-y-1.5 left-0 w-[3px] rounded-full bg-blue-400 sidebar-pulse" />
+        <span className="absolute inset-y-1.5 left-0 w-[3px] rounded-full accent-flow" />
       )}
       {hasPendingApproval && (
-        <span className="absolute inset-y-1.5 left-0 w-[3px] rounded-full bg-amber-400" />
+        <span className="absolute inset-y-1.5 left-0 w-[3px] rounded-full bg-[var(--color-status-warning)]" />
       )}
 
       {/* Mode icon */}
       <span
         className={`mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md ${
-          isActive ? 'bg-indigo-500/15' : 'bg-zinc-800/80'
+          isActive ? 'bg-[var(--color-accent-muted)]' : 'bg-[var(--color-surface-2)]'
         }`}
       >
-        <ModeIcon className={`size-3.5 ${isActive ? 'text-indigo-400' : visual.color}`} />
+        <ModeIcon className={`size-3.5 ${isActive ? 'text-[var(--color-accent)]' : visual.color}`} />
       </span>
 
       {/* Content */}
@@ -247,7 +247,7 @@ function SessionItem({
           {isRenaming ? (
             <input
               ref={inputRef}
-              className="w-full rounded bg-zinc-800 px-1.5 py-0.5 text-[13px] font-medium text-zinc-100 outline-none ring-1 ring-indigo-500/50"
+              className="w-full rounded bg-[var(--color-surface-2)] px-1.5 py-0.5 text-[13px] font-medium text-[var(--color-text-primary)] outline-none ring-1 ring-[var(--color-border-glow)]"
               value={renameText}
               onChange={(e) => setRenameText(e.target.value)}
               onKeyDown={handleRenameKeyDown}
@@ -257,7 +257,7 @@ function SessionItem({
           ) : (
             <span
               className={`truncate text-[13px] font-medium leading-tight ${
-                isActive ? 'text-indigo-100' : 'text-zinc-200 group-hover:text-zinc-100'
+                isActive ? 'text-[var(--color-text-primary)]' : 'text-[var(--color-text-primary)] group-hover:text-[var(--color-text-primary)]'
               }`}
             >
               {session.title}
@@ -267,36 +267,36 @@ function SessionItem({
 
         <div className="mt-1 flex items-center gap-2">
           {agentCount > 1 && (
-            <span className="inline-flex items-center gap-0.5 text-[10px] text-zinc-500">
+            <span className="inline-flex items-center gap-0.5 text-[10px] text-[var(--color-text-muted)]">
               <Users className="size-2.5" />
               {agentCount}
             </span>
           )}
           {isRunning && !hasPendingApproval && (
-            <span className="inline-flex items-center gap-1 text-[10px] font-medium text-blue-400">
-              <span className="size-1.5 rounded-full bg-blue-400 sidebar-pulse" />
+            <span className="inline-flex items-center gap-1 text-[10px] font-medium text-[var(--color-accent-sky)]">
+              <span className="size-1.5 rounded-full bg-[var(--color-accent-sky)] sidebar-pulse" />
               Running
             </span>
           )}
           {hasPendingApproval && (
-            <span className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-400">
-              <span className="size-1.5 rounded-full bg-amber-400 animate-pulse" />
+            <span className="inline-flex items-center gap-1 text-[10px] font-medium text-[var(--color-status-warning)]">
+              <span className="size-1.5 rounded-full bg-[var(--color-status-warning)] animate-pulse" />
               Awaiting approval{queuedCount > 0 && ` (+${queuedCount})`}
             </span>
           )}
           {isError && (
-            <span className="inline-flex items-center gap-1 text-[10px] font-medium text-red-400">
-              <span className="size-1.5 rounded-full bg-red-400" />
+            <span className="inline-flex items-center gap-1 text-[10px] font-medium text-[var(--color-status-error)]">
+              <span className="size-1.5 rounded-full bg-[var(--color-status-error)]" />
               Error
             </span>
           )}
           {session.isArchived && (
-            <span className="inline-flex items-center gap-1 text-[10px] text-zinc-600">
+            <span className="inline-flex items-center gap-1 text-[10px] text-[var(--color-text-muted)]">
               <Archive className="size-2.5" />
               Archived
             </span>
           )}
-          <span className="ml-auto text-[10px] text-zinc-600 group-hover:text-zinc-500">
+          <span className="ml-auto text-[10px] text-[var(--color-text-muted)] group-hover:text-[var(--color-text-secondary)]">
             {relativeTime(session.updatedAt)}
           </span>
         </div>
@@ -305,7 +305,7 @@ function SessionItem({
       {/* Actions button (hidden during rename) */}
       {!isRenaming && (
         <button
-          className="absolute right-1.5 top-1.5 flex size-6 items-center justify-center rounded-md text-zinc-600 opacity-0 transition hover:bg-zinc-700 hover:text-zinc-300 group-hover:opacity-100"
+          className="absolute right-1.5 top-1.5 flex size-6 items-center justify-center rounded-md text-[var(--color-text-muted)] opacity-0 transition-all duration-150 hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-primary)] group-hover:opacity-100"
           onClick={(e) => { e.stopPropagation(); onOpenMenu(e); }}
           type="button"
         >
@@ -376,19 +376,19 @@ function ProjectGroup({
   return (
     <div>
       <button
-        className="group flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-[13px] font-semibold text-zinc-400 transition hover:bg-zinc-800/40 hover:text-zinc-200"
+        className="group flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-[13px] font-semibold text-[var(--color-text-secondary)] transition-all duration-150 hover:bg-[var(--color-surface-2)]/40 hover:text-[var(--color-text-primary)]"
         onClick={() => setExpanded(!expanded)}
         type="button"
       >
         {expanded ? (
-          <ChevronDown className="size-3 shrink-0 text-zinc-500" />
+          <ChevronDown className="size-3 shrink-0 text-[var(--color-text-muted)]" />
         ) : (
-          <ChevronRight className="size-3 shrink-0 text-zinc-500" />
+          <ChevronRight className="size-3 shrink-0 text-[var(--color-text-muted)]" />
         )}
         {isScratchpad ? (
-          <MessageSquare className="size-3.5 shrink-0 text-zinc-500 transition group-hover:text-indigo-400" />
+          <MessageSquare className="size-3.5 shrink-0 text-[var(--color-text-muted)] transition group-hover:text-[var(--color-accent)]" />
         ) : (
-          <FolderOpen className="size-3.5 shrink-0 text-zinc-500 transition group-hover:text-indigo-400" />
+          <FolderOpen className="size-3.5 shrink-0 text-[var(--color-text-muted)] transition group-hover:text-[var(--color-accent)]" />
         )}
         <span className="truncate">{project.name}</span>
 
@@ -399,7 +399,7 @@ function ProjectGroup({
         <div className="ml-auto flex items-center gap-1.5">
           {!isScratchpad && onOpenProjectSettings && (
             <span
-              className="flex size-5 items-center justify-center rounded text-zinc-600 opacity-0 transition hover:bg-zinc-700 hover:text-zinc-300 group-hover:opacity-100"
+              className="flex size-5 items-center justify-center rounded text-[var(--color-text-muted)] opacity-0 transition hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-primary)] group-hover:opacity-100"
               onClick={(e) => {
                 e.stopPropagation();
                 onOpenProjectSettings(project.id);
@@ -412,7 +412,7 @@ function ProjectGroup({
           )}
           {!isScratchpad && onRefreshGitContext && (
             <span
-              className="flex size-5 items-center justify-center rounded text-zinc-600 opacity-0 transition hover:bg-zinc-700 hover:text-zinc-300 group-hover:opacity-100"
+              className="flex size-5 items-center justify-center rounded text-[var(--color-text-muted)] opacity-0 transition hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-primary)] group-hover:opacity-100"
               onClick={(e) => {
                 e.stopPropagation();
                 onRefreshGitContext(project.id);
@@ -424,8 +424,8 @@ function ProjectGroup({
             </span>
           )}
           {runningCount > 0 && (
-            <span className="flex items-center gap-1 rounded-full bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-medium text-blue-400">
-              <span className="size-1.5 rounded-full bg-blue-400 sidebar-pulse" />
+            <span className="flex items-center gap-1 rounded-full bg-[var(--color-accent-sky)]/10 px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-accent-sky)]">
+              <span className="size-1.5 rounded-full bg-[var(--color-accent-sky)] sidebar-pulse" />
               {runningCount}
             </span>
           )}
@@ -442,14 +442,14 @@ function ProjectGroup({
               {pendingDiscoveryCount} new
             </span>
           )}
-          <span className="rounded-full bg-zinc-800 px-1.5 py-0.5 text-[10px] font-medium text-zinc-500">
+          <span className="rounded-full bg-[var(--color-surface-2)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-text-muted)]">
             {visibleSessions.length}
           </span>
         </div>
       </button>
 
       {expanded && (
-        <div className="ml-2 mt-0.5 space-y-0.5 border-l border-zinc-800/60 pl-2">
+        <div className="ml-2 mt-0.5 space-y-0.5 border-l border-[var(--color-border-subtle)] pl-2">
           {visibleSessions.length > 0 &&
             visibleSessions.map((session) => (
               <SessionItem
@@ -466,7 +466,7 @@ function ProjectGroup({
             ))}
           {onNewSession ? (
             <button
-              className="flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-zinc-700/60 bg-zinc-800/20 px-2.5 py-1.5 text-[12px] font-medium text-zinc-500 transition hover:border-indigo-500/40 hover:bg-indigo-500/5 hover:text-indigo-300"
+              className="flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-[var(--color-border)] bg-[var(--color-surface-1)]/40 px-2.5 py-1.5 text-[12px] font-medium text-[var(--color-text-muted)] transition-all duration-200 hover:border-[var(--color-border-glow)] hover:bg-[var(--color-accent-muted)] hover:text-[var(--color-accent)]"
               onClick={onNewSession}
               type="button"
             >
@@ -475,7 +475,7 @@ function ProjectGroup({
             </button>
           ) : (
             visibleSessions.length === 0 && (
-              <div className="px-3 py-3 text-center text-[12px] text-zinc-600">
+              <div className="px-3 py-3 text-center text-[12px] text-[var(--color-text-muted)]">
                 {isScratchpad ? 'No scratchpad chats yet' : 'No sessions yet'}
               </div>
             )
@@ -562,19 +562,19 @@ export function Sidebar({
   return (
     <div className="flex h-full flex-col">
       {/* Header — extra top padding clears the title bar overlay zone */}
-      <div className="drag-region flex items-center justify-between border-b border-[var(--color-border)] px-4 pb-3 pt-3">
+      <div className="drag-region flex items-center justify-between border-b border-[var(--color-border-subtle)] px-4 pb-3 pt-3">
         <div className="flex items-center gap-2.5">
           <img alt="aryx" className="size-8 rounded-xl" src={appIconUrl} />
           <div>
-            <span className="text-sm font-semibold text-zinc-100">aryx</span>
-            <span className="ml-1.5 rounded bg-zinc-800 px-1 py-0.5 text-[9px] font-medium text-zinc-500">
+            <span className="font-display text-sm font-semibold text-[var(--color-text-primary)]">aryx</span>
+            <span className="ml-1.5 rounded bg-[var(--color-surface-2)] px-1 py-0.5 text-[9px] font-medium text-[var(--color-text-muted)]">
               ALPHA
             </span>
           </div>
         </div>
         <div className="flex items-center gap-1">
           <button
-            className="no-drag flex size-8 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-300"
+            className="no-drag flex size-8 items-center justify-center rounded-lg text-[var(--color-text-muted)] transition-all duration-150 hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-primary)]"
             onClick={onOpenSettings}
             title="Settings"
             type="button"
@@ -587,16 +587,16 @@ export function Sidebar({
       {/* Search + Filters */}
       <div className="space-y-2 px-3 pt-3 pb-1">
         <div className="relative">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-zinc-500" />
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-[var(--color-text-muted)]" />
           <input
-            className="w-full rounded-lg border border-zinc-800 bg-zinc-900/60 py-1.5 pl-8 pr-8 text-[12px] text-zinc-200 placeholder-zinc-600 outline-none transition focus:border-zinc-700 focus:bg-zinc-900"
+            className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-0)]/60 py-1.5 pl-8 pr-8 text-[12px] text-[var(--color-text-primary)] placeholder-[var(--color-text-muted)] outline-none transition-all duration-200 focus:border-[var(--color-border-glow)] focus:bg-[var(--color-surface-0)] focus:shadow-[0_0_12px_rgba(36,92,249,0.06)]"
             placeholder="Search sessions…"
             value={searchText}
             onChange={(e) => setSearchText(e.target.value)}
           />
           {searchText && (
             <button
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
               onClick={() => setSearchText('')}
               type="button"
             >
@@ -615,11 +615,11 @@ export function Sidebar({
         {isQueryActive ? (
           /* ── Flat search / filter results ──────────────────────── */
           <div className="space-y-1">
-            <div className="px-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-600">
+            <div className="px-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--color-text-muted)]">
               Results ({queryResults.length})
             </div>
             {queryResults.length === 0 ? (
-              <div className="px-3 py-6 text-center text-[12px] text-zinc-600">
+              <div className="px-3 py-6 text-center text-[12px] text-[var(--color-text-muted)]">
                 No sessions match your search
               </div>
             ) : (
@@ -643,7 +643,7 @@ export function Sidebar({
           <div className="space-y-3">
             {scratchpadProject && (
               <div className="space-y-1">
-                <div className="px-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-600">
+                <div className="px-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--color-text-muted)]">
                   Scratchpad
                 </div>
                 <ProjectGroup
@@ -666,21 +666,21 @@ export function Sidebar({
             {userProjects.length === 0 ? (
               <div className="flex flex-col items-center gap-4 px-4 py-8 text-center">
                 <div className="relative">
-                  <div className="flex size-14 items-center justify-center rounded-2xl bg-zinc-800/50 ring-1 ring-zinc-700/50">
-                    <FolderOpen className="size-7 text-zinc-600" />
+                  <div className="flex size-14 items-center justify-center rounded-2xl bg-[var(--color-surface-2)] ring-1 ring-[var(--color-border)]">
+                    <FolderOpen className="size-7 text-[var(--color-text-muted)]" />
                   </div>
-                  <div className="absolute -bottom-1 -right-1 flex size-6 items-center justify-center rounded-full bg-indigo-600 ring-2 ring-[var(--color-surface-1)]">
+                  <div className="absolute -bottom-1 -right-1 flex size-6 items-center justify-center rounded-full brand-gradient-bg ring-2 ring-[var(--color-surface-1)]">
                     <Plus className="size-3 text-white" />
                   </div>
                 </div>
                 <div>
-                  <p className="text-[13px] font-medium text-zinc-300">No projects yet</p>
-                  <p className="mt-1 text-[12px] leading-relaxed text-zinc-500">
+                  <p className="text-[13px] font-medium text-[var(--color-text-primary)]">No projects yet</p>
+                  <p className="mt-1 text-[12px] leading-relaxed text-[var(--color-text-muted)]">
                     Use Scratchpad for ad-hoc chat or add a repo<br />to work against project files
                   </p>
                 </div>
                 <button
-                  className="rounded-lg bg-indigo-600 px-4 py-2 text-[13px] font-medium text-white transition hover:bg-indigo-500"
+                  className="rounded-lg brand-gradient-bg px-4 py-2 text-[13px] font-medium text-white shadow-[0_2px_12px_rgba(36,92,249,0.25)] transition-all duration-200 hover:shadow-[0_4px_20px_rgba(36,92,249,0.35)]"
                   onClick={onAddProject}
                   type="button"
                 >
@@ -689,7 +689,7 @@ export function Sidebar({
               </div>
             ) : (
               <div className="space-y-1">
-                <div className="px-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-600">
+                <div className="px-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--color-text-muted)]">
                   Projects
                 </div>
                 {userProjects.map((project) => (
@@ -717,9 +717,9 @@ export function Sidebar({
 
       {/* Footer */}
       {userProjects.length > 0 && (
-        <div className="border-t border-[var(--color-border)] px-3 py-2">
+        <div className="border-t border-[var(--color-border-subtle)] px-3 py-2">
           <button
-            className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-[12px] text-zinc-500 transition hover:bg-zinc-800/60 hover:text-zinc-300"
+            className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-[12px] text-[var(--color-text-muted)] transition-all duration-150 hover:bg-[var(--color-surface-2)]/60 hover:text-[var(--color-text-primary)]"
             onClick={onAddProject}
             type="button"
           >
@@ -734,7 +734,7 @@ export function Sidebar({
         <>
           <div className="fixed inset-0 z-40" onClick={closeMenu} onKeyDown={(e) => { if (e.key === 'Escape') closeMenu(); }} />
           <div
-            className="fixed z-50 w-40 rounded-lg border border-zinc-700 bg-zinc-900 py-1 shadow-xl"
+            className="fixed z-50 w-40 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-1)] py-1 shadow-[0_8px_32px_rgba(0,0,0,0.4)]"
             role="menu"
             style={{ top: menuState.top, left: menuState.left }}
           >
@@ -771,7 +771,7 @@ export function Sidebar({
               }}
             />
             <ActionMenuItem
-              className="text-red-400 hover:bg-red-500/10"
+              className="text-[var(--color-status-error)] hover:bg-[var(--color-status-error)]/10"
               icon={Trash2}
               label="Delete"
               onClick={() => {

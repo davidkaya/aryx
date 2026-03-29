@@ -24,20 +24,20 @@ export function McpAuthBanner({
   const hasFailed = mcpAuth.status === 'failed';
 
   return (
-    <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3" role="alert">
+    <div className="rounded-xl border border-[var(--color-glass-border)] border-l-4 border-l-[var(--color-status-warning)] bg-[var(--color-glass)] px-4 py-3" role="alert">
       <div className="flex items-start gap-2.5">
-        <KeyRound className="mt-0.5 size-4 shrink-0 text-amber-400" />
+        <KeyRound className="mt-0.5 size-4 shrink-0 text-[var(--color-status-warning)]" />
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
-              <span className="text-[13px] font-semibold text-amber-200">Authentication required</span>
-              <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-amber-400">
+              <span className="text-[13px] font-semibold text-[var(--color-status-warning)]">Authentication required</span>
+              <span className="rounded-full bg-[var(--color-status-warning)]/15 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-[var(--color-status-warning)]">
                 MCP
               </span>
             </div>
             <button
               aria-label="Dismiss authentication prompt"
-              className="rounded p-0.5 text-zinc-500 transition hover:bg-zinc-700/50 hover:text-zinc-300"
+              className="rounded p-0.5 text-[var(--color-text-muted)] transition-all duration-200 hover:bg-[var(--color-surface-3)]/50 hover:text-[var(--color-text-primary)]"
               onClick={handleDismiss}
               type="button"
             >
@@ -45,21 +45,21 @@ export function McpAuthBanner({
             </button>
           </div>
 
-          <p className="mt-2 text-[13px] leading-relaxed text-zinc-200">
+          <p className="mt-2 text-[13px] leading-relaxed text-[var(--color-text-primary)]">
             The MCP server{' '}
-            <span className="font-medium text-amber-200">{mcpAuth.serverName}</span>{' '}
+            <span className="font-medium text-[var(--color-status-warning)]">{mcpAuth.serverName}</span>{' '}
             requires OAuth authentication to connect.
           </p>
 
-          <p className="mt-1 text-[11px] text-zinc-500">{mcpAuth.serverUrl}</p>
+          <p className="mt-1 text-[11px] text-[var(--color-text-muted)]">{mcpAuth.serverUrl}</p>
 
           {hasFailed && mcpAuth.errorMessage && (
-            <p className="mt-2 text-[12px] text-red-400">{mcpAuth.errorMessage}</p>
+            <p className="mt-2 text-[12px] text-[var(--color-status-error)]">{mcpAuth.errorMessage}</p>
           )}
 
           <div className="mt-3 flex items-center gap-3">
             <button
-              className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500/20 px-3 py-1.5 text-[12px] font-medium text-amber-200 transition hover:bg-amber-500/30 disabled:opacity-50"
+              className="brand-gradient-bg inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] font-medium text-white transition-all duration-200 hover:brightness-110 disabled:opacity-50"
               disabled={isAuthenticating}
               onClick={handleAuthenticate}
               type="button"
@@ -75,7 +75,7 @@ export function McpAuthBanner({
                 'Authenticate in browser'
               )}
             </button>
-            <span className="text-[11px] text-zinc-500">
+            <span className="text-[11px] text-[var(--color-text-muted)]">
               {isAuthenticating
                 ? 'Waiting for consent in the browser…'
                 : 'Opens your browser for OAuth consent. Token is stored for this session only.'}

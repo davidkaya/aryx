@@ -24,12 +24,12 @@ import { ProviderIcon } from './ProviderIcons';
 /* ── Mode accent colours ───────────────────────────────────── */
 
 const modeAccent: Record<OrchestrationMode, { dot: string; bar: string; label: string }> = {
-  single:       { dot: 'bg-indigo-400',  bar: 'bg-indigo-500/60',  label: 'text-indigo-400' },
-  sequential:   { dot: 'bg-amber-400',   bar: 'bg-amber-500/60',   label: 'text-amber-400' },
-  concurrent:   { dot: 'bg-emerald-400', bar: 'bg-emerald-500/60', label: 'text-emerald-400' },
-  handoff:      { dot: 'bg-sky-400',     bar: 'bg-sky-500/60',     label: 'text-sky-400' },
-  'group-chat': { dot: 'bg-violet-400',  bar: 'bg-violet-500/60',  label: 'text-violet-400' },
-  magentic:     { dot: 'bg-zinc-500',    bar: 'bg-zinc-600/60',    label: 'text-zinc-500' },
+  single:       { dot: 'bg-[#245CF9]',                       bar: 'bg-[#245CF9] opacity-60',                       label: 'text-[#245CF9]' },
+  sequential:   { dot: 'bg-[var(--color-status-warning)]',   bar: 'bg-[var(--color-status-warning)] opacity-60',   label: 'text-[var(--color-status-warning)]' },
+  concurrent:   { dot: 'bg-[var(--color-status-success)]',   bar: 'bg-[var(--color-status-success)] opacity-60',   label: 'text-[var(--color-status-success)]' },
+  handoff:      { dot: 'bg-[var(--color-accent-sky)]',       bar: 'bg-[var(--color-accent-sky)] opacity-60',       label: 'text-[var(--color-accent-sky)]' },
+  'group-chat': { dot: 'bg-[var(--color-accent-purple)]',   bar: 'bg-[var(--color-accent-purple)] opacity-60',   label: 'text-[var(--color-accent-purple)]' },
+  magentic:     { dot: 'bg-[var(--color-text-muted)]',       bar: 'bg-[var(--color-text-muted)] opacity-60',       label: 'text-[var(--color-text-muted)]' },
 };
 
 /* ── Helpers ───────────────────────────────────────────────── */
@@ -62,7 +62,7 @@ const modeLabels: Record<OrchestrationMode, string> = {
 
 function SectionHeader({ children }: { children: ReactNode }) {
   return (
-    <h3 className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-600">
+    <h3 className="font-display mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
       {children}
     </h3>
   );
@@ -87,7 +87,7 @@ function AgentRow({
   const isCompleted = isAgentActivityCompleted(row.activity);
 
   return (
-    <div className={`relative flex gap-2.5 py-2.5 ${isLast ? '' : 'border-b border-zinc-800/50'}`}>
+    <div className={`relative flex gap-2.5 py-2.5 ${isLast ? '' : 'border-b border-[var(--color-border-subtle)]'}`}>
       {/* Left accent bar — visible only when this agent is actively working */}
       {isActive && (
         <div className={`absolute -left-3 bottom-2 top-2 w-[3px] rounded-full ${accent.bar}`} />
@@ -96,12 +96,12 @@ function AgentRow({
       {/* Status dot */}
       <div className="flex shrink-0 pt-0.5">
         <span
-          className={`size-2 rounded-full ${
+          className={`size-2 rounded-full transition-all duration-200 ${
             isActive
-              ? `animate-pulse ${accent.dot}`
+              ? `animate-pulse ${accent.dot} ring-2 ring-[var(--color-border-glow)]`
               : isCompleted
-                ? 'bg-emerald-400'
-                : 'bg-zinc-700'
+                ? 'bg-[var(--color-status-success)]'
+                : 'bg-[var(--color-surface-3)]'
           }`}
         />
       </div>
@@ -109,13 +109,13 @@ function AgentRow({
       {/* Content */}
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
-          <span className="truncate text-[12px] font-medium text-zinc-200">{row.agentName}</span>
+          <span className="truncate text-[12px] font-medium text-[var(--color-text-primary)]">{row.agentName}</span>
         </div>
 
         {/* Model + effort inline */}
         {agent && (
           <div className="mt-1 flex flex-wrap items-center gap-1">
-            <span className="inline-flex items-center gap-1 text-[10px] text-zinc-500">
+            <span className="inline-flex items-center gap-1 text-[10px] text-[var(--color-text-muted)]">
               {(() => {
                 const prov = inferProvider(agent.model);
                 return prov ? <ProviderIcon provider={prov} className="size-2.5" /> : null;
@@ -124,8 +124,8 @@ function AgentRow({
             </span>
             {agent.reasoningEffort && (
               <>
-                <span className="text-[10px] text-zinc-700">·</span>
-                <span className="inline-flex items-center gap-0.5 text-[10px] text-zinc-500">
+                <span className="text-[10px] text-[var(--color-text-muted)]">·</span>
+                <span className="inline-flex items-center gap-0.5 text-[10px] text-[var(--color-text-muted)]">
                   <Sparkles className="size-2" />
                   {formatEffort(agent.reasoningEffort)}
                 </span>
@@ -141,8 +141,8 @@ function AgentRow({
               isActive
                 ? accent.label
                 : isCompleted
-                  ? 'text-emerald-400'
-                  : 'text-zinc-600'
+                  ? 'text-[var(--color-status-success)]'
+                  : 'text-[var(--color-text-muted)]'
             }`}
           >
             {formatAgentActivityLabel(row.activity)}
@@ -151,20 +151,20 @@ function AgentRow({
 
         {/* Per-agent usage summary */}
         {agentUsage && agentUsage.requestCount > 0 && (
-          <div className="mt-0.5 flex items-center gap-1 text-[10px] text-zinc-600">
-            <span className="tabular-nums">{formatTokenCount(agentUsage.inputTokens)} in</span>
-            <span className="text-zinc-700">·</span>
-            <span className="tabular-nums">{formatTokenCount(agentUsage.outputTokens)} out</span>
+          <div className="mt-0.5 flex items-center gap-1 text-[10px] text-[var(--color-text-muted)]">
+            <span className="font-mono tabular-nums">{formatTokenCount(agentUsage.inputTokens)} in</span>
+            <span className="text-[var(--color-text-muted)]">·</span>
+            <span className="font-mono tabular-nums">{formatTokenCount(agentUsage.outputTokens)} out</span>
             {agentUsage.cost > 0 && (
               <>
-                <span className="text-zinc-700">·</span>
-                <span className="tabular-nums">{agentUsage.cost.toFixed(2)} cost</span>
+                <span className="text-[var(--color-text-muted)]">·</span>
+                <span className="font-mono tabular-nums">{agentUsage.cost.toFixed(2)} cost</span>
               </>
             )}
             {agentUsage.durationMs > 0 && (
               <>
-                <span className="text-zinc-700">·</span>
-                <span className="tabular-nums">{formatDuration(agentUsage.durationMs)}</span>
+                <span className="text-[var(--color-text-muted)]">·</span>
+                <span className="font-mono tabular-nums">{formatDuration(agentUsage.durationMs)}</span>
               </>
             )}
           </div>
@@ -182,15 +182,15 @@ function TurnEventIcon({ kind, phase, success }: { kind: SessionEventKind; phase
   const base = 'size-3';
   switch (kind) {
     case 'subagent':
-      return <ArrowRight className={`${base} ${success === false ? 'text-red-400' : 'text-sky-400'}`} />;
+      return <ArrowRight className={`${base} ${success === false ? 'text-[var(--color-status-error)]' : 'text-[var(--color-accent-sky)]'}`} />;
     case 'hook-lifecycle':
-      return <Cog className={`${base} ${phase === 'start' ? 'animate-spin text-amber-400' : success === false ? 'text-red-400' : 'text-emerald-400'}`} />;
+      return <Cog className={`${base} ${phase === 'start' ? 'animate-spin text-[var(--color-status-warning)]' : success === false ? 'text-[var(--color-status-error)]' : 'text-[var(--color-status-success)]'}`} />;
     case 'skill-invoked':
-      return <Sparkles className={`${base} text-violet-400`} />;
+      return <Sparkles className={`${base} text-[var(--color-accent-purple)]`} />;
     case 'session-compaction':
-      return <CheckCircle2 className={`${base} ${phase === 'start' ? 'animate-pulse text-amber-400' : 'text-emerald-400'}`} />;
+      return <CheckCircle2 className={`${base} ${phase === 'start' ? 'animate-pulse text-[var(--color-status-warning)]' : 'text-[var(--color-status-success)]'}`} />;
     default:
-      return <Zap className={`${base} text-zinc-500`} />;
+      return <Zap className={`${base} text-[var(--color-text-muted)]`} />;
   }
 }
 
@@ -238,19 +238,19 @@ export function ActivityPanel({
       {/* Header — top padding clears the title bar overlay zone */}
       <div className="drag-region border-b border-[var(--color-border)] px-4 pb-3 pt-3">
         <div className="flex min-h-8 items-center gap-2">
-          <Activity className="size-4 text-zinc-500" />
-          <span className="text-[12px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
+          <Activity className="size-4 text-[var(--color-text-muted)]" />
+          <span className="font-display text-[12px] font-semibold uppercase tracking-[0.12em] text-[var(--color-text-secondary)]">
             Activity
           </span>
           {hasPendingApproval ? (
             <span className="flex items-center gap-1">
-              <ShieldAlert className="size-3 text-amber-400" />
-              <span className="text-[9px] font-semibold uppercase tracking-wider text-amber-400">
+              <ShieldAlert className="size-3 text-[var(--color-status-warning)]" />
+              <span className="text-[9px] font-semibold uppercase tracking-wider text-[var(--color-status-warning)]">
                 Approval{totalApprovalCount > 1 ? `s (${totalApprovalCount})` : ''}
               </span>
             </span>
           ) : isBusy ? (
-            <span className="size-1.5 animate-pulse rounded-full bg-blue-400" />
+            <span className="size-1.5 animate-pulse rounded-full bg-[var(--color-status-info)]" />
           ) : null}
         </div>
       </div>
@@ -261,7 +261,7 @@ export function ActivityPanel({
           <SectionHeader>
             <Users className="size-3" />
             <span>Agents</span>
-            <span className="rounded-full bg-zinc-800 px-1.5 py-0.5 text-[9px] tabular-nums text-zinc-500">
+            <span className="font-mono rounded-full bg-[var(--color-surface-2)] px-1.5 py-0.5 text-[9px] tabular-nums text-[var(--color-text-muted)]">
               {activityRows.length}
             </span>
             <span className={`ml-auto text-[9px] font-medium normal-case tracking-normal ${accent.label}`}>
@@ -270,7 +270,7 @@ export function ActivityPanel({
           </SectionHeader>
 
           {activityRows.length > 0 ? (
-            <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 px-3">
+            <div className="glass-surface rounded-lg px-3">
               {activityRows.map((row, index) => {
                 const agentKey = row.activity?.agentId ?? row.key;
                 const agentUsage = sessionRequestUsage?.perAgent[agentKey]
@@ -288,7 +288,7 @@ export function ActivityPanel({
               })}
             </div>
           ) : (
-            <p className="py-4 text-center text-[11px] text-zinc-600">No agents configured</p>
+            <p className="py-4 text-center text-[11px] text-[var(--color-text-muted)]">No agents configured</p>
           )}
         </div>
 
@@ -300,32 +300,32 @@ export function ActivityPanel({
               <span>Session Usage</span>
             </SectionHeader>
 
-            <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 px-3 py-2.5">
-              <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-zinc-400">
-                <span className="font-medium tabular-nums">
+            <div className="glass-surface rounded-lg px-3 py-2.5">
+              <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-[var(--color-text-secondary)]">
+                <span className="font-mono font-medium tabular-nums">
                   {sessionRequestUsage.requestCount} premium request{sessionRequestUsage.requestCount === 1 ? '' : 's'}
                 </span>
                 {sessionRequestUsage.totalNanoAiu > 0 && (
                   <>
-                    <span className="text-zinc-700">·</span>
-                    <span className="tabular-nums">{formatNanoAiu(sessionRequestUsage.totalNanoAiu)} AIU</span>
+                    <span className="text-[var(--color-text-muted)]">·</span>
+                    <span className="font-mono tabular-nums">{formatNanoAiu(sessionRequestUsage.totalNanoAiu)} AIU</span>
                   </>
                 )}
               </div>
-              <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] text-zinc-500">
-                <span className="tabular-nums">{formatTokenCount(sessionRequestUsage.totalInputTokens)} in</span>
-                <span className="text-zinc-700">·</span>
-                <span className="tabular-nums">{formatTokenCount(sessionRequestUsage.totalOutputTokens)} out</span>
+              <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] text-[var(--color-text-muted)]">
+                <span className="font-mono tabular-nums">{formatTokenCount(sessionRequestUsage.totalInputTokens)} in</span>
+                <span className="text-[var(--color-text-muted)]">·</span>
+                <span className="font-mono tabular-nums">{formatTokenCount(sessionRequestUsage.totalOutputTokens)} out</span>
                 {sessionRequestUsage.totalCost > 0 && (
                   <>
-                    <span className="text-zinc-700">·</span>
-                    <span className="tabular-nums">{sessionRequestUsage.totalCost.toFixed(2)} cost</span>
+                    <span className="text-[var(--color-text-muted)]">·</span>
+                    <span className="font-mono tabular-nums">{sessionRequestUsage.totalCost.toFixed(2)} cost</span>
                   </>
                 )}
                 {sessionRequestUsage.totalDurationMs > 0 && (
                   <>
-                    <span className="text-zinc-700">·</span>
-                    <span className="tabular-nums">{formatDuration(sessionRequestUsage.totalDurationMs)} total</span>
+                    <span className="text-[var(--color-text-muted)]">·</span>
+                    <span className="font-mono tabular-nums">{formatDuration(sessionRequestUsage.totalDurationMs)} total</span>
                   </>
                 )}
               </div>
@@ -339,7 +339,7 @@ export function ActivityPanel({
             <Clock className="size-3" />
             <span>Timeline</span>
             {session.runs.length > 0 && (
-              <span className="rounded-full bg-zinc-800 px-1.5 py-0.5 text-[9px] tabular-nums text-zinc-500">
+              <span className="font-mono rounded-full bg-[var(--color-surface-2)] px-1.5 py-0.5 text-[9px] tabular-nums text-[var(--color-text-muted)]">
                 {session.runs.length}
               </span>
             )}
@@ -354,12 +354,12 @@ export function ActivityPanel({
             <SectionHeader>
               <Zap className="size-3" />
               <span>Events</span>
-              <span className="rounded-full bg-zinc-800 px-1.5 py-0.5 text-[9px] tabular-nums text-zinc-500">
+              <span className="font-mono rounded-full bg-[var(--color-surface-2)] px-1.5 py-0.5 text-[9px] tabular-nums text-[var(--color-text-muted)]">
                 {turnEvents.length}
               </span>
             </SectionHeader>
 
-            <div className="space-y-0.5 rounded-lg border border-zinc-800 bg-zinc-900/40 px-3 py-2">
+            <div className="glass-surface space-y-0.5 rounded-lg px-3 py-2">
               {turnEvents.slice().reverse().map((entry, index) => (
                 <div key={index} className="flex items-start gap-2 py-1">
                   <div className="mt-0.5 shrink-0">
@@ -367,13 +367,13 @@ export function ActivityPanel({
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5">
-                      <span className="text-[11px] font-medium text-zinc-300">{entry.label}</span>
-                      <span className="ml-auto shrink-0 text-[9px] tabular-nums text-zinc-700">
+                      <span className="text-[11px] font-medium text-[var(--color-text-secondary)]">{entry.label}</span>
+                      <span className="font-mono ml-auto shrink-0 text-[9px] tabular-nums text-[var(--color-text-muted)]">
                         {formatTurnEventTimestamp(entry.occurredAt)}
                       </span>
                     </div>
                     {entry.detail && (
-                      <p className="text-[10px] leading-snug text-zinc-600">{entry.detail}</p>
+                      <p className="text-[10px] leading-snug text-[var(--color-text-muted)]">{entry.detail}</p>
                     )}
                   </div>
                 </div>

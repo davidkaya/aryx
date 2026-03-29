@@ -51,9 +51,9 @@ const iconComponents: Record<ModelProvider, React.FC<{ className?: string }>> = 
 };
 
 export const providerColors: Record<ModelProvider, string> = {
-  openai: 'text-emerald-400',
-  anthropic: 'text-orange-400',
-  google: 'text-blue-400',
+  openai: 'text-[var(--color-status-success)]',
+  anthropic: 'text-[var(--color-accent-purple)]',
+  google: 'text-[var(--color-status-info)]',
 };
 
 export function ProviderIcon({ provider, className }: ProviderIconProps) {

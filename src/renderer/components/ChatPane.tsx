@@ -250,16 +250,16 @@ export function ChatPane({
   return (
     <div className="flex h-full flex-col">
       {/* Header — extra top padding clears the title bar overlay zone */}
-      <header className="drag-region border-b border-[var(--color-border)] px-6 pb-3 pt-3">
+      <header className="drag-region border-b border-[var(--color-border-subtle)] px-6 pb-3 pt-3">
         <div className="flex min-h-8 items-center justify-between">
           <div className="min-w-0">
-            <h2 className="truncate text-[13px] font-semibold leading-tight text-zinc-100">{session.title}</h2>
-            <p className="truncate text-[11px] leading-tight text-zinc-500">
+            <h2 className="font-display truncate text-[13px] font-semibold leading-tight text-[var(--color-text-primary)]">{session.title}</h2>
+            <p className="truncate text-[11px] leading-tight text-[var(--color-text-muted)]">
               {isScratchpad
                 ? `Scratchpad · ${pattern.name}`
                 : `${project.name} · ${pattern.name} · ${pattern.mode}`}
               {!isScratchpad && project.git?.status === 'ready' && (
-                <span className="ml-2 inline-flex items-center gap-1 text-zinc-600">
+                <span className="ml-2 inline-flex items-center gap-1 text-[var(--color-text-muted)]">
                   <GitBranch className="inline size-2.5" />
                   {project.git.branch ?? project.git.head?.shortHash ?? 'HEAD'}
                   {project.git.isDirty && (
@@ -273,31 +273,31 @@ export function ChatPane({
           </div>
           <div className="flex items-center gap-2">
             {pendingApproval && (
-              <div className="flex items-center gap-1.5 text-[12px] font-medium text-amber-400">
+              <div className="flex items-center gap-1.5 text-[12px] font-medium text-[var(--color-status-warning)]">
                 <ShieldAlert className="size-3.5" />
                 Awaiting approval
                 {queuedApprovals.length > 0 && (
-                  <span className="rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] tabular-nums">
+                  <span className="rounded-full bg-[var(--color-status-warning)]/15 px-1.5 py-0.5 text-[10px] tabular-nums">
                     +{queuedApprovals.length} queued
                   </span>
                 )}
               </div>
             )}
             {pendingUserInput && !pendingApproval && (
-              <div className="flex items-center gap-1.5 text-[12px] font-medium text-blue-400">
+              <div className="flex items-center gap-1.5 text-[12px] font-medium text-[var(--color-accent-sky)]">
                 <MessageCircleQuestion className="size-3.5" />
                 Awaiting your input
               </div>
             )}
-            {isSessionBusy && !pendingApproval && !pendingUserInput && <span className="size-2 animate-pulse rounded-full bg-blue-400" />}
+            {isSessionBusy && !pendingApproval && !pendingUserInput && <span className="size-2 animate-pulse rounded-full bg-[var(--color-accent-sky)]" />}
             {session.status === 'error' && (
-              <div className="flex items-center gap-1.5 text-[12px] text-red-400">
+              <div className="flex items-center gap-1.5 text-[12px] text-[var(--color-status-error)]">
                 <AlertCircle className="size-3.5" />
                 Error
               </div>
             )}
             {session.status === 'idle' && !pendingApproval && !pendingUserInput && session.messages.length > 0 && (
-              <span className="text-[12px] text-zinc-600">
+              <span className="text-[12px] text-[var(--color-text-muted)]">
                 {session.messages.length} message{session.messages.length === 1 ? '' : 's'}
               </span>
             )}
@@ -309,18 +309,18 @@ export function ChatPane({
       <div className="flex-1 overflow-y-auto" ref={transcriptRef}>
         {session.messages.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center">
-            <Bot className="size-10 text-zinc-800" />
-            <p className="text-[13px] text-zinc-500">Send a message to start the conversation</p>
-            <p className="text-[12px] text-zinc-700">
+            <Bot className="size-10 text-[var(--color-surface-3)]" />
+            <p className="text-[13px] text-[var(--color-text-muted)]">Send a message to start the conversation</p>
+            <p className="text-[12px] text-[var(--color-text-muted)]">
               {isScratchpad ? (
                 <>
                   Scratchpad is ready for ad-hoc questions using{' '}
-                  <span className="text-zinc-500">{pattern.name}</span>
+                  <span className="text-[var(--color-text-secondary)]">{pattern.name}</span>
                 </>
               ) : (
                 <>
-                  Using <span className="text-zinc-500">{pattern.name}</span> in{' '}
-                  <span className="text-zinc-500">{project.name}</span>
+                  Using <span className="text-[var(--color-text-secondary)]">{pattern.name}</span> in{' '}
+                  <span className="text-[var(--color-text-secondary)]">{project.name}</span>
                 </>
               )}
             </p>
@@ -333,14 +333,14 @@ export function ChatPane({
                 const phase = getAssistantMessagePhase(session, message, index);
                 const assistantContainerClass =
                   phase === 'thinking'
-                    ? 'border-sky-500/20 bg-sky-500/5'
+                    ? 'border-[var(--color-accent-sky)]/20 bg-[var(--color-accent-sky)]/5'
                     : phase === 'final'
-                      ? 'border-emerald-500/20 bg-emerald-500/5'
-                      : 'border-zinc-800 bg-zinc-900/40';
+                      ? 'border-[var(--color-status-success)]/20 bg-[var(--color-status-success)]/5'
+                      : 'border-[var(--color-border)] bg-[var(--color-surface-1)]/40';
                 const assistantBadgeClass =
                   phase === 'thinking'
-                    ? 'border-sky-400/20 bg-sky-400/10 text-sky-300'
-                    : 'border-emerald-400/20 bg-emerald-400/10 text-emerald-300';
+                    ? 'border-[var(--color-accent-sky)]/20 bg-[var(--color-accent-sky)]/10 text-[var(--color-accent-sky)]'
+                    : 'border-[var(--color-status-success)]/20 bg-[var(--color-status-success)]/10 text-[var(--color-status-success)]';
                 const phaseLabel =
                   phase === 'thinking' ? 'Thinking' : phase === 'final' ? 'Final' : undefined;
 
@@ -349,13 +349,13 @@ export function ChatPane({
                     <div className="flex gap-3">
                       <div
                         className={`mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full ${
-                          isUser ? 'bg-indigo-600 text-white' : 'bg-zinc-800 text-zinc-400'
+                          isUser ? 'brand-gradient-bg text-white' : 'bg-[var(--color-surface-2)] text-[var(--color-text-secondary)]'
                         }`}
                       >
                         {isUser ? <User className="size-3.5" /> : <Bot className="size-3.5" />}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className="mb-1 flex items-center gap-2 text-[12px] font-medium text-zinc-400">
+                        <div className="mb-1 flex items-center gap-2 text-[12px] font-medium text-[var(--color-text-secondary)]">
                           <span>{message.authorName}</span>
                           {!isUser && phaseLabel && (
                             <span
@@ -368,8 +368,8 @@ export function ChatPane({
                         <div
                           className={
                             isUser
-                              ? 'text-[14px] leading-relaxed text-zinc-200'
-                              : `rounded-xl border px-4 py-3 text-[14px] leading-relaxed text-zinc-200 ${assistantContainerClass}`
+                              ? 'text-[14px] leading-relaxed text-[var(--color-text-primary)]'
+                              : `rounded-xl border px-4 py-3 text-[14px] leading-relaxed text-[var(--color-text-primary)] ${assistantContainerClass}`
                           }
                         >
                           {/* Attachment thumbnails */}
@@ -380,13 +380,13 @@ export function ChatPane({
                                   <img
                                     key={attIdx}
                                     alt={getAttachmentDisplayName(att)}
-                                    className="max-h-48 max-w-xs rounded-lg border border-zinc-700 object-cover"
+                                    className="max-h-48 max-w-xs rounded-lg border border-[var(--color-border)] object-cover"
                                     src={`data:${att.mimeType};base64,${att.data}`}
                                   />
                                 ) : (
                                   <div
                                     key={attIdx}
-                                    className="flex items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-800 px-2 py-1 text-[11px] text-zinc-400"
+                                    className="flex items-center gap-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2 py-1 text-[11px] text-[var(--color-text-secondary)]"
                                   >
                                     <Paperclip className="size-3" />
                                     {getAttachmentDisplayName(att)}
@@ -396,14 +396,14 @@ export function ChatPane({
                             </div>
                           )}
                           {!isUser && message.pending ? (
-                            <div className="whitespace-pre-wrap break-words text-[14px] leading-relaxed text-zinc-200">
+                            <div className="whitespace-pre-wrap break-words text-[14px] leading-relaxed text-[var(--color-text-primary)]">
                               {message.content}
                             </div>
                           ) : (
                             <MarkdownContent content={message.content} />
                           )}
                           {message.pending && message.content && (
-                            <span className="mt-1 inline-block h-4 w-[2px] animate-pulse rounded-sm bg-zinc-400" />
+                            <span className="mt-1 inline-block h-4 w-[2px] animate-pulse rounded-sm bg-[var(--color-accent)]" />
                           )}
                         </div>
                         {message.pending && !message.content && <ThinkingDots />}
@@ -423,24 +423,24 @@ export function ChatPane({
       </div>
 
       {/* Input area */}
-      <div className="border-t border-[var(--color-border)] px-6 py-4">
+      <div className="border-t border-[var(--color-border-subtle)] px-6 py-4">
         {session.lastError && (
-          <div className="mb-3 flex items-start gap-2 rounded-lg bg-red-500/10 px-3 py-2 text-[13px] text-red-300">
-            <AlertCircle className="mt-0.5 size-4 shrink-0 text-red-400" />
+          <div className="mb-3 flex items-start gap-2 rounded-lg bg-[var(--color-status-error)]/10 px-3 py-2 text-[13px] text-[var(--color-status-error)]">
+            <AlertCircle className="mt-0.5 size-4 shrink-0 text-[var(--color-status-error)]" />
             <span>{session.lastError}</span>
           </div>
         )}
 
         {configError && (
-          <div className="mb-3 flex items-start gap-2 rounded-lg bg-red-500/10 px-3 py-2 text-[13px] text-red-300">
-            <AlertCircle className="mt-0.5 size-4 shrink-0 text-red-400" />
+          <div className="mb-3 flex items-start gap-2 rounded-lg bg-[var(--color-status-error)]/10 px-3 py-2 text-[13px] text-[var(--color-status-error)]">
+            <AlertCircle className="mt-0.5 size-4 shrink-0 text-[var(--color-status-error)]" />
             <span>{configError}</span>
           </div>
         )}
 
         {approvalError && (
-          <div className="mb-3 flex items-start gap-2 rounded-lg bg-red-500/10 px-3 py-2 text-[13px] text-red-300">
-            <AlertCircle className="mt-0.5 size-4 shrink-0 text-red-400" />
+          <div className="mb-3 flex items-start gap-2 rounded-lg bg-[var(--color-status-error)]/10 px-3 py-2 text-[13px] text-[var(--color-status-error)]">
+            <AlertCircle className="mt-0.5 size-4 shrink-0 text-[var(--color-status-error)]" />
             <span>{approvalError}</span>
           </div>
         )}
@@ -544,7 +544,7 @@ export function ChatPane({
                     value={sessionReasoningEffort}
                   />
                   {isUpdatingSessionModelConfig && (
-                    <Loader2 className="size-3 animate-spin text-zinc-500" />
+                  <Loader2 className="size-3 animate-spin text-[var(--color-text-muted)]" />
                   )}
                 </div>
               )}
@@ -584,13 +584,13 @@ export function ChatPane({
               {pendingAttachments.map((attachment, index) => (
                 <div
                   key={index}
-                  className="flex items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 text-[11px] text-zinc-300"
+                  className="flex items-center gap-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2.5 py-1.5 text-[11px] text-[var(--color-text-secondary)]"
                 >
-                  <Paperclip className="size-3 text-zinc-500" />
+                  <Paperclip className="size-3 text-[var(--color-text-muted)]" />
                   <span className="max-w-[160px] truncate">{getAttachmentDisplayName(attachment)}</span>
                   <button
                     aria-label="Remove attachment"
-                    className="ml-1 rounded p-0.5 text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300"
+                    className="ml-1 rounded p-0.5 text-[var(--color-text-muted)] hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-primary)]"
                     onClick={() => setPendingAttachments((prev) => prev.filter((_, i) => i !== index))}
                     type="button"
                   >
@@ -601,7 +601,7 @@ export function ChatPane({
             </div>
           )}
 
-          <div className="rounded-xl border border-zinc-700 bg-zinc-900 transition-colors focus-within:border-indigo-500/50">
+          <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-1)] transition-all duration-200 focus-within:border-[var(--color-border-glow)] focus-within:shadow-[0_0_16px_rgba(36,92,249,0.06)]">
             <MarkdownComposer
               ref={composerRef}
               disabled={isComposerDisabled}
@@ -651,7 +651,7 @@ export function ChatPane({
                 {/* Attachment picker */}
                 <button
                   aria-label="Attach image"
-                  className="flex size-8 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-300"
+                  className="flex size-8 items-center justify-center rounded-lg text-[var(--color-text-muted)] transition-all duration-150 hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-primary)]"
                   disabled={isComposerDisabled}
                   onClick={() => {
                     const input = document.createElement('input');
@@ -685,10 +685,10 @@ export function ChatPane({
                   <button
                     aria-label={isPlanMode ? 'Switch to interactive mode' : 'Switch to plan mode'}
                     aria-pressed={isPlanMode}
-                    className={`flex size-8 items-center justify-center rounded-lg transition ${
+                    className={`flex size-8 items-center justify-center rounded-lg transition-all duration-150 ${
                       isPlanMode
-                        ? 'bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/30'
-                        : 'text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300'
+                        ? 'bg-[var(--color-status-success)]/20 text-[var(--color-status-success)] hover:bg-[var(--color-status-success)]/30'
+                        : 'text-[var(--color-text-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-primary)]'
                     }`}
                     disabled={isComposerDisabled}
                     onClick={() => onSetInteractionMode(isPlanMode ? 'interactive' : 'plan')}
@@ -700,16 +700,16 @@ export function ChatPane({
 
                 {/* Send / Stop / Steer button */}
                 <button
-                  className={`flex size-8 items-center justify-center rounded-lg transition ${
+                  className={`flex size-8 items-center justify-center rounded-lg transition-all duration-150 ${
                     isSessionBusy && !hasComposerContent && pendingAttachments.length === 0
-                      ? 'bg-red-600/80 text-white hover:bg-red-500'
+                      ? 'bg-[var(--color-status-error)]/80 text-white hover:bg-[var(--color-status-error)]'
                       : canSubmitInput || pendingAttachments.length > 0
                         ? isSessionBusy
-                          ? 'bg-amber-600 text-white hover:bg-amber-500'
+                          ? 'bg-[var(--color-status-warning)] text-white hover:brightness-110'
                           : isPlanMode
-                            ? 'bg-emerald-600 text-white hover:bg-emerald-500'
-                            : 'bg-indigo-600 text-white hover:bg-indigo-500'
-                        : 'bg-zinc-800 text-zinc-600'
+                            ? 'bg-[var(--color-status-success)] text-white hover:brightness-110'
+                            : 'brand-gradient-bg text-white shadow-[0_2px_12px_rgba(36,92,249,0.25)] hover:shadow-[0_4px_20px_rgba(36,92,249,0.35)]'
+                        : 'bg-[var(--color-surface-2)] text-[var(--color-text-muted)]'
                   }`}
                   disabled={!canSubmitInput && !isSessionBusy && pendingAttachments.length === 0}
                   onClick={() => {
@@ -741,16 +741,16 @@ export function ChatPane({
             </MarkdownComposer>
             {isPlanMode && !isSessionBusy && (
               <div className="flex items-center gap-1.5 px-3 pb-1.5 pt-0.5">
-                <div className="size-1.5 rounded-full bg-emerald-500" />
-                <span className="text-[10px] font-medium text-emerald-400/80">
+                <div className="size-1.5 rounded-full bg-[var(--color-status-success)]" />
+                <span className="text-[10px] font-medium text-[var(--color-status-success)]/80">
                   Plan mode — the agent will propose a plan instead of implementing
                 </span>
               </div>
             )}
             {isSessionBusy && (hasComposerContent || pendingAttachments.length > 0) && (
               <div className="flex items-center gap-1.5 px-3 pb-1.5 pt-0.5">
-                <div className="size-1.5 rounded-full bg-amber-500" />
-                <span className="text-[10px] font-medium text-amber-400/80">
+                <div className="size-1.5 rounded-full bg-[var(--color-status-warning)]" />
+                <span className="text-[10px] font-medium text-[var(--color-status-warning)]/80">
                   Steering — your message will be injected into the current turn
                 </span>
               </div>
@@ -760,15 +760,15 @@ export function ChatPane({
           {/* Session usage bar */}
           {sessionUsage && sessionUsage.tokenLimit > 0 && (
             <div className="px-1 pt-1.5">
-              <div className="flex items-center gap-2 text-[10px] text-zinc-500">
-                <div className="h-1 flex-1 overflow-hidden rounded-full bg-zinc-800">
+              <div className="flex items-center gap-2 text-[10px] text-[var(--color-text-muted)]">
+                <div className="h-1 flex-1 overflow-hidden rounded-full bg-[var(--color-surface-2)]">
                   <div
                     className={`h-full rounded-full transition-all ${
                       sessionUsage.currentTokens / sessionUsage.tokenLimit > 0.9
-                        ? 'bg-red-500'
+                        ? 'bg-[var(--color-status-error)]'
                         : sessionUsage.currentTokens / sessionUsage.tokenLimit > 0.7
-                          ? 'bg-amber-500'
-                          : 'bg-indigo-500/60'
+                          ? 'bg-[var(--color-status-warning)]'
+                          : 'bg-[var(--color-accent)]/60'
                     }`}
                     style={{ width: `${Math.min(100, (sessionUsage.currentTokens / sessionUsage.tokenLimit) * 100)}%` }}
                   />

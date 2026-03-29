@@ -30,21 +30,21 @@ import type { RunTimelineEventRecord, SessionRunRecord } from '@shared/domain/ru
 /* ── Mode accent colours (shared with ActivityPanel) ───────── */
 
 const modeAccent: Record<OrchestrationMode, { dot: string; ring: string; text: string }> = {
-  single:       { dot: 'bg-indigo-400',  ring: 'ring-indigo-500/30', text: 'text-indigo-400' },
-  sequential:   { dot: 'bg-amber-400',   ring: 'ring-amber-500/30',  text: 'text-amber-400' },
-  concurrent:   { dot: 'bg-emerald-400', ring: 'ring-emerald-500/30', text: 'text-emerald-400' },
-  handoff:      { dot: 'bg-sky-400',     ring: 'ring-sky-500/30',    text: 'text-sky-400' },
-  'group-chat': { dot: 'bg-violet-400',  ring: 'ring-violet-500/30', text: 'text-violet-400' },
-  magentic:     { dot: 'bg-zinc-500',    ring: 'ring-zinc-600/30',   text: 'text-zinc-500' },
+  single:       { dot: 'bg-[#245CF9]',                       ring: 'ring-[#245CF9]/30',                       text: 'text-[#245CF9]' },
+  sequential:   { dot: 'bg-[var(--color-status-warning)]',   ring: 'ring-[var(--color-status-warning)]/30',   text: 'text-[var(--color-status-warning)]' },
+  concurrent:   { dot: 'bg-[var(--color-status-success)]',   ring: 'ring-[var(--color-status-success)]/30',   text: 'text-[var(--color-status-success)]' },
+  handoff:      { dot: 'bg-[var(--color-accent-sky)]',       ring: 'ring-[var(--color-accent-sky)]/30',       text: 'text-[var(--color-accent-sky)]' },
+  'group-chat': { dot: 'bg-[var(--color-accent-purple)]',   ring: 'ring-[var(--color-accent-purple)]/30',   text: 'text-[var(--color-accent-purple)]' },
+  magentic:     { dot: 'bg-[var(--color-text-muted)]',       ring: 'ring-[var(--color-text-muted)]/30',       text: 'text-[var(--color-text-muted)]' },
 };
 
 /* ── Status badges ─────────────────────────────────────────── */
 
 const runStatusStyles: Record<SessionRunRecord['status'], { icon: ReactNode; className: string }> = {
-  running:   { icon: <CircleDot className="size-3" />, className: 'text-blue-400' },
-  completed: { icon: <CheckCircle2 className="size-3" />, className: 'text-emerald-400' },
-  cancelled: { icon: <XCircle className="size-3" />, className: 'text-zinc-400' },
-  error:     { icon: <XCircle className="size-3" />, className: 'text-red-400' },
+  running:   { icon: <CircleDot className="size-3" />, className: 'text-[var(--color-status-info)]' },
+  completed: { icon: <CheckCircle2 className="size-3" />, className: 'text-[var(--color-status-success)]' },
+  cancelled: { icon: <XCircle className="size-3" />, className: 'text-[var(--color-text-muted)]' },
+  error:     { icon: <XCircle className="size-3" />, className: 'text-[var(--color-status-error)]' },
 };
 
 /* ── Event node icon ───────────────────────────────────────── */
@@ -53,23 +53,23 @@ function EventIcon({ kind, status }: { kind: RunTimelineEventRecord['kind']; sta
   const base = 'size-3.5';
   switch (kind) {
     case 'run-started':
-      return <Play className={`${base} text-zinc-500`} />;
+      return <Play className={`${base} text-[var(--color-text-muted)]`} />;
     case 'thinking':
-      return <Brain className={`${base} ${status === 'running' ? 'text-sky-400 animate-pulse' : 'text-zinc-500'}`} />;
+      return <Brain className={`${base} ${status === 'running' ? 'text-[var(--color-accent-sky)] animate-pulse' : 'text-[var(--color-text-muted)]'}`} />;
     case 'handoff':
-      return <ArrowRight className={`${base} text-amber-400`} />;
+      return <ArrowRight className={`${base} text-[var(--color-status-warning)]`} />;
     case 'tool-call':
-      return <Wrench className={`${base} text-violet-400`} />;
+      return <Wrench className={`${base} text-[var(--color-accent-purple)]`} />;
     case 'approval':
-      return <AlertTriangle className={`${base} ${status === 'running' ? 'text-amber-400 animate-pulse' : status === 'error' ? 'text-red-400' : 'text-emerald-400'}`} />;
+      return <AlertTriangle className={`${base} ${status === 'running' ? 'text-[var(--color-status-warning)] animate-pulse' : status === 'error' ? 'text-[var(--color-status-error)]' : 'text-[var(--color-status-success)]'}`} />;
     case 'message':
-      return <MessageSquare className={`${base} ${status === 'running' ? 'text-blue-400 animate-pulse' : status === 'error' ? 'text-red-400' : 'text-emerald-400'}`} />;
+      return <MessageSquare className={`${base} ${status === 'running' ? 'text-[var(--color-status-info)] animate-pulse' : status === 'error' ? 'text-[var(--color-status-error)]' : 'text-[var(--color-status-success)]'}`} />;
     case 'run-completed':
-      return <CheckCircle2 className={`${base} text-emerald-400`} />;
+      return <CheckCircle2 className={`${base} text-[var(--color-status-success)]`} />;
     case 'run-cancelled':
-      return <XCircle className={`${base} text-zinc-400`} />;
+      return <XCircle className={`${base} text-[var(--color-text-muted)]`} />;
     case 'run-failed':
-      return <AlertTriangle className={`${base} text-red-400`} />;
+      return <AlertTriangle className={`${base} text-[var(--color-status-error)]`} />;
   }
 }
 
@@ -92,19 +92,19 @@ function TimelineEventRow({
 
   return (
     <button
-      className={`group relative flex w-full gap-2.5 text-left ${terminal ? 'py-1' : 'py-1.5'} ${isClickable ? 'cursor-pointer' : 'cursor-default'}`}
+      className={`group relative flex w-full gap-2.5 text-left transition-all duration-200 ${terminal ? 'py-1' : 'py-1.5'} ${isClickable ? 'cursor-pointer' : 'cursor-default'}`}
       disabled={!isClickable}
       onClick={isClickable ? () => onJumpToMessage(event.messageId!) : undefined}
       type="button"
     >
       {/* Vertical connector line */}
       {!isLast && (
-        <div className="absolute left-[7px] top-[22px] bottom-0 w-px bg-zinc-800" />
+        <div className="absolute left-[7px] top-[22px] bottom-0 w-px bg-[var(--color-border)]" />
       )}
 
       {/* Node */}
       <div className="relative z-10 flex shrink-0 items-start pt-0.5">
-        <div className="flex size-[15px] items-center justify-center rounded-full bg-[var(--color-surface-1)]">
+        <div className={`flex size-[15px] items-center justify-center rounded-full ${event.status === 'running' ? 'brand-gradient-bg' : 'bg-[var(--color-surface-2)]'}`}>
           <EventIcon kind={event.kind} status={event.status} />
         </div>
       </div>
@@ -112,41 +112,41 @@ function TimelineEventRow({
       {/* Content */}
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
-          <span className={`text-[11px] font-medium ${terminal ? 'text-zinc-600' : 'text-zinc-300'} ${isClickable ? 'group-hover:text-indigo-300' : ''}`}>
+          <span className={`text-[11px] font-medium ${terminal ? 'text-[var(--color-text-muted)]' : 'text-[var(--color-text-secondary)]'} ${isClickable ? 'group-hover:text-[var(--color-text-accent)]' : ''}`}>
             {label}
           </span>
           {/* Approval kind badge */}
           {event.kind === 'approval' && event.approvalKind && (
             <span className={`rounded-full px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wider ${
               event.status === 'running'
-                ? 'bg-amber-500/15 text-amber-400'
+                ? 'bg-[var(--color-status-warning)]/15 text-[var(--color-status-warning)]'
                 : event.status === 'completed'
-                  ? 'bg-emerald-500/15 text-emerald-400'
-                  : 'bg-red-500/15 text-red-400'
+                  ? 'bg-[var(--color-status-success)]/15 text-[var(--color-status-success)]'
+                  : 'bg-[var(--color-status-error)]/15 text-[var(--color-status-error)]'
             }`}>
               {event.approvalKind === 'final-response' ? 'response' : 'tool'}
             </span>
           )}
-          <span className="ml-auto shrink-0 text-[9px] tabular-nums text-zinc-700">{timestamp}</span>
+          <span className="font-mono ml-auto shrink-0 text-[9px] tabular-nums text-[var(--color-text-muted)]">{timestamp}</span>
         </div>
 
         {/* Content preview for message events */}
         {preview && (
-          <p className={`mt-0.5 text-[10px] leading-snug text-zinc-600 ${isClickable ? 'group-hover:text-zinc-500' : ''}`}>
+          <p className={`mt-0.5 text-[10px] leading-snug text-[var(--color-text-muted)] ${isClickable ? 'group-hover:text-[var(--color-text-secondary)]' : ''}`}>
             {preview}
           </p>
         )}
 
         {/* Approval detail */}
         {event.kind === 'approval' && event.approvalDetail && (
-          <p className="mt-0.5 text-[10px] leading-snug text-zinc-500">
+          <p className="mt-0.5 text-[10px] leading-snug text-[var(--color-text-muted)]">
             {truncateContent(event.approvalDetail, 120)}
           </p>
         )}
 
         {/* Error detail */}
         {event.error && (
-          <p className="mt-0.5 text-[10px] leading-snug text-red-500/80">
+          <p className="mt-0.5 text-[10px] leading-snug text-[var(--color-status-error)]/80">
             {truncateContent(event.error, 120)}
           </p>
         )}
@@ -169,15 +169,15 @@ function ThinkingGroupRow({
   return (
     <div className="group relative flex w-full gap-2.5 py-1">
       {!isLast && (
-        <div className="absolute left-[7px] top-[22px] bottom-0 w-px bg-zinc-800" />
+        <div className="absolute left-[7px] top-[22px] bottom-0 w-px bg-[var(--color-border)]" />
       )}
       <div className="relative z-10 flex shrink-0 items-start pt-0.5">
-        <div className="flex size-[15px] items-center justify-center rounded-full bg-[var(--color-surface-1)]">
-          <Brain className="size-3.5 text-zinc-500" />
+        <div className="flex size-[15px] items-center justify-center rounded-full bg-[var(--color-surface-2)]">
+          <Brain className="size-3.5 text-[var(--color-text-muted)]" />
         </div>
       </div>
       <div className="min-w-0 flex-1">
-        <span className="text-[11px] text-zinc-600">
+        <span className="text-[11px] text-[var(--color-text-muted)]">
           {agentName ? `${agentName} thinking` : 'Thinking'} ×{events.length}
         </span>
       </div>
@@ -225,26 +225,26 @@ function RunCard({
   );
 
   return (
-    <div className="rounded-lg border border-zinc-800 bg-zinc-900/40">
+    <div className="glass-surface rounded-lg">
       {/* Run header */}
       <button
-        className="flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-zinc-800/30"
+        className="flex w-full items-center gap-2 px-3 py-2 text-left transition-all duration-200 hover:bg-[var(--color-surface-3)]"
         onClick={onToggle}
         type="button"
       >
         {expanded
-          ? <ChevronDown className="size-3 shrink-0 text-zinc-600" />
-          : <ChevronRight className="size-3 shrink-0 text-zinc-600" />}
+          ? <ChevronDown className="size-3 shrink-0 text-[var(--color-text-muted)]" />
+          : <ChevronRight className="size-3 shrink-0 text-[var(--color-text-muted)]" />}
 
         <Bot className={`size-3 shrink-0 ${accent.text}`} />
 
-        <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-zinc-300">
+        <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-[var(--color-text-secondary)]">
           {run.patternName}
         </span>
 
         {/* Status */}
         <span className={`flex items-center gap-1 shrink-0 ${statusStyle.className}`}>
-          {run.status === 'running' && <span className="size-1.5 animate-pulse rounded-full bg-blue-400" />}
+          {run.status === 'running' && <span className="size-1.5 animate-pulse rounded-full bg-[var(--color-status-info)]" />}
           {run.status !== 'running' && statusStyle.icon}
           <span className="text-[9px] font-medium">{formatRunStatusLabel(run.status)}</span>
         </span>
@@ -252,13 +252,13 @@ function RunCard({
 
       {/* Expanded timeline */}
       {expanded && (
-        <div className="border-t border-zinc-800/60 px-3 pb-2 pt-1.5">
+        <div className="border-t border-[var(--color-border-subtle)] px-3 pb-2 pt-1.5">
           {/* Agent badges */}
           {run.agents.length > 1 && (
             <div className="mb-2 flex flex-wrap gap-1">
               {run.agents.map((agent) => (
                 <span
-                  className="rounded-full bg-zinc-800/80 px-2 py-0.5 text-[9px] font-medium text-zinc-500"
+                  className="rounded-full bg-[var(--color-surface-2)] px-2 py-0.5 text-[9px] font-medium text-[var(--color-text-muted)]"
                   key={agent.agentId}
                 >
                   {agent.agentName}
@@ -281,7 +281,7 @@ function RunCard({
 
           {/* Duration footer */}
           {duration && (
-            <div className="mt-1 border-t border-zinc-800/40 pt-1.5 text-[9px] tabular-nums text-zinc-700">
+            <div className="font-mono mt-1 border-t border-[var(--color-border-subtle)] pt-1.5 text-[9px] tabular-nums text-[var(--color-text-muted)]">
               Duration: {duration}
             </div>
           )}
@@ -295,7 +295,7 @@ function RunCard({
 
 function EmptyTimeline() {
   return (
-    <p className="py-4 text-center text-[11px] text-zinc-600">
+    <p className="py-4 text-center text-[11px] text-[var(--color-text-muted)]">
       Send a message to see the run timeline
     </p>
   );

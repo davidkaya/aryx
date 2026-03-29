@@ -11,28 +11,28 @@ import type { TerminalExitInfo } from '@shared/domain/terminal';
 /* ── Theme ────────────────────────────────────────────────── */
 
 const terminalTheme = {
-  background: '#09090b',   // zinc-950
-  foreground: '#e4e4e7',   // zinc-200
-  cursor: '#818cf8',       // indigo-400
-  cursorAccent: '#09090b',
-  selectionBackground: '#6366f14d', // indigo-500/30
-  selectionForeground: '#e4e4e7',
-  black: '#27272a',        // zinc-800
-  red: '#f87171',          // red-400
-  green: '#4ade80',        // green-400
-  yellow: '#facc15',       // yellow-400
-  blue: '#60a5fa',         // blue-400
-  magenta: '#c084fc',      // purple-400
-  cyan: '#22d3ee',         // cyan-400
-  white: '#e4e4e7',        // zinc-200
-  brightBlack: '#52525b',  // zinc-600
-  brightRed: '#fca5a5',    // red-300
-  brightGreen: '#86efac',  // green-300
-  brightYellow: '#fde047', // yellow-300
-  brightBlue: '#93c5fd',   // blue-300
-  brightMagenta: '#d8b4fe',// purple-300
-  brightCyan: '#67e8f9',   // cyan-300
-  brightWhite: '#fafafa',  // zinc-50
+  background: '#07080e',
+  foreground: '#e8eaf0',
+  cursor: '#245CF9',
+  cursorAccent: '#07080e',
+  selectionBackground: 'rgba(36, 92, 249, 0.2)',
+  selectionForeground: '#e8eaf0',
+  black: '#1e2233',
+  red: '#f87171',
+  green: '#4ade80',
+  yellow: '#facc15',
+  blue: '#248CFD',
+  magenta: '#a855f7',
+  cyan: '#22d3ee',
+  white: '#e8eaf0',
+  brightBlack: '#4e5368',
+  brightRed: '#fca5a5',
+  brightGreen: '#86efac',
+  brightYellow: '#fde047',
+  brightBlue: '#60a5fa',
+  brightMagenta: '#c084fc',
+  brightCyan: '#67e8f9',
+  brightWhite: '#f8f9fc',
 };
 
 /* ── Constants ────────────────────────────────────────────── */
@@ -94,7 +94,7 @@ export function TerminalPanel({
 
     const terminal = new Terminal({
       theme: terminalTheme,
-      fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace',
+      fontFamily: '"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace',
       fontSize: 13,
       lineHeight: 1.4,
       cursorBlink: true,
@@ -214,12 +214,12 @@ export function TerminalPanel({
 
   return (
     <div
-      className="flex flex-col border-t border-[var(--color-border)] bg-[#09090b]"
+      className="flex flex-col border-t border-[var(--color-border)] bg-[var(--color-surface-0)]"
       style={{ height, minHeight: MIN_HEIGHT }}
     >
       {/* Resize handle */}
       <div
-        className={`h-1 shrink-0 cursor-row-resize transition-colors ${isDragging ? 'bg-indigo-500/40' : 'hover:bg-zinc-700/60'}`}
+        className={`h-1 shrink-0 cursor-row-resize transition-colors ${isDragging ? 'bg-[var(--color-accent)]/40' : 'hover:bg-[var(--color-surface-3)]/60'}`}
         onMouseDown={handleDragStart}
         role="separator"
         aria-orientation="horizontal"
@@ -237,15 +237,15 @@ export function TerminalPanel({
       />
 
       {/* Header bar */}
-      <div className="flex h-7 shrink-0 items-center gap-2 border-b border-zinc-800/60 px-3">
-        <span className={`size-1.5 shrink-0 rounded-full ${isRunning ? 'bg-emerald-400' : 'bg-zinc-600'}`} />
-        <span className="min-w-0 flex-1 truncate text-[11px] text-zinc-500">
+      <div className="flex h-7 shrink-0 items-center gap-2 border-b border-[var(--color-border)] px-3">
+        <span className={`size-1.5 shrink-0 rounded-full ${isRunning ? 'bg-emerald-400' : 'bg-[var(--color-text-muted)]'}`} />
+        <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-[var(--color-text-muted)]">
           {snapshot ? `${snapshot.shell} — ${snapshot.cwd}` : 'Terminal'}
         </span>
         <div className="flex items-center gap-0.5">
           <button
             aria-label="Restart terminal"
-            className="rounded p-0.5 text-zinc-600 transition hover:bg-zinc-800 hover:text-zinc-400"
+            className="rounded p-0.5 text-[var(--color-text-muted)] transition hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-secondary)]"
             onClick={handleRestart}
             type="button"
           >
@@ -253,7 +253,7 @@ export function TerminalPanel({
           </button>
           <button
             aria-label="Minimize terminal"
-            className="rounded p-0.5 text-zinc-600 transition hover:bg-zinc-800 hover:text-zinc-400"
+            className="rounded p-0.5 text-[var(--color-text-muted)] transition hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-secondary)]"
             onClick={onMinimize}
             type="button"
           >
@@ -261,7 +261,7 @@ export function TerminalPanel({
           </button>
           <button
             aria-label="Close terminal"
-            className="rounded p-0.5 text-zinc-600 transition hover:bg-zinc-800 hover:text-red-400"
+            className="rounded p-0.5 text-[var(--color-text-muted)] transition hover:bg-[var(--color-surface-3)] hover:text-red-400"
             onClick={handleClose}
             type="button"
           >

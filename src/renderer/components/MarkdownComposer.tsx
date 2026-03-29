@@ -677,11 +677,11 @@ function ToolbarPlugin({ disabled }: { disabled: boolean }) {
   }, [editor]);
 
   return (
-    <div className="flex items-center gap-0.5 border-b border-zinc-700/50 px-2 py-1">
+    <div className="flex items-center gap-0.5 border-b border-[var(--color-border)]/50 px-2 py-1">
       <ToolbarButton active={state.isBold} disabled={disabled} icon={<Bold className="size-3.5" />} onClick={formatBold} onMouseDown={preventFocus} title="Bold (Ctrl+B)" />
       <ToolbarButton active={state.isItalic} disabled={disabled} icon={<Italic className="size-3.5" />} onClick={formatItalic} onMouseDown={preventFocus} title="Italic (Ctrl+I)" />
       <ToolbarButton active={state.isCode} disabled={disabled} icon={<Code className="size-3.5" />} onClick={formatInlineCode} onMouseDown={preventFocus} title="Inline Code" />
-      <div className="mx-1 h-4 w-px bg-zinc-700/50" />
+      <div className="mx-1 h-4 w-px bg-[var(--color-border)]/50" />
       <ToolbarButton active={state.blockType === 'ul'} disabled={disabled} icon={<List className="size-3.5" />} onClick={toggleBulletList} onMouseDown={preventFocus} title="Bullet List" />
       <ToolbarButton active={state.blockType === 'ol'} disabled={disabled} icon={<ListOrdered className="size-3.5" />} onClick={toggleNumberedList} onMouseDown={preventFocus} title="Numbered List" />
       <ToolbarButton active={state.blockType === 'code'} disabled={disabled} icon={<Braces className="size-3.5" />} onClick={toggleCodeBlock} onMouseDown={preventFocus} title="Code Block" />
@@ -709,8 +709,8 @@ function ToolbarButton({
       aria-pressed={active}
       className={`flex size-7 items-center justify-center rounded transition ${
         active
-          ? 'bg-indigo-600/30 text-indigo-300'
-          : 'text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300'
+          ? 'bg-[var(--color-accent)]/30 text-[var(--color-accent-sky)]'
+          : 'text-[var(--color-text-muted)] hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-secondary)]'
       } ${disabled ? 'pointer-events-none opacity-50' : ''}`}
       disabled={disabled}
       onClick={onClick}

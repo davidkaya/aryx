@@ -115,16 +115,16 @@ export function ProjectSettingsPanel({
       {/* Header */}
       <div className="drag-region flex items-center gap-3 border-b border-[var(--color-border)] px-5 pb-3 pt-3">
         <button
-          className="no-drag flex size-8 items-center justify-center rounded-lg text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-200"
+          className="no-drag flex size-8 items-center justify-center rounded-lg text-[var(--color-text-secondary)] transition-all duration-200 hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-primary)]"
           onClick={onClose}
           type="button"
         >
           <ChevronLeft className="size-4" />
         </button>
-        <h2 className="text-[13px] font-semibold text-zinc-100">
+        <h2 className="font-display text-[13px] font-semibold text-[var(--color-text-primary)]">
           Project Settings
-          <span className="ml-2 font-normal text-zinc-500">·</span>
-          <span className="ml-2 font-normal text-zinc-400">{project.name}</span>
+          <span className="ml-2 font-normal text-[var(--color-text-muted)]">·</span>
+          <span className="ml-2 font-normal text-[var(--color-text-secondary)]">{project.name}</span>
         </h2>
       </div>
 
@@ -135,7 +135,7 @@ export function ProjectSettingsPanel({
           <div className="space-y-4">
             {navGroups.map((group) => (
               <div key={group.label}>
-                <span className="mb-1 block px-3 text-[10px] font-semibold uppercase tracking-wider text-zinc-600">
+                <span className="mb-1 block px-3 text-[10px] font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
                   {group.label}
                 </span>
                 <div className="space-y-0.5">
@@ -144,10 +144,10 @@ export function ProjectSettingsPanel({
                     const badge = sectionBadge(item.id);
                     return (
                       <button
-                        className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] transition ${
+                        className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] transition-all duration-200 ${
                           isActive
-                            ? 'bg-zinc-800 font-medium text-zinc-100'
-                            : 'text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-300'
+                            ? 'bg-[var(--color-surface-3)] font-medium text-[var(--color-text-primary)]'
+                            : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-3)]/50 hover:text-[var(--color-text-secondary)]'
                         }`}
                         key={item.id}
                         onClick={() => {
@@ -156,7 +156,7 @@ export function ProjectSettingsPanel({
                         }}
                         type="button"
                       >
-                        <span className={isActive ? 'text-zinc-300' : 'text-zinc-500'}>{item.icon}</span>
+                        <span className={isActive ? 'text-[var(--color-text-secondary)]' : 'text-[var(--color-text-muted)]'}>{item.icon}</span>
                         <span className="flex-1 truncate">{item.label}</span>
                         {badge}
                       </button>
@@ -167,13 +167,13 @@ export function ProjectSettingsPanel({
             ))}
 
             {/* Danger zone at the bottom */}
-            <div className="border-t border-zinc-800 pt-3">
+            <div className="border-t border-[var(--color-border)] pt-3">
               <div className="space-y-0.5">
                 <button
-                  className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] transition ${
+                  className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] transition-all duration-200 ${
                     activeSection === 'danger-zone'
-                      ? 'bg-zinc-800 font-medium text-red-400'
-                      : 'text-zinc-500 hover:bg-zinc-800/50 hover:text-red-400'
+                      ? 'bg-[var(--color-surface-3)] font-medium text-[var(--color-status-error)]'
+                      : 'text-[var(--color-text-muted)] hover:bg-[var(--color-surface-3)]/50 hover:text-[var(--color-status-error)]'
                   }`}
                   onClick={() => {
                     setActiveSection('danger-zone');
@@ -240,7 +240,7 @@ export function ProjectSettingsPanel({
 
 function CountBadge({ count, total }: { count: number; total?: number }) {
   return (
-    <span className="rounded-full bg-zinc-800 px-1.5 py-0.5 text-[10px] font-medium text-zinc-500">
+    <span className="rounded-full bg-[var(--color-surface-3)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-text-muted)]">
       {total !== undefined ? `${count}/${total}` : count}
     </span>
   );
@@ -248,7 +248,7 @@ function CountBadge({ count, total }: { count: number; total?: number }) {
 
 function PendingBadge({ count }: { count: number }) {
   return (
-    <span className="rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-400">
+    <span className="rounded-full bg-[var(--color-status-warning)]/10 px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-status-warning)]">
       {count} new
     </span>
   );
@@ -263,12 +263,12 @@ function OverviewContent({ project }: { project: ProjectRecord }) {
         description="Project details and git status."
         title="Overview"
       />
-      <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 px-5 py-4 space-y-3">
+      <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-glass)] px-5 py-4 space-y-3">
         <div className="flex items-center gap-3">
-          <FolderOpen className="size-5 shrink-0 text-indigo-400" />
+          <FolderOpen className="size-5 shrink-0 text-[var(--color-text-accent)]" />
           <div className="min-w-0">
-            <div className="text-[13px] font-medium text-zinc-200">{project.name}</div>
-            <div className="mt-0.5 truncate text-[12px] text-zinc-500">{project.path}</div>
+            <div className="text-[13px] font-medium text-[var(--color-text-primary)]">{project.name}</div>
+            <div className="mt-0.5 truncate text-[12px] text-[var(--color-text-muted)]">{project.path}</div>
           </div>
         </div>
         {project.git && <ProjectGitInfo git={project.git} />}
@@ -280,7 +280,7 @@ function OverviewContent({ project }: { project: ProjectRecord }) {
 function ProjectGitInfo({ git }: { git: ProjectGitContext }) {
   if (git.status === 'not-repository') {
     return (
-      <div className="flex items-center gap-2 text-[12px] text-zinc-600">
+      <div className="flex items-center gap-2 text-[12px] text-[var(--color-text-muted)]">
         <GitBranch className="size-3.5" />
         Not a git repository
       </div>
@@ -289,7 +289,7 @@ function ProjectGitInfo({ git }: { git: ProjectGitContext }) {
 
   if (git.status === 'git-missing') {
     return (
-      <div className="flex items-center gap-2 text-[12px] text-amber-500/70">
+      <div className="flex items-center gap-2 text-[12px] text-[var(--color-status-warning)]">
         <AlertTriangle className="size-3.5" />
         Git is not installed
       </div>
@@ -298,7 +298,7 @@ function ProjectGitInfo({ git }: { git: ProjectGitContext }) {
 
   if (git.status === 'error') {
     return (
-      <div className="flex items-center gap-2 text-[12px] text-red-400/70">
+      <div className="flex items-center gap-2 text-[12px] text-[var(--color-status-error)]">
         <AlertTriangle className="size-3.5" />
         {git.errorMessage ?? 'Git error'}
       </div>
@@ -312,12 +312,12 @@ function ProjectGitInfo({ git }: { git: ProjectGitContext }) {
   if (git.behind) parts.push(`${git.behind} behind`);
 
   return (
-    <div className="flex items-center gap-2 text-[12px] text-zinc-400">
+    <div className="flex items-center gap-2 text-[12px] text-[var(--color-text-secondary)]">
       <GitBranch className="size-3.5 shrink-0" />
       <span>{branchLabel}</span>
-      {git.isDirty && <Circle className="size-1.5 shrink-0 fill-amber-500 text-amber-500" />}
+      {git.isDirty && <Circle className="size-1.5 shrink-0 fill-[var(--color-status-warning)] text-[var(--color-status-warning)]" />}
       {parts.length > 0 && (
-        <span className="text-zinc-600">· {parts.join(' · ')}</span>
+        <span className="text-[var(--color-text-muted)]">· {parts.join(' · ')}</span>
       )}
     </div>
   );
@@ -343,7 +343,7 @@ function InstructionsContent({
 
       {instructions.length === 0 ? (
         <EmptyState>
-          No instruction files found. Add a <code className="text-zinc-400">.github/copilot-instructions.md</code> or <code className="text-zinc-400">AGENTS.md</code> file to your project root.
+          No instruction files found. Add a <code className="text-[var(--color-text-secondary)]">.github/copilot-instructions.md</code> or <code className="text-[var(--color-text-secondary)]">AGENTS.md</code> file to your project root.
         </EmptyState>
       ) : (
         <div className="space-y-3">
@@ -361,28 +361,28 @@ function InstructionCard({ instruction }: { instruction: ProjectInstructionFile 
   const isLong = instruction.content.length > 300;
 
   return (
-    <div className="rounded-xl border border-zinc-800 bg-zinc-900/40">
+    <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-glass)]">
       <button
-        className="flex w-full items-center gap-3 px-5 py-3.5 text-left transition hover:bg-zinc-900/60"
+        className="flex w-full items-center gap-3 px-5 py-3.5 text-left transition-all duration-200 hover:bg-[var(--color-glass)]"
         onClick={() => setExpanded(!expanded)}
         type="button"
       >
-        <FileCode2 className="size-4 shrink-0 text-indigo-400" />
-        <span className="flex-1 text-[13px] font-medium text-zinc-200">{instruction.sourcePath}</span>
+        <FileCode2 className="size-4 shrink-0 text-[var(--color-text-accent)]" />
+        <span className="flex-1 text-[13px] font-medium text-[var(--color-text-primary)]">{instruction.sourcePath}</span>
         <ChevronDown
-          className={`size-3.5 shrink-0 text-zinc-500 transition-transform ${expanded ? 'rotate-180' : ''}`}
+          className={`size-3.5 shrink-0 text-[var(--color-text-muted)] transition-transform ${expanded ? 'rotate-180' : ''}`}
         />
       </button>
       {expanded && (
-        <div className="border-t border-zinc-800 px-5 py-4">
-          <pre className="whitespace-pre-wrap text-[11px] leading-relaxed text-zinc-400">
+        <div className="border-t border-[var(--color-border)] px-5 py-4">
+          <pre className="whitespace-pre-wrap text-[11px] leading-relaxed text-[var(--color-text-secondary)]">
             {instruction.content}
           </pre>
         </div>
       )}
       {!expanded && (
         <div className="px-5 pb-3">
-          <p className={`text-[11px] leading-relaxed text-zinc-500 ${isLong ? 'line-clamp-2' : ''}`}>
+          <p className={`text-[11px] leading-relaxed text-[var(--color-text-muted)] ${isLong ? 'line-clamp-2' : ''}`}>
             {instruction.content}
           </p>
         </div>
@@ -415,12 +415,12 @@ function AgentsContent({
 
       {agents.length === 0 ? (
         <EmptyState>
-          No custom agents found. Add <code className="text-zinc-400">.agent.md</code> files to <code className="text-zinc-400">.github/agents/</code> in your project.
+          No custom agents found. Add <code className="text-[var(--color-text-secondary)]">.agent.md</code> files to <code className="text-[var(--color-text-secondary)]">.github/agents/</code> in your project.
         </EmptyState>
       ) : (
         <>
           {agents.length > 1 && (
-            <div className="mb-3 text-[11px] text-zinc-500">
+            <div className="mb-3 text-[11px] text-[var(--color-text-muted)]">
               {enabledCount} of {agents.length} agent{agents.length === 1 ? '' : 's'} enabled
             </div>
           )}
@@ -449,26 +449,26 @@ function AgentCard({
   return (
     <div className={`rounded-xl border px-5 py-4 transition ${
       agent.enabled
-        ? 'border-zinc-800 bg-zinc-900/40'
-        : 'border-zinc-800/50 bg-zinc-900/20 opacity-60'
+        ? 'border-[var(--color-border)] bg-[var(--color-glass)]'
+        : 'border-[var(--color-border-subtle)] bg-[var(--color-surface-1)]/20 opacity-60'
     }`}>
       <div className="flex items-start gap-3">
-        <Sparkles className={`mt-0.5 size-4 shrink-0 ${agent.enabled ? 'text-amber-400' : 'text-zinc-600'}`} />
+        <Sparkles className={`mt-0.5 size-4 shrink-0 ${agent.enabled ? 'text-[var(--color-status-warning)]' : 'text-[var(--color-text-muted)]'}`} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="text-[13px] font-medium text-zinc-200">
+            <span className="text-[13px] font-medium text-[var(--color-text-primary)]">
               {agent.displayName ?? agent.name}
             </span>
             {agent.tools && agent.tools.length > 0 && (
-              <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] font-medium text-zinc-500">
+              <span className="rounded-full bg-[var(--color-surface-3)] px-2 py-0.5 text-[10px] font-medium text-[var(--color-text-muted)]">
                 {agent.tools.length} tool{agent.tools.length === 1 ? '' : 's'}
               </span>
             )}
           </div>
           {agent.description && (
-            <p className="mt-1 text-[12px] leading-relaxed text-zinc-500">{agent.description}</p>
+            <p className="mt-1 text-[12px] leading-relaxed text-[var(--color-text-muted)]">{agent.description}</p>
           )}
-          <p className="mt-1 text-[11px] text-zinc-600">{agent.sourcePath}</p>
+          <p className="mt-1 text-[11px] text-[var(--color-text-muted)]">{agent.sourcePath}</p>
         </div>
         <button
           aria-label={agent.enabled ? `Disable ${agent.name}` : `Enable ${agent.name}`}
@@ -504,7 +504,7 @@ function PromptsContent({
 
       {promptFiles.length === 0 ? (
         <EmptyState>
-          No prompt files found. Add <code className="text-zinc-400">.prompt.md</code> files to <code className="text-zinc-400">.github/prompts/</code> in your project.
+          No prompt files found. Add <code className="text-[var(--color-text-secondary)]">.prompt.md</code> files to <code className="text-[var(--color-text-secondary)]">.github/prompts/</code> in your project.
         </EmptyState>
       ) : (
         <div className="space-y-2">
@@ -519,27 +519,27 @@ function PromptsContent({
 
 function PromptCard({ prompt }: { prompt: ProjectPromptFile }) {
   return (
-    <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 px-5 py-4">
+    <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-glass)] px-5 py-4">
       <div className="flex items-start gap-3">
-        <FileText className="mt-0.5 size-4 shrink-0 text-emerald-400" />
+        <FileText className="mt-0.5 size-4 shrink-0 text-[var(--color-status-success)]" />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="text-[13px] font-medium text-zinc-200">{prompt.name}</span>
+            <span className="text-[13px] font-medium text-[var(--color-text-primary)]">{prompt.name}</span>
             {prompt.variables.length > 0 && (
-              <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] font-medium text-zinc-500">
+              <span className="rounded-full bg-[var(--color-surface-3)] px-2 py-0.5 text-[10px] font-medium text-[var(--color-text-muted)]">
                 {prompt.variables.length} variable{prompt.variables.length === 1 ? '' : 's'}
               </span>
             )}
           </div>
           {prompt.description && (
-            <p className="mt-1 text-[12px] leading-relaxed text-zinc-500">{prompt.description}</p>
+            <p className="mt-1 text-[12px] leading-relaxed text-[var(--color-text-muted)]">{prompt.description}</p>
           )}
           {prompt.variables.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-1.5">
               {prompt.variables.map((v) => (
                 <span
                   key={v.name}
-                  className="rounded-md bg-zinc-800 px-2 py-0.5 text-[10px] font-medium text-zinc-400"
+                  className="rounded-md bg-[var(--color-surface-3)] px-2 py-0.5 text-[10px] font-medium text-[var(--color-text-secondary)]"
                   title={v.placeholder}
                 >
                   {v.name}
@@ -547,7 +547,7 @@ function PromptCard({ prompt }: { prompt: ProjectPromptFile }) {
               ))}
             </div>
           )}
-          <p className="mt-1.5 text-[11px] text-zinc-600">{prompt.sourcePath}</p>
+          <p className="mt-1.5 text-[11px] text-[var(--color-text-muted)]">{prompt.sourcePath}</p>
         </div>
       </div>
     </div>
@@ -607,14 +607,14 @@ function McpServersContent({
           {pending.length > 1 && (
             <div className="mt-3 flex items-center gap-2">
               <button
-                className="rounded-lg bg-emerald-500/10 px-3 py-1.5 text-[12px] font-medium text-emerald-400 transition hover:bg-emerald-500/20"
+                className="rounded-lg bg-[var(--color-status-success)]/10 px-3 py-1.5 text-[12px] font-medium text-[var(--color-status-success)] transition-all duration-200 hover:bg-[var(--color-status-success)]/20"
                 onClick={() => onResolve(pending.map((s) => s.id), 'accept')}
                 type="button"
               >
                 Accept all ({pending.length})
               </button>
               <button
-                className="rounded-lg px-3 py-1.5 text-[12px] font-medium text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-300"
+                className="rounded-lg px-3 py-1.5 text-[12px] font-medium text-[var(--color-text-muted)] transition-all duration-200 hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-secondary)]"
                 onClick={() => onResolve(pending.map((s) => s.id), 'dismiss')}
                 type="button"
               >
@@ -645,31 +645,31 @@ function DiscoveredServerRow({
       : server.url || 'No URL';
 
   const statusBadge = status === 'accepted'
-    ? 'bg-emerald-500/10 text-emerald-400'
-    : 'bg-amber-500/10 text-amber-400';
+    ? 'bg-[var(--color-status-success)]/10 text-[var(--color-status-success)]'
+    : 'bg-[var(--color-status-warning)]/10 text-[var(--color-status-warning)]';
 
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-transparent px-4 py-3 hover:border-zinc-800 hover:bg-zinc-900">
-      <Server className="size-4 shrink-0 text-zinc-600" />
+    <div className="flex items-center gap-3 rounded-xl border border-transparent px-4 py-3 hover:border-[var(--color-border)] hover:bg-[var(--color-surface-1)]">
+      <Server className="size-4 shrink-0 text-[var(--color-text-muted)]" />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <span className="truncate text-[13px] font-medium text-zinc-200">{server.name}</span>
-          <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-zinc-400">
+          <span className="truncate text-[13px] font-medium text-[var(--color-text-primary)]">{server.name}</span>
+          <span className="rounded-full bg-[var(--color-surface-3)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[var(--color-text-secondary)]">
             {server.transport}
           </span>
           <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${statusBadge}`}>
             {status}
           </span>
         </div>
-        <p className="mt-0.5 truncate text-[12px] text-zinc-500">
+        <p className="mt-0.5 truncate text-[12px] text-[var(--color-text-muted)]">
           {detail}
-          <span className="ml-2 text-zinc-700">· {server.sourceLabel}</span>
+          <span className="ml-2 text-[var(--color-text-muted)]">· {server.sourceLabel}</span>
         </p>
       </div>
       <div className="flex items-center gap-1">
         {onAccept && (
           <button
-            className="rounded-lg px-2.5 py-1 text-[12px] font-medium text-emerald-400 transition hover:bg-emerald-500/10"
+            className="rounded-lg px-2.5 py-1 text-[12px] font-medium text-[var(--color-status-success)] transition-all duration-200 hover:bg-[var(--color-status-success)]/10"
             onClick={onAccept}
             type="button"
           >
@@ -678,7 +678,7 @@ function DiscoveredServerRow({
         )}
         {onDismiss && (
           <button
-            className="rounded-lg px-2.5 py-1 text-[12px] font-medium text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-300"
+            className="rounded-lg px-2.5 py-1 text-[12px] font-medium text-[var(--color-text-muted)] transition-all duration-200 hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-secondary)]"
             onClick={onDismiss}
             type="button"
           >
@@ -707,18 +707,18 @@ function DangerZoneContent({
         description="Irreversible actions for this project."
         title="Danger Zone"
       />
-      <div className="rounded-xl border border-red-500/20 bg-red-500/5 px-5 py-5">
-        <h4 className="text-[13px] font-semibold text-zinc-200">Remove project</h4>
-        <p className="mt-1 text-[12px] text-zinc-500">
+      <div className="rounded-xl border border-[var(--color-status-error)]/20 bg-[var(--color-status-error)]/5 px-5 py-5">
+        <h4 className="text-[13px] font-semibold text-[var(--color-text-primary)]">Remove project</h4>
+        <p className="mt-1 text-[12px] text-[var(--color-text-muted)]">
           Removing a project deletes all its sessions and discovered tooling from Aryx.
           Your project files on disk are not affected.
         </p>
         <div className="mt-4 flex items-center gap-3">
           <button
-            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[13px] font-medium transition ${
+            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[13px] font-medium transition-all duration-200 ${
               confirmingRemove
-                ? 'bg-red-600 text-white hover:bg-red-500'
-                : 'bg-red-500/10 text-red-400 hover:bg-red-500/20'
+                ? 'bg-[var(--color-status-error)] text-white hover:bg-[var(--color-status-error)]'
+                : 'bg-[var(--color-status-error)]/10 text-[var(--color-status-error)] hover:bg-[var(--color-status-error)]/20'
             }`}
             onClick={onRemove}
             type="button"
@@ -728,7 +728,7 @@ function DangerZoneContent({
           </button>
           {confirmingRemove && (
             <button
-              className="rounded-lg px-3 py-1.5 text-[13px] font-medium text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-200"
+              className="rounded-lg px-3 py-1.5 text-[13px] font-medium text-[var(--color-text-secondary)] transition-all duration-200 hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-primary)]"
               onClick={onCancelRemove}
               type="button"
             >
@@ -755,8 +755,8 @@ function SectionHeader({
   return (
     <div className="mb-4 flex items-center justify-between gap-3">
       <div>
-        <h3 className="text-[13px] font-semibold text-zinc-200">{title}</h3>
-        <p className="mt-0.5 text-[12px] text-zinc-500">{description}</p>
+        <h3 className="font-display text-[13px] font-semibold text-[var(--color-text-primary)]">{title}</h3>
+        <p className="mt-0.5 text-[12px] text-[var(--color-text-muted)]">{description}</p>
       </div>
       {children}
     </div>
@@ -766,7 +766,7 @@ function SectionHeader({
 function RescanButton({ onClick, label = 'Re-scan' }: { onClick: () => void; label?: string }) {
   return (
     <button
-      className="flex items-center gap-1.5 rounded-lg bg-zinc-800 px-3 py-1.5 text-[13px] font-medium text-zinc-200 transition hover:bg-zinc-700"
+      className="flex items-center gap-1.5 rounded-lg bg-[var(--color-surface-3)] px-3 py-1.5 text-[13px] font-medium text-[var(--color-text-primary)] transition-all duration-200 hover:bg-[var(--color-surface-3)]"
       onClick={onClick}
       title={label === 'Scan' ? 'Scan for files' : 'Re-scan for changes'}
       type="button"
@@ -779,7 +779,7 @@ function RescanButton({ onClick, label = 'Re-scan' }: { onClick: () => void; lab
 
 function EmptyState({ children }: { children: ReactNode }) {
   return (
-    <div className="rounded-xl border border-dashed border-zinc-800 bg-zinc-900/20 px-5 py-8 text-center text-[12px] leading-relaxed text-zinc-500">
+    <div className="rounded-xl border border-dashed border-[var(--color-border)] bg-[var(--color-surface-1)]/20 px-5 py-8 text-center text-[12px] leading-relaxed text-[var(--color-text-muted)]">
       {children}
     </div>
   );

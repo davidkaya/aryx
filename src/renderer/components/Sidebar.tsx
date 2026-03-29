@@ -297,8 +297,22 @@ function SessionItem({
             </span>
           )}
           {session.branchOrigin && (
-            <span className="inline-flex items-center gap-0.5 text-[10px] text-[var(--color-text-muted)]" title="Branched session">
-              <GitBranch className="size-2.5" />
+            <span
+              className="inline-flex items-center gap-0.5 text-[10px] text-[var(--color-text-muted)]"
+              title={
+                session.branchOrigin.action === 'regenerate'
+                  ? 'Regenerated response'
+                  : session.branchOrigin.action === 'edit-and-resend'
+                    ? 'Edited & resent'
+                    : 'Branched session'
+              }
+            >
+              {session.branchOrigin.action === 'regenerate'
+                ? <RefreshCw className="size-2.5" />
+                : session.branchOrigin.action === 'edit-and-resend'
+                  ? <Pencil className="size-2.5" />
+                  : <GitBranch className="size-2.5" />
+              }
             </span>
           )}
           <span className="ml-auto text-[10px] text-[var(--color-text-muted)] group-hover:text-[var(--color-text-secondary)]">

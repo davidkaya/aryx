@@ -574,6 +574,15 @@ export default function App() {
           onBranchFromMessage={(messageId) => {
             void api.branchSession({ sessionId: selectedSession.id, messageId });
           }}
+          onPinMessage={(messageId, isPinned) => {
+            void api.setSessionMessagePinned({ sessionId: selectedSession.id, messageId, isPinned });
+          }}
+          onRegenerateMessage={(messageId) => {
+            void api.regenerateSessionMessage({ sessionId: selectedSession.id, messageId });
+          }}
+          onEditAndResendMessage={(messageId, content) => {
+            void api.editAndResendSessionMessage({ sessionId: selectedSession.id, messageId, content });
+          }}
           branchOriginLabel={
             selectedSession.branchOrigin
               ? workspace.sessions.find((s) => s.id === selectedSession.branchOrigin!.sourceSessionId)?.title

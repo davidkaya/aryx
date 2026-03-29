@@ -587,6 +587,19 @@ body {
   animation: message-in 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
+/* ── Message action toolbar ──────────────────────────────────── */
+
+@keyframes msg-actions-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px) scale(0.96);
+  }
+}
+
+.msg-actions-enter {
+  animation: msg-actions-in 0.12s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
 /* ── Sidebar session item ────────────────────────────────────── */
 
 @keyframes session-item-in {
@@ -622,6 +635,7 @@ body {
   .overlay-panel-enter,
   .overlay-slide-enter,
   .message-enter,
+  .msg-actions-enter,
   .session-item-enter,
   .banner-slide-enter {
     animation: none;

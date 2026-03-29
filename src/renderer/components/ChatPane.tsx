@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, ArrowUp, Bot, Circle, ClipboardList, GitBranch, Loader2, MessageCircleQuestion, Paperclip, ShieldAlert, Square, User, X } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AlertCircle, ArrowUp, Bookmark, Bot, Circle, ClipboardList, GitBranch, Loader2, MessageCircleQuestion, Paperclip, RefreshCw, ShieldAlert, Square, User, X } from 'lucide-react';
 
 import { MarkdownContent } from '@renderer/components/MarkdownContent';
 import { MarkdownComposer, type MarkdownComposerHandle } from '@renderer/components/MarkdownComposer';
 import { ApprovalBanner, QueuedApprovalsList } from '@renderer/components/chat/ApprovalBanner';
+import { MessageActions } from '@renderer/components/chat/MessageActions';
+import { MessageEditComposer } from '@renderer/components/chat/MessageEditComposer';
 import { PlanReviewBanner } from '@renderer/components/chat/PlanReviewBanner';
 import { McpAuthBanner } from '@renderer/components/chat/McpAuthBanner';
 import { UserInputBanner } from '@renderer/components/chat/UserInputBanner';
@@ -26,7 +28,7 @@ import {
 } from '@shared/domain/models';
 import { type PatternDefinition, type ReasoningEffort } from '@shared/domain/pattern';
 import { isScratchpadProject, type ProjectRecord } from '@shared/domain/project';
-import { resolveSessionToolingSelection, type SessionRecord } from '@shared/domain/session';
+import { resolveSessionToolingSelection, type SessionBranchOriginAction, type SessionRecord } from '@shared/domain/session';
 import {
   groupApprovalToolsByProvider,
   listApprovalToolDefinitions,
@@ -65,6 +67,9 @@ interface ChatPaneProps {
   onUpdateSessionTooling?: (selection: SessionToolingSelection) => void;
   onUpdateSessionApprovalSettings?: (settings: { autoApprovedToolNames?: string[] }) => void;
   onBranchFromMessage?: (messageId: string) => void;
+  onPinMessage?: (messageId: string, isPinned: boolean) => void;
+  onRegenerateMessage?: (messageId: string) => void;
+  onEditAndResendMessage?: (messageId: string, content: string) => void;
   branchOriginLabel?: string;
 }
 
@@ -93,6 +98,9 @@ export function ChatPane({
   onUpdateSessionTooling,
   onUpdateSessionApprovalSettings,
   onBranchFromMessage,
+  onPinMessage,
+  onRegenerateMessage,
+  onEditAndResendMessage,
   branchOriginLabel,
 }: ChatPaneProps) {
   const [hasComposerContent, setHasComposerContent] = useState(false);
@@ -101,10 +109,17 @@ export function ChatPane({
   const [isResolvingApproval, setIsResolvingApproval] = useState(false);
   const [isSubmittingUserInput, setIsSubmittingUserInput] = useState(false);
   const [isUpdatingSessionModelConfig, setIsUpdatingSessionModelConfig] = useState(false);
+  const [editingMessageId, setEditingMessageId] = useState<string>();
   const transcriptRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<MarkdownComposerHandle>(null);
 
   const isSessionBusy = session.status === 'running';
+  const lastAssistantIndex = useMemo(() => {
+    for (let i = session.messages.length - 1; i >= 0; i--) {
+      if (session.messages[i].role === 'assistant') return i;
+    }
+    return -1;
+  }, [session.messages]);
   const pendingApproval = session.pendingApproval?.status === 'pending' ? session.pendingApproval : undefined;
   const queuedApprovals = (session.pendingApprovalQueue ?? []).filter((a) => a.status === 'pending');
   const totalPendingCount = (pendingApproval ? 1 : 0) + queuedApprovals.length;
@@ -174,6 +189,7 @@ export function ChatPane({
     setApprovalError(undefined);
     setIsResolvingApproval(false);
     setIsUpdatingSessionModelConfig(false);
+    setEditingMessageId(undefined);
   }, [session.id]);
 
   function handleComposerSubmit(content: string) {
@@ -182,6 +198,18 @@ export function ChatPane({
     setPendingAttachments([]);
     void onSend(content, attachments, messageMode);
   }
+
+  const handleCopyMessage = useCallback((content: string) => {
+    void navigator.clipboard.writeText(content);
+  }, []);
+
+  const handleEditSave = useCallback(
+    (messageId: string, content: string) => {
+      setEditingMessageId(undefined);
+      onEditAndResendMessage?.(messageId, content);
+    },
+    [onEditAndResendMessage],
+  );
 
   function handleDismissPlan() {
     onDismissPlanReview?.();
@@ -333,19 +361,16 @@ export function ChatPane({
           <div className="mx-auto max-w-3xl px-6 py-4">
             {/* Branch origin banner */}
             {session.branchOrigin && (
-              <div className="mb-4 flex items-center gap-2.5 rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-1)]/60 px-3.5 py-2.5 text-[12px] text-[var(--color-text-secondary)]">
-                <GitBranch className="size-3.5 shrink-0 text-[var(--color-accent)]" />
-                <span>
-                  Branched from{' '}
-                  <span className="font-medium text-[var(--color-text-primary)]">
-                    {branchOriginLabel ?? 'a previous session'}
-                  </span>
-                </span>
-              </div>
+              <BranchOriginBanner
+                action={session.branchOrigin.action}
+                label={branchOriginLabel}
+              />
             )}
             <div className="space-y-1">
               {session.messages.map((message, index) => {
                 const isUser = message.role === 'user';
+                const isEditing = editingMessageId === message.id;
+                const isLastAssistant = index === lastAssistantIndex;
                 const phase = getAssistantMessagePhase(session, message, index);
                 const assistantContainerClass =
                   phase === 'thinking'
@@ -359,6 +384,7 @@ export function ChatPane({
                     : 'border-[var(--color-status-success)]/20 bg-[var(--color-status-success)]/10 text-[var(--color-status-success)]';
                 const phaseLabel =
                   phase === 'thinking' ? 'Thinking' : phase === 'final' ? 'Final' : undefined;
+                const showActions = !isSessionBusy && !message.pending;
 
                 return (
                   <div className="message-enter group py-3" data-message-id={message.id} key={message.id}>
@@ -373,6 +399,9 @@ export function ChatPane({
                       <div className="min-w-0 flex-1">
                         <div className="mb-1 flex items-center gap-2 text-[12px] font-medium text-[var(--color-text-secondary)]">
                           <span>{message.authorName}</span>
+                          {message.isPinned && (
+                            <Bookmark className="size-3 fill-[var(--color-accent-sky)] text-[var(--color-accent-sky)]" />
+                          )}
                           {!isUser && phaseLabel && (
                             <span
                               className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] ${assistantBadgeClass}`}
@@ -380,61 +409,71 @@ export function ChatPane({
                               {phaseLabel}
                             </span>
                           )}
-                          {onBranchFromMessage && (
-                            <button
-                              className="ml-auto flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-[var(--color-text-muted)] opacity-0 transition-all duration-150 hover:bg-[var(--color-surface-2)] hover:text-[var(--color-accent)] group-hover:opacity-100"
-                              onClick={() => onBranchFromMessage(message.id)}
-                              title={isUser
-                                ? 'Branch from here — create a new session starting from this message'
-                                : 'Branch from here — create a new session continuing from this response'}
-                              type="button"
-                            >
-                              <GitBranch className="size-3" />
-                              Branch
-                            </button>
-                          )}
-                        </div>
-                        <div
-                          className={
-                            isUser
-                              ? 'text-[14px] leading-relaxed text-[var(--color-text-primary)]'
-                              : `rounded-xl border px-4 py-3 text-[14px] leading-relaxed text-[var(--color-text-primary)] ${assistantContainerClass}`
-                          }
-                        >
-                          {/* Attachment thumbnails */}
-                          {isUser && message.attachments && message.attachments.length > 0 && (
-                            <div className="mb-2 flex flex-wrap gap-2">
-                              {message.attachments.map((att, attIdx) =>
-                                isImageAttachment(att) ? (
-                                  <img
-                                    key={attIdx}
-                                    alt={getAttachmentDisplayName(att)}
-                                    className="max-h-48 max-w-xs rounded-lg border border-[var(--color-border)] object-cover"
-                                    src={`data:${att.mimeType};base64,${att.data}`}
-                                  />
-                                ) : (
-                                  <div
-                                    key={attIdx}
-                                    className="flex items-center gap-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2 py-1 text-[11px] text-[var(--color-text-secondary)]"
-                                  >
-                                    <Paperclip className="size-3" />
-                                    {getAttachmentDisplayName(att)}
-                                  </div>
-                                ),
-                              )}
+                          {showActions && (
+                            <div className="ml-auto">
+                              <MessageActions
+                                message={message}
+                                isLastAssistant={isLastAssistant}
+                                onCopy={() => handleCopyMessage(message.content)}
+                                onPin={() => onPinMessage?.(message.id, !message.isPinned)}
+                                onBranch={() => onBranchFromMessage?.(message.id)}
+                                onRegenerate={onRegenerateMessage ? () => onRegenerateMessage(message.id) : undefined}
+                                onEdit={onEditAndResendMessage && isUser ? () => setEditingMessageId(message.id) : undefined}
+                              />
                             </div>
                           )}
-                          {!isUser && message.pending ? (
-                            <div className="whitespace-pre-wrap break-words text-[14px] leading-relaxed text-[var(--color-text-primary)]">
-                              {message.content}
-                            </div>
-                          ) : (
-                            <MarkdownContent content={message.content} />
-                          )}
-                          {message.pending && message.content && (
-                            <span className="mt-1 inline-block h-4 w-[2px] animate-pulse rounded-sm bg-[var(--color-accent)]" />
-                          )}
                         </div>
+
+                        {/* Edit mode */}
+                        {isEditing ? (
+                          <MessageEditComposer
+                            initialContent={message.content}
+                            onSave={(content) => handleEditSave(message.id, content)}
+                            onCancel={() => setEditingMessageId(undefined)}
+                          />
+                        ) : (
+                          <div
+                            className={
+                              isUser
+                                ? 'text-[14px] leading-relaxed text-[var(--color-text-primary)]'
+                                : `rounded-xl border px-4 py-3 text-[14px] leading-relaxed text-[var(--color-text-primary)] ${assistantContainerClass}`
+                            }
+                          >
+                            {/* Attachment thumbnails */}
+                            {isUser && message.attachments && message.attachments.length > 0 && (
+                              <div className="mb-2 flex flex-wrap gap-2">
+                                {message.attachments.map((att, attIdx) =>
+                                  isImageAttachment(att) ? (
+                                    <img
+                                      key={attIdx}
+                                      alt={getAttachmentDisplayName(att)}
+                                      className="max-h-48 max-w-xs rounded-lg border border-[var(--color-border)] object-cover"
+                                      src={`data:${att.mimeType};base64,${att.data}`}
+                                    />
+                                  ) : (
+                                    <div
+                                      key={attIdx}
+                                      className="flex items-center gap-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2 py-1 text-[11px] text-[var(--color-text-secondary)]"
+                                    >
+                                      <Paperclip className="size-3" />
+                                      {getAttachmentDisplayName(att)}
+                                    </div>
+                                  ),
+                                )}
+                              </div>
+                            )}
+                            {!isUser && message.pending ? (
+                              <div className="whitespace-pre-wrap break-words text-[14px] leading-relaxed text-[var(--color-text-primary)]">
+                                {message.content}
+                              </div>
+                            ) : (
+                              <MarkdownContent content={message.content} />
+                            )}
+                            {message.pending && message.content && (
+                              <span className="mt-1 inline-block h-4 w-[2px] animate-pulse rounded-sm bg-[var(--color-accent)]" />
+                            )}
+                          </div>
+                        )}
                         {message.pending && !message.content && <ThinkingDots />}
                       </div>
                     </div>
@@ -810,6 +849,34 @@ export function ChatPane({
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ── Branch origin banner ───────────────────────────────────── */
+
+function BranchOriginBanner({ action, label }: { action?: SessionBranchOriginAction; label?: string }) {
+  const icon =
+    action === 'regenerate'
+      ? <RefreshCw className="size-3.5 shrink-0 text-[var(--color-accent-sky)]" />
+      : <GitBranch className="size-3.5 shrink-0 text-[var(--color-accent)]" />;
+
+  const verb =
+    action === 'regenerate'
+      ? 'Regenerated from'
+      : action === 'edit-and-resend'
+        ? 'Edited & resent from'
+        : 'Branched from';
+
+  return (
+    <div className="mb-4 flex items-center gap-2.5 rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-1)]/60 px-3.5 py-2.5 text-[12px] text-[var(--color-text-secondary)]">
+      {icon}
+      <span>
+        {verb}{' '}
+        <span className="font-medium text-[var(--color-text-primary)]">
+          {label ?? 'a previous session'}
+        </span>
+      </span>
     </div>
   );
 }

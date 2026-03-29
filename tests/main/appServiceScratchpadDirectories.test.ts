@@ -169,6 +169,73 @@ describe('AryxAppService scratchpad directories', () => {
     expect(await pathExists(duplicate.cwd!)).toBe(true);
   });
 
+  test('creates a new directory when branching a scratchpad session', async () => {
+    const workspace = createWorkspaceSeed();
+    const pattern = requireSinglePattern(workspace);
+    const scratchpadProject = createScratchpadProject(join(USER_DATA_PATH, 'scratchpad'), TIMESTAMP);
+    const originalDirectory = join(USER_DATA_PATH, 'scratchpad', 'session-original');
+    const originalSession = createScratchpadSession(pattern.id, {
+      id: 'session-original',
+      cwd: originalDirectory,
+      messages: [
+        {
+          id: 'msg-1',
+          role: 'user',
+          authorName: 'You',
+          content: 'Draft a plan.',
+          createdAt: TIMESTAMP,
+        },
+        {
+          id: 'msg-2',
+          role: 'assistant',
+          authorName: 'Primary Agent',
+          content: 'Here is the first approach.',
+          createdAt: TIMESTAMP,
+        },
+        {
+          id: 'msg-3',
+          role: 'user',
+          authorName: 'You',
+          content: 'Try again from here with a stricter checklist.',
+          createdAt: TIMESTAMP,
+        },
+        {
+          id: 'msg-4',
+          role: 'assistant',
+          authorName: 'Primary Agent',
+          content: 'Here is the revised approach.',
+          createdAt: TIMESTAMP,
+        },
+      ],
+    });
+
+    workspace.projects = [scratchpadProject];
+    workspace.sessions = [originalSession];
+    workspace.selectedProjectId = scratchpadProject.id;
+    workspace.selectedPatternId = pattern.id;
+    workspace.selectedSessionId = originalSession.id;
+
+    const service = createService(workspace);
+
+    const result = await service.branchSession(originalSession.id, 'msg-3');
+    const branch = result.sessions[0];
+    if (!branch) {
+      throw new Error('Expected branchSession to prepend the branch.');
+    }
+
+    expect(branch.id).not.toBe(originalSession.id);
+    expect(branch.cwd).toBe(join(USER_DATA_PATH, 'scratchpad', branch.id));
+    expect(branch.cwd).not.toBe(originalSession.cwd);
+    expect(branch.branchOrigin).toMatchObject({
+      sourceSessionId: originalSession.id,
+      sourceMessageId: 'msg-3',
+      sourceMessageIndex: 2,
+    });
+    expect(branch.messages.map((message) => message.id)).toEqual(['msg-1', 'msg-2', 'msg-3']);
+    expect(result.selectedSessionId).toBe(branch.id);
+    expect(await pathExists(branch.cwd!)).toBe(true);
+  });
+
   test('removes the scratchpad directory when deleting a session', async () => {
     const workspace = createWorkspaceSeed();
     const pattern = requireSinglePattern(workspace);

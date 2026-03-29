@@ -62,6 +62,7 @@ import {
 } from '@shared/domain/approval';
 import { isScratchpadProject, type ProjectRecord } from '@shared/domain/project';
 import {
+  branchSessionRecord,
   duplicateSessionRecord,
   querySessions as queryWorkspaceSessions,
   renameSessionRecord,
@@ -700,6 +701,23 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     workspace.selectedProjectId = duplicate.projectId;
     workspace.selectedPatternId = duplicate.patternId;
     workspace.selectedSessionId = duplicate.id;
+    return this.persistAndBroadcast(workspace);
+  }
+
+  async branchSession(sessionId: string, messageId: string): Promise<WorkspaceState> {
+    const workspace = await this.loadWorkspace();
+    const session = this.requireSession(workspace, sessionId);
+    const pattern = this.requirePattern(workspace, session.patternId);
+    const branch = branchSessionRecord(session, pattern, createId('session'), messageId, nowIso());
+    if (isScratchpadProject(branch.projectId)) {
+      branch.cwd = undefined;
+    }
+
+    await this.ensureScratchpadSessionDirectory(branch);
+    workspace.sessions.unshift(branch);
+    workspace.selectedProjectId = branch.projectId;
+    workspace.selectedPatternId = branch.patternId;
+    workspace.selectedSessionId = branch.id;
     return this.persistAndBroadcast(workspace);
   }
 

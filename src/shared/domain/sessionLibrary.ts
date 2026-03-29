@@ -1,6 +1,6 @@
 import type { PatternDefinition } from '@shared/domain/pattern';
 import { isScratchpadProject, type ProjectRecord } from '@shared/domain/project';
-import type { ChatMessageRecord, SessionRecord, SessionStatus } from '@shared/domain/session';
+import { resolveSessionTitle, type ChatMessageRecord, type SessionBranchOrigin, type SessionRecord, type SessionStatus } from '@shared/domain/session';
 import type { WorkspaceState } from '@shared/domain/workspace';
 
 export type SessionQueryMatchField = 'title' | 'message' | 'project' | 'pattern';
@@ -158,21 +158,32 @@ export function renameSessionRecord(session: SessionRecord, title: string, updat
   };
 }
 
-export function duplicateSessionRecord(
+function cloneBranchOrigin(branchOrigin?: SessionBranchOrigin): SessionBranchOrigin | undefined {
+  return branchOrigin ? { ...branchOrigin } : undefined;
+}
+
+function cloneChatMessageRecord(message: ChatMessageRecord): ChatMessageRecord {
+  return {
+    ...message,
+    pending: false,
+    attachments: message.attachments?.map((attachment) => ({ ...attachment })),
+  };
+}
+
+function createDerivedSessionRecord(
   session: SessionRecord,
   sessionId: string,
-  duplicatedAt: string,
+  createdAt: string,
 ): SessionRecord {
   return {
     ...session,
     id: sessionId,
-    title: `${session.title} (Copy)`,
-    titleSource: 'manual',
-    createdAt: duplicatedAt,
-    updatedAt: duplicatedAt,
+    createdAt,
+    updatedAt: createdAt,
     status: 'idle',
     isPinned: false,
     isArchived: false,
+    branchOrigin: cloneBranchOrigin(session.branchOrigin),
     lastError: undefined,
     sessionModelConfig: session.sessionModelConfig ? { ...session.sessionModelConfig } : undefined,
     tooling: session.tooling
@@ -188,11 +199,60 @@ export function duplicateSessionRecord(
       : undefined,
     pendingApproval: undefined,
     pendingApprovalQueue: undefined,
+    pendingUserInput: undefined,
+    pendingPlanReview: undefined,
+    pendingMcpAuth: undefined,
     runs: [],
-    messages: session.messages.map((message): ChatMessageRecord => ({
-      ...message,
-      pending: false,
-    })),
+    messages: [],
+  };
+}
+
+export function duplicateSessionRecord(
+  session: SessionRecord,
+  sessionId: string,
+  duplicatedAt: string,
+): SessionRecord {
+  return {
+    ...createDerivedSessionRecord(session, sessionId, duplicatedAt),
+    title: `${session.title} (Copy)`,
+    titleSource: 'manual',
+    messages: session.messages.map(cloneChatMessageRecord),
+  };
+}
+
+export function branchSessionRecord(
+  session: SessionRecord,
+  pattern: PatternDefinition,
+  sessionId: string,
+  messageId: string,
+  branchedAt: string,
+): SessionRecord {
+  const sourceMessageIndex = session.messages.findIndex((message) => message.id === messageId);
+  if (sourceMessageIndex < 0) {
+    throw new Error(`Message ${messageId} not found in session ${session.id}.`);
+  }
+
+  const sourceMessage = session.messages[sourceMessageIndex];
+  if (!sourceMessage) {
+    throw new Error(`Message ${messageId} not found in session ${session.id}.`);
+  }
+
+  if (sourceMessage.role !== 'user') {
+    throw new Error('Only user messages can be used as a branch point.');
+  }
+
+  const branchedMessages = session.messages.slice(0, sourceMessageIndex + 1).map(cloneChatMessageRecord);
+
+  return {
+    ...createDerivedSessionRecord(session, sessionId, branchedAt),
+    title: resolveSessionTitle(session, pattern, branchedMessages),
+    messages: branchedMessages,
+    branchOrigin: {
+      sourceSessionId: session.id,
+      sourceMessageId: messageId,
+      sourceMessageIndex,
+      branchedAt,
+    },
   };
 }
 

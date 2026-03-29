@@ -31,6 +31,7 @@ export const ipcChannels = {
   updateSessionApprovalSettings: 'sessions:update-approval-settings',
   createSession: 'sessions:create',
   duplicateSession: 'sessions:duplicate',
+  branchSession: 'sessions:branch',
   renameSession: 'sessions:rename',
   setSessionPinned: 'sessions:set-pinned',
   setSessionArchived: 'sessions:set-archived',

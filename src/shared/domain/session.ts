@@ -36,6 +36,13 @@ export interface ChatMessageRecord {
   attachments?: ChatMessageAttachment[];
 }
 
+export interface SessionBranchOrigin {
+  sourceSessionId: string;
+  sourceMessageId: string;
+  sourceMessageIndex: number;
+  branchedAt: string;
+}
+
 export interface SessionRecord {
   id: string;
   projectId: string;
@@ -47,6 +54,7 @@ export interface SessionRecord {
   status: SessionStatus;
   isPinned?: boolean;
   isArchived?: boolean;
+  branchOrigin?: SessionBranchOrigin;
   interactionMode?: InteractionMode;
   cwd?: string;
   messages: ChatMessageRecord[];
@@ -60,6 +68,38 @@ export interface SessionRecord {
   pendingPlanReview?: PendingPlanReviewRecord;
   pendingMcpAuth?: PendingMcpAuthRecord;
   runs: SessionRunRecord[];
+}
+
+function normalizeOptionalString(value?: string): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+export function normalizeSessionBranchOrigin(
+  branchOrigin?: Partial<SessionBranchOrigin>,
+): SessionBranchOrigin | undefined {
+  const sourceSessionId = normalizeOptionalString(branchOrigin?.sourceSessionId);
+  const sourceMessageId = normalizeOptionalString(branchOrigin?.sourceMessageId);
+  const branchedAt = normalizeOptionalString(branchOrigin?.branchedAt);
+  const sourceMessageIndex = branchOrigin?.sourceMessageIndex;
+
+  if (
+    !sourceSessionId
+    || !sourceMessageId
+    || !branchedAt
+    || typeof sourceMessageIndex !== 'number'
+    || !Number.isInteger(sourceMessageIndex)
+    || sourceMessageIndex < 0
+  ) {
+    return undefined;
+  }
+
+  return {
+    sourceSessionId,
+    sourceMessageId,
+    sourceMessageIndex,
+    branchedAt,
+  };
 }
 
 export function resolveSessionTitle(

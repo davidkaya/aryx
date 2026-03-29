@@ -58,6 +58,11 @@ export interface DuplicateSessionInput {
   sessionId: string;
 }
 
+export interface BranchSessionInput {
+  sessionId: string;
+  messageId: string;
+}
+
 export interface RenameSessionInput {
   sessionId: string;
   title: string;
@@ -174,6 +179,7 @@ export interface ElectronApi {
   updateSessionApprovalSettings(input: UpdateSessionApprovalSettingsInput): Promise<WorkspaceState>;
   createSession(input: CreateSessionInput): Promise<WorkspaceState>;
   duplicateSession(input: DuplicateSessionInput): Promise<WorkspaceState>;
+  branchSession(input: BranchSessionInput): Promise<WorkspaceState>;
   renameSession(input: RenameSessionInput): Promise<WorkspaceState>;
   setSessionPinned(input: SetSessionPinnedInput): Promise<WorkspaceState>;
   setSessionArchived(input: SetSessionArchivedInput): Promise<WorkspaceState>;

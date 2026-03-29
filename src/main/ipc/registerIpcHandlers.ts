@@ -3,6 +3,7 @@ import type { BrowserWindow } from 'electron';
 
 import { ipcChannels } from '@shared/contracts/channels';
 import type {
+  BranchSessionInput,
   CancelSessionTurnInput,
   CreateSessionInput,
   DismissSessionMcpAuthInput,
@@ -134,6 +135,9 @@ export function registerIpcHandlers(window: BrowserWindow, service: AryxAppServi
   );
   ipcMain.handle(ipcChannels.duplicateSession, (_event, input: DuplicateSessionInput) =>
     service.duplicateSession(input.sessionId),
+  );
+  ipcMain.handle(ipcChannels.branchSession, (_event, input: BranchSessionInput) =>
+    service.branchSession(input.sessionId, input.messageId),
   );
   ipcMain.handle(ipcChannels.renameSession, (_event, input: RenameSessionInput) =>
     service.renameSession(input.sessionId, input.title),

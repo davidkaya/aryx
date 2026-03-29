@@ -47,6 +47,7 @@ const api: ElectronApi = {
     ipcRenderer.invoke(ipcChannels.updateSessionApprovalSettings, input),
   createSession: (input) => ipcRenderer.invoke(ipcChannels.createSession, input),
   duplicateSession: (input) => ipcRenderer.invoke(ipcChannels.duplicateSession, input),
+  branchSession: (input) => ipcRenderer.invoke(ipcChannels.branchSession, input),
   renameSession: (input) => ipcRenderer.invoke(ipcChannels.renameSession, input),
   setSessionPinned: (input) => ipcRenderer.invoke(ipcChannels.setSessionPinned, input),
   setSessionArchived: (input) => ipcRenderer.invoke(ipcChannels.setSessionArchived, input),

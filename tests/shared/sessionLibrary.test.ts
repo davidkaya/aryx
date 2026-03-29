@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 
-import { querySessions, duplicateSessionRecord, renameSessionRecord } from '@shared/domain/sessionLibrary';
+import { branchSessionRecord, querySessions, duplicateSessionRecord, renameSessionRecord } from '@shared/domain/sessionLibrary';
 import type { PatternDefinition } from '@shared/domain/pattern';
 import type { ProjectRecord } from '@shared/domain/project';
 import type { SessionRecord } from '@shared/domain/session';
@@ -174,6 +174,132 @@ describe('session library helpers', () => {
     expect(session.pendingApproval).toBeUndefined();
     expect(session.pendingApprovalQueue).toBeUndefined();
     expect(session.runs).toEqual([]);
+  });
+
+  test('branches sessions from a user message and retains only the prior transcript', () => {
+    const sourceSession = createSession({
+      title: 'Manual branch source',
+      titleSource: 'manual',
+      status: 'error',
+      isPinned: true,
+      isArchived: true,
+      lastError: 'sidecar crashed',
+      approvalSettings: {
+        autoApprovedToolNames: ['git.status'],
+      },
+      pendingApproval: {
+        id: 'approval-1',
+        kind: 'tool-call',
+        status: 'pending',
+        requestedAt: '2026-03-23T00:01:00.000Z',
+        title: 'Approve tool access',
+      },
+      pendingApprovalQueue: [
+        {
+          id: 'approval-2',
+          kind: 'final-response',
+          status: 'pending',
+          requestedAt: '2026-03-23T00:02:00.000Z',
+          title: 'Approve final response',
+        },
+      ],
+      messages: [
+        {
+          id: 'msg-1',
+          role: 'user',
+          authorName: 'You',
+          content: 'Investigate the refresh bug.',
+          createdAt: '2026-03-23T00:00:00.000Z',
+        },
+        {
+          id: 'msg-2',
+          role: 'assistant',
+          authorName: 'Reviewer',
+          content: 'I found two likely causes.',
+          createdAt: '2026-03-23T00:01:00.000Z',
+          pending: true,
+        },
+        {
+          id: 'msg-3',
+          role: 'user',
+          authorName: 'You',
+          content: 'Try a different approach focused on session state.',
+          createdAt: '2026-03-23T00:02:00.000Z',
+          attachments: [
+            {
+              type: 'file',
+              path: 'C:\\workspace\\alpha\\notes.txt',
+              displayName: 'notes.txt',
+            },
+          ],
+        },
+        {
+          id: 'msg-4',
+          role: 'assistant',
+          authorName: 'Reviewer',
+          content: 'Here is the alternate plan.',
+          createdAt: '2026-03-23T00:03:00.000Z',
+        },
+      ],
+    });
+
+    const branch = branchSessionRecord(
+      sourceSession,
+      createPattern(),
+      'session-branch',
+      'msg-3',
+      '2026-03-23T00:04:00.000Z',
+    );
+
+    expect(branch).toMatchObject({
+      id: 'session-branch',
+      title: 'Manual branch source',
+      titleSource: 'manual',
+      status: 'idle',
+      isPinned: false,
+      isArchived: false,
+      lastError: undefined,
+      createdAt: '2026-03-23T00:04:00.000Z',
+      updatedAt: '2026-03-23T00:04:00.000Z',
+      branchOrigin: {
+        sourceSessionId: 'session-1',
+        sourceMessageId: 'msg-3',
+        sourceMessageIndex: 2,
+        branchedAt: '2026-03-23T00:04:00.000Z',
+      },
+    });
+    expect(branch.messages.map((message) => message.id)).toEqual(['msg-1', 'msg-2', 'msg-3']);
+    expect(branch.messages[1]?.pending).toBe(false);
+    expect(branch.messages[2]?.attachments).toEqual(sourceSession.messages[2]?.attachments);
+    expect(branch.messages[2]?.attachments).not.toBe(sourceSession.messages[2]?.attachments);
+    expect(branch.messages[1]).not.toBe(sourceSession.messages[1]);
+    expect(branch.pendingApproval).toBeUndefined();
+    expect(branch.pendingApprovalQueue).toBeUndefined();
+    expect(branch.runs).toEqual([]);
+    expect(sourceSession.messages[1]?.pending).toBe(true);
+  });
+
+  test('rejects branching from non-user messages', () => {
+    const sourceSession = createSession({
+      messages: [
+        {
+          id: 'msg-1',
+          role: 'assistant',
+          authorName: 'Reviewer',
+          content: 'I can help with that.',
+          createdAt: '2026-03-23T00:00:00.000Z',
+        },
+      ],
+    });
+
+    expect(() =>
+      branchSessionRecord(
+        sourceSession,
+        createPattern(),
+        'session-branch',
+        'msg-1',
+        '2026-03-23T00:04:00.000Z',
+      )).toThrow('Only user messages can be used as a branch point.');
   });
 
   test('searches across session title, messages, projects, and patterns', () => {

@@ -7,9 +7,19 @@ namespace Aryx.AgentHost.Services;
 
 internal static class CopilotSessionHooks
 {
+    private const string AskUserToolName = "ask_user";
     private const string AllowDecision = "allow";
     private const string AskDecision = "ask";
     private const string DenyDecision = "deny";
+    private const string HandoffToolPrefix = "handoff_to_";
+    private const string ReportIntentToolName = "report_intent";
+    private const string TaskCompleteToolName = "task_complete";
+    private static readonly HashSet<string> AlwaysAllowedToolNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        AskUserToolName,
+        ReportIntentToolName,
+        TaskCompleteToolName,
+    };
     private static readonly JsonSerializerOptions HookJsonOptions = new(JsonSerializerDefaults.Web)
     {
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
@@ -216,11 +226,20 @@ internal static class CopilotSessionHooks
         PatternAgentDefinitionDto agentDefinition,
         PreToolUseHookInput input)
     {
+        string? toolName = Normalize(input.ToolName);
+        if (IsAlwaysAllowedTool(toolName))
+        {
+            return new PreToolUseHookOutput
+            {
+                PermissionDecision = AllowDecision,
+            };
+        }
+
         bool requiresApproval = CopilotApprovalCoordinator.RequiresToolCallApproval(
             command.Pattern.ApprovalPolicy,
             agentDefinition.Id,
-            Normalize(input.ToolName),
-            Normalize(input.ToolName));
+            toolName,
+            toolName);
 
         return new PreToolUseHookOutput
         {
@@ -261,6 +280,14 @@ internal static class CopilotSessionHooks
 
     private static string SerializeHookValue(object? value)
         => JsonSerializer.Serialize(value, HookJsonOptions);
+
+    private static bool IsAlwaysAllowedTool(string? toolName)
+    {
+        string? normalizedToolName = Normalize(toolName);
+        return normalizedToolName is not null
+            && (AlwaysAllowedToolNames.Contains(normalizedToolName)
+                || normalizedToolName.StartsWith(HandoffToolPrefix, StringComparison.OrdinalIgnoreCase));
+    }
 
     private static string? Normalize(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value.Trim();

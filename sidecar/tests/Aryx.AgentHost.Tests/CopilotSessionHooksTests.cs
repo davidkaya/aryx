@@ -106,6 +106,27 @@ public sealed class CopilotSessionHooksTests
         Assert.Single(runner.Invocations);
     }
 
+    [Theory]
+    [InlineData("ask_user")]
+    [InlineData("report_intent")]
+    [InlineData("task_complete")]
+    [InlineData("handoff_to_2")]
+    [InlineData("handoff_to_specialist")]
+    public async Task Create_PreToolUseAutoAllowsInfrastructureTools(string toolName)
+    {
+        RunTurnCommandDto command = CreateCommandWithToolApproval();
+        SessionHooks hooks = CopilotSessionHooks.Create(command, command.Pattern.Agents[0], ResolvedHookSet.Empty, new RecordingHookCommandRunner());
+
+        PreToolUseHookOutput? decision = await hooks.OnPreToolUse!(
+            new PreToolUseHookInput
+            {
+                ToolName = toolName,
+            },
+            null!);
+
+        Assert.Equal("allow", decision?.PermissionDecision);
+    }
+
     [Fact]
     public async Task Create_RunsConfiguredNonPreToolHooks()
     {

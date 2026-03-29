@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, Code, Cpu, FolderOpen, Palette, Plus, Server
 
 import { CopilotStatusCard } from '@renderer/components/CopilotStatusCard';
 import { PatternEditor } from '@renderer/components/PatternEditor';
+import { ToggleSwitch } from '@renderer/components/ui';
 import { LspProfileEditor } from '@renderer/components/settings/LspProfileEditor';
 import { McpServerEditor } from '@renderer/components/settings/McpServerEditor';
 import type { SidecarCapabilities, QuotaSnapshot } from '@shared/contracts/sidecar';
@@ -39,6 +40,8 @@ interface SettingsPanelProps {
   onDeleteLspProfile: (profileId: string) => Promise<void>;
   onNewLspProfile: () => LspProfileDefinition;
   onSetTheme: (theme: AppearanceTheme) => void;
+  notificationsEnabled: boolean;
+  onSetNotificationsEnabled: (enabled: boolean) => void;
   onOpenAppDataFolder: () => void;
   onResetLocalWorkspace: () => Promise<void>;
   onResolveUserDiscoveredTooling?: (serverIds: string[], resolution: 'accept' | 'dismiss') => void;
@@ -117,6 +120,8 @@ export function SettingsPanel({
   onDeleteLspProfile,
   onNewLspProfile,
   onSetTheme,
+  notificationsEnabled,
+  onSetNotificationsEnabled,
   onOpenAppDataFolder,
   onResetLocalWorkspace,
   onResolveUserDiscoveredTooling,
@@ -255,7 +260,12 @@ export function SettingsPanel({
         <div className="flex-1 overflow-y-auto">
           <div className="mx-auto max-w-2xl px-8 py-6">
             {activeSection === 'appearance' && (
-              <AppearanceSection theme={theme} onSetTheme={onSetTheme} />
+              <AppearanceSection
+                theme={theme}
+                onSetTheme={onSetTheme}
+                notificationsEnabled={notificationsEnabled}
+                onSetNotificationsEnabled={onSetNotificationsEnabled}
+              />
             )}
             {activeSection === 'connection' && (
               <ConnectionSection
@@ -315,9 +325,13 @@ const themeOptions: { value: AppearanceTheme; label: string; description: string
 function AppearanceSection({
   theme,
   onSetTheme,
+  notificationsEnabled,
+  onSetNotificationsEnabled,
 }: {
   theme: AppearanceTheme;
   onSetTheme: (theme: AppearanceTheme) => void;
+  notificationsEnabled: boolean;
+  onSetNotificationsEnabled: (enabled: boolean) => void;
 }) {
   return (
     <div>
@@ -359,6 +373,30 @@ function AppearanceSection({
           );
         })}
       </div>
+
+      {/* Notifications */}
+      <div className="mt-8 mb-1">
+        <h3 className="font-display text-[13px] font-semibold text-[var(--color-text-primary)]">Notifications</h3>
+        <p className="mt-0.5 text-[12px] text-[var(--color-text-muted)]">
+          Control when Aryx sends desktop notifications
+        </p>
+      </div>
+
+      <button
+        className="mt-4 flex w-full items-center justify-between rounded-lg border border-[var(--color-border)] px-4 py-3 text-left transition hover:bg-[var(--color-surface-3)]/40"
+        onClick={() => onSetNotificationsEnabled(!notificationsEnabled)}
+        type="button"
+      >
+        <div>
+          <span className="text-[13px] font-medium text-[var(--color-text-primary)]">
+            Run completion alerts
+          </span>
+          <p className="text-[12px] text-[var(--color-text-muted)]">
+            Notify when a session run completes, fails, or needs approval while the app is unfocused
+          </p>
+        </div>
+        <ToggleSwitch enabled={notificationsEnabled} />
+      </button>
     </div>
   );
 }

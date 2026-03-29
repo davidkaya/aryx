@@ -257,6 +257,11 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     return this.workspace;
   }
 
+  /** Returns the in-memory workspace without loading from disk. Used for synchronous checks. */
+  getCachedWorkspace(): WorkspaceState | undefined {
+    return this.workspace;
+  }
+
   async dispose(): Promise<void> {
     this.ptyManager.dispose();
     await this.sidecar.dispose();
@@ -500,6 +505,12 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     }
 
     workspace.settings.terminalHeight = normalizedHeight;
+    return this.persistAndBroadcast(workspace);
+  }
+
+  async setNotificationsEnabled(enabled: boolean): Promise<WorkspaceState> {
+    const workspace = await this.loadWorkspace();
+    workspace.settings.notificationsEnabled = enabled;
     return this.persistAndBroadcast(workspace);
   }
 

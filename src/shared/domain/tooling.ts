@@ -64,6 +64,7 @@ export interface WorkspaceSettings {
   tooling: WorkspaceToolingSettings;
   discoveredUserTooling: DiscoveredToolingState;
   terminalHeight?: number;
+  notificationsEnabled?: boolean;
 }
 
 export interface SessionToolingSelection {

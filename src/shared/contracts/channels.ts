@@ -15,6 +15,7 @@ export const ipcChannels = {
   setPatternFavorite: 'patterns:set-favorite',
   setTheme: 'settings:set-theme',
   setTerminalHeight: 'settings:set-terminal-height',
+  setNotificationsEnabled: 'settings:set-notifications-enabled',
   saveMcpServer: 'tooling:mcp:save',
   deleteMcpServer: 'tooling:mcp:delete',
   saveLspProfile: 'tooling:lsp:save',

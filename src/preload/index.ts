@@ -26,6 +26,7 @@ const api: ElectronApi = {
   setPatternFavorite: (input) => ipcRenderer.invoke(ipcChannels.setPatternFavorite, input),
   setTheme: (theme) => ipcRenderer.invoke(ipcChannels.setTheme, theme),
   setTerminalHeight: (input) => ipcRenderer.invoke(ipcChannels.setTerminalHeight, input),
+  setNotificationsEnabled: (enabled) => ipcRenderer.invoke(ipcChannels.setNotificationsEnabled, enabled),
   saveMcpServer: (input) => ipcRenderer.invoke(ipcChannels.saveMcpServer, input),
   deleteMcpServer: (serverId) => ipcRenderer.invoke(ipcChannels.deleteMcpServer, serverId),
   saveLspProfile: (input) => ipcRenderer.invoke(ipcChannels.saveLspProfile, input),

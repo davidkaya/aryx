@@ -194,6 +194,7 @@ export interface ElectronApi {
   setPatternFavorite(input: SetPatternFavoriteInput): Promise<WorkspaceState>;
   setTheme(theme: AppearanceTheme): Promise<WorkspaceState>;
   setTerminalHeight(input: SetTerminalHeightInput): Promise<WorkspaceState>;
+  setNotificationsEnabled(enabled: boolean): Promise<WorkspaceState>;
   describeTerminal(): Promise<TerminalSnapshot | undefined>;
   createTerminal(): Promise<TerminalSnapshot>;
   restartTerminal(): Promise<TerminalSnapshot>;

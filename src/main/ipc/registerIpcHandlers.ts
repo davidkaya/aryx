@@ -36,6 +36,7 @@ import type { QuerySessionsInput } from '@shared/domain/sessionLibrary';
 import type { AppearanceTheme } from '@shared/domain/tooling';
 
 import { AryxAppService } from '@main/AryxAppService';
+import { createDesktopNotificationHandler } from '@main/services/desktopNotifications';
 import { applyTitleBarTheme } from '@main/windows/titleBarTheme';
 
 const { ipcMain } = electron;
@@ -85,6 +86,10 @@ export function registerIpcHandlers(window: BrowserWindow, service: AryxAppServi
   ipcMain.handle(
     ipcChannels.setTerminalHeight,
     (_event, input: SetTerminalHeightInput) => service.setTerminalHeight(input.height),
+  );
+  ipcMain.handle(
+    ipcChannels.setNotificationsEnabled,
+    (_event, enabled: boolean) => service.setNotificationsEnabled(enabled),
   );
   ipcMain.handle(ipcChannels.saveMcpServer, (_event, input: SaveMcpServerInput) =>
     service.saveMcpServer(input.server),
@@ -182,6 +187,14 @@ export function registerIpcHandlers(window: BrowserWindow, service: AryxAppServi
   service.on('session-event', (event) => {
     window.webContents.send(ipcChannels.sessionEvent, event);
   });
+
+  // Desktop notifications for run completion, failure, and approval requests
+  const handleNotification = createDesktopNotificationHandler(
+    () => window,
+    () => service.getCachedWorkspace(),
+    (sessionId) => service.selectSession(sessionId),
+  );
+  service.on('session-event', handleNotification);
 
   service.on('terminal-data', (data) => {
     window.webContents.send(ipcChannels.terminalData, data);

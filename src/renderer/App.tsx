@@ -485,6 +485,8 @@ export default function App() {
           await api.savePattern({ pattern });
         }}
         onSetTheme={(theme) => void api.setTheme(theme)}
+        notificationsEnabled={workspace.settings.notificationsEnabled !== false}
+        onSetNotificationsEnabled={(enabled) => void api.setNotificationsEnabled(enabled)}
         onOpenAppDataFolder={() => void api.openAppDataFolder()}
         onResetLocalWorkspace={async () => {
           const fresh = await api.resetLocalWorkspace();

@@ -279,14 +279,14 @@ describe('session library helpers', () => {
     expect(sourceSession.messages[1]?.pending).toBe(true);
   });
 
-  test('rejects branching from non-user messages', () => {
+  test('rejects branching from non-conversation messages', () => {
     const sourceSession = createSession({
       messages: [
         {
           id: 'msg-1',
-          role: 'assistant',
-          authorName: 'Reviewer',
-          content: 'I can help with that.',
+          role: 'system' as 'user',
+          authorName: 'System',
+          content: 'System prompt.',
           createdAt: '2026-03-23T00:00:00.000Z',
         },
       ],
@@ -299,7 +299,57 @@ describe('session library helpers', () => {
         'session-branch',
         'msg-1',
         '2026-03-23T00:04:00.000Z',
-      )).toThrow('Only user messages can be used as a branch point.');
+      )).toThrow('Only user or assistant messages can be used as a branch point.');
+  });
+
+  test('branches from an assistant message and retains transcript up to that response', () => {
+    const sourceSession = createSession({
+      messages: [
+        {
+          id: 'msg-1',
+          role: 'user',
+          authorName: 'You',
+          content: 'Investigate the refresh bug.',
+          createdAt: '2026-03-23T00:00:00.000Z',
+        },
+        {
+          id: 'msg-2',
+          role: 'assistant',
+          authorName: 'Reviewer',
+          content: 'I found two likely causes.',
+          createdAt: '2026-03-23T00:01:00.000Z',
+        },
+        {
+          id: 'msg-3',
+          role: 'user',
+          authorName: 'You',
+          content: 'Try a different approach.',
+          createdAt: '2026-03-23T00:02:00.000Z',
+        },
+        {
+          id: 'msg-4',
+          role: 'assistant',
+          authorName: 'Reviewer',
+          content: 'Here is the alternate plan.',
+          createdAt: '2026-03-23T00:03:00.000Z',
+        },
+      ],
+    });
+
+    const branch = branchSessionRecord(
+      sourceSession,
+      createPattern(),
+      'session-branch',
+      'msg-2',
+      '2026-03-23T00:05:00.000Z',
+    );
+
+    expect(branch.messages.map((m) => m.id)).toEqual(['msg-1', 'msg-2']);
+    expect(branch.branchOrigin).toMatchObject({
+      sourceSessionId: 'session-1',
+      sourceMessageId: 'msg-2',
+      sourceMessageIndex: 1,
+    });
   });
 
   test('searches across session title, messages, projects, and patterns', () => {

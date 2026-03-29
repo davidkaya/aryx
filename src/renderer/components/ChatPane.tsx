@@ -380,11 +380,13 @@ export function ChatPane({
                               {phaseLabel}
                             </span>
                           )}
-                          {isUser && onBranchFromMessage && (
+                          {onBranchFromMessage && (
                             <button
                               className="ml-auto flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-[var(--color-text-muted)] opacity-0 transition-all duration-150 hover:bg-[var(--color-surface-2)] hover:text-[var(--color-accent)] group-hover:opacity-100"
                               onClick={() => onBranchFromMessage(message.id)}
-                              title="Branch from here — create a new session starting from this message"
+                              title={isUser
+                                ? 'Branch from here — create a new session starting from this message'
+                                : 'Branch from here — create a new session continuing from this response'}
                               type="button"
                             >
                               <GitBranch className="size-3" />

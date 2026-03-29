@@ -237,8 +237,8 @@ export function branchSessionRecord(
     throw new Error(`Message ${messageId} not found in session ${session.id}.`);
   }
 
-  if (sourceMessage.role !== 'user') {
-    throw new Error('Only user messages can be used as a branch point.');
+  if (sourceMessage.role !== 'user' && sourceMessage.role !== 'assistant') {
+    throw new Error('Only user or assistant messages can be used as a branch point.');
   }
 
   const branchedMessages = session.messages.slice(0, sourceMessageIndex + 1).map(cloneChatMessageRecord);

@@ -134,7 +134,7 @@ To publish packaged artifacts and update metadata to GitHub Releases, run:
 
 GitHub Actions runs validation on pushes and pull requests, and tagged releases now use `electron-builder` to publish Windows (NSIS), macOS (DMG + ZIP for updater metadata), and Linux (AppImage) artifacts directly to GitHub Releases. Packaged builds use `electron-updater` against those releases for in-app updates.
 
-Tagged macOS release jobs now prepare signing assets from the GitHub secrets `APPLE_CERT_P12_BASE64`, `APPLE_CERT_PASSWORD`, `APPLE_API_KEY_P8`, `APPLE_API_KEY_ID`, `APPLE_API_ISSUER`, and `APPLE_TEAM_ID`, then export the standard `electron-builder` environment variables (`CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_API_KEY`, `APPLE_API_KEY_ID`, `APPLE_API_ISSUER`, `APPLE_TEAM_ID`) before packaging. That same release path signs and notarizes the macOS artifacts as part of publication.
+Tagged macOS release jobs now prepare signing assets from the GitHub secrets `APPLE_CERT_P12_BASE64`, `APPLE_CERT_PASSWORD`, `APPLE_API_KEY_P8`, `APPLE_API_KEY_ID`, `APPLE_API_ISSUER`, and `APPLE_TEAM_ID`, normalize the decoded PKCS#12 into a macOS-compatible container, preflight `security import` against a temporary keychain, and then export the standard `electron-builder` environment variables (`CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_API_KEY`, `APPLE_API_KEY_ID`, `APPLE_API_ISSUER`, `APPLE_TEAM_ID`) before packaging. That same release path signs and notarizes the macOS artifacts as part of publication.
 
 Windows builds are currently packaged without Authenticode signing, so Aryx disables `electron-updater`'s Windows signature verification until a signing certificate is configured. macOS auto-update metadata still requires a ZIP artifact alongside the DMG build.
 

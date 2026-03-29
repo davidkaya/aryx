@@ -174,11 +174,22 @@ jobs:
             exit 1
           fi
 
+          SOURCE_CERT_PATH="$RUNNER_TEMP/apple-signing-source.p12"
           CERT_PATH="$RUNNER_TEMP/apple-signing.p12"
+          PEM_PATH="$RUNNER_TEMP/apple-signing.pem"
+          PRECHECK_KEYCHAIN_PATH="$RUNNER_TEMP/apple-signing-preflight.keychain-db"
+          PRECHECK_KEYCHAIN_PASSWORD="$(uuidgen)"
           API_KEY_PATH="$RUNNER_TEMP/AuthKey_${APPLE_API_KEY_ID}.p8"
 
-          CERT_PATH="$CERT_PATH" python3 - <<'PY'
+          cleanup_precheck_keychain() {
+            security delete-keychain "$PRECHECK_KEYCHAIN_PATH" >/dev/null 2>&1 || true
+          }
+
+          trap cleanup_precheck_keychain EXIT
+
+          CERT_PATH="$SOURCE_CERT_PATH" python3 - <<'PY'
           import base64
+          import binascii
           import os
           from pathlib import Path
 
@@ -187,7 +198,11 @@ jobs:
           if not normalized_value:
               raise SystemExit("APPLE_CERT_P12_BASE64 is empty after whitespace normalization")
 
-          decoded = base64.b64decode(normalized_value, validate=True)
+          try:
+              decoded = base64.b64decode(normalized_value, validate=True)
+          except binascii.Error:
+              raise SystemExit("APPLE_CERT_P12_BASE64 is not valid base64")
+
           if not decoded:
               raise SystemExit("Decoded Apple signing certificate is empty")
 
@@ -195,15 +210,49 @@ jobs:
           PY
           printf '%s' "$APPLE_API_KEY_P8" > "$API_KEY_PATH"
 
-          if [[ ! -s "$CERT_PATH" ]]; then
+          if [[ ! -s "$SOURCE_CERT_PATH" ]]; then
             echo "Decoded Apple signing certificate file is empty." >&2
             exit 1
           fi
 
-          if ! openssl pkcs12 -in "$CERT_PATH" -noout -passin env:APPLE_CERT_PASSWORD >/dev/null 2>&1; then
+          if ! openssl pkcs12 -in "$SOURCE_CERT_PATH" -noout -passin env:APPLE_CERT_PASSWORD >/dev/null 2>&1; then
             echo "Decoded Apple signing certificate could not be opened with APPLE_CERT_PASSWORD." >&2
             exit 1
           fi
+
+          if ! openssl pkcs12 -in "$SOURCE_CERT_PATH" -passin env:APPLE_CERT_PASSWORD -nodes -out "$PEM_PATH" >/dev/null 2>&1; then
+            echo "Decoded Apple signing certificate could not be converted to PEM." >&2
+            exit 1
+          fi
+
+          if ! openssl pkcs12 -export -out "$CERT_PATH" -in "$PEM_PATH" -passout env:APPLE_CERT_PASSWORD -macalg sha1 -keypbe PBE-SHA1-3DES -certpbe PBE-SHA1-3DES >/dev/null 2>&1; then
+            echo "Apple signing certificate could not be re-exported into a macOS-compatible PKCS#12." >&2
+            exit 1
+          fi
+
+          if [[ ! -s "$CERT_PATH" ]]; then
+            echo "Normalized Apple signing certificate file is empty." >&2
+            exit 1
+          fi
+
+          if ! security create-keychain -p "$PRECHECK_KEYCHAIN_PASSWORD" "$PRECHECK_KEYCHAIN_PATH" >/dev/null 2>&1; then
+            echo "Unable to create the macOS signing precheck keychain." >&2
+            exit 1
+          fi
+
+          if ! security unlock-keychain -p "$PRECHECK_KEYCHAIN_PASSWORD" "$PRECHECK_KEYCHAIN_PATH" >/dev/null 2>&1; then
+            echo "Unable to unlock the macOS signing precheck keychain." >&2
+            exit 1
+          fi
+
+          if ! security import "$CERT_PATH" -k "$PRECHECK_KEYCHAIN_PATH" -P "$APPLE_CERT_PASSWORD" -T /usr/bin/codesign -T /usr/bin/productsign >/dev/null 2>&1; then
+            echo "Normalized Apple signing certificate is still not importable by macOS security." >&2
+            exit 1
+          fi
+
+          rm -f "$SOURCE_CERT_PATH" "$PEM_PATH"
+          cleanup_precheck_keychain
+          trap - EXIT
 
           write_github_env "CSC_LINK" "$CERT_PATH"
           write_github_env "CSC_KEY_PASSWORD" "$APPLE_CERT_PASSWORD"

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AppShell } from '@renderer/components/AppShell';
 import { ActivityPanel } from '@renderer/components/ActivityPanel';
 import { ChatPane } from '@renderer/components/ChatPane';
+import { CommandPalette } from '@renderer/components/CommandPalette';
 import { DiscoveredToolingModal } from '@renderer/components/DiscoveredToolingModal';
 import { NewSessionModal } from '@renderer/components/NewSessionModal';
 import { ProjectSettingsPanel } from '@renderer/components/ProjectSettingsPanel';
@@ -112,6 +113,7 @@ export default function App() {
   const [projectSettingsId, setProjectSettingsId] = useState<string>();
   const [newSessionProjectId, setNewSessionProjectId] = useState<string>();
   const [showDiscoveryModal, setShowDiscoveryModal] = useState(false);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
 
   // Terminal state
   const [terminalOpen, setTerminalOpen] = useState(false);
@@ -264,12 +266,16 @@ export default function App() {
     if (hasPendingDiscoveries) setShowDiscoveryModal(true);
   }, [hasPendingDiscoveries]);
 
-  // Terminal: Ctrl+` toggle + track running state
+  // Terminal: Ctrl+` toggle + Command palette: Ctrl+K / Cmd+K
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.key === '`') {
         e.preventDefault();
         setTerminalOpen((prev) => !prev);
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        setCommandPaletteOpen((prev) => !prev);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -605,6 +611,38 @@ export default function App() {
             void api.removeProject(projectForSettings.id);
             setProjectSettingsId(undefined);
           }}
+        />
+      )}
+
+      {commandPaletteOpen && workspace && (
+        <CommandPalette
+          workspace={workspace}
+          onClose={() => setCommandPaletteOpen(false)}
+          onSelectSession={(sessionId) => {
+            void api.selectSession(sessionId);
+          }}
+          onSelectProject={(projectId) => {
+            void api.selectProject(projectId);
+          }}
+          onNewSession={(projectId) => {
+            setNewSessionProjectId(projectId);
+          }}
+          onCreateScratchpad={handleCreateScratchpad}
+          onOpenSettings={() => setShowSettings(true)}
+          onOpenProjectSettings={(projectId) => setProjectSettingsId(projectId)}
+          onToggleTerminal={handleTerminalToggle}
+          onSetTheme={(theme) => void api.setTheme(theme)}
+          onDuplicateSession={(sessionId) => {
+            void api.duplicateSession({ sessionId });
+          }}
+          onPinSession={(sessionId, isPinned) => {
+            void api.setSessionPinned({ sessionId, isPinned });
+          }}
+          onArchiveSession={(sessionId, isArchived) => {
+            void api.setSessionArchived({ sessionId, isArchived });
+          }}
+          onAddProject={() => void api.addProject()}
+          onOpenAppDataFolder={() => void api.openAppDataFolder()}
         />
       )}
     </>

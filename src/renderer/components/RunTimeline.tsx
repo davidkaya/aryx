@@ -51,20 +51,37 @@ const runStatusStyles: Record<SessionRunRecord['status'], { icon: ReactNode; cla
 /* ── Event node icon ───────────────────────────────────────── */
 
 function EventIcon({ kind, status }: { kind: RunTimelineEventRecord['kind']; status: RunTimelineEventRecord['status'] }) {
-  const base = 'size-3.5';
+  const isRunning = status === 'running';
+  const base = 'size-2.5';
+
+  // Running events use white icons to contrast with the brand-gradient circle
+  if (isRunning) {
+    const pulse = 'animate-pulse';
+    switch (kind) {
+      case 'thinking':
+        return <Brain className={`${base} ${pulse} text-white`} />;
+      case 'approval':
+        return <AlertTriangle className={`${base} ${pulse} text-white`} />;
+      case 'message':
+        return <MessageSquare className={`${base} ${pulse} text-white`} />;
+      default:
+        return <Play className={`${base} text-white`} />;
+    }
+  }
+
   switch (kind) {
     case 'run-started':
       return <Play className={`${base} text-[var(--color-text-muted)]`} />;
     case 'thinking':
-      return <Brain className={`${base} ${status === 'running' ? 'text-[var(--color-accent-sky)] animate-pulse' : 'text-[var(--color-text-muted)]'}`} />;
+      return <Brain className={`${base} text-[var(--color-text-muted)]`} />;
     case 'handoff':
       return <ArrowRight className={`${base} text-[var(--color-status-warning)]`} />;
     case 'tool-call':
       return <Wrench className={`${base} text-[var(--color-accent-purple)]`} />;
     case 'approval':
-      return <AlertTriangle className={`${base} ${status === 'running' ? 'text-[var(--color-status-warning)] animate-pulse' : status === 'error' ? 'text-[var(--color-status-error)]' : 'text-[var(--color-status-success)]'}`} />;
+      return <AlertTriangle className={`${base} ${status === 'error' ? 'text-[var(--color-status-error)]' : 'text-[var(--color-status-success)]'}`} />;
     case 'message':
-      return <MessageSquare className={`${base} ${status === 'running' ? 'text-[var(--color-status-info)] animate-pulse' : status === 'error' ? 'text-[var(--color-status-error)]' : 'text-[var(--color-status-success)]'}`} />;
+      return <MessageSquare className={`${base} ${status === 'error' ? 'text-[var(--color-status-error)]' : 'text-[var(--color-status-success)]'}`} />;
     case 'run-completed':
       return <CheckCircle2 className={`${base} text-[var(--color-status-success)]`} />;
     case 'run-cancelled':
@@ -95,7 +112,7 @@ function TimelineEventRow({
     <div className="relative">
       {/* Vertical connector line */}
       {!isLast && (
-        <div className="absolute left-[7px] top-[22px] bottom-0 w-px bg-[var(--color-border)]" />
+        <div className="absolute left-[9px] top-[22px] bottom-0 w-px bg-[var(--color-border)]" />
       )}
 
       <button
@@ -106,7 +123,7 @@ function TimelineEventRow({
       >
         {/* Node */}
         <div className="relative z-10 flex shrink-0 items-start pt-0.5">
-          <div className={`flex size-[15px] items-center justify-center rounded-full ${event.status === 'running' ? 'brand-gradient-bg' : 'bg-[var(--color-surface-2)]'}`}>
+          <div className={`flex size-[18px] items-center justify-center rounded-full ${event.status === 'running' ? 'brand-gradient-bg' : 'bg-[var(--color-surface-2)]'}`}>
             <EventIcon kind={event.kind} status={event.status} />
           </div>
         </div>
@@ -179,11 +196,11 @@ function ThinkingGroupRow({
   return (
     <div className="group relative flex w-full gap-2.5 py-1">
       {!isLast && (
-        <div className="absolute left-[7px] top-[22px] bottom-0 w-px bg-[var(--color-border)]" />
+        <div className="absolute left-[9px] top-[22px] bottom-0 w-px bg-[var(--color-border)]" />
       )}
       <div className="relative z-10 flex shrink-0 items-start pt-0.5">
-        <div className="flex size-[15px] items-center justify-center rounded-full bg-[var(--color-surface-2)]">
-          <Brain className="size-3.5 text-[var(--color-text-muted)]" />
+        <div className="flex size-[18px] items-center justify-center rounded-full bg-[var(--color-surface-2)]">
+          <Brain className="size-2.5 text-[var(--color-text-muted)]" />
         </div>
       </div>
       <div className="min-w-0 flex-1">

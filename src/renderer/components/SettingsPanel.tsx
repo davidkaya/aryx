@@ -1,5 +1,5 @@
-import { useState, type ReactNode } from 'react';
-import { ChevronLeft, ChevronRight, Code, Cpu, FolderOpen, Palette, Plus, Server, TriangleAlert, Workflow, Wrench } from 'lucide-react';
+import { useEffect, useState, type ReactNode } from 'react';
+import { ChevronLeft, ChevronRight, Code, Cpu, FolderOpen, Palette, Plus, RefreshCw, Server, TriangleAlert, Workflow, Wrench } from 'lucide-react';
 
 import { CopilotStatusCard } from '@renderer/components/CopilotStatusCard';
 import { PatternEditor } from '@renderer/components/PatternEditor';
@@ -11,6 +11,7 @@ import type { DiscoveredMcpServer, DiscoveredToolingState } from '@shared/domain
 import { listAcceptedDiscoveredMcpServers, listPendingDiscoveredMcpServers } from '@shared/domain/discoveredTooling';
 import type { ModelDefinition } from '@shared/domain/models';
 import type { PatternDefinition } from '@shared/domain/pattern';
+import type { UpdateStatus, UpdateStatusState } from '@shared/contracts/ipc';
 import {
   normalizeLspProfileDefinition,
   normalizeMcpServerDefinition,
@@ -817,6 +818,30 @@ function TroubleshootingSection({
 }) {
   const [isResetting, setIsResetting] = useState(false);
   const [confirmingReset, setConfirmingReset] = useState(false);
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({ state: 'idle' });
+  const [isCheckingManually, setIsCheckingManually] = useState(false);
+
+  useEffect(() => {
+    const unsubscribe = window.aryxApi.onUpdateStatus((status) => {
+      setUpdateStatus(status);
+      if (status.state !== 'checking') setIsCheckingManually(false);
+    });
+    return unsubscribe;
+  }, []);
+
+  async function handleCheckForUpdates() {
+    setIsCheckingManually(true);
+    try {
+      const status = await window.aryxApi.checkForUpdates();
+      setUpdateStatus(status);
+    } finally {
+      setIsCheckingManually(false);
+    }
+  }
+
+  async function handleInstallUpdate() {
+    await window.aryxApi.installUpdate();
+  }
 
   async function handleReset() {
     setIsResetting(true);
@@ -828,63 +853,147 @@ function TroubleshootingSection({
     }
   }
 
+  const isChecking = isCheckingManually || updateStatus.state === 'checking';
+
+  function getUpdateLabel(): string {
+    switch (updateStatus.state) {
+      case 'checking':
+        return 'Checking for updates…';
+      case 'available':
+        return `Update available: v${updateStatus.version ?? 'unknown'}`;
+      case 'downloading':
+        return `Downloading update${updateStatus.downloadProgress ? ` (${Math.round(updateStatus.downloadProgress.percent)}%)` : '…'}`;
+      case 'downloaded':
+        return `Update ready: v${updateStatus.version ?? 'unknown'}`;
+      case 'error':
+        return 'Update check failed';
+      default:
+        return 'Check for updates';
+    }
+  }
+
+  function getUpdateDescription(): string {
+    switch (updateStatus.state) {
+      case 'checking':
+        return 'Contacting the update server…';
+      case 'available':
+      case 'downloading':
+        return 'A new version is being downloaded and will be installed automatically.';
+      case 'downloaded':
+        return 'Restart Aryx to apply the update.';
+      case 'error':
+        return updateStatus.error ?? 'Could not reach the update server. Try again later.';
+      default:
+        return 'Manually check whether a newer version of Aryx is available.';
+    }
+  }
+
   return (
-    <div>
-      <SectionHeader
-        description="Diagnose issues and manage local application data"
-        title="Troubleshooting"
-      />
-
-      <div className="space-y-2">
-        <TroubleshootingAction
-          description="Reveal the folder where Aryx stores workspace data, scratchpad files, and configuration."
-          icon={<FolderOpen className="size-4" />}
-          label="Open App Data Folder"
-          onClick={onOpenAppDataFolder}
+    <div className="flex min-h-full flex-col">
+      <div className="flex-1">
+        <SectionHeader
+          description="Diagnose issues and manage local application data"
+          title="Troubleshooting"
         />
-      </div>
 
-      <div className="mt-8 rounded-xl border border-[var(--color-status-error)]/20 bg-[var(--color-status-error)]/5 p-5">
-        <div className="flex items-start gap-3">
-          <TriangleAlert className="mt-0.5 size-4 shrink-0 text-[var(--color-status-error)]" />
-          <div className="min-w-0 flex-1">
-            <h4 className="text-[13px] font-semibold text-[var(--color-status-error)]">Reset Local Workspace</h4>
-            <p className="mt-1 text-[12px] leading-relaxed text-[var(--color-text-secondary)]">
-              Restore Aryx to its initial state. This permanently removes all sessions, custom patterns,
-              MCP server definitions, LSP profiles, and scratchpad contents. Your GitHub Copilot sign-in
-              is not affected.
-            </p>
-
-            {!confirmingReset ? (
-              <button
-                className="mt-3 rounded-lg border border-[var(--color-status-error)]/30 bg-[var(--color-status-error)]/10 px-3.5 py-1.5 text-[13px] font-medium text-[var(--color-status-error)] transition-all duration-200 hover:border-[var(--color-status-error)]/50 hover:bg-[var(--color-status-error)]/20"
-                onClick={() => setConfirmingReset(true)}
-                type="button"
-              >
-                Reset workspace…
-              </button>
-            ) : (
-              <div className="mt-3 flex items-center gap-2">
-                <button
-                  className="rounded-lg bg-[var(--color-status-error)] px-3.5 py-1.5 text-[13px] font-medium text-white transition-all duration-200 hover:bg-[var(--color-status-error)] disabled:opacity-50"
-                  disabled={isResetting}
-                  onClick={() => void handleReset()}
-                  type="button"
-                >
-                  {isResetting ? 'Resetting…' : 'Confirm reset'}
-                </button>
-                <button
-                  className="rounded-lg border border-[var(--color-border)] px-3.5 py-1.5 text-[13px] font-medium text-[var(--color-text-secondary)] transition-all duration-200 hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-primary)]"
-                  disabled={isResetting}
-                  onClick={() => setConfirmingReset(false)}
-                  type="button"
-                >
-                  Cancel
-                </button>
+        <div className="space-y-2">
+          {/* Check for updates */}
+          {updateStatus.state === 'downloaded' ? (
+            <button
+              className="group flex w-full items-center gap-3 rounded-xl border border-[var(--color-status-success)]/20 bg-[var(--color-status-success)]/5 px-4 py-3 text-left transition-all duration-200 hover:border-[var(--color-status-success)]/40 hover:bg-[var(--color-status-success)]/10"
+              onClick={() => void handleInstallUpdate()}
+              type="button"
+            >
+              <span className="text-[var(--color-status-success)]">
+                <RefreshCw className="size-4" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <span className="text-[13px] font-medium text-[var(--color-status-success)]">{getUpdateLabel()}</span>
+                <p className="mt-0.5 text-[12px] text-[var(--color-text-muted)]">{getUpdateDescription()}</p>
               </div>
-            )}
+              <span className="rounded-lg bg-[var(--color-status-success)]/15 px-2.5 py-1 text-[11px] font-semibold text-[var(--color-status-success)]">
+                Restart
+              </span>
+            </button>
+          ) : (
+            <button
+              className={`group flex w-full items-center gap-3 rounded-xl border border-transparent px-4 py-3 text-left transition-all duration-200 hover:border-[var(--color-border)] hover:bg-[var(--color-surface-1)] ${isChecking ? 'pointer-events-none opacity-70' : ''}`}
+              disabled={isChecking}
+              onClick={() => void handleCheckForUpdates()}
+              type="button"
+            >
+              <span className="text-[var(--color-text-muted)] transition-all duration-200 group-hover:text-[var(--color-text-secondary)]">
+                <RefreshCw className={`size-4 ${isChecking ? 'animate-spin' : ''}`} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <span className={`text-[13px] font-medium ${updateStatus.state === 'error' ? 'text-[var(--color-status-error)]' : 'text-[var(--color-text-primary)]'}`}>
+                  {getUpdateLabel()}
+                </span>
+                <p className="mt-0.5 text-[12px] text-[var(--color-text-muted)]">{getUpdateDescription()}</p>
+              </div>
+              <ChevronRight className="size-4 text-[var(--color-text-muted)] transition-all duration-200 group-hover:text-[var(--color-text-muted)]" />
+            </button>
+          )}
+
+          <TroubleshootingAction
+            description="Reveal the folder where Aryx stores workspace data, scratchpad files, and configuration."
+            icon={<FolderOpen className="size-4" />}
+            label="Open App Data Folder"
+            onClick={onOpenAppDataFolder}
+          />
+        </div>
+
+        <div className="mt-8 rounded-xl border border-[var(--color-status-error)]/20 bg-[var(--color-status-error)]/5 p-5">
+          <div className="flex items-start gap-3">
+            <TriangleAlert className="mt-0.5 size-4 shrink-0 text-[var(--color-status-error)]" />
+            <div className="min-w-0 flex-1">
+              <h4 className="text-[13px] font-semibold text-[var(--color-status-error)]">Reset Local Workspace</h4>
+              <p className="mt-1 text-[12px] leading-relaxed text-[var(--color-text-secondary)]">
+                Restore Aryx to its initial state. This permanently removes all sessions, custom patterns,
+                MCP server definitions, LSP profiles, and scratchpad contents. Your GitHub Copilot sign-in
+                is not affected.
+              </p>
+
+              {!confirmingReset ? (
+                <button
+                  className="mt-3 rounded-lg border border-[var(--color-status-error)]/30 bg-[var(--color-status-error)]/10 px-3.5 py-1.5 text-[13px] font-medium text-[var(--color-status-error)] transition-all duration-200 hover:border-[var(--color-status-error)]/50 hover:bg-[var(--color-status-error)]/20"
+                  onClick={() => setConfirmingReset(true)}
+                  type="button"
+                >
+                  Reset workspace…
+                </button>
+              ) : (
+                <div className="mt-3 flex items-center gap-2">
+                  <button
+                    className="rounded-lg bg-[var(--color-status-error)] px-3.5 py-1.5 text-[13px] font-medium text-white transition-all duration-200 hover:bg-[var(--color-status-error)] disabled:opacity-50"
+                    disabled={isResetting}
+                    onClick={() => void handleReset()}
+                    type="button"
+                  >
+                    {isResetting ? 'Resetting…' : 'Confirm reset'}
+                  </button>
+                  <button
+                    className="rounded-lg border border-[var(--color-border)] px-3.5 py-1.5 text-[13px] font-medium text-[var(--color-text-secondary)] transition-all duration-200 hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-primary)]"
+                    disabled={isResetting}
+                    onClick={() => setConfirmingReset(false)}
+                    type="button"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
+      </div>
+
+      {/* Attribution footer */}
+      <div className="mt-12 flex items-center justify-center gap-1.5 pb-2 text-[11px] text-[var(--color-text-muted)]">
+        <span>Built with</span>
+        <svg aria-hidden="true" className="size-3 text-[var(--color-status-error)]" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+        </svg>
+        <span>by Dávid Kaya</span>
       </div>
     </div>
   );

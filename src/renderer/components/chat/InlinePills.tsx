@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight, Loader2, Minus, Search, Sparkles, TerminalSquare } from 'lucide-react';
 
 import { ProviderIcon } from '@renderer/components/ProviderIcons';
@@ -250,7 +250,27 @@ export function InlineToolsPill({
       </button>
 
       {open && !disabled && (
-        <div className="absolute bottom-full left-0 z-40 mb-1.5 w-64 overflow-y-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-1)] py-1 shadow-2xl">
+        <div className="absolute bottom-full left-0 z-40 mb-1.5 max-h-[28rem] w-64 overflow-y-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-1)] shadow-2xl">
+          {/* Header: enable / disable all */}
+          <div className="sticky top-0 z-10 border-b border-[var(--color-border)] bg-[var(--color-surface-1)]">
+            <div className="flex items-center justify-end px-3 py-1.5">
+              <button
+                className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-medium text-[var(--color-text-muted)] transition-all duration-200 hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-primary)]"
+                onClick={() => {
+                  const allEnabled = enabledCount === totalCount;
+                  onToggle({
+                    enabledMcpServerIds: allEnabled ? [] : mcpServers.map((s) => s.id),
+                    enabledLspProfileIds: allEnabled ? [] : lspProfiles.map((p) => p.id),
+                  });
+                }}
+                type="button"
+              >
+                {enabledCount === totalCount ? 'Disable all' : 'Enable all'}
+              </button>
+            </div>
+          </div>
+
+          <div className="py-1">
           {workspaceMcpServers.length > 0 && (
             <McpServerGroup
               label="Workspace MCP"
@@ -296,6 +316,7 @@ export function InlineToolsPill({
               ))}
             </div>
           )}
+          </div>
         </div>
       )}
     </div>
@@ -470,6 +491,25 @@ export function InlineApprovalPill({
     return expandedGroups.has(groupId);
   }
 
+  const allApprovedGlobal = effectiveAutoApprovedCount === totalItemCount && totalItemCount > 0;
+
+  const approveAll = useCallback(() => {
+    const next = new Set<string>();
+    for (const group of groups) {
+      if (group.serverApprovalKey) {
+        next.add(group.serverApprovalKey);
+      }
+      for (const tool of group.tools) {
+        next.add(tool.id);
+      }
+    }
+    onUpdate({ autoApprovedToolNames: [...next] });
+  }, [groups, onUpdate]);
+
+  const unapproveAll = useCallback(() => {
+    onUpdate({ autoApprovedToolNames: [] });
+  }, [onUpdate]);
+
   return (
     <div className="relative" ref={ref}>
       <button
@@ -510,16 +550,25 @@ export function InlineApprovalPill({
               }`}>
                 {isOverridden ? 'Session override' : 'Pattern defaults'}
               </span>
-              {isOverridden && (
+              <span className="ml-auto flex items-center gap-1">
+                {isOverridden && (
+                  <button
+                    className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-medium text-[var(--color-text-muted)] transition-all duration-200 hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-primary)]"
+                    onClick={() => onUpdate({})}
+                    type="button"
+                  >
+                    <RotateCcw className="size-2.5" />
+                    Reset
+                  </button>
+                )}
                 <button
                   className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-medium text-[var(--color-text-muted)] transition-all duration-200 hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-primary)]"
-                  onClick={() => onUpdate({})}
+                  onClick={allApprovedGlobal ? unapproveAll : approveAll}
                   type="button"
                 >
-                  <RotateCcw className="size-2.5" />
-                  Reset
+                  {allApprovedGlobal ? 'Unapprove all' : 'Approve all'}
                 </button>
-              )}
+              </span>
             </div>
 
             {/* Search */}

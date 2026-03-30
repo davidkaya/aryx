@@ -626,6 +626,19 @@ body {
   animation: banner-slide-in 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+/* ── Update banner slide-up ──────────────────────────────────── */
+
+@keyframes update-banner-in {
+  from {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+}
+
+.update-banner-enter {
+  animation: update-banner-in 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
 /* ── Thinking process section ────────────────────────────────── */
 
 @keyframes thinking-process-in {
@@ -651,6 +664,7 @@ body {
   .msg-actions-enter,
   .session-item-enter,
   .banner-slide-enter,
+  .update-banner-enter,
   .thinking-process-enter {
     animation: none;
   }

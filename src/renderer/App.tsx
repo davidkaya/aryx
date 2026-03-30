@@ -10,7 +10,7 @@ import { NewSessionModal } from '@renderer/components/NewSessionModal';
 import { ProjectSettingsPanel } from '@renderer/components/ProjectSettingsPanel';
 import { BookmarksPanel } from '@renderer/components/BookmarksPanel';
 import { SessionSearchPanel } from '@renderer/components/SessionSearchPanel';
-import { SettingsPanel } from '@renderer/components/SettingsPanel';
+import { SettingsPanel, type SettingsSection } from '@renderer/components/SettingsPanel';
 import { Sidebar } from '@renderer/components/Sidebar';
 import { TerminalPanel, DEFAULT_HEIGHT as DEFAULT_TERMINAL_HEIGHT, MIN_HEIGHT as MIN_TERMINAL_HEIGHT } from '@renderer/components/TerminalPanel';
 import { resolveChatToolingSettings } from '@renderer/lib/chatTooling';
@@ -46,6 +46,7 @@ import { isScratchpadProject, SCRATCHPAD_PROJECT_ID } from '@shared/domain/proje
 import { applySessionModelConfig } from '@shared/domain/session';
 import type { AppearanceTheme, LspProfileDefinition, McpServerDefinition } from '@shared/domain/tooling';
 import type { WorkspaceState } from '@shared/domain/workspace';
+import type { UpdateStatus } from '@shared/contracts/ipc';
 import { createId, nowIso } from '@shared/utils/ids';
 
 function createDraftPattern(defaultModelId: string, defaultReasoningEffort: PatternDefinition['agents'][0]['reasoningEffort']): PatternDefinition {
@@ -113,6 +114,8 @@ export default function App() {
   const [activeSubagents, setActiveSubagents] = useState<ActiveSubagentMap>({});
 
   const [showSettings, setShowSettings] = useState(false);
+  const [settingsSection, setSettingsSection] = useState<SettingsSection>();
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({ state: 'idle' });
   const [projectSettingsId, setProjectSettingsId] = useState<string>();
   const [newSessionProjectId, setNewSessionProjectId] = useState<string>();
   const [showDiscoveryModal, setShowDiscoveryModal] = useState(false);
@@ -186,6 +189,12 @@ export default function App() {
       offWorkspace();
       offSessionEvent();
     };
+  }, [api]);
+
+  // Subscribe to auto-update status pushes from the main process
+  useEffect(() => {
+    const off = api.onUpdateStatus((status) => setUpdateStatus(status));
+    return off;
   }, [api]);
 
   // Apply theme to the document root
@@ -494,6 +503,15 @@ export default function App() {
     }
   }, [api, workspace]);
 
+  const handleOpenSettingsAt = useCallback((section?: SettingsSection) => {
+    setSettingsSection(section);
+    setShowSettings(true);
+  }, []);
+
+  const handleInstallUpdate = useCallback(() => {
+    void api.installUpdate();
+  }, [api]);
+
   // Listen for tray "Quick Scratchpad" action
   const scratchpadRef = useRef(handleCreateScratchpad);
   scratchpadRef.current = handleCreateScratchpad;
@@ -637,8 +655,9 @@ export default function App() {
   const overlay = showSettings ? (
       <SettingsPanel
         availableModels={availableModels}
+        initialSection={settingsSection}
         isRefreshingCapabilities={isRefreshingCapabilities}
-        onClose={() => setShowSettings(false)}
+        onClose={() => { setShowSettings(false); setSettingsSection(undefined); }}
         onDeleteLspProfile={async (id) => {
           await api.deleteLspProfile(id);
         }}
@@ -741,6 +760,9 @@ export default function App() {
             onRefreshGitContext={(projectId) => {
               void api.refreshProjectGitContext(projectId);
             }}
+            updateStatus={updateStatus}
+            onViewUpdateDetails={() => handleOpenSettingsAt('troubleshooting')}
+            onInstallUpdate={handleInstallUpdate}
             workspace={workspace}
           />
         }

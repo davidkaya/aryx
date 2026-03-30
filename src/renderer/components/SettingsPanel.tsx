@@ -29,6 +29,7 @@ interface SettingsPanelProps {
   toolingSettings: WorkspaceToolingSettings;
   discoveredUserTooling: DiscoveredToolingState;
   isRefreshingCapabilities: boolean;
+  initialSection?: SettingsSection;
   onRefreshCapabilities: () => void;
   onClose: () => void;
   onSavePattern: (pattern: PatternDefinition) => Promise<void>;
@@ -51,7 +52,7 @@ interface SettingsPanelProps {
   onGetQuota?: () => Promise<Record<string, QuotaSnapshot>>;
 }
 
-type SettingsSection = 'appearance' | 'connection' | 'patterns' | 'mcp-servers' | 'lsp-profiles' | 'troubleshooting';
+export type SettingsSection = 'appearance' | 'connection' | 'patterns' | 'mcp-servers' | 'lsp-profiles' | 'troubleshooting';
 
 interface NavItem {
   id: SettingsSection;
@@ -111,6 +112,7 @@ export function SettingsPanel({
   toolingSettings,
   discoveredUserTooling,
   isRefreshingCapabilities,
+  initialSection,
   onRefreshCapabilities,
   onClose,
   onSavePattern,
@@ -132,7 +134,7 @@ export function SettingsPanel({
   onResolveUserDiscoveredTooling,
   onGetQuota,
 }: SettingsPanelProps) {
-  const [activeSection, setActiveSection] = useState<SettingsSection>('appearance');
+  const [activeSection, setActiveSection] = useState<SettingsSection>(initialSection ?? 'appearance');
   const [editingPattern, setEditingPattern] = useState<PatternDefinition | null>(null);
   const [editingMcpServer, setEditingMcpServer] = useState<McpServerDefinition | null>(null);
   const [editingLspProfile, setEditingLspProfile] = useState<LspProfileDefinition | null>(null);

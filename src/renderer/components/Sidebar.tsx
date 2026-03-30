@@ -33,7 +33,9 @@ import { isScratchpadProject, type ProjectRecord, type ProjectGitContext } from 
 import { listPendingDiscoveredMcpServers } from '@shared/domain/discoveredTooling';
 import type { SessionRecord } from '@shared/domain/session';
 import { querySessions } from '@shared/domain/sessionLibrary';
+import type { UpdateStatus } from '@shared/contracts/ipc';
 import type { WorkspaceState } from '@shared/domain/workspace';
+import { UpdateBanner } from '@renderer/components/ui';
 
 interface SidebarProps {
   workspace: WorkspaceState;
@@ -50,6 +52,9 @@ interface SidebarProps {
   onSetSessionArchived: (sessionId: string, isArchived: boolean) => void;
   onDeleteSession: (sessionId: string) => void;
   onRefreshGitContext: (projectId: string) => void;
+  updateStatus?: UpdateStatus;
+  onViewUpdateDetails?: () => void;
+  onInstallUpdate?: () => void;
 }
 
 /* ── Mode icon + accent colour mapping ─────────────────────── */
@@ -540,6 +545,9 @@ export function Sidebar({
   onSetSessionArchived,
   onDeleteSession,
   onRefreshGitContext,
+  updateStatus,
+  onViewUpdateDetails,
+  onInstallUpdate,
 }: SidebarProps) {
   const scratchpadProject = workspace.projects.find((project) => isScratchpadProject(project));
   const userProjects = workspace.projects.filter((project) => !isScratchpadProject(project));
@@ -751,6 +759,15 @@ export function Sidebar({
           </div>
         )}
       </div>
+
+      {/* Update notification banner */}
+      {updateStatus && onViewUpdateDetails && onInstallUpdate && (
+        <UpdateBanner
+          status={updateStatus}
+          onViewDetails={onViewUpdateDetails}
+          onInstallUpdate={onInstallUpdate}
+        />
+      )}
 
       {/* Footer */}
       {userProjects.length > 0 && (

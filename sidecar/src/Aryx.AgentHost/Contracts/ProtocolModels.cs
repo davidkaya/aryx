@@ -331,6 +331,13 @@ public sealed class TurnCompleteEventDto : SidecarEventDto
     public bool Cancelled { get; init; }
 }
 
+public sealed class MessageReclassifiedEventDto : SidecarEventDto
+{
+    public string SessionId { get; init; } = string.Empty;
+    public string MessageId { get; init; } = string.Empty;
+    public string NewKind { get; init; } = string.Empty;
+}
+
 public sealed class AgentActivityEventDto : SidecarEventDto
 {
     public string SessionId { get; init; } = string.Empty;
@@ -374,6 +381,23 @@ public sealed class SkillInvokedEventDto : SidecarEventDto
     public string? PluginName { get; init; }
     public string? PluginVersion { get; init; }
     public string? Description { get; init; }
+}
+
+public sealed class AssistantIntentEventDto : SidecarEventDto
+{
+    public string SessionId { get; init; } = string.Empty;
+    public string? AgentId { get; init; }
+    public string? AgentName { get; init; }
+    public string Intent { get; init; } = string.Empty;
+}
+
+public sealed class ReasoningDeltaEventDto : SidecarEventDto
+{
+    public string SessionId { get; init; } = string.Empty;
+    public string? AgentId { get; init; }
+    public string? AgentName { get; init; }
+    public string ReasoningId { get; init; } = string.Empty;
+    public string ContentDelta { get; init; } = string.Empty;
 }
 
 public sealed class HookLifecycleEventDto : SidecarEventDto

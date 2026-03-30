@@ -9,11 +9,13 @@ internal sealed class CopilotTurnExecutionState
 {
     private readonly RunTurnCommandDto _command;
     private readonly HashSet<string> _startedAgents = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _reclassifiedMessageIds = new(StringComparer.Ordinal);
     private readonly ConcurrentQueue<SidecarEventDto> _pendingEvents = new();
     private readonly ConcurrentQueue<McpOauthRequiredEventDto> _pendingMcpOauthRequests = new();
     private readonly ConcurrentDictionary<string, AgentIdentity> _observedAgentsByMessageId = new(StringComparer.Ordinal);
     private readonly StreamingTranscriptBuffer _transcriptBuffer = new();
     private int _fallbackMessageIndex;
+    private string? _lastObservedMessageId;
 
     public CopilotTurnExecutionState(RunTurnCommandDto command)
     {
@@ -79,15 +81,34 @@ internal sealed class CopilotTurnExecutionState
             case AssistantMessageEvent assistantMessage when !string.IsNullOrWhiteSpace(assistantMessage.Data?.MessageId):
                 RecordObservedAgentForMessage(agent, assistantMessage.Data!.MessageId);
                 QueueThinkingIfNeeded(agent);
+                if (assistantMessage.Data?.ToolRequests is { Length: > 0 })
+                {
+                    QueueMessageReclassifiedIfNeeded(assistantMessage.Data.MessageId);
+                }
                 break;
             case ToolExecutionStartEvent toolExecutionStart
                 when !string.IsNullOrWhiteSpace(toolExecutionStart.Data?.ToolCallId)
                     && !string.IsNullOrWhiteSpace(toolExecutionStart.Data?.ToolName):
                 ToolNamesByCallId[toolExecutionStart.Data.ToolCallId.Trim()] = toolExecutionStart.Data.ToolName.Trim();
+                QueueMessageReclassifiedIfNeeded(_lastObservedMessageId);
                 break;
-            case AssistantReasoningDeltaEvent:
+            case AssistantIntentEvent intentEvent:
                 ActiveAgent = agent;
                 QueueThinkingIfNeeded(agent);
+                AssistantIntentEventDto? assistantIntent = CreateAssistantIntentEvent(agent, intentEvent.Data);
+                if (assistantIntent is not null)
+                {
+                    _pendingEvents.Enqueue(assistantIntent);
+                }
+                break;
+            case AssistantReasoningDeltaEvent reasoningDelta:
+                ActiveAgent = agent;
+                QueueThinkingIfNeeded(agent);
+                ReasoningDeltaEventDto? reasoningDeltaEvent = CreateReasoningDeltaEvent(agent, reasoningDelta.Data);
+                if (reasoningDeltaEvent is not null)
+                {
+                    _pendingEvents.Enqueue(reasoningDeltaEvent);
+                }
                 break;
             case SubagentStartedEvent started:
                 ActiveAgent = agent;
@@ -218,6 +239,23 @@ internal sealed class CopilotTurnExecutionState
     {
         ActiveAgent = agent;
         _observedAgentsByMessageId[messageId] = agent;
+        _lastObservedMessageId = messageId;
+    }
+
+    private void QueueMessageReclassifiedIfNeeded(string? messageId)
+    {
+        if (string.IsNullOrWhiteSpace(messageId))
+        {
+            return;
+        }
+
+        string normalizedMessageId = messageId.Trim();
+        if (!_reclassifiedMessageIds.Add(normalizedMessageId))
+        {
+            return;
+        }
+
+        _pendingEvents.Enqueue(CreateMessageReclassifiedEvent(normalizedMessageId));
     }
 
     private AgentActivityEventDto? CreateThinkingActivityIfNeeded(AgentIdentity agent)
@@ -237,6 +275,18 @@ internal sealed class CopilotTurnExecutionState
             ActivityType = "thinking",
             AgentId = agent.AgentId,
             AgentName = agent.AgentName,
+        };
+    }
+
+    private MessageReclassifiedEventDto CreateMessageReclassifiedEvent(string messageId)
+    {
+        return new MessageReclassifiedEventDto
+        {
+            Type = "message-reclassified",
+            RequestId = _command.RequestId,
+            SessionId = _command.SessionId,
+            MessageId = messageId,
+            NewKind = "thinking",
         };
     }
 
@@ -351,6 +401,50 @@ internal sealed class CopilotTurnExecutionState
             EventKind = "deselected",
             AgentId = agent.AgentId,
             AgentName = agent.AgentName,
+        };
+    }
+
+    private AssistantIntentEventDto? CreateAssistantIntentEvent(
+        AgentIdentity agent,
+        AssistantIntentData? data)
+    {
+        string? intent = data?.Intent?.Trim();
+        if (string.IsNullOrWhiteSpace(intent))
+        {
+            return null;
+        }
+
+        return new AssistantIntentEventDto
+        {
+            Type = "assistant-intent",
+            RequestId = _command.RequestId,
+            SessionId = _command.SessionId,
+            AgentId = agent.AgentId,
+            AgentName = agent.AgentName,
+            Intent = intent,
+        };
+    }
+
+    private ReasoningDeltaEventDto? CreateReasoningDeltaEvent(
+        AgentIdentity agent,
+        AssistantReasoningDeltaData? data)
+    {
+        if (data is null
+            || string.IsNullOrWhiteSpace(data.ReasoningId)
+            || string.IsNullOrEmpty(data.DeltaContent))
+        {
+            return null;
+        }
+
+        return new ReasoningDeltaEventDto
+        {
+            Type = "reasoning-delta",
+            RequestId = _command.RequestId,
+            SessionId = _command.SessionId,
+            AgentId = agent.AgentId,
+            AgentName = agent.AgentName,
+            ReasoningId = data.ReasoningId,
+            ContentDelta = data.DeltaContent,
         };
     }
 

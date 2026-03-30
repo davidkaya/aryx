@@ -214,6 +214,8 @@ The protocol also carries **turn-scoped lifecycle events** alongside output delt
 
 - **Sub-agent events**: started, completed, failed, selected, deselected — surfaced when custom agents are defined
 - **Skill invocation events**: emitted when an agent-side skill is triggered
+- **Message reclassification events**: let the sidecar retroactively mark a streamed assistant message as `thinking` once the SDK confirms that message requested tool work, so the UI can separate intermediate planning chatter from the final response without sacrificing live streaming
+- **Assistant intent and reasoning-delta events**: optional Copilot SDK metadata that exposes short "what I'm doing" labels plus incremental reasoning text for richer thinking-process surfaces
 - **Hook lifecycle events**: start and end of configured project hook commands discovered from `.github/hooks/*.json`; Aryx suppresses the SDK's built-in no-op hook chatter so the UI only sees meaningful hook activity
 - **Assistant usage events**: per-LLM-call tokens, cost, AIU, and quota snapshots from the Copilot SDK's `assistant.usage` stream
 - **Session compaction events**: start and complete, with token-reduction metrics when infinite sessions trigger context trimming

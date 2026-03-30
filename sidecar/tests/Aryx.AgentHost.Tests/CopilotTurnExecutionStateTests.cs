@@ -84,6 +84,132 @@ public sealed class CopilotTurnExecutionStateTests
     }
 
     [Fact]
+    public void ObserveSessionEvent_AssistantMessageWithToolRequests_QueuesMessageReclassifiedEvent()
+    {
+        RunTurnCommandDto command = CreateCommand();
+        CopilotTurnExecutionState state = new(command);
+
+        state.ObserveSessionEvent(
+            command.Pattern.Agents[0],
+            SessionEvent.FromJson(
+                """
+                {
+                  "type": "assistant.message",
+                  "data": {
+                    "messageId": "msg-2",
+                    "content": "Let me search for that.",
+                    "toolRequests": [
+                      {
+                        "toolCallId": "tool-call-1",
+                        "name": "rg",
+                        "arguments": {
+                          "pattern": "identifierUri"
+                        }
+                      }
+                    ]
+                  },
+                  "id": "3f75988b-8e69-4c90-a203-6b01d1c1f90b",
+                  "timestamp": "2026-03-27T00:00:00Z"
+                }
+                """));
+
+        IReadOnlyList<SidecarEventDto> pending = state.DrainPendingEvents();
+
+        AgentActivityEventDto thinking = Assert.Single(pending.OfType<AgentActivityEventDto>());
+        Assert.Equal("thinking", thinking.ActivityType);
+
+        MessageReclassifiedEventDto reclassified = Assert.Single(pending.OfType<MessageReclassifiedEventDto>());
+        Assert.Equal("session-1", reclassified.SessionId);
+        Assert.Equal("msg-2", reclassified.MessageId);
+        Assert.Equal("thinking", reclassified.NewKind);
+    }
+
+    [Fact]
+    public void ObserveSessionEvent_ToolExecutionStart_ReclassifiesLastObservedMessageOnce()
+    {
+        RunTurnCommandDto command = CreateCommand();
+        CopilotTurnExecutionState state = new(command);
+
+        state.ObserveSessionEvent(
+            command.Pattern.Agents[0],
+            SessionEvent.FromJson(
+                """
+                {
+                  "type": "assistant.message_delta",
+                  "data": {
+                    "messageId": "msg-3",
+                    "deltaContent": "Searching"
+                  },
+                  "id": "0b65f0e9-d0fb-417e-ab5c-7a3343d8581b",
+                  "timestamp": "2026-03-27T00:00:00Z"
+                }
+                """));
+        _ = state.DrainPendingEvents();
+
+        state.ObserveSessionEvent(
+            command.Pattern.Agents[0],
+            SessionEvent.FromJson(
+                """
+                {
+                  "type": "tool.execution_start",
+                  "data": {
+                    "toolCallId": "tool-call-1",
+                    "toolName": "rg"
+                  },
+                  "id": "8f33240e-bd3f-475c-aeb6-a4b7908e47b0",
+                  "timestamp": "2026-03-27T00:00:01Z"
+                }
+                """));
+        state.ObserveSessionEvent(
+            command.Pattern.Agents[0],
+            SessionEvent.FromJson(
+                """
+                {
+                  "type": "tool.execution_start",
+                  "data": {
+                    "toolCallId": "tool-call-2",
+                    "toolName": "view"
+                  },
+                  "id": "a23f9c9a-f947-4282-866d-f599451c3899",
+                  "timestamp": "2026-03-27T00:00:02Z"
+                }
+                """));
+
+        IReadOnlyList<SidecarEventDto> pending = state.DrainPendingEvents();
+
+        MessageReclassifiedEventDto reclassified = Assert.Single(pending.OfType<MessageReclassifiedEventDto>());
+        Assert.Equal("msg-3", reclassified.MessageId);
+        Assert.True(state.ToolNamesByCallId.TryGetValue("tool-call-1", out string? firstToolName));
+        Assert.Equal("rg", firstToolName);
+        Assert.True(state.ToolNamesByCallId.TryGetValue("tool-call-2", out string? secondToolName));
+        Assert.Equal("view", secondToolName);
+    }
+
+    [Fact]
+    public void ObserveSessionEvent_AssistantMessageWithoutToolRequests_DoesNotQueueMessageReclassifiedEvent()
+    {
+        RunTurnCommandDto command = CreateCommand();
+        CopilotTurnExecutionState state = new(command);
+
+        state.ObserveSessionEvent(
+            command.Pattern.Agents[0],
+            SessionEvent.FromJson(
+                """
+                {
+                  "type": "assistant.message",
+                  "data": {
+                    "messageId": "msg-4",
+                    "content": "Final answer."
+                  },
+                  "id": "d07fe954-1258-4f6a-bf79-1550d6143ed0",
+                  "timestamp": "2026-03-27T00:00:00Z"
+                }
+                """));
+
+        Assert.Empty(state.DrainPendingEvents().OfType<MessageReclassifiedEventDto>());
+    }
+
+    [Fact]
     public async Task EmitThinkingIfNeeded_DoesNotDuplicateQueuedThinkingActivity()
     {
         RunTurnCommandDto command = CreateCommand();
@@ -117,6 +243,70 @@ public sealed class CopilotTurnExecutionStateTests
         AgentActivityEventDto thinking = Assert.Single(activities);
         Assert.Equal("thinking", thinking.ActivityType);
         Assert.Equal("agent-1", thinking.AgentId);
+    }
+
+    [Fact]
+    public void ObserveSessionEvent_AssistantIntent_QueuesIntentEvent()
+    {
+        RunTurnCommandDto command = CreateCommand();
+        CopilotTurnExecutionState state = new(command);
+
+        state.ObserveSessionEvent(
+            command.Pattern.Agents[0],
+            SessionEvent.FromJson(
+                """
+                {
+                  "type": "assistant.intent",
+                  "data": {
+                    "intent": "Searching incident playbooks"
+                  },
+                  "id": "64cf59fe-63f0-4217-adf4-9bd6b3a80452",
+                  "timestamp": "2026-03-27T00:00:00Z"
+                }
+                """));
+
+        IReadOnlyList<SidecarEventDto> pending = state.DrainPendingEvents();
+
+        AgentActivityEventDto thinking = Assert.Single(pending.OfType<AgentActivityEventDto>());
+        Assert.Equal("thinking", thinking.ActivityType);
+
+        AssistantIntentEventDto intent = Assert.Single(pending.OfType<AssistantIntentEventDto>());
+        Assert.Equal("session-1", intent.SessionId);
+        Assert.Equal("agent-1", intent.AgentId);
+        Assert.Equal("Searching incident playbooks", intent.Intent);
+    }
+
+    [Fact]
+    public void ObserveSessionEvent_AssistantReasoningDelta_QueuesReasoningDeltaEvent()
+    {
+        RunTurnCommandDto command = CreateCommand();
+        CopilotTurnExecutionState state = new(command);
+
+        state.ObserveSessionEvent(
+            command.Pattern.Agents[0],
+            SessionEvent.FromJson(
+                """
+                {
+                  "type": "assistant.reasoning_delta",
+                  "data": {
+                    "reasoningId": "reasoning-2",
+                    "deltaContent": "Searching logs."
+                  },
+                  "id": "bd269258-5e5d-46b6-bf3f-bd8cba793b1a",
+                  "timestamp": "2026-03-27T00:00:00Z"
+                }
+                """));
+
+        IReadOnlyList<SidecarEventDto> pending = state.DrainPendingEvents();
+
+        AgentActivityEventDto thinking = Assert.Single(pending.OfType<AgentActivityEventDto>());
+        Assert.Equal("thinking", thinking.ActivityType);
+
+        ReasoningDeltaEventDto reasoning = Assert.Single(pending.OfType<ReasoningDeltaEventDto>());
+        Assert.Equal("session-1", reasoning.SessionId);
+        Assert.Equal("agent-1", reasoning.AgentId);
+        Assert.Equal("reasoning-2", reasoning.ReasoningId);
+        Assert.Equal("Searching logs.", reasoning.ContentDelta);
     }
 
     [Fact]

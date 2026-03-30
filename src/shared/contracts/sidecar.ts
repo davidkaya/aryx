@@ -239,6 +239,14 @@ export interface TurnCompleteEvent {
   cancelled?: boolean;
 }
 
+export interface MessageReclassifiedEvent {
+  type: 'message-reclassified';
+  requestId: string;
+  sessionId: string;
+  messageId: string;
+  newKind: 'thinking';
+}
+
 export type AgentActivityType = 'thinking' | 'tool-calling' | 'handoff' | 'completed';
 
 export interface ToolCallFileChangePreview {
@@ -295,6 +303,25 @@ export interface SkillInvokedEvent {
   pluginName?: string;
   pluginVersion?: string;
   description?: string;
+}
+
+export interface AssistantIntentEvent {
+  type: 'assistant-intent';
+  requestId: string;
+  sessionId: string;
+  agentId?: string;
+  agentName?: string;
+  intent: string;
+}
+
+export interface ReasoningDeltaEvent {
+  type: 'reasoning-delta';
+  requestId: string;
+  sessionId: string;
+  agentId?: string;
+  agentName?: string;
+  reasoningId: string;
+  contentDelta: string;
 }
 
 export interface HookLifecycleEvent {
@@ -526,9 +553,12 @@ export type SidecarEvent =
   | PatternValidationEvent
   | TurnDeltaEvent
   | TurnCompleteEvent
+  | MessageReclassifiedEvent
   | AgentActivityEvent
   | SubagentEvent
   | SkillInvokedEvent
+  | AssistantIntentEvent
+  | ReasoningDeltaEvent
   | HookLifecycleEvent
   | SessionUsageEvent
   | SessionCompactionEvent

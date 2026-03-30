@@ -1,4 +1,5 @@
 import type { SessionRunRecord } from '@shared/domain/runTimeline';
+import type { ChatMessageKind } from '@shared/domain/session';
 
 import type { QuotaSnapshot, ToolCallFileChangePreview } from '@shared/contracts/sidecar';
 
@@ -8,6 +9,7 @@ export type SessionEventKind =
   | 'status'
   | 'message-delta'
   | 'message-complete'
+  | 'message-reclassified'
   | 'agent-activity'
   | 'run-updated'
   | 'error'
@@ -27,6 +29,7 @@ export interface SessionEventRecord {
   occurredAt: string;
   status?: 'idle' | 'running' | 'error';
   messageId?: string;
+  messageKind?: ChatMessageKind;
   authorName?: string;
   contentDelta?: string;
   content?: string;

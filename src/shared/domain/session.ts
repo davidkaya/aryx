@@ -18,6 +18,7 @@ import type { ChatMessageAttachment } from '@shared/domain/attachment';
 import type { InteractionMode } from '@shared/contracts/sidecar';
 
 export type ChatRole = 'system' | 'user' | 'assistant';
+export type ChatMessageKind = 'response' | 'thinking';
 export type SessionStatus = 'idle' | 'running' | 'error';
 export type SessionTitleSource = 'auto' | 'manual';
 export type SessionBranchOriginAction = 'branch' | 'regenerate' | 'edit-and-resend';
@@ -33,6 +34,7 @@ export interface ChatMessageRecord {
   authorName: string;
   content: string;
   createdAt: string;
+  messageKind?: ChatMessageKind;
   isPinned?: boolean;
   pending?: boolean;
   attachments?: ChatMessageAttachment[];

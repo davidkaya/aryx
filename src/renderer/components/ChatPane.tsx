@@ -12,6 +12,7 @@ import { UserInputBanner } from '@renderer/components/chat/UserInputBanner';
 import { InlineApprovalPill, InlineModelPill, InlineTerminalPill, InlineThinkingPill, InlineToolsPill } from '@renderer/components/chat/InlinePills';
 import { InlinePromptPill } from '@renderer/components/chat/InlinePromptPill';
 import { ThinkingDots } from '@renderer/components/chat/ThinkingDots';
+import { ThinkingProcess } from '@renderer/components/chat/ThinkingProcess';
 import { SubagentActivityList } from '@renderer/components/chat/SubagentActivityCard';
 import { getAssistantMessagePhase } from '@renderer/lib/messagePhase';
 import type { ApprovalDecision } from '@shared/domain/approval';
@@ -115,12 +116,28 @@ export function ChatPane({
   const composerRef = useRef<MarkdownComposerHandle>(null);
 
   const isSessionBusy = session.status === 'running';
+  const { visibleMessages, thinkingMessages } = useMemo(() => {
+    const visible: typeof session.messages = [];
+    const thinking: typeof session.messages = [];
+    for (const message of session.messages) {
+      if (message.messageKind === 'thinking') {
+        thinking.push(message);
+      } else {
+        visible.push(message);
+      }
+    }
+    return { visibleMessages: visible, thinkingMessages: thinking };
+  }, [session.messages]);
   const lastAssistantIndex = useMemo(() => {
-    for (let i = session.messages.length - 1; i >= 0; i--) {
-      if (session.messages[i].role === 'assistant') return i;
+    for (let i = visibleMessages.length - 1; i >= 0; i--) {
+      if (visibleMessages[i].role === 'assistant') return i;
     }
     return -1;
-  }, [session.messages]);
+  }, [visibleMessages]);
+  const turnStartedAt = useMemo(() => {
+    if (session.runs.length === 0) return undefined;
+    return session.runs[0].startedAt;
+  }, [session.runs]);
   const pendingApproval = session.pendingApproval?.status === 'pending' ? session.pendingApproval : undefined;
   const queuedApprovals = (session.pendingApprovalQueue ?? []).filter((a) => a.status === 'pending');
   const totalPendingCount = (pendingApproval ? 1 : 0) + queuedApprovals.length;
@@ -358,7 +375,7 @@ export function ChatPane({
               />
             )}
             <div className="space-y-1">
-              {session.messages.map((message, index) => {
+              {visibleMessages.map((message, index) => {
                 const isUser = message.role === 'user';
                 const isEditing = editingMessageId === message.id;
                 const isLastAssistant = index === lastAssistantIndex;
@@ -376,101 +393,122 @@ export function ChatPane({
                 const phaseLabel =
                   phase === 'thinking' ? 'Thinking' : phase === 'final' ? 'Final' : undefined;
                 const showActions = !isSessionBusy && !message.pending;
+                const showThinkingBefore = isLastAssistant && thinkingMessages.length > 0;
 
                 return (
-                  <div className="message-enter group py-3" data-message-id={message.id} key={message.id}>
-                    <div className="flex gap-3">
-                      <div
-                        className={`mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full ${
-                          isUser ? 'brand-gradient-bg text-white' : 'bg-[var(--color-surface-2)] text-[var(--color-text-secondary)]'
-                        }`}
-                      >
-                        {isUser ? <User className="size-3.5" /> : <Bot className="size-3.5" />}
+                  <div key={message.id}>
+                    {showThinkingBefore && (
+                      <div className="py-2">
+                        <ThinkingProcess
+                          messages={thinkingMessages}
+                          isActive={isSessionBusy}
+                          turnStartedAt={turnStartedAt}
+                        />
                       </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="mb-1 flex items-center gap-2 text-[12px] font-medium text-[var(--color-text-secondary)]">
-                          <span>{message.authorName}</span>
-                          {message.isPinned && (
-                            <Bookmark className="size-3 fill-[var(--color-accent-sky)] text-[var(--color-accent-sky)]" />
-                          )}
-                          {!isUser && phaseLabel && (
-                            <span
-                              className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] ${assistantBadgeClass}`}
-                            >
-                              {phaseLabel}
-                            </span>
-                          )}
-                          {showActions && (
-                            <div className="ml-auto">
-                              <MessageActions
-                                message={message}
-                                isLastAssistant={isLastAssistant}
-                                onCopy={() => handleCopyMessage(message.content)}
-                                onPin={() => onPinMessage?.(message.id, !message.isPinned)}
-                                onBranch={() => onBranchFromMessage?.(message.id)}
-                                onRegenerate={onRegenerateMessage ? () => onRegenerateMessage(message.id) : undefined}
-                                onEdit={onEditAndResendMessage && isUser ? () => setEditingMessageId(message.id) : undefined}
-                              />
-                            </div>
-                          )}
+                    )}
+                    <div className="message-enter group py-3" data-message-id={message.id}>
+                      <div className="flex gap-3">
+                        <div
+                          className={`mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full ${
+                            isUser ? 'brand-gradient-bg text-white' : 'bg-[var(--color-surface-2)] text-[var(--color-text-secondary)]'
+                          }`}
+                        >
+                          {isUser ? <User className="size-3.5" /> : <Bot className="size-3.5" />}
                         </div>
-
-                        {/* Edit mode */}
-                        {isEditing ? (
-                          <MessageEditComposer
-                            initialContent={message.content}
-                            onSave={(content) => handleEditSave(message.id, content)}
-                            onCancel={() => setEditingMessageId(undefined)}
-                          />
-                        ) : (
-                          <div
-                            className={
-                              isUser
-                                ? 'text-[14px] leading-relaxed text-[var(--color-text-primary)]'
-                                : `rounded-xl border px-4 py-3 text-[14px] leading-relaxed text-[var(--color-text-primary)] ${assistantContainerClass}`
-                            }
-                          >
-                            {/* Attachment thumbnails */}
-                            {isUser && message.attachments && message.attachments.length > 0 && (
-                              <div className="mb-2 flex flex-wrap gap-2">
-                                {message.attachments.map((att, attIdx) =>
-                                  isImageAttachment(att) ? (
-                                    <img
-                                      key={attIdx}
-                                      alt={getAttachmentDisplayName(att)}
-                                      className="max-h-48 max-w-xs rounded-lg border border-[var(--color-border)] object-cover"
-                                      src={`data:${att.mimeType};base64,${att.data}`}
-                                    />
-                                  ) : (
-                                    <div
-                                      key={attIdx}
-                                      className="flex items-center gap-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2 py-1 text-[11px] text-[var(--color-text-secondary)]"
-                                    >
-                                      <Paperclip className="size-3" />
-                                      {getAttachmentDisplayName(att)}
-                                    </div>
-                                  ),
-                                )}
-                              </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="mb-1 flex items-center gap-2 text-[12px] font-medium text-[var(--color-text-secondary)]">
+                            <span>{message.authorName}</span>
+                            {message.isPinned && (
+                              <Bookmark className="size-3 fill-[var(--color-accent-sky)] text-[var(--color-accent-sky)]" />
                             )}
-                            {!isUser && message.pending ? (
-                              <div className="whitespace-pre-wrap break-words text-[14px] leading-relaxed text-[var(--color-text-primary)]">
-                                {message.content}
-                              </div>
-                            ) : (
-                              <MarkdownContent content={message.content} />
+                            {!isUser && phaseLabel && (
+                              <span
+                                className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] ${assistantBadgeClass}`}
+                              >
+                                {phaseLabel}
+                              </span>
                             )}
-                            {message.pending && message.content && (
-                              <span className="mt-1 inline-block h-4 w-[2px] animate-pulse rounded-sm bg-[var(--color-accent)]" />
+                            {showActions && (
+                              <div className="ml-auto">
+                                <MessageActions
+                                  message={message}
+                                  isLastAssistant={isLastAssistant}
+                                  onCopy={() => handleCopyMessage(message.content)}
+                                  onPin={() => onPinMessage?.(message.id, !message.isPinned)}
+                                  onBranch={() => onBranchFromMessage?.(message.id)}
+                                  onRegenerate={onRegenerateMessage ? () => onRegenerateMessage(message.id) : undefined}
+                                  onEdit={onEditAndResendMessage && isUser ? () => setEditingMessageId(message.id) : undefined}
+                                />
+                              </div>
                             )}
                           </div>
-                        )}
-                        {message.pending && !message.content && <ThinkingDots />}
+
+                          {/* Edit mode */}
+                          {isEditing ? (
+                            <MessageEditComposer
+                              initialContent={message.content}
+                              onSave={(content) => handleEditSave(message.id, content)}
+                              onCancel={() => setEditingMessageId(undefined)}
+                            />
+                          ) : (
+                            <div
+                              className={
+                                isUser
+                                  ? 'text-[14px] leading-relaxed text-[var(--color-text-primary)]'
+                                  : `rounded-xl border px-4 py-3 text-[14px] leading-relaxed text-[var(--color-text-primary)] ${assistantContainerClass}`
+                              }
+                            >
+                              {/* Attachment thumbnails */}
+                              {isUser && message.attachments && message.attachments.length > 0 && (
+                                <div className="mb-2 flex flex-wrap gap-2">
+                                  {message.attachments.map((att, attIdx) =>
+                                    isImageAttachment(att) ? (
+                                      <img
+                                        key={attIdx}
+                                        alt={getAttachmentDisplayName(att)}
+                                        className="max-h-48 max-w-xs rounded-lg border border-[var(--color-border)] object-cover"
+                                        src={`data:${att.mimeType};base64,${att.data}`}
+                                      />
+                                    ) : (
+                                      <div
+                                        key={attIdx}
+                                        className="flex items-center gap-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2 py-1 text-[11px] text-[var(--color-text-secondary)]"
+                                      >
+                                        <Paperclip className="size-3" />
+                                        {getAttachmentDisplayName(att)}
+                                      </div>
+                                    ),
+                                  )}
+                                </div>
+                              )}
+                              {!isUser && message.pending ? (
+                                <div className="whitespace-pre-wrap break-words text-[14px] leading-relaxed text-[var(--color-text-primary)]">
+                                  {message.content}
+                                </div>
+                              ) : (
+                                <MarkdownContent content={message.content} />
+                              )}
+                              {message.pending && message.content && (
+                                <span className="mt-1 inline-block h-4 w-[2px] animate-pulse rounded-sm bg-[var(--color-accent)]" />
+                              )}
+                            </div>
+                          )}
+                          {message.pending && !message.content && <ThinkingDots />}
+                        </div>
                       </div>
                     </div>
                   </div>
                 );
               })}
+              {thinkingMessages.length > 0 && lastAssistantIndex < 0 && (
+                <div className="py-2">
+                  <ThinkingProcess
+                    messages={thinkingMessages}
+                    isActive={isSessionBusy}
+                    turnStartedAt={turnStartedAt}
+                  />
+                </div>
+              )}
             </div>
             {activeSubagents && activeSubagents.length > 0 && (
               <div className="px-6 py-1">

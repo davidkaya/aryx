@@ -3,6 +3,7 @@ import type {
   ApprovalRequestedEvent,
   ExitPlanModeRequestedEvent,
   McpOauthRequiredEvent,
+  MessageReclassifiedEvent,
   TurnDeltaEvent,
   UserInputRequestedEvent,
   SubagentEvent,
@@ -12,6 +13,8 @@ import type {
   SessionCompactionEvent,
   PendingMessagesModifiedEvent,
   AssistantUsageEvent,
+  AssistantIntentEvent,
+  ReasoningDeltaEvent,
 } from '@shared/contracts/sidecar';
 import type { ChatMessageRecord } from '@shared/domain/session';
 
@@ -22,7 +25,9 @@ export type TurnScopedEvent =
   | SessionUsageEvent
   | SessionCompactionEvent
   | PendingMessagesModifiedEvent
-  | AssistantUsageEvent;
+  | AssistantUsageEvent
+  | AssistantIntentEvent
+  | ReasoningDeltaEvent;
 
 export interface RunTurnPendingCommand {
   kind: 'run-turn';
@@ -34,6 +39,7 @@ export interface RunTurnPendingCommand {
   onUserInput: (event: UserInputRequestedEvent) => void | Promise<void>;
   onMcpOAuthRequired: (event: McpOauthRequiredEvent) => void | Promise<void>;
   onExitPlanMode: (event: ExitPlanModeRequestedEvent) => void | Promise<void>;
+  onMessageReclassified: (event: MessageReclassifiedEvent) => void | Promise<void>;
   onTurnScopedEvent: (event: TurnScopedEvent) => void | Promise<void>;
   errored: boolean;
 }

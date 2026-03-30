@@ -626,6 +626,19 @@ body {
   animation: banner-slide-in 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+/* ── Thinking process section ────────────────────────────────── */
+
+@keyframes thinking-process-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+.thinking-process-enter {
+  animation: thinking-process-in 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
 /* ── Respect reduced motion ──────────────────────────────────── */
 
 @media (prefers-reduced-motion: reduce) {
@@ -637,7 +650,8 @@ body {
   .message-enter,
   .msg-actions-enter,
   .session-item-enter,
-  .banner-slide-enter {
+  .banner-slide-enter,
+  .thinking-process-enter {
     animation: none;
   }
 }

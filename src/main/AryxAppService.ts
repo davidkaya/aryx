@@ -10,6 +10,7 @@ import type {
   ExitPlanModeRequestedEvent,
   MessageMode,
   McpOauthRequiredEvent,
+  MessageReclassifiedEvent,
   RunTurnCustomAgentConfig,
   RunTurnToolingConfig,
   SidecarCapabilities,
@@ -1365,6 +1366,9 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
           await this.handleExitPlanModeRequested(workspace, session.id, event);
         },
         async (event) => {
+          await this.applyMessageReclassified(workspace, session.id, event);
+        },
+        async (event) => {
           await this.handleTurnScopedEvent(workspace, session.id, event);
         },
       );
@@ -1713,6 +1717,31 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     if (nextRun) {
       this.emitRunUpdated(sessionId, occurredAt, nextRun);
     }
+  }
+
+  private async applyMessageReclassified(
+    workspace: WorkspaceState,
+    sessionId: string,
+    event: MessageReclassifiedEvent,
+  ): Promise<void> {
+    const session = this.requireSession(workspace, sessionId);
+    const message = session.messages.find((m) => m.id === event.messageId);
+    if (!message || message.messageKind === 'thinking') {
+      return;
+    }
+
+    message.messageKind = 'thinking';
+    const occurredAt = nowIso();
+    session.updatedAt = occurredAt;
+    await this.workspaceRepository.save(workspace);
+
+    this.emitSessionEvent({
+      sessionId,
+      kind: 'message-reclassified',
+      occurredAt,
+      messageId: event.messageId,
+      messageKind: 'thinking',
+    });
   }
 
   private async applyAgentActivity(

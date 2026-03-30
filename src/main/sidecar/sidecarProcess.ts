@@ -9,6 +9,7 @@ import type {
   SidecarCapabilities,
   SidecarEvent,
   TurnDeltaEvent,
+  MessageReclassifiedEvent,
   UserInputRequestedEvent,
   McpOauthRequiredEvent,
   ExitPlanModeRequestedEvent,
@@ -134,9 +135,10 @@ export class SidecarClient {
     onUserInput: (event: UserInputRequestedEvent) => void | Promise<void>,
     onMcpOAuthRequired: (event: McpOauthRequiredEvent) => void | Promise<void>,
     onExitPlanMode: (event: ExitPlanModeRequestedEvent) => void | Promise<void>,
+    onMessageReclassified: (event: MessageReclassifiedEvent) => void | Promise<void>,
     onTurnScopedEvent: (event: TurnScopedEvent) => void | Promise<void>,
   ): Promise<ChatMessageRecord[]> {
-    return this.dispatch<ChatMessageRecord[]>(command, onDelta, onActivity, onApproval, onUserInput, onMcpOAuthRequired, onExitPlanMode, onTurnScopedEvent);
+    return this.dispatch<ChatMessageRecord[]>(command, onDelta, onActivity, onApproval, onUserInput, onMcpOAuthRequired, onExitPlanMode, onMessageReclassified, onTurnScopedEvent);
   }
 
   async resolveUserInput(userInputId: string, answer: string, wasFreeform: boolean): Promise<void> {
@@ -286,6 +288,7 @@ export class SidecarClient {
     onUserInput?: (event: UserInputRequestedEvent) => void | Promise<void>,
     onMcpOAuthRequired?: (event: McpOauthRequiredEvent) => void | Promise<void>,
     onExitPlanMode?: (event: ExitPlanModeRequestedEvent) => void | Promise<void>,
+    onMessageReclassified?: (event: MessageReclassifiedEvent) => void | Promise<void>,
     onTurnScopedEvent?: (event: TurnScopedEvent) => void | Promise<void>,
   ): Promise<TResult> {
     const state = await this.ensureProcess();
@@ -303,6 +306,7 @@ export class SidecarClient {
           onUserInput: onUserInput ?? (() => undefined),
           onMcpOAuthRequired: onMcpOAuthRequired ?? (() => undefined),
           onExitPlanMode: onExitPlanMode ?? (() => undefined),
+          onMessageReclassified: onMessageReclassified ?? (() => undefined),
           onTurnScopedEvent: onTurnScopedEvent ?? (() => undefined),
           errored: false,
         });
@@ -439,6 +443,11 @@ export class SidecarClient {
           this.invokeRunTurnHandler(event.requestId, pending, () => pending.onExitPlanMode(event));
         }
         return;
+      case 'message-reclassified':
+        if (pending.kind === 'run-turn' && shouldHandleRunTurnEvent(pending)) {
+          this.invokeRunTurnHandler(event.requestId, pending, () => pending.onMessageReclassified(event));
+        }
+        return;
       case 'subagent-event':
       case 'skill-invoked':
       case 'hook-lifecycle':
@@ -446,6 +455,8 @@ export class SidecarClient {
       case 'session-compaction':
       case 'pending-messages-modified':
       case 'assistant-usage':
+      case 'assistant-intent':
+      case 'reasoning-delta':
         if (pending.kind === 'run-turn' && shouldHandleRunTurnEvent(pending)) {
           this.invokeRunTurnHandler(event.requestId, pending, () => pending.onTurnScopedEvent(event));
         }

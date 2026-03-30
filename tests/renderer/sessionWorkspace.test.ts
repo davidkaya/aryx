@@ -281,4 +281,73 @@ describe('session workspace helpers', () => {
       } satisfies SessionEventRecord),
     ).toBe(workspace);
   });
+
+  test('reclassifies a message as thinking when message-reclassified event arrives', () => {
+    const workspace = applySessionEventWorkspace(createWorkspace(), {
+      sessionId: 'session-1',
+      kind: 'message-delta',
+      occurredAt: '2026-03-23T00:00:01.000Z',
+      messageId: 'assistant-1',
+      authorName: 'Primary Agent',
+      contentDelta: 'Let me search...',
+      content: 'Let me search...',
+    } satisfies SessionEventRecord);
+
+    const reclassified = applySessionEventWorkspace(workspace, {
+      sessionId: 'session-1',
+      kind: 'message-reclassified',
+      occurredAt: '2026-03-23T00:00:02.000Z',
+      messageId: 'assistant-1',
+      messageKind: 'thinking',
+    } satisfies SessionEventRecord);
+
+    expect(reclassified?.sessions[0].messages[0]).toMatchObject({
+      id: 'assistant-1',
+      messageKind: 'thinking',
+    });
+  });
+
+  test('ignores message-reclassified for an already reclassified message', () => {
+    let workspace = applySessionEventWorkspace(createWorkspace(), {
+      sessionId: 'session-1',
+      kind: 'message-delta',
+      occurredAt: '2026-03-23T00:00:01.000Z',
+      messageId: 'assistant-1',
+      authorName: 'Primary Agent',
+      contentDelta: 'Let me search...',
+      content: 'Let me search...',
+    } satisfies SessionEventRecord);
+
+    workspace = applySessionEventWorkspace(workspace, {
+      sessionId: 'session-1',
+      kind: 'message-reclassified',
+      occurredAt: '2026-03-23T00:00:02.000Z',
+      messageId: 'assistant-1',
+      messageKind: 'thinking',
+    } satisfies SessionEventRecord);
+
+    const duplicate = applySessionEventWorkspace(workspace, {
+      sessionId: 'session-1',
+      kind: 'message-reclassified',
+      occurredAt: '2026-03-23T00:00:03.000Z',
+      messageId: 'assistant-1',
+      messageKind: 'thinking',
+    } satisfies SessionEventRecord);
+
+    // Should return the same reference (no change)
+    expect(duplicate).toBe(workspace);
+  });
+
+  test('ignores message-reclassified for unknown message ids', () => {
+    const workspace = createWorkspace();
+    const result = applySessionEventWorkspace(workspace, {
+      sessionId: 'session-1',
+      kind: 'message-reclassified',
+      occurredAt: '2026-03-23T00:00:01.000Z',
+      messageId: 'nonexistent',
+      messageKind: 'thinking',
+    } satisfies SessionEventRecord);
+
+    expect(result).toBe(workspace);
+  });
 });

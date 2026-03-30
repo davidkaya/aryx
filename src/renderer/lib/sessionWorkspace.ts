@@ -41,6 +41,8 @@ function applySessionEvent(session: SessionRecord, event: SessionEventRecord): S
       return applyMessageDeltaEvent(session, event);
     case 'message-complete':
       return applyMessageCompleteEvent(session, event);
+    case 'message-reclassified':
+      return applyMessageReclassifiedEvent(session, event);
     case 'run-updated':
       return applyRunUpdatedEvent(session, event);
     default:
@@ -165,6 +167,30 @@ function applyMessageCompleteEvent(session: SessionRecord, event: SessionEventRe
 
   const nextMessages = session.messages.slice();
   nextMessages[messageIndex] = nextMessage;
+  return {
+    ...session,
+    messages: nextMessages,
+    updatedAt: event.occurredAt,
+  };
+}
+
+function applyMessageReclassifiedEvent(session: SessionRecord, event: SessionEventRecord): SessionRecord {
+  if (!event.messageId || !event.messageKind) {
+    return session;
+  }
+
+  const messageIndex = session.messages.findIndex((message) => message.id === event.messageId);
+  if (messageIndex < 0) {
+    return session;
+  }
+
+  const existing = session.messages[messageIndex];
+  if (existing.messageKind === event.messageKind) {
+    return session;
+  }
+
+  const nextMessages = session.messages.slice();
+  nextMessages[messageIndex] = { ...existing, messageKind: event.messageKind };
   return {
     ...session,
     messages: nextMessages,

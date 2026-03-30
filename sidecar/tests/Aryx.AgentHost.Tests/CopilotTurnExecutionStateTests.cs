@@ -1,6 +1,7 @@
 using Aryx.AgentHost.Contracts;
 using Aryx.AgentHost.Services;
 using GitHub.Copilot.SDK;
+using Microsoft.Extensions.AI;
 
 namespace Aryx.AgentHost.Tests;
 
@@ -599,6 +600,56 @@ public sealed class CopilotTurnExecutionStateTests
               "timestamp": "2026-03-27T00:00:00Z"
             }
             """);
+    }
+
+    [Fact]
+    public void FinalizeCompletedMessages_TagsReclassifiedMessagesAsThinking()
+    {
+        RunTurnCommandDto command = CreateCommand();
+        CopilotTurnExecutionState state = new(command);
+
+        // Simulate assistant message with tool requests → triggers reclassification
+        state.ObserveSessionEvent(
+            command.Pattern.Agents[0],
+            SessionEvent.FromJson(
+                """
+                {
+                  "type": "assistant.message",
+                  "data": {
+                    "messageId": "msg-intermediate",
+                    "content": "Let me search...",
+                    "toolRequests": [
+                      {
+                        "toolCallId": "tool-call-1",
+                        "name": "grep",
+                        "arguments": {}
+                      }
+                    ]
+                  },
+                  "id": "11111111-1111-1111-1111-111111111111",
+                  "timestamp": "2026-03-27T00:00:00Z"
+                }
+                """));
+
+        state.DrainPendingEvents();
+
+        // Build completed messages with a reclassified and a non-reclassified message
+        ChatMessage intermediateMsg = new(ChatRole.Assistant, "Let me search...");
+        intermediateMsg.MessageId = "msg-intermediate";
+        intermediateMsg.AuthorName = "Primary";
+
+        ChatMessage finalMsg = new(ChatRole.Assistant, "Here are the results.");
+        finalMsg.MessageId = "msg-final";
+        finalMsg.AuthorName = "Primary";
+
+        state.UpdateCompletedMessages([intermediateMsg, finalMsg], []);
+        IReadOnlyList<ChatMessageDto> messages = state.FinalizeCompletedMessages();
+
+        ChatMessageDto intermediate = Assert.Single(messages, m => m.Id == "msg-intermediate");
+        Assert.Equal("thinking", intermediate.MessageKind);
+
+        ChatMessageDto final_ = Assert.Single(messages, m => m.Id == "msg-final");
+        Assert.Null(final_.MessageKind);
     }
 
     private static RunTurnCommandDto CreateCommand()

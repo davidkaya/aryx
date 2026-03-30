@@ -1824,6 +1824,15 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     const pattern = this.requirePattern(workspace, session.patternId);
     const incomingIds = new Set(messages.map((message) => message.id));
 
+    // Messages that were streamed during the turn already exist in session.messages
+    // (possibly with messageKind: 'thinking' from reclassification). Unstreamed messages
+    // (e.g. from sub-agents) only appear now. Classify them as thinking when a visible
+    // response was already streamed, since they are intermediate tool-driving steps.
+    const existingIds = new Set(session.messages.map((m) => m.id));
+    const hasVisibleResponse = session.messages.some(
+      (m) => m.role === 'assistant' && m.messageKind !== 'thinking',
+    );
+
     for (const message of messages) {
       const occurredAt = nowIso();
       const existing = session.messages.find((current) => current.id === message.id);
@@ -1832,8 +1841,21 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
         existing.content = message.content;
         existing.pending = false;
       } else {
-        session.messages.push({ ...message, pending: false });
+        const isUnstreamedIntermediate =
+          message.role === 'assistant'
+          && hasVisibleResponse
+          && !message.messageKind;
+        session.messages.push({
+          ...message,
+          pending: false,
+          messageKind: message.messageKind ?? (isUnstreamedIntermediate ? 'thinking' : undefined),
+        });
       }
+
+      const reclassifiedAsThinking =
+        !existingIds.has(message.id)
+        && (message.messageKind === 'thinking'
+          || (message.role === 'assistant' && hasVisibleResponse && !message.messageKind));
 
       const nextRun = this.updateSessionRun(session, requestId, (run) =>
         upsertRunMessageEvent(run, {
@@ -1851,6 +1873,15 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
         authorName: message.authorName,
         content: message.content,
       });
+      if (reclassifiedAsThinking) {
+        this.emitSessionEvent({
+          sessionId,
+          kind: 'message-reclassified',
+          occurredAt,
+          messageId: message.id,
+          messageKind: 'thinking',
+        });
+      }
       if (nextRun) {
         this.emitRunUpdated(sessionId, occurredAt, nextRun);
       }

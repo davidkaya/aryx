@@ -313,6 +313,14 @@ internal sealed class CopilotTurnExecutionState
                 ActiveAgent);
         }
 
+        foreach (ChatMessageDto message in CompletedMessages)
+        {
+            if (_reclassifiedMessageIds.Contains(message.Id))
+            {
+                message.MessageKind = "thinking";
+            }
+        }
+
         return CompletedMessages;
     }
 

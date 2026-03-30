@@ -85,6 +85,7 @@ public sealed class ChatMessageDto
     public string AuthorName { get; init; } = string.Empty;
     public string Content { get; init; } = string.Empty;
     public string CreatedAt { get; init; } = string.Empty;
+    public string? MessageKind { get; set; }
     public IReadOnlyList<ChatMessageAttachmentDto> Attachments { get; init; } = [];
 }
 

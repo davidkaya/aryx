@@ -23,6 +23,7 @@ type AutoUpdateListener = (...args: any[]) => void;
 interface AutoUpdaterLike {
   autoDownload: boolean;
   autoInstallOnAppQuit: boolean;
+  forceDevUpdateConfig: boolean;
   on(event: string, listener: AutoUpdateListener): this;
   removeListener(event: string, listener: AutoUpdateListener): this;
   checkForUpdates(): Promise<unknown>;
@@ -180,6 +181,7 @@ export class AutoUpdateService {
     this.scheduler = options.scheduler ?? defaultScheduler;
     this.updater.autoDownload = true;
     this.updater.autoInstallOnAppQuit = false;
+    this.updater.forceDevUpdateConfig = !options.isPackaged;
 
     this.updater.on('checking-for-update', this.checkingListener);
     this.updater.on('update-available', this.availableListener);
@@ -215,10 +217,6 @@ export class AutoUpdateService {
   }
 
   async checkForUpdates(): Promise<UpdateStatus> {
-    if (!this.options.isPackaged) {
-      return this.getStatus();
-    }
-
     if (this.pendingCheck) {
       return this.pendingCheck;
     }

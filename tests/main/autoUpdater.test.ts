@@ -10,6 +10,8 @@ class FakeUpdater extends EventEmitter {
 
   autoInstallOnAppQuit = true;
 
+  forceDevUpdateConfig = false;
+
   checkForUpdatesCalls = 0;
 
   quitAndInstallCalls = 0;
@@ -62,7 +64,7 @@ class FakeScheduler implements AutoUpdateScheduler {
 }
 
 describe('AutoUpdateService', () => {
-  test('does not schedule checks for unpackaged apps', async () => {
+  test('does not schedule checks for unpackaged apps but manual checks still work', async () => {
     const updater = new FakeUpdater();
     const scheduler = new FakeScheduler();
     const service = new AutoUpdateService({ isPackaged: false, scheduler, updater });
@@ -71,8 +73,10 @@ describe('AutoUpdateService', () => {
 
     expect(scheduler.timeouts).toHaveLength(0);
     expect(scheduler.intervals).toHaveLength(0);
-    expect(await service.checkForUpdates()).toEqual({ state: 'idle' });
-    expect(updater.checkForUpdatesCalls).toBe(0);
+    expect(updater.forceDevUpdateConfig).toBe(true);
+
+    await service.checkForUpdates();
+    expect(updater.checkForUpdatesCalls).toBe(1);
   });
 
   test('configures auto download and schedules startup and periodic checks', async () => {

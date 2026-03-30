@@ -1,0 +1,4 @@
+provider: github
+owner: davidkaya
+repo: aryx
+releaseType: release

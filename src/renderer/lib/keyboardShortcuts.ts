@@ -18,6 +18,7 @@ export const shortcuts: ShortcutDefinition[] = [
   // ── Navigation ──
   { id: 'command-palette',  label: 'Command palette',      keys: `${MOD}+K`,           category: 'Navigation' },
   { id: 'search-sessions',  label: 'Search sessions',      keys: `${MOD}+Shift+F`,     category: 'Navigation' },
+  { id: 'bookmarks',        label: 'View bookmarks',       keys: `${MOD}+Shift+B`,     category: 'Navigation' },
   { id: 'settings',         label: 'Open settings',        keys: `${MOD}+,`,           category: 'Navigation' },
   { id: 'toggle-terminal',  label: 'Toggle terminal',      keys: 'Ctrl+`',             category: 'Navigation' },
   { id: 'shortcut-help',    label: 'Keyboard shortcuts',   keys: `${MOD}+/`,           category: 'Navigation' },

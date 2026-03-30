@@ -395,6 +395,44 @@ export function editAndResendSessionRecord(
   };
 }
 
+// ── Pinned messages ──
+
+export interface PinnedMessageHit {
+  session: SessionRecord;
+  projectName: string;
+  message: ChatMessageRecord;
+  /** Truncated preview of the message content. */
+  snippet: string;
+}
+
+function extractMessageSnippet(content: string, maxLength = 120): string {
+  const collapsed = content.replace(/\n+/g, ' ').trim();
+  if (collapsed.length <= maxLength) return collapsed;
+  return collapsed.slice(0, maxLength) + '…';
+}
+
+export function listPinnedMessages(workspace: WorkspaceState): PinnedMessageHit[] {
+  const projectNames = new Map<string, string>(
+    workspace.projects.map((p) => [p.id, isScratchpadProject(p) ? 'Scratchpad' : p.name]),
+  );
+
+  return workspace.sessions
+    .filter((session) => !session.isArchived)
+    .flatMap((session) =>
+      session.messages
+        .filter((message) => message.isPinned && message.content)
+        .map((message) => ({
+          session,
+          projectName: projectNames.get(session.projectId) ?? 'Unknown',
+          message,
+          snippet: extractMessageSnippet(message.content),
+        })),
+    )
+    .sort((a, b) => b.message.createdAt.localeCompare(a.message.createdAt));
+}
+
+// ── Session query ──
+
 export function querySessions(workspace: WorkspaceState, input: QuerySessionsInput): SessionQueryResult[] {
   const projectsById = new Map<string, ProjectRecord>(workspace.projects.map((project) => [project.id, project]));
   const patternsById = new Map<string, PatternDefinition>(workspace.patterns.map((pattern) => [pattern.id, pattern]));

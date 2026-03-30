@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Archive,
+  Bookmark,
   Copy,
   FolderOpen,
   FolderPlus,
@@ -51,6 +52,7 @@ export interface CommandPaletteProps {
   onOpenAppDataFolder: () => void;
   onShowShortcuts: () => void;
   onShowSearch: () => void;
+  onShowBookmarks: () => void;
 }
 
 /** Score how well `query` matches `text` (and optional `keywords`). 0 = no match. */
@@ -92,6 +94,7 @@ export function CommandPalette({
   onOpenAppDataFolder,
   onShowShortcuts,
   onShowSearch,
+  onShowBookmarks,
 }: CommandPaletteProps) {
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -235,6 +238,16 @@ export function CommandPalette({
     });
 
     cmds.push({
+      id: 'view-bookmarks',
+      label: 'View Bookmarks',
+      category: 'General',
+      keywords: 'pin pinned bookmark bookmarked saved',
+      shortcut: shortcutKeys('bookmarks'),
+      icon: <Bookmark className={ICON} />,
+      action: onShowBookmarks,
+    });
+
+    cmds.push({
       id: 'settings',
       label: 'Open Settings',
       category: 'General',
@@ -316,7 +329,7 @@ export function CommandPalette({
     onSelectSession, onSelectProject, onNewSession, onCreateScratchpad,
     onOpenSettings, onOpenProjectSettings, onToggleTerminal, onSetTheme,
     onDuplicateSession, onPinSession, onArchiveSession, onAddProject,
-    onOpenAppDataFolder, onShowShortcuts, onShowSearch,
+    onOpenAppDataFolder, onShowShortcuts, onShowSearch, onShowBookmarks,
   ]);
 
   const filteredCommands = useMemo(() => {

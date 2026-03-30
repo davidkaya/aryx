@@ -8,6 +8,7 @@ import { DiscoveredToolingModal } from '@renderer/components/DiscoveredToolingMo
 import { KeyboardShortcutsPanel } from '@renderer/components/KeyboardShortcutsPanel';
 import { NewSessionModal } from '@renderer/components/NewSessionModal';
 import { ProjectSettingsPanel } from '@renderer/components/ProjectSettingsPanel';
+import { BookmarksPanel } from '@renderer/components/BookmarksPanel';
 import { SessionSearchPanel } from '@renderer/components/SessionSearchPanel';
 import { SettingsPanel } from '@renderer/components/SettingsPanel';
 import { Sidebar } from '@renderer/components/Sidebar';
@@ -118,6 +119,7 @@ export default function App() {
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
+  const [showBookmarks, setShowBookmarks] = useState(false);
 
   // Terminal state
   const [terminalOpen, setTerminalOpen] = useState(false);
@@ -321,6 +323,13 @@ export default function App() {
       if (mod && e.shiftKey && e.key === 'F') {
         e.preventDefault();
         setShowSearch((prev) => !prev);
+        return;
+      }
+
+      // ── Ctrl/Cmd+Shift+B — Bookmarks ──
+      if (mod && e.shiftKey && e.key === 'B') {
+        e.preventDefault();
+        setShowBookmarks((prev) => !prev);
         return;
       }
 
@@ -824,6 +833,7 @@ export default function App() {
           onOpenAppDataFolder={() => void api.openAppDataFolder()}
           onShowShortcuts={() => setShowShortcuts(true)}
           onShowSearch={() => setShowSearch(true)}
+          onShowBookmarks={() => setShowBookmarks(true)}
         />
       )}
 
@@ -837,6 +847,19 @@ export default function App() {
           onClose={() => setShowSearch(false)}
           onSelectSession={(sessionId) => {
             void api.selectSession(sessionId);
+          }}
+        />
+      )}
+
+      {showBookmarks && workspace && (
+        <BookmarksPanel
+          workspace={workspace}
+          onClose={() => setShowBookmarks(false)}
+          onSelectSession={(sessionId) => {
+            void api.selectSession(sessionId);
+          }}
+          onUnpinMessage={(sessionId, messageId) => {
+            void api.setSessionMessagePinned({ sessionId, messageId, isPinned: false });
           }}
         />
       )}

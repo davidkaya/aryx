@@ -94,3 +94,7 @@ bun run publish-release # publish to GitHub Releases
 ```
 
 Tagged releases use GitHub Actions to build and publish Windows (NSIS), macOS (DMG, signed + notarized), and Linux (AppImage) artifacts. The app uses `electron-updater` for in-app updates.
+
+## Trademarks
+
+GitHub and GitHub Copilot are trademarks of Microsoft Corporation. Aryx is an independent project, not affiliated with or endorsed by Microsoft or GitHub.

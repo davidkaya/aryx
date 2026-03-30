@@ -64,18 +64,20 @@ class FakeScheduler implements AutoUpdateScheduler {
 }
 
 describe('AutoUpdateService', () => {
-  test('does not schedule checks for unpackaged apps but manual checks still work', async () => {
+  test('schedules checks for unpackaged apps using dev update config', async () => {
     const updater = new FakeUpdater();
     const scheduler = new FakeScheduler();
     const service = new AutoUpdateService({ isPackaged: false, scheduler, updater });
 
     service.start();
 
-    expect(scheduler.timeouts).toHaveLength(0);
-    expect(scheduler.intervals).toHaveLength(0);
     expect(updater.forceDevUpdateConfig).toBe(true);
+    expect(scheduler.timeouts).toEqual([{ callback: expect.any(Function), delayMs: 10_000 }]);
+    expect(scheduler.intervals).toEqual([{ callback: expect.any(Function), delayMs: 4 * 60 * 60 * 1000 }]);
 
-    await service.checkForUpdates();
+    await scheduler.runTimeout();
+    await Promise.resolve();
+
     expect(updater.checkForUpdatesCalls).toBe(1);
   });
 

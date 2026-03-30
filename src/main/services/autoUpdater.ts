@@ -192,7 +192,7 @@ export class AutoUpdateService {
   }
 
   start(): void {
-    if (this.started || !this.options.isPackaged) {
+    if (this.started) {
       return;
     }
 

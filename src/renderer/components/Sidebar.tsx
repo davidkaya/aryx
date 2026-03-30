@@ -120,7 +120,7 @@ function GitContextBadge({ git }: { git: ProjectGitContext }) {
   return (
     <span className="flex items-center gap-1 text-[10px] text-[var(--color-text-muted)]" title={parts.join(' · ') || branchLabel}>
       <GitBranch className="size-2.5 shrink-0" />
-      <span className="max-w-[80px] truncate">{branchLabel}</span>
+      <span className="max-w-[140px] truncate font-mono">{branchLabel}</span>
       {git.isDirty && <Circle className="size-1.5 shrink-0 fill-amber-500 text-amber-500" />}
     </span>
   );
@@ -396,76 +396,93 @@ function ProjectGroup({
   return (
     <div>
       <button
-        className="group flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-[13px] font-semibold text-[var(--color-text-secondary)] transition-all duration-150 hover:bg-[var(--color-surface-2)]/40 hover:text-[var(--color-text-primary)]"
+        className="group flex w-full flex-col gap-0.5 rounded-lg px-2 py-2 text-left transition-all duration-150 hover:bg-[var(--color-surface-2)]/40"
         onClick={() => setExpanded(!expanded)}
         type="button"
+        title={`${project.name}\n${project.path}`}
       >
-        {expanded ? (
-          <ChevronDown className="size-3 shrink-0 text-[var(--color-text-muted)]" />
-        ) : (
-          <ChevronRight className="size-3 shrink-0 text-[var(--color-text-muted)]" />
-        )}
-        {isScratchpad ? (
-          <MessageSquare className="size-3.5 shrink-0 text-[var(--color-text-muted)] transition group-hover:text-[var(--color-accent)]" />
-        ) : (
-          <FolderOpen className="size-3.5 shrink-0 text-[var(--color-text-muted)] transition group-hover:text-[var(--color-accent)]" />
-        )}
-        <span className="truncate">{project.name}</span>
+        {/* Row 1 — project identity + hover actions */}
+        <div className="flex w-full items-center gap-2 text-[13px] font-semibold text-[var(--color-text-secondary)] group-hover:text-[var(--color-text-primary)]">
+          {expanded ? (
+            <ChevronDown className="size-3 shrink-0 text-[var(--color-text-muted)]" />
+          ) : (
+            <ChevronRight className="size-3 shrink-0 text-[var(--color-text-muted)]" />
+          )}
+          {isScratchpad ? (
+            <MessageSquare className="size-3.5 shrink-0 text-[var(--color-text-muted)] transition group-hover:text-[var(--color-accent)]" />
+          ) : (
+            <FolderOpen className="size-3.5 shrink-0 text-[var(--color-text-muted)] transition group-hover:text-[var(--color-accent)]" />
+          )}
+          <span className="min-w-0 flex-1 truncate">{project.name}</span>
 
-        {!isScratchpad && project.git && (
-          <GitContextBadge git={project.git} />
-        )}
+          {isScratchpad && (
+            <span className="shrink-0 rounded-full bg-[var(--color-surface-2)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-text-muted)]">
+              {visibleSessions.length}
+            </span>
+          )}
 
-        <div className="ml-auto flex items-center gap-1.5">
-          {!isScratchpad && onOpenProjectSettings && (
-            <span
-              className="flex size-5 items-center justify-center rounded text-[var(--color-text-muted)] opacity-0 transition hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-primary)] group-hover:opacity-100"
-              onClick={(e) => {
-                e.stopPropagation();
-                onOpenProjectSettings(project.id);
-              }}
-              role="button"
-              title="Project settings"
-            >
-              <Settings className="size-3" />
-            </span>
+          {!isScratchpad && (onOpenProjectSettings || onRefreshGitContext) && (
+            <div className="flex shrink-0 items-center gap-0.5">
+              {onOpenProjectSettings && (
+                <span
+                  className="flex size-5 items-center justify-center rounded text-[var(--color-text-muted)] opacity-0 transition hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-primary)] group-hover:opacity-100"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOpenProjectSettings(project.id);
+                  }}
+                  role="button"
+                  title="Project settings"
+                >
+                  <Settings className="size-3" />
+                </span>
+              )}
+              {onRefreshGitContext && (
+                <span
+                  className="flex size-5 items-center justify-center rounded text-[var(--color-text-muted)] opacity-0 transition hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-primary)] group-hover:opacity-100"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRefreshGitContext(project.id);
+                  }}
+                  role="button"
+                  title="Refresh git status"
+                >
+                  <RefreshCw className="size-3" />
+                </span>
+              )}
+            </div>
           )}
-          {!isScratchpad && onRefreshGitContext && (
-            <span
-              className="flex size-5 items-center justify-center rounded text-[var(--color-text-muted)] opacity-0 transition hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-primary)] group-hover:opacity-100"
-              onClick={(e) => {
-                e.stopPropagation();
-                onRefreshGitContext(project.id);
-              }}
-              role="button"
-              title="Refresh git status"
-            >
-              <RefreshCw className="size-3" />
-            </span>
-          )}
-          {runningCount > 0 && (
-            <span className="flex items-center gap-1 rounded-full bg-[var(--color-accent-sky)]/10 px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-accent-sky)]">
-              <span className="size-1.5 rounded-full bg-[var(--color-accent-sky)] sidebar-pulse" />
-              {runningCount}
-            </span>
-          )}
-          {pendingDiscoveryCount > 0 && (
-            <span
-              className="flex cursor-pointer items-center gap-1 rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-400 transition hover:bg-amber-500/20"
-              onClick={(e) => {
-                e.stopPropagation();
-                onOpenProjectSettings?.(project.id);
-              }}
-              role="button"
-              title={`${pendingDiscoveryCount} MCP server${pendingDiscoveryCount === 1 ? '' : 's'} discovered — click to review`}
-            >
-              {pendingDiscoveryCount} new
-            </span>
-          )}
-          <span className="rounded-full bg-[var(--color-surface-2)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-text-muted)]">
-            {visibleSessions.length}
-          </span>
         </div>
+
+        {/* Row 2 — metadata strip: branch, status badges, session count */}
+        {!isScratchpad && (project.git || runningCount > 0 || pendingDiscoveryCount > 0 || visibleSessions.length > 0) && (
+          <div className="ml-[26px] flex items-center gap-2">
+            {project.git && <GitContextBadge git={project.git} />}
+
+            {runningCount > 0 && (
+              <span className="flex items-center gap-1 rounded-full bg-[var(--color-accent-sky)]/10 px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-accent-sky)]">
+                <span className="size-1.5 rounded-full bg-[var(--color-accent-sky)] sidebar-pulse" />
+                {runningCount}
+              </span>
+            )}
+            {pendingDiscoveryCount > 0 && (
+              <span
+                className="flex cursor-pointer items-center gap-1 rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-400 transition hover:bg-amber-500/20"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenProjectSettings?.(project.id);
+                }}
+                role="button"
+                title={`${pendingDiscoveryCount} MCP server${pendingDiscoveryCount === 1 ? '' : 's'} discovered — click to review`}
+              >
+                {pendingDiscoveryCount} new
+              </span>
+            )}
+            <span className="ml-auto rounded-full bg-[var(--color-surface-2)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-text-muted)]">
+              {visibleSessions.length}
+            </span>
+          </div>
+        )}
+
       </button>
 
       {expanded && (

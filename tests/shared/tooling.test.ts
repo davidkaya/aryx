@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 
 import {
   buildMcpServerApprovalKey,
+  countApprovedToolsInGroups,
   groupApprovalToolsByProvider,
   listApprovalToolDefinitions,
   listApprovalToolNames,
@@ -656,5 +657,103 @@ describe('probed tools', () => {
     expect(names).toContain('probe_tool_1');
     expect(names).toContain('probe_tool_2');
     expect(names).toContain('mcp_server:Probed Keys');
+  });
+});
+
+describe('countApprovedToolsInGroups', () => {
+  const TS = '2026-03-28T00:00:00.000Z';
+
+  function makeTooling(
+    mcpServers: McpServerDefinition[] = [],
+    lspProfiles: LspProfileDefinition[] = [],
+  ): WorkspaceToolingSettings {
+    return { mcpServers, lspProfiles };
+  }
+
+  function makeMcpServer(id: string, name: string, tools: string[]): McpServerDefinition {
+    return { id, name, transport: 'local', command: 'node', args: [], tools, createdAt: TS, updatedAt: TS };
+  }
+
+  test('counts all tools approved when all server keys are set', () => {
+    const tooling = makeTooling([
+      makeMcpServer('git', 'Git MCP', ['git.status', 'git.diff']),
+      makeMcpServer('fs', 'Filesystem', ['fs.read']),
+    ]);
+    const tools = listApprovalToolDefinitions(tooling);
+    const groups = groupApprovalToolsByProvider(tools, tooling);
+    const mcpGroups = groups.filter((g) => g.kind === 'mcp');
+    const approved = new Set(['mcp_server:Git MCP', 'mcp_server:Filesystem']);
+
+    const mcpTotal = mcpGroups.reduce(
+      (sum, g) => sum + Math.max(g.tools.length, g.serverApprovalKey ? 1 : 0), 0,
+    );
+    const count = countApprovedToolsInGroups(mcpGroups, approved);
+    expect(count).toBe(mcpTotal);
+  });
+
+  test('counts shared tool names per group, not as unique IDs', () => {
+    const tooling = makeTooling([
+      makeMcpServer('git-a', 'Git A', ['git.status', 'git.diff']),
+      makeMcpServer('git-b', 'Git B', ['git.status', 'git.diff']),
+    ]);
+    const tools = listApprovalToolDefinitions(tooling);
+    const groups = groupApprovalToolsByProvider(tools, tooling);
+
+    const mcpGroups = groups.filter((g) => g.kind === 'mcp');
+    expect(mcpGroups.length).toBe(2);
+    // Both servers share the same tool names — MCP total should be 4 (2 per group)
+    const mcpTotal = mcpGroups.reduce(
+      (sum, g) => sum + Math.max(g.tools.length, g.serverApprovalKey ? 1 : 0), 0,
+    );
+    expect(mcpTotal).toBe(4);
+
+    // Approve all via server keys — count must match total
+    const approved = new Set(['mcp_server:Git A', 'mcp_server:Git B']);
+    const count = countApprovedToolsInGroups(mcpGroups, approved);
+    expect(count).toBe(mcpTotal);
+  });
+
+  test('counts individual tool approvals per group when no server key', () => {
+    const tooling = makeTooling([
+      makeMcpServer('git-a', 'Git A', ['git.status']),
+      makeMcpServer('git-b', 'Git B', ['git.status']),
+    ]);
+    const tools = listApprovalToolDefinitions(tooling);
+    const groups = groupApprovalToolsByProvider(tools, tooling);
+
+    // Approve only the individual tool ID (shared across both groups)
+    const approved = new Set(['git.status']);
+    const mcpGroups = groups.filter((g) => g.kind === 'mcp');
+    expect(mcpGroups.length).toBe(2);
+
+    // Each group has the same tool → count should be 2 (once per group)
+    const mcpCount = countApprovedToolsInGroups(mcpGroups, approved);
+    expect(mcpCount).toBe(2);
+  });
+
+  test('counts empty server with approved key as 1', () => {
+    const tooling = makeTooling([makeMcpServer('empty', 'Empty Server', [])]);
+    const tools = listApprovalToolDefinitions(tooling);
+    const groups = groupApprovalToolsByProvider(tools, tooling);
+    const approved = new Set(['mcp_server:Empty Server']);
+
+    const mcpGroups = groups.filter((g) => g.kind === 'mcp');
+    expect(mcpGroups.length).toBe(1);
+    expect(mcpGroups[0].tools.length).toBe(0);
+
+    const count = countApprovedToolsInGroups(mcpGroups, approved);
+    expect(count).toBe(1);
+  });
+
+  test('returns 0 when nothing is approved', () => {
+    const tooling = makeTooling([
+      makeMcpServer('git', 'Git MCP', ['git.status']),
+    ]);
+    const tools = listApprovalToolDefinitions(tooling);
+    const groups = groupApprovalToolsByProvider(tools, tooling);
+    const approved = new Set<string>();
+
+    const count = countApprovedToolsInGroups(groups, approved);
+    expect(count).toBe(0);
   });
 });

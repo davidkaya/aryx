@@ -30,6 +30,7 @@ import { type PatternDefinition, type ReasoningEffort } from '@shared/domain/pat
 import { isScratchpadProject, type ProjectRecord } from '@shared/domain/project';
 import { resolveSessionToolingSelection, type SessionBranchOriginAction, type SessionRecord } from '@shared/domain/session';
 import {
+  countApprovedToolsInGroups,
   groupApprovalToolsByProvider,
   listApprovalToolDefinitions,
   type RuntimeToolDefinition,
@@ -162,17 +163,7 @@ export function ChatPane({
   );
   const effectiveAutoApprovedCount = useMemo(() => {
     const groups = groupApprovalToolsByProvider(approvalTools, toolingSettings);
-    const counted = new Set<string>();
-    for (const group of groups) {
-      if (group.serverApprovalKey && effectiveAutoApproved.has(group.serverApprovalKey)) {
-        for (const tool of group.tools) counted.add(tool.id);
-      } else {
-        for (const tool of group.tools) {
-          if (effectiveAutoApproved.has(tool.id)) counted.add(tool.id);
-        }
-      }
-    }
-    return counted.size;
+    return countApprovedToolsInGroups(groups, effectiveAutoApproved);
   }, [approvalTools, effectiveAutoApproved, toolingSettings]);
   const isProbingMcp = (mcpProbingServerIds?.length ?? 0) > 0;
   const hasApprovalContent = approvalTools.length > 0 || isProbingMcp;

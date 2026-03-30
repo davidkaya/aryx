@@ -395,6 +395,34 @@ function resolveApprovalToolGroupKey(
   return { id: 'other', label: 'Other', kind: 'mixed' };
 }
 
+/**
+ * Count how many tools are effectively auto-approved across all groups.
+ *
+ * This must use per-group counting (not unique-tool-ID deduplication) to stay
+ * consistent with the total-item formula used in InlineApprovalPill, which
+ * counts each group occurrence independently.  Without this, shared tool names
+ * across MCP servers produce a numerator smaller than the denominator even when
+ * everything is approved.
+ */
+export function countApprovedToolsInGroups(
+  groups: ReadonlyArray<ApprovalToolGroup>,
+  approved: ReadonlySet<string>,
+): number {
+  let count = 0;
+  for (const group of groups) {
+    if (group.serverApprovalKey && approved.has(group.serverApprovalKey)) {
+      // Server-level approval covers all tools.  Servers with 0 tools still
+      // count as 1 (matching the totalItemCount formula).
+      count += Math.max(group.tools.length, 1);
+    } else {
+      for (const tool of group.tools) {
+        if (approved.has(tool.id)) count += 1;
+      }
+    }
+  }
+  return count;
+}
+
 export function validateMcpServerDefinition(server: McpServerDefinition): string | undefined {
   if (!server.name.trim()) {
     return 'MCP server name is required.';

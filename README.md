@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/davidkaya/aryx/releases">Download</a>&nbsp;&nbsp;·&nbsp;&nbsp;<a href="https://aryx.dev">Website</a>&nbsp;&nbsp;·&nbsp;&nbsp;<a href="https://github.com/davidkaya/aryx/issues">Issues</a>
+  <a href="https://github.com/davidkaya/aryx/releases">Download</a>&nbsp;&nbsp;·&nbsp;&nbsp;<a href="https://aryx.app">Website</a>&nbsp;&nbsp;·&nbsp;&nbsp;<a href="https://github.com/davidkaya/aryx/issues">Issues</a>
 </p>
 
 ---

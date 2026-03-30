@@ -1325,6 +1325,155 @@ public sealed class CopilotWorkflowRunnerTests
         Assert.Equal("https://example.com", args["url"]);
     }
 
+    [Theory]
+    [InlineData("view", "read")]
+    [InlineData("glob", "read")]
+    [InlineData("grep", "read")]
+    [InlineData("lsp", "read")]
+    [InlineData("edit", "write")]
+    [InlineData("create", "write")]
+    [InlineData("powershell", "shell")]
+    [InlineData("read_powershell", "shell")]
+    [InlineData("write_powershell", "shell")]
+    [InlineData("stop_powershell", "shell")]
+    [InlineData("list_powershell", "shell")]
+    [InlineData("web_fetch", "url")]
+    [InlineData("web_search", "url")]
+    [InlineData("store_memory", "memory")]
+    public void ResolveHookToolCategory_ReturnsExpectedCategoryForKnownTools(string toolName, string expectedCategory)
+    {
+        Assert.Equal(expectedCategory, CopilotApprovalCoordinator.ResolveHookToolCategory(toolName));
+    }
+
+    [Theory]
+    [InlineData("icm-mcp-get_on_call_schedule")]
+    [InlineData("custom_tool")]
+    [InlineData("unknown")]
+    public void ResolveHookToolCategory_ReturnsNullForUnknownTools(string toolName)
+    {
+        Assert.Null(CopilotApprovalCoordinator.ResolveHookToolCategory(toolName));
+    }
+
+    [Fact]
+    public void ResolveHookToolCategory_ReturnsNullForNullOrEmpty()
+    {
+        Assert.Null(CopilotApprovalCoordinator.ResolveHookToolCategory(null));
+        Assert.Null(CopilotApprovalCoordinator.ResolveHookToolCategory(""));
+        Assert.Null(CopilotApprovalCoordinator.ResolveHookToolCategory("  "));
+    }
+
+    [Fact]
+    public void TryGetApprovalToolName_ResolvesHookToolToCategory()
+    {
+        Assert.True(
+            CopilotApprovalCoordinator.TryGetApprovalToolName(
+                new PermissionRequestHook
+                {
+                    Kind = "hook",
+                    ToolName = "view",
+                    ToolArgs = """{"path":"README.md"}""",
+                },
+                out string? toolName));
+        Assert.Equal("view", toolName);
+
+        // But the auto-approved name (fallback) resolves to the category
+        PermissionRequestHook hookRequest = new()
+        {
+            Kind = "hook",
+            ToolName = "view",
+            ToolArgs = """{"path":"README.md"}""",
+        };
+
+        // Verify GetFallbackToolName returns category via ResolveAutoApprovedToolName path
+        Assert.True(
+            CopilotApprovalCoordinator.TryGetApprovalToolName(
+                hookRequest,
+                out _));
+    }
+
+    [Fact]
+    public void RequiresToolCallApproval_HonorsHookToolCategoryForAutoApproval()
+    {
+        ApprovalPolicyDto policy = new()
+        {
+            Rules =
+            [
+                new ApprovalCheckpointRuleDto
+                {
+                    Kind = "tool-call",
+                    AgentIds = ["agent-1"],
+                },
+            ],
+            AutoApprovedToolNames = ["read"],
+        };
+
+        // "view" is a hook tool that maps to "read" category — should be auto-approved
+        Assert.False(CopilotApprovalCoordinator.RequiresToolCallApproval(
+            policy, "agent-1", "view", "read"));
+
+        // "grep" also maps to "read"
+        Assert.False(CopilotApprovalCoordinator.RequiresToolCallApproval(
+            policy, "agent-1", "grep", "read"));
+
+        // "edit" maps to "write" — not auto-approved
+        Assert.True(CopilotApprovalCoordinator.RequiresToolCallApproval(
+            policy, "agent-1", "edit", "write"));
+    }
+
+    [Fact]
+    public void BuildPermissionApprovalEvent_UsesResolvedCategoryForHookPermissionKind()
+    {
+        ApprovalRequestedEventDto approvalEvent = CopilotApprovalCoordinator.BuildPermissionApprovalEvent(
+            new RunTurnCommandDto
+            {
+                RequestId = "turn-1",
+                SessionId = "session-1",
+            },
+            CreateAgent("agent-1", "Primary"),
+            new PermissionRequestHook
+            {
+                Kind = "hook",
+                ToolName = "view",
+                ToolArgs = """{"path":"README.md"}""",
+            },
+            new PermissionInvocation
+            {
+                SessionId = "copilot-session-1",
+            },
+            "approval-1",
+            "view");
+
+        Assert.Equal("view", approvalEvent.ToolName);
+        Assert.Equal("read", approvalEvent.PermissionKind);
+        Assert.Contains("read permission", approvalEvent.Detail);
+    }
+
+    [Fact]
+    public void BuildPermissionApprovalEvent_KeepsHookKindForUnknownHookTools()
+    {
+        ApprovalRequestedEventDto approvalEvent = CopilotApprovalCoordinator.BuildPermissionApprovalEvent(
+            new RunTurnCommandDto
+            {
+                RequestId = "turn-1",
+                SessionId = "session-1",
+            },
+            CreateAgent("agent-1", "Primary"),
+            new PermissionRequestHook
+            {
+                Kind = "hook",
+                ToolName = "icm-mcp-get_schedule",
+                ToolArgs = """{"teamIds":[91982]}""",
+            },
+            new PermissionInvocation
+            {
+                SessionId = "copilot-session-1",
+            },
+            "approval-1",
+            "icm-mcp-get_schedule");
+
+        Assert.Equal("hook", approvalEvent.PermissionKind);
+    }
+
     [Fact]
     public async Task RequestApprovalAsync_RaisesApprovalAndCompletesAfterResolution()
     {

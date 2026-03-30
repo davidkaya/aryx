@@ -151,6 +151,26 @@ public sealed class CopilotSessionHooksTests
         Assert.Equal("ask", decision?.PermissionDecision);
     }
 
+    [Theory]
+    [InlineData("view", "read")]
+    [InlineData("grep", "read")]
+    [InlineData("edit", "write")]
+    [InlineData("powershell", "shell")]
+    public async Task Create_PreToolUseAutoAllowsWhenCategoryIsApproved(string toolName, string category)
+    {
+        RunTurnCommandDto command = CreateCommandWithAutoApprovedCategory(category);
+        SessionHooks hooks = CopilotSessionHooks.Create(command, command.Pattern.Agents[0], ResolvedHookSet.Empty, new RecordingHookCommandRunner());
+
+        PreToolUseHookOutput? decision = await hooks.OnPreToolUse!(
+            new PreToolUseHookInput
+            {
+                ToolName = toolName,
+            },
+            null!);
+
+        Assert.Equal("allow", decision?.PermissionDecision);
+    }
+
     [Fact]
     public async Task Create_RunsConfiguredNonPreToolHooks()
     {
@@ -305,6 +325,45 @@ public sealed class CopilotSessionHooksTests
                 Availability = command.Pattern.Availability,
                 ApprovalPolicy = new ApprovalPolicyDto(),
                 Agents = command.Pattern.Agents,
+            },
+        };
+    }
+
+    private static RunTurnCommandDto CreateCommandWithAutoApprovedCategory(string category)
+    {
+        return new RunTurnCommandDto
+        {
+            RequestId = "turn-1",
+            SessionId = "session-1",
+            ProjectPath = @"C:\workspace\project",
+            Pattern = new PatternDefinitionDto
+            {
+                Id = "pattern-1",
+                Name = "Pattern",
+                Mode = "single",
+                Availability = "available",
+                ApprovalPolicy = new ApprovalPolicyDto
+                {
+                    Rules =
+                    [
+                        new ApprovalCheckpointRuleDto
+                        {
+                            Kind = "tool-call",
+                            AgentIds = ["agent-1"],
+                        },
+                    ],
+                    AutoApprovedToolNames = [category],
+                },
+                Agents =
+                [
+                    new PatternAgentDefinitionDto
+                    {
+                        Id = "agent-1",
+                        Name = "Primary",
+                        Model = "gpt-5.4",
+                        Instructions = "Help.",
+                    },
+                ],
             },
         };
     }

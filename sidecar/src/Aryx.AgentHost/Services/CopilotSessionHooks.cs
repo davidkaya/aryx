@@ -248,11 +248,13 @@ internal static class CopilotSessionHooks
             };
         }
 
+        string? autoApprovedToolName = CopilotApprovalCoordinator.ResolveHookToolCategory(toolName) ?? toolName;
+
         bool requiresApproval = CopilotApprovalCoordinator.RequiresToolCallApproval(
             command.Pattern.ApprovalPolicy,
             agentDefinition.Id,
             toolName,
-            toolName);
+            autoApprovedToolName);
 
         return new PreToolUseHookOutput
         {

@@ -21,6 +21,24 @@ internal sealed class CopilotApprovalCoordinator
     private const string HookPermissionKind = "hook";
     private const string ToolCallingActivityType = "tool-calling";
 
+    private static readonly Dictionary<string, string> HookToolCategories = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["view"] = ReadPermissionKind,
+        ["glob"] = ReadPermissionKind,
+        ["grep"] = ReadPermissionKind,
+        ["lsp"] = ReadPermissionKind,
+        ["edit"] = WritePermissionKind,
+        ["create"] = WritePermissionKind,
+        ["powershell"] = ShellPermissionKind,
+        ["read_powershell"] = ShellPermissionKind,
+        ["write_powershell"] = ShellPermissionKind,
+        ["stop_powershell"] = ShellPermissionKind,
+        ["list_powershell"] = ShellPermissionKind,
+        ["web_fetch"] = UrlPermissionKind,
+        ["web_search"] = UrlPermissionKind,
+        ["store_memory"] = MemoryPermissionKind,
+    };
+
     private readonly ConcurrentDictionary<string, PendingApprovalRequest> _pendingApprovals = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, byte>> _requestApprovedTools = new(StringComparer.Ordinal);
 
@@ -140,6 +158,16 @@ internal sealed class CopilotApprovalCoordinator
         string permissionKind = string.IsNullOrWhiteSpace(request.Kind)
             ? "tool access"
             : request.Kind.Trim();
+
+        if (request is PermissionRequestHook hook)
+        {
+            string? resolvedCategory = ResolveHookToolCategory(hook.ToolName);
+            if (resolvedCategory is not null)
+            {
+                permissionKind = resolvedCategory;
+            }
+        }
+
         string agentName = string.IsNullOrWhiteSpace(agent.Name) ? agent.Id : agent.Name;
         string? sessionId = NormalizeOptionalString(invocation.SessionId);
         string? normalizedToolName = NormalizeOptionalString(toolName);
@@ -476,8 +504,20 @@ internal sealed class CopilotApprovalCoordinator
             PermissionRequestWrite => WritePermissionKind,
             PermissionRequestRead => ReadPermissionKind,
             PermissionRequestMemory => StoreMemoryToolName,
+            PermissionRequestHook hook => ResolveHookToolCategory(hook.ToolName),
             _ => null,
         };
+    }
+
+    internal static string? ResolveHookToolCategory(string? toolName)
+    {
+        string? normalized = NormalizeOptionalString(toolName);
+        if (normalized is null)
+        {
+            return null;
+        }
+
+        return HookToolCategories.TryGetValue(normalized, out string? category) ? category : null;
     }
 
     private static bool MatchesAutoApprovedTool(

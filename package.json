@@ -126,6 +126,7 @@
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
+      "include": "assets/installer.nsh",
       "installerIcon": "assets/icons/windows/icon.ico",
       "uninstallerIcon": "assets/icons/windows/icon.ico"
     },

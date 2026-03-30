@@ -418,9 +418,19 @@ export function InlineApprovalPill({
       .filter((g) => g.tools.length > 0 || g.label.toLowerCase().includes(searchLower));
   }, [groups, searchLower]);
 
-  function toggleTool(toolId: string) {
+  function toggleTool(toolId: string, group: ApprovalToolGroup) {
     const next = new Set(effectiveAutoApproved);
-    if (next.has(toolId)) {
+
+    // If the group has server-level approval, expand it to individual tools
+    // so the user can selectively disable one tool.
+    if (group.serverApprovalKey && next.has(group.serverApprovalKey)) {
+      next.delete(group.serverApprovalKey);
+      for (const tool of group.tools) {
+        if (tool.id !== toolId) {
+          next.add(tool.id);
+        }
+      }
+    } else if (next.has(toolId)) {
       next.delete(toolId);
     } else {
       next.add(toolId);
@@ -489,6 +499,12 @@ export function InlineApprovalPill({
   function isGroupExpanded(groupId: string): boolean {
     if (searchLower) return true;
     return expandedGroups.has(groupId);
+  }
+
+  function isToolEffectivelyApproved(toolId: string, group: ApprovalToolGroup): boolean {
+    if (effectiveAutoApproved.has(toolId)) return true;
+    if (group.serverApprovalKey && effectiveAutoApproved.has(group.serverApprovalKey)) return true;
+    return false;
   }
 
   const allApprovedGlobal = effectiveAutoApprovedCount === totalItemCount && totalItemCount > 0;
@@ -656,9 +672,9 @@ export function InlineApprovalPill({
                       <div key={tool.id} className={isCollapsible ? 'pl-3' : ''}>
                         <PopoverToggleRow
                           detail={detail}
-                          enabled={effectiveAutoApproved.has(tool.id)}
+                          enabled={isToolEffectivelyApproved(tool.id, group)}
                           label={tool.label}
-                          onToggle={() => toggleTool(tool.id)}
+                          onToggle={() => toggleTool(tool.id, group)}
                         />
                       </div>
                     );
@@ -691,8 +707,8 @@ function GroupToggle({
   return (
     <button
       aria-pressed={allApproved}
-      className={`relative inline-flex h-[16px] w-[28px] shrink-0 items-center rounded-full transition-colors ${
-        allApproved ? 'bg-[var(--color-accent)]' : someApproved ? 'bg-[var(--color-surface-3)]' : 'bg-[var(--color-surface-3)]'
+      className={`relative inline-flex h-[14px] w-[24px] shrink-0 items-center rounded-full transition-all duration-200 ${
+        allApproved ? 'brand-gradient-bg shadow-[0_0_8px_rgba(36,92,249,0.3)]' : 'bg-[var(--color-surface-3)]'
       }`}
       onClick={onToggle}
       type="button"
@@ -701,8 +717,8 @@ function GroupToggle({
         <Minus className="absolute left-1/2 size-2 -translate-x-1/2 text-[var(--color-text-primary)]" strokeWidth={3} />
       ) : (
         <span
-          className={`inline-block size-[12px] rounded-full bg-white shadow transition-transform ${
-            allApproved ? 'translate-x-[13px]' : 'translate-x-[2px]'
+          className={`inline-block size-[10px] rounded-full bg-white shadow-sm transition-transform ${
+            allApproved ? 'translate-x-[12px]' : 'translate-x-[2px]'
           }`}
         />
       )}

@@ -43,6 +43,7 @@ Aryx is a desktop app that turns GitHub Copilot into a full workspace. Connect r
 | Session branching | Fork a session at any user message to explore a different direction |
 | Session search | Full-text search across all session messages, not just titles |
 | Message actions | Copy, pin, edit-and-resend, and regenerate individual messages |
+| Bookmarks | Browse all pinned messages across sessions in one panel (`Ctrl+Shift+B`) |
 | System tray | Minimize to tray, quick-launch scratchpads, and see running session count |
 | Desktop notifications | Native OS alerts when runs complete, fail, or need approval |
 | Onboarding | First-launch walkthrough, interactive tooltips, and a "try it" quickstart |

@@ -161,6 +161,8 @@ A session is the working unit of the product. It binds together:
 
 This is how Aryx keeps "ongoing work" first class. Sessions can survive restarts, can be organized, and can accumulate operational history over time.
 
+Individual messages can be pinned as bookmarks. A dedicated bookmarks panel (`BookmarksPanel`) lists all pinned messages across all sessions globally, navigating to the originating session and message on selection. This data is derived renderer-side from the workspace state; there is no separate backend API.
+
 ### Runs
 
 Each user turn becomes a **run**. A run is more than the final assistant output; it also tracks:

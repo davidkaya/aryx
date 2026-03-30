@@ -21,6 +21,9 @@ export function createMainWindow(): BrowserWindowType {
     }),
     backgroundColor: '#09090b',
     titleBarStyle: 'hidden',
+    ...(process.platform === 'darwin' && {
+      trafficLightPosition: { x: 16, y: 22 },
+    }),
     titleBarOverlay: {
       color: '#09090b',
       symbolColor: '#a1a1aa',

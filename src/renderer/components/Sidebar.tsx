@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import appIconUrl from '../../../assets/icons/icon.png';
+import { isMac } from '@renderer/lib/platform';
 import {
   AlertTriangle,
   Archive,
@@ -581,7 +582,7 @@ export function Sidebar({
   return (
     <div className="flex h-full flex-col">
       {/* Header — extra top padding clears the title bar overlay zone */}
-      <div className="drag-region flex items-center justify-between border-b border-[var(--color-border-subtle)] px-4 pb-3 pt-3">
+      <div className={`drag-region flex items-center justify-between border-b border-[var(--color-border-subtle)] pb-3 pt-3 pr-4 ${isMac ? 'pl-20' : 'pl-4'}`}>
         <div className="flex items-center gap-2.5">
           <img alt="aryx" className="size-8 rounded-xl" src={appIconUrl} />
           <div>

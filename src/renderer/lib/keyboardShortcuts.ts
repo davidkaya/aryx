@@ -1,4 +1,4 @@
-const isMac = navigator.platform.startsWith('Mac');
+import { isMac } from '@renderer/lib/platform';
 
 /** Platform-aware modifier key label. */
 export const MOD = isMac ? '⌘' : 'Ctrl';

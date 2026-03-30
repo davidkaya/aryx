@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { ChevronLeft, ChevronRight, Code, Cpu, FolderOpen, Palette, Plus, RefreshCw, Server, TriangleAlert, Workflow, Wrench } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CircleCheck, Code, Cpu, FolderOpen, Palette, Plus, RefreshCw, Server, TriangleAlert, Workflow, Wrench } from 'lucide-react';
 
 import { CopilotStatusCard } from '@renderer/components/CopilotStatusCard';
 import { PatternEditor } from '@renderer/components/PatternEditor';
@@ -859,6 +859,8 @@ function TroubleshootingSection({
     switch (updateStatus.state) {
       case 'checking':
         return 'Checking for updates…';
+      case 'up-to-date':
+        return 'Up to date';
       case 'available':
         return `Update available: v${updateStatus.version ?? 'unknown'}`;
       case 'downloading':
@@ -876,6 +878,8 @@ function TroubleshootingSection({
     switch (updateStatus.state) {
       case 'checking':
         return 'Contacting the update server…';
+      case 'up-to-date':
+        return 'You are running the latest version of Aryx.';
       case 'available':
       case 'downloading':
         return 'A new version is being downloaded and will be installed automatically.';
@@ -922,11 +926,13 @@ function TroubleshootingSection({
               onClick={() => void handleCheckForUpdates()}
               type="button"
             >
-              <span className="text-[var(--color-text-muted)] transition-all duration-200 group-hover:text-[var(--color-text-secondary)]">
-                <RefreshCw className={`size-4 ${isChecking ? 'animate-spin' : ''}`} />
+              <span className={`transition-all duration-200 ${updateStatus.state === 'up-to-date' ? 'text-[var(--color-status-success)]' : 'text-[var(--color-text-muted)] group-hover:text-[var(--color-text-secondary)]'}`}>
+                {updateStatus.state === 'up-to-date'
+                  ? <CircleCheck className="size-4" />
+                  : <RefreshCw className={`size-4 ${isChecking ? 'animate-spin' : ''}`} />}
               </span>
               <div className="min-w-0 flex-1">
-                <span className={`text-[13px] font-medium ${updateStatus.state === 'error' ? 'text-[var(--color-status-error)]' : 'text-[var(--color-text-primary)]'}`}>
+                <span className={`text-[13px] font-medium ${updateStatus.state === 'error' ? 'text-[var(--color-status-error)]' : updateStatus.state === 'up-to-date' ? 'text-[var(--color-status-success)]' : 'text-[var(--color-text-primary)]'}`}>
                   {getUpdateLabel()}
                 </span>
                 <p className="mt-0.5 text-[12px] text-[var(--color-text-muted)]">{getUpdateDescription()}</p>

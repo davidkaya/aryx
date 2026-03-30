@@ -175,7 +175,7 @@ export interface SetTerminalHeightInput {
   height?: number;
 }
 
-export type UpdateStatusState = 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'error';
+export type UpdateStatusState = 'idle' | 'checking' | 'up-to-date' | 'available' | 'downloading' | 'downloaded' | 'error';
 
 export interface UpdateDownloadProgress {
   bytesPerSecond: number;

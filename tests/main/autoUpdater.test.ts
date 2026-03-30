@@ -148,6 +148,22 @@ describe('AutoUpdateService', () => {
     ]);
   });
 
+  test('transitions to up-to-date when no update is available', () => {
+    const updater = new FakeUpdater();
+    const service = new AutoUpdateService({ isPackaged: true, updater });
+    const statuses: UpdateStatus[] = [];
+    service.onStatus((status) => statuses.push(status));
+
+    updater.emit('checking-for-update');
+    updater.emit('update-not-available', {});
+
+    expect(statuses).toEqual([
+      { state: 'checking' },
+      { state: 'up-to-date' },
+    ]);
+    expect(service.getStatus()).toEqual({ state: 'up-to-date' });
+  });
+
   test('reports updater errors and only installs once an update is downloaded', () => {
     const updater = new FakeUpdater();
     const service = new AutoUpdateService({ isPackaged: true, updater });

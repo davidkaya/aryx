@@ -151,7 +151,7 @@ export class AutoUpdateService {
   };
 
   private readonly notAvailableListener = () => {
-    this.publishStatus({ state: 'idle' });
+    this.publishStatus({ state: 'up-to-date' });
   };
 
   private readonly progressListener = (progress: AutoUpdateProgressLike) => {

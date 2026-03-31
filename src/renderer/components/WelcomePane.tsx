@@ -1,7 +1,9 @@
-import { CheckCircle2, Circle, FolderPlus, MessageSquarePlus, Settings, Zap } from 'lucide-react';
+import { CheckCircle2, Circle, Download, FolderPlus, MessageSquarePlus, Settings, Zap } from 'lucide-react';
 import { motion } from 'motion/react';
 
 import type { SidecarConnectionStatus } from '@shared/contracts/sidecar';
+import { detectedPlatform } from '@renderer/lib/platform';
+import { getInstallInfoForPlatform } from '@renderer/lib/cliInstallInstructions';
 import appIconUrl from '../../../assets/icons/icon.png';
 
 interface WelcomePaneProps {
@@ -68,6 +70,34 @@ function SetupStep({ label, done, active }: SetupStepProps) {
       }
       <span className={done ? 'line-through opacity-60' : ''}>{label}</span>
     </div>
+  );
+}
+
+function CliMissingCard({ onOpenSettings }: { onOpenSettings: () => void }) {
+  const info = getInstallInfoForPlatform(detectedPlatform);
+  const recommended = info.methods.find((m) => m.recommended) ?? info.methods[0];
+
+  return (
+    <button
+      type="button"
+      onClick={onOpenSettings}
+      className="group flex w-full cursor-pointer items-start gap-4 rounded-xl border border-[var(--color-border-glow)] bg-[var(--color-accent-muted)] px-5 py-4 text-left shadow-[0_0_24px_rgba(36,92,249,0.1)] backdrop-blur-sm transition-all duration-200 hover:shadow-[0_0_32px_rgba(36,92,249,0.15)]"
+    >
+      <div className="brand-gradient-bg flex size-9 shrink-0 items-center justify-center rounded-full">
+        <Download className="size-4 text-white" />
+      </div>
+      <div className="min-w-0 space-y-1.5">
+        <span className="block text-[13px] font-medium text-[var(--color-text-primary)]">
+          Install the Copilot CLI
+        </span>
+        <code className="block truncate rounded-md bg-[var(--color-surface-1)] px-2 py-1 font-mono text-[11px] text-[var(--color-text-secondary)]">
+          {recommended.command}
+        </code>
+        <span className="block text-[11px] text-[var(--color-text-muted)]">
+          View full instructions for {info.displayName} →
+        </span>
+      </div>
+    </button>
   );
 }
 
@@ -165,7 +195,10 @@ export function WelcomePane({
         {/* Action cards */}
         <motion.div {...fadeUp(isFirstRun && !allDone ? 0.2 : 0.16)} className="flex w-full flex-col gap-2.5">
           {/* Primary CTA adapts to state */}
-          {!isConnected && (
+          {connectionStatus === 'copilot-cli-missing' && (
+            <CliMissingCard onOpenSettings={onOpenSettings} />
+          )}
+          {!isConnected && connectionStatus !== 'copilot-cli-missing' && (
             <ActionCard
               icon={<Zap className="size-4 text-white" />}
               title="Connect GitHub Copilot"

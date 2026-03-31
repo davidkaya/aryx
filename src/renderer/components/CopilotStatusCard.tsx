@@ -16,6 +16,7 @@ import {
   Loader2,
 } from 'lucide-react';
 
+import { CliInstallGuide } from '@renderer/components/settings/CliInstallGuide';
 import type {
   SidecarConnectionDiagnostics,
   SidecarConnectionStatus,
@@ -391,8 +392,15 @@ export function CopilotStatusCard({
         </div>
       )}
 
-      {/* Action hint for non-ready states */}
-      {!isHealthy && config.actionLabel && (
+      {/* Installation guide for missing CLI */}
+      {connection.status === 'copilot-cli-missing' && (
+        <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-glass)] p-4">
+          <CliInstallGuide isRefreshing={isRefreshing} onRefresh={onRefresh} />
+        </div>
+      )}
+
+      {/* Action hint for other non-ready states */}
+      {!isHealthy && connection.status !== 'copilot-cli-missing' && config.actionLabel && (
         <div className="flex items-start gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-glass)] px-3 py-2.5">
           <div className="mt-0.5 shrink-0">{config.actionIcon}</div>
           <p className="text-[12px] leading-relaxed text-[var(--color-text-secondary)]">{config.actionLabel}</p>

@@ -1,5 +1,5 @@
 import { useMemo, type ReactNode } from 'react';
-import { Activity, ArrowRight, BarChart3, CheckCircle2, Clock, Cog, GitBranch as GitBranchIcon, ShieldAlert, Sparkles, Users, Zap } from 'lucide-react';
+import { Activity, ArrowRight, BarChart3, CheckCircle2, Clock, Cog, ShieldAlert, Sparkles, Users, Zap } from 'lucide-react';
 
 import {
   buildAgentActivityRows,
@@ -16,10 +16,8 @@ import {
   type TurnEventLog,
 } from '@renderer/lib/sessionActivity';
 import { RunTimeline } from '@renderer/components/RunTimeline';
-import { GitPanel } from '@renderer/components/GitPanel';
 import { inferProvider } from '@shared/domain/models';
 import type { OrchestrationMode, PatternAgentDefinition, PatternDefinition } from '@shared/domain/pattern';
-import { isScratchpadProject } from '@shared/domain/project';
 import type { ProjectGitFileReference } from '@shared/domain/project';
 import type { SessionRecord } from '@shared/domain/session';
 import { ProviderIcon } from './ProviderIcons';
@@ -392,18 +390,6 @@ export function ActivityPanel({
                 </div>
               ))}
             </div>
-          </div>
-        )}
-
-        {/* ── Git panel section ────────────────────────────── */}
-        {!isScratchpadProject(session.projectId) && (
-          <div className="mb-4">
-            <SectionHeader>
-              <GitBranchIcon className="size-3" />
-              <span>Git</span>
-            </SectionHeader>
-
-            <GitPanel projectId={session.projectId} />
           </div>
         )}
 

@@ -4,11 +4,11 @@ interface AppShellProps {
   sidebar: ReactNode;
   content: ReactNode;
   detailPanel?: ReactNode;
-  terminalPanel?: ReactNode;
+  bottomPanel?: ReactNode;
   overlay?: ReactNode;
 }
 
-export function AppShell({ sidebar, content, detailPanel, terminalPanel, overlay }: AppShellProps) {
+export function AppShell({ sidebar, content, detailPanel, bottomPanel, overlay }: AppShellProps) {
   return (
     <div className="relative flex h-screen bg-[var(--color-surface-0)] text-[var(--color-text-primary)]">
       {/* Full-width drag region matching the title bar overlay height */}
@@ -19,7 +19,7 @@ export function AppShell({ sidebar, content, detailPanel, terminalPanel, overlay
         {sidebar}
       </aside>
 
-      {/* Main content + terminal */}
+      {/* Main content + bottom panel */}
       <main className="relative flex min-w-0 flex-1 flex-col">
         {/* Ambient glow behind active content area */}
         <div
@@ -27,7 +27,7 @@ export function AppShell({ sidebar, content, detailPanel, terminalPanel, overlay
           style={{ background: 'var(--gradient-glow)' }}
         />
         <div className="relative min-h-0 flex-1">{content}</div>
-        {terminalPanel}
+        {bottomPanel}
       </main>
 
       {/* Detail panel */}

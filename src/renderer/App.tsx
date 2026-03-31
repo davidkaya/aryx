@@ -13,7 +13,9 @@ import { BookmarksPanel } from '@renderer/components/BookmarksPanel';
 import { SessionSearchPanel } from '@renderer/components/SessionSearchPanel';
 import { SettingsPanel, type SettingsSection } from '@renderer/components/SettingsPanel';
 import { Sidebar } from '@renderer/components/Sidebar';
-import { TerminalPanel, DEFAULT_HEIGHT as DEFAULT_TERMINAL_HEIGHT, MIN_HEIGHT as MIN_TERMINAL_HEIGHT } from '@renderer/components/TerminalPanel';
+import { BottomPanel, DEFAULT_HEIGHT as DEFAULT_BOTTOM_HEIGHT, MIN_HEIGHT as MIN_BOTTOM_HEIGHT, type BottomPanelTab } from '@renderer/components/BottomPanel';
+import { GitPanel } from '@renderer/components/GitPanel';
+import { TerminalPanel } from '@renderer/components/TerminalPanel';
 import { resolveChatToolingSettings } from '@renderer/lib/chatTooling';
 import {
   applySessionEventActivity,
@@ -129,12 +131,14 @@ export default function App() {
   // Commit composer state
   const [commitComposerCtx, setCommitComposerCtx] = useState<{ projectId: string; sessionId: string; runId?: string }>();
 
-  // Terminal state
-  const [terminalOpen, setTerminalOpen] = useState(false);
-  const [terminalHeight, setTerminalHeight] = useState(
-    () => workspace?.settings.terminalHeight ?? DEFAULT_TERMINAL_HEIGHT,
+  // Bottom panel state (terminal + git)
+  const [bottomPanelOpen, setBottomPanelOpen] = useState(false);
+  const [bottomPanelTab, setBottomPanelTab] = useState<BottomPanelTab>('terminal');
+  const [bottomPanelHeight, setBottomPanelHeight] = useState(
+    () => workspace?.settings.terminalHeight ?? DEFAULT_BOTTOM_HEIGHT,
   );
   const [terminalRunning, setTerminalRunning] = useState(false);
+  const [gitDirty, setGitDirty] = useState(false);
 
   // Load workspace on mount
   useEffect(() => {
@@ -315,7 +319,7 @@ export default function App() {
       // ── Ctrl+` — Toggle terminal ──
       if (e.ctrlKey && e.key === '`') {
         e.preventDefault();
-        setTerminalOpen((prev) => !prev);
+        handleTerminalToggle();
         return;
       }
 
@@ -462,26 +466,38 @@ export default function App() {
     };
   }, [api]);
 
-  // Sync terminalHeight from workspace settings when workspace loads
+  // Sync bottom panel height from workspace settings when workspace loads
   useEffect(() => {
     if (workspace?.settings.terminalHeight) {
-      setTerminalHeight(workspace.settings.terminalHeight);
+      setBottomPanelHeight(workspace.settings.terminalHeight);
     }
   }, [workspace?.settings.terminalHeight]);
 
-  const handleTerminalHeightChange = useCallback((newHeight: number) => {
-    const clamped = Math.max(MIN_TERMINAL_HEIGHT, Math.round(newHeight));
-    setTerminalHeight(clamped);
+  const handleBottomPanelHeightChange = useCallback((newHeight: number) => {
+    const clamped = Math.max(MIN_BOTTOM_HEIGHT, Math.round(newHeight));
+    setBottomPanelHeight(clamped);
     void api.setTerminalHeight({ height: clamped });
   }, [api]);
 
-  const handleTerminalClose = useCallback(() => {
-    setTerminalOpen(false);
+  const handleBottomPanelClose = useCallback(() => {
+    setBottomPanelOpen(false);
   }, []);
 
   const handleTerminalToggle = useCallback(() => {
-    setTerminalOpen((prev) => !prev);
-  }, []);
+    setBottomPanelOpen((prev) => {
+      if (prev && bottomPanelTab === 'terminal') return false;
+      return true;
+    });
+    setBottomPanelTab('terminal');
+  }, [bottomPanelTab]);
+
+  const handleGitToggle = useCallback(() => {
+    setBottomPanelOpen((prev) => {
+      if (prev && bottomPanelTab === 'git') return false;
+      return true;
+    });
+    setBottomPanelTab('git');
+  }, [bottomPanelTab]);
 
   const jumpToMessage = useCallback((messageId: string) => {
     const element = document.querySelector(`[data-message-id="${CSS.escape(messageId)}"]`);
@@ -637,14 +653,17 @@ export default function App() {
           availableModels={availableModels}
           mcpProbingServerIds={workspace.mcpProbingServerIds}
           onTerminalToggle={handleTerminalToggle}
+          onGitToggle={!isScratchpadProject(selectedSession.projectId) ? handleGitToggle : undefined}
           pattern={patternForSession}
           project={projectForSession}
           runtimeTools={sidecarCapabilities?.runtimeTools}
           session={selectedSession}
           sessionUsage={usageForSession}
           activeSubagents={subagentsForSession}
-          terminalOpen={terminalOpen}
+          terminalOpen={bottomPanelOpen && bottomPanelTab === 'terminal'}
           terminalRunning={terminalRunning}
+          gitPanelOpen={bottomPanelOpen && bottomPanelTab === 'git'}
+          gitDirty={gitDirty}
           toolingSettings={chatToolingSettings ?? workspace.settings.tooling}
         />
     );
@@ -740,13 +759,30 @@ export default function App() {
         content={content}
         detailPanel={detailPanel}
         overlay={overlay}
-        terminalPanel={
-          terminalOpen ? (
-            <TerminalPanel
-              height={terminalHeight}
-              onHeightChange={handleTerminalHeightChange}
-              onClose={handleTerminalClose}
-              onMinimize={handleTerminalClose}
+        bottomPanel={
+          bottomPanelOpen ? (
+            <BottomPanel
+              activeTab={bottomPanelTab}
+              gitContent={
+                selectedSession && !isScratchpadProject(selectedSession.projectId) ? (
+                  <GitPanel
+                    onDirtyChange={setGitDirty}
+                    projectId={selectedSession.projectId}
+                  />
+                ) : (
+                  <div className="flex items-center justify-center py-8 text-[11px] text-[var(--color-text-muted)]">
+                    Git is not available for scratchpad sessions
+                  </div>
+                )
+              }
+              gitDirty={gitDirty}
+              height={bottomPanelHeight}
+              onClose={handleBottomPanelClose}
+              onHeightChange={handleBottomPanelHeightChange}
+              onTabChange={setBottomPanelTab}
+              showGitTab={!!selectedSession && !isScratchpadProject(selectedSession.projectId)}
+              terminalContent={<TerminalPanel onRunningChange={setTerminalRunning} />}
+              terminalRunning={terminalRunning}
             />
           ) : undefined
         }

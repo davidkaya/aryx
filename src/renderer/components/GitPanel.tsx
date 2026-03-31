@@ -310,9 +310,10 @@ function CreateBranchForm({
 
 interface GitPanelProps {
   projectId: string;
+  onDirtyChange?: (isDirty: boolean) => void;
 }
 
-export function GitPanel({ projectId }: GitPanelProps) {
+export function GitPanel({ projectId, onDirtyChange }: GitPanelProps) {
   const api = getElectronApi();
 
   const [details, setDetails] = useState<ProjectGitDetails>();
@@ -334,6 +335,7 @@ export function GitPanel({ projectId }: GitPanelProps) {
       const result = await api.getProjectGitDetails({ projectId });
       setDetails(result);
       setOperationError(undefined);
+      onDirtyChange?.(result.context.isDirty ?? false);
     } catch (error) {
       setOperationError(error instanceof Error ? error.message : String(error));
     } finally {

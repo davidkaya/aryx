@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { RotateCcw, Minus, X } from 'lucide-react';
+import { RotateCcw } from 'lucide-react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
@@ -44,17 +44,11 @@ const DEFAULT_HEIGHT = 280;
 /* ── TerminalPanel ────────────────────────────────────────── */
 
 interface TerminalPanelProps {
-  height: number;
-  onHeightChange: (height: number) => void;
-  onClose: () => void;
-  onMinimize: () => void;
+  onRunningChange?: (running: boolean) => void;
 }
 
 export function TerminalPanel({
-  height,
-  onHeightChange,
-  onClose,
-  onMinimize,
+  onRunningChange,
 }: TerminalPanelProps) {
   const api = getElectronApi();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -62,8 +56,6 @@ export function TerminalPanel({
   const fitAddonRef = useRef<FitAddon | null>(null);
   const [snapshot, setSnapshot] = useState<TerminalSnapshot>();
   const [isRunning, setIsRunning] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
-  const dragStartRef = useRef<{ y: number; height: number } | null>(null);
 
   // Create or recover terminal on mount
   useEffect(() => {
@@ -74,11 +66,13 @@ export function TerminalPanel({
       if (existing) {
         setSnapshot(existing);
         setIsRunning(true);
+        onRunningChange?.(true);
       } else {
         void api.createTerminal().then((created) => {
           if (disposed) return;
           setSnapshot(created);
           setIsRunning(true);
+          onRunningChange?.(true);
         });
       }
     });
@@ -135,6 +129,7 @@ export function TerminalPanel({
     });
     const offExit = api.onTerminalExit((_info: TerminalExitInfo) => {
       setIsRunning(false);
+      onRunningChange?.(false);
       terminalRef.current?.write('\r\n\x1b[90m[Process exited]\x1b[0m\r\n');
     });
 
@@ -144,19 +139,7 @@ export function TerminalPanel({
     };
   }, [api]);
 
-  // Refit on height changes
-  useEffect(() => {
-    if (!fitAddonRef.current || !terminalRef.current) return;
-    requestAnimationFrame(() => {
-      fitAddonRef.current?.fit();
-      const terminal = terminalRef.current;
-      if (terminal) {
-        api.resizeTerminal({ cols: terminal.cols, rows: terminal.rows });
-      }
-    });
-  }, [height, api]);
-
-  // ResizeObserver for container width changes
+  // ResizeObserver for container size changes (width or height from parent)
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -174,100 +157,31 @@ export function TerminalPanel({
     return () => observer.disconnect();
   }, [api]);
 
-  // Drag-to-resize
-  const handleDragStart = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    dragStartRef.current = { y: e.clientY, height };
-    setIsDragging(true);
-
-    const handleDragMove = (moveEvent: MouseEvent) => {
-      if (!dragStartRef.current) return;
-      const maxHeight = window.innerHeight * MAX_HEIGHT_FRACTION;
-      const delta = dragStartRef.current.y - moveEvent.clientY;
-      const nextHeight = Math.max(MIN_HEIGHT, Math.min(maxHeight, dragStartRef.current.height + delta));
-      onHeightChange(nextHeight);
-    };
-
-    const handleDragEnd = () => {
-      setIsDragging(false);
-      dragStartRef.current = null;
-      document.removeEventListener('mousemove', handleDragMove);
-      document.removeEventListener('mouseup', handleDragEnd);
-    };
-
-    document.addEventListener('mousemove', handleDragMove);
-    document.addEventListener('mouseup', handleDragEnd);
-  }, [height, onHeightChange]);
-
   const handleRestart = useCallback(() => {
     void api.restartTerminal().then((restarted) => {
       setSnapshot(restarted);
       setIsRunning(true);
+      onRunningChange?.(true);
       terminalRef.current?.clear();
     });
   }, [api]);
 
-  const handleClose = useCallback(() => {
-    void api.killTerminal();
-    onClose();
-  }, [api, onClose]);
-
   return (
-    <div
-      className="flex flex-col border-t border-[var(--color-border)] bg-[var(--color-surface-0)]"
-      style={{ height, minHeight: MIN_HEIGHT }}
-    >
-      {/* Resize handle */}
-      <div
-        className={`h-1 shrink-0 cursor-row-resize transition-colors ${isDragging ? 'bg-[var(--color-accent)]/40' : 'hover:bg-[var(--color-surface-3)]/60'}`}
-        onMouseDown={handleDragStart}
-        role="separator"
-        aria-orientation="horizontal"
-        aria-label="Resize terminal"
-        tabIndex={0}
-        onKeyDown={(e) => {
-          if (e.key === 'ArrowUp') {
-            e.preventDefault();
-            onHeightChange(Math.min(window.innerHeight * MAX_HEIGHT_FRACTION, height + 20));
-          } else if (e.key === 'ArrowDown') {
-            e.preventDefault();
-            onHeightChange(Math.max(MIN_HEIGHT, height - 20));
-          }
-        }}
-      />
-
+    <div className="flex min-h-0 flex-1 flex-col">
       {/* Header bar */}
       <div className="flex h-7 shrink-0 items-center gap-2 border-b border-[var(--color-border)] px-3">
         <span className={`size-1.5 shrink-0 rounded-full ${isRunning ? 'bg-emerald-400' : 'bg-[var(--color-text-muted)]'}`} />
         <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-[var(--color-text-muted)]">
           {snapshot ? `${snapshot.shell} — ${snapshot.cwd}` : 'Terminal'}
         </span>
-        <div className="flex items-center gap-0.5">
-          <button
-            aria-label="Restart terminal"
-            className="rounded p-0.5 text-[var(--color-text-muted)] transition hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-secondary)]"
-            onClick={handleRestart}
-            type="button"
-          >
-            <RotateCcw className="size-3" />
-          </button>
-          <button
-            aria-label="Minimize terminal"
-            className="rounded p-0.5 text-[var(--color-text-muted)] transition hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-secondary)]"
-            onClick={onMinimize}
-            type="button"
-          >
-            <Minus className="size-3" />
-          </button>
-          <button
-            aria-label="Close terminal"
-            className="rounded p-0.5 text-[var(--color-text-muted)] transition hover:bg-[var(--color-surface-3)] hover:text-red-400"
-            onClick={handleClose}
-            type="button"
-          >
-            <X className="size-3" />
-          </button>
-        </div>
+        <button
+          aria-label="Restart terminal"
+          className="rounded p-0.5 text-[var(--color-text-muted)] transition hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-secondary)]"
+          onClick={handleRestart}
+          type="button"
+        >
+          <RotateCcw className="size-3" />
+        </button>
       </div>
 
       {/* Terminal body */}

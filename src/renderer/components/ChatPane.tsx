@@ -9,7 +9,7 @@ import { MessageEditComposer } from '@renderer/components/chat/MessageEditCompos
 import { PlanReviewBanner } from '@renderer/components/chat/PlanReviewBanner';
 import { McpAuthBanner } from '@renderer/components/chat/McpAuthBanner';
 import { UserInputBanner } from '@renderer/components/chat/UserInputBanner';
-import { InlineApprovalPill, InlineModelPill, InlineTerminalPill, InlineThinkingPill, InlineToolsPill } from '@renderer/components/chat/InlinePills';
+import { InlineApprovalPill, InlineGitPill, InlineModelPill, InlineTerminalPill, InlineThinkingPill, InlineToolsPill } from '@renderer/components/chat/InlinePills';
 import { InlinePromptPill } from '@renderer/components/chat/InlinePromptPill';
 import { ThinkingDots } from '@renderer/components/chat/ThinkingDots';
 import { ThinkingProcess } from '@renderer/components/chat/ThinkingProcess';
@@ -53,6 +53,8 @@ interface ChatPaneProps {
   activeSubagents?: ReadonlyArray<ActiveSubagent>;
   terminalOpen?: boolean;
   terminalRunning?: boolean;
+  gitPanelOpen?: boolean;
+  gitDirty?: boolean;
   onSend: (content: string, attachments?: ChatMessageAttachment[], messageMode?: MessageMode) => Promise<void>;
   onCancelTurn?: () => void;
   onResolveApproval?: (approvalId: string, decision: ApprovalDecision, alwaysApprove?: boolean) => Promise<unknown>;
@@ -62,6 +64,7 @@ interface ChatPaneProps {
   onDismissMcpAuth?: () => void;
   onAuthenticateMcp?: () => void;
   onTerminalToggle?: () => void;
+  onGitToggle?: () => void;
   onUpdateSessionModelConfig?: (config: {
     model: string;
     reasoningEffort?: ReasoningEffort;
@@ -87,6 +90,8 @@ export function ChatPane({
   activeSubagents,
   terminalOpen,
   terminalRunning,
+  gitPanelOpen,
+  gitDirty,
   onSend,
   onCancelTurn,
   onResolveApproval,
@@ -96,6 +101,7 @@ export function ChatPane({
   onDismissMcpAuth,
   onAuthenticateMcp,
   onTerminalToggle,
+  onGitToggle,
   onUpdateSessionModelConfig,
   onUpdateSessionTooling,
   onUpdateSessionApprovalSettings,
@@ -749,6 +755,13 @@ export function ChatPane({
                       isOpen={!!terminalOpen}
                       isRunning={!!terminalRunning}
                       onToggle={onTerminalToggle}
+                    />
+                  )}
+                  {onGitToggle && !isScratchpad && (
+                    <InlineGitPill
+                      isDirty={!!gitDirty}
+                      isOpen={!!gitPanelOpen}
+                      onToggle={onGitToggle}
                     />
                   )}
                   {!isScratchpad && promptFiles.length > 0 && (

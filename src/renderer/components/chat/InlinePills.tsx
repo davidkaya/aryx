@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { ChevronDown, ChevronRight, Loader2, Minus, Search, Sparkles, TerminalSquare } from 'lucide-react';
+import { ChevronDown, ChevronRight, GitBranch, Loader2, Minus, Search, Sparkles, TerminalSquare } from 'lucide-react';
 
 import { ProviderIcon } from '@renderer/components/ProviderIcons';
 import { PopoverToggleRow } from '@renderer/components/ui';
@@ -754,6 +754,35 @@ export function InlineTerminalPill({
       {isRunning && <span className="size-1.5 shrink-0 rounded-full bg-[var(--color-status-success)]" />}
       <TerminalSquare className="size-3" />
       <span>Terminal</span>
+    </button>
+  );
+}
+
+/* ── InlineGitPill ─────────────────────────────────────────── */
+
+export function InlineGitPill({
+  isDirty,
+  isOpen,
+  onToggle,
+}: {
+  isDirty: boolean;
+  isOpen: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      aria-pressed={isOpen}
+      className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium transition-all duration-200 ${
+        isOpen
+          ? 'bg-[var(--color-accent-muted)] text-[var(--color-text-accent)] hover:bg-[var(--color-accent)]/20'
+          : 'text-[var(--color-text-muted)] hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-primary)]'
+      }`}
+      onClick={onToggle}
+      type="button"
+    >
+      {isDirty && <span className="size-1.5 shrink-0 rounded-full bg-[var(--color-status-warning)]" />}
+      <GitBranch className="size-3" />
+      <span>Git</span>
     </button>
   );
 }

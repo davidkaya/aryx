@@ -249,12 +249,16 @@ internal static class CopilotSessionHooks
         }
 
         string? autoApprovedToolName = CopilotApprovalCoordinator.ResolveHookToolCategory(toolName) ?? toolName;
+        string? mcpServerApprovalKey = CopilotApprovalCoordinator.ResolveHookMcpServerApprovalKey(
+            toolName,
+            command.Tooling?.McpServers);
 
         bool requiresApproval = CopilotApprovalCoordinator.RequiresToolCallApproval(
             command.Pattern.ApprovalPolicy,
             agentDefinition.Id,
             toolName,
-            autoApprovedToolName);
+            autoApprovedToolName,
+            mcpServerApprovalKey);
 
         return new PreToolUseHookOutput
         {

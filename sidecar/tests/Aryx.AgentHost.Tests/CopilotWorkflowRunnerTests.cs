@@ -1325,6 +1325,29 @@ public sealed class CopilotWorkflowRunnerTests
         Assert.Equal("https://example.com", args["url"]);
     }
 
+    [Fact]
+    public void BuildPermissionDetail_MapsConfiguredMcpHookToMcpDetail()
+    {
+        PermissionDetailDto detail = CopilotApprovalCoordinator.BuildPermissionDetail(
+            new PermissionRequestHook
+            {
+                Kind = "hook",
+                ToolName = "icm-mcp-get_incident_details_by_id",
+                ToolArgs = new Dictionary<string, object?>
+                {
+                    ["incidentId"] = 769904783,
+                },
+            },
+            [CreateMcpServerConfig("icm-mcp")]);
+
+        Assert.Equal("mcp", detail.Kind);
+        Assert.Equal("icm-mcp", detail.ServerName);
+        Assert.Equal("get_incident_details_by_id", detail.ToolTitle);
+
+        Dictionary<string, object?> args = Assert.IsType<Dictionary<string, object?>>(detail.Args);
+        Assert.Equal(769904783, args["incidentId"]);
+    }
+
     [Theory]
     [InlineData("view", "read")]
     [InlineData("glob", "read")]
@@ -1360,6 +1383,16 @@ public sealed class CopilotWorkflowRunnerTests
         Assert.Null(CopilotApprovalCoordinator.ResolveHookToolCategory(null));
         Assert.Null(CopilotApprovalCoordinator.ResolveHookToolCategory(""));
         Assert.Null(CopilotApprovalCoordinator.ResolveHookToolCategory("  "));
+    }
+
+    [Fact]
+    public void ResolveHookMcpServerApprovalKey_PrefersLongestConfiguredServerName()
+    {
+        string? approvalKey = CopilotApprovalCoordinator.ResolveHookMcpServerApprovalKey(
+            "icm-mcp-get_on_call_schedule",
+            [CreateMcpServerConfig("icm"), CreateMcpServerConfig("icm-mcp")]);
+
+        Assert.Equal("mcp_server:icm-mcp", approvalKey);
     }
 
     [Fact]
@@ -1446,6 +1479,41 @@ public sealed class CopilotWorkflowRunnerTests
         Assert.Equal("view", approvalEvent.ToolName);
         Assert.Equal("read", approvalEvent.PermissionKind);
         Assert.Contains("read permission", approvalEvent.Detail);
+    }
+
+    [Fact]
+    public void BuildPermissionApprovalEvent_UsesMcpKindForConfiguredMcpHookTools()
+    {
+        ApprovalRequestedEventDto approvalEvent = CopilotApprovalCoordinator.BuildPermissionApprovalEvent(
+            new RunTurnCommandDto
+            {
+                RequestId = "turn-1",
+                SessionId = "session-1",
+                Tooling = new RunTurnToolingConfigDto
+                {
+                    McpServers = [CreateMcpServerConfig("icm-mcp")],
+                },
+            },
+            CreateAgent("agent-1", "Primary"),
+            new PermissionRequestHook
+            {
+                Kind = "hook",
+                ToolName = "icm-mcp-get_schedule",
+                ToolArgs = """{"teamIds":[91982]}""",
+            },
+            new PermissionInvocation
+            {
+                SessionId = "copilot-session-1",
+            },
+            "approval-1",
+            "icm-mcp-get_schedule");
+
+        Assert.Equal("mcp", approvalEvent.PermissionKind);
+        Assert.Contains("mcp permission", approvalEvent.Detail);
+        Assert.NotNull(approvalEvent.PermissionDetail);
+        Assert.Equal("mcp", approvalEvent.PermissionDetail!.Kind);
+        Assert.Equal("icm-mcp", approvalEvent.PermissionDetail.ServerName);
+        Assert.Equal("get_schedule", approvalEvent.PermissionDetail.ToolTitle);
     }
 
     [Fact]
@@ -1596,6 +1664,43 @@ public sealed class CopilotWorkflowRunnerTests
                 Kind = "custom tool",
                 ToolName = "web_fetch",
                 ToolDescription = "Fetch documentation",
+            },
+            new PermissionInvocation
+            {
+                SessionId = "copilot-session-1",
+            },
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            approval =>
+            {
+                sawApproval = true;
+                return Task.CompletedTask;
+            },
+            CancellationToken.None);
+
+        Assert.False(sawApproval);
+        Assert.Equal(PermissionRequestResultKind.Approved, result.Kind);
+    }
+
+    [Fact]
+    public async Task RequestApprovalAsync_AutoApprovesHookRequestsForApprovedMcpServer()
+    {
+        CopilotApprovalCoordinator coordinator = new();
+        bool sawApproval = false;
+        RunTurnCommandDto command = CreateApprovalCommand(
+            autoApprovedToolNames: ["mcp_server:icm-mcp"],
+            mcpServers: [CreateMcpServerConfig("icm-mcp")]);
+
+        PermissionRequestResult result = await coordinator.RequestApprovalAsync(
+            command,
+            command.Pattern.Agents[0],
+            new PermissionRequestHook
+            {
+                Kind = "hook",
+                ToolName = "icm-mcp-get_incident_details_by_id",
+                ToolArgs = new Dictionary<string, object?>
+                {
+                    ["incidentId"] = 769904783,
+                },
             },
             new PermissionInvocation
             {
@@ -1853,12 +1958,21 @@ public sealed class CopilotWorkflowRunnerTests
             null!);
     }
 
-    private static RunTurnCommandDto CreateApprovalCommand(string requestId = "turn-1")
+    private static RunTurnCommandDto CreateApprovalCommand(
+        string requestId = "turn-1",
+        IReadOnlyList<string>? autoApprovedToolNames = null,
+        IReadOnlyList<RunTurnMcpServerConfigDto>? mcpServers = null)
     {
         return new RunTurnCommandDto
         {
             RequestId = requestId,
             SessionId = "session-1",
+            Tooling = mcpServers is null
+                ? null
+                : new RunTurnToolingConfigDto
+                {
+                    McpServers = [.. mcpServers],
+                },
             Pattern = new PatternDefinitionDto
             {
                 Id = "pattern-1",
@@ -1875,7 +1989,9 @@ public sealed class CopilotWorkflowRunnerTests
                             AgentIds = ["agent-1"],
                         },
                     ],
-                    AutoApprovedToolNames = ["web_fetch"],
+                    AutoApprovedToolNames = autoApprovedToolNames is null
+                        ? ["web_fetch"]
+                        : [.. autoApprovedToolNames],
                 },
                 Agents =
                 [
@@ -1884,6 +2000,13 @@ public sealed class CopilotWorkflowRunnerTests
             },
         };
     }
+
+    private static RunTurnMcpServerConfigDto CreateMcpServerConfig(string serverName)
+        => new()
+        {
+            Id = serverName,
+            Name = serverName,
+        };
 
     private sealed class StubChatClient : IChatClient
     {

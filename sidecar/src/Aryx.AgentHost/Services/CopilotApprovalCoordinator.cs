@@ -98,7 +98,7 @@ internal sealed class CopilotApprovalCoordinator
     {
         string? toolName = ResolveApprovalToolName(request, toolNamesByCallId);
         string? autoApprovedToolName = ResolveAutoApprovedToolName(request);
-        string? mcpServerApprovalKey = ResolveMcpServerApprovalKey(request);
+        string? mcpServerApprovalKey = ResolveMcpServerApprovalKey(request, command.Tooling?.McpServers);
         string? approvalCacheKey = ResolveApprovalCacheKey(toolName, autoApprovedToolName);
 
         AgentActivityEventDto? fileChangeActivity = BuildToolCallFileChangeActivity(command, agent, request, toolName);
@@ -155,18 +155,7 @@ internal sealed class CopilotApprovalCoordinator
         string approvalId,
         string? toolName)
     {
-        string permissionKind = string.IsNullOrWhiteSpace(request.Kind)
-            ? "tool access"
-            : request.Kind.Trim();
-
-        if (request is PermissionRequestHook hook)
-        {
-            string? resolvedCategory = ResolveHookToolCategory(hook.ToolName);
-            if (resolvedCategory is not null)
-            {
-                permissionKind = resolvedCategory;
-            }
-        }
+        string permissionKind = ResolvePermissionKind(request, command.Tooling?.McpServers);
 
         string agentName = string.IsNullOrWhiteSpace(agent.Name) ? agent.Id : agent.Name;
         string? sessionId = NormalizeOptionalString(invocation.SessionId);
@@ -208,7 +197,7 @@ internal sealed class CopilotApprovalCoordinator
             PermissionKind = permissionKind,
             Title = title,
             Detail = detail,
-            PermissionDetail = BuildPermissionDetail(request),
+            PermissionDetail = BuildPermissionDetail(request, command.Tooling?.McpServers),
         };
     }
 
@@ -252,7 +241,9 @@ internal sealed class CopilotApprovalCoordinator
         };
     }
 
-    internal static PermissionDetailDto BuildPermissionDetail(PermissionRequest request)
+    internal static PermissionDetailDto BuildPermissionDetail(
+        PermissionRequest request,
+        IReadOnlyList<RunTurnMcpServerConfigDto>? configuredMcpServers = null)
     {
         ArgumentNullException.ThrowIfNull(request);
 
@@ -309,12 +300,7 @@ internal sealed class CopilotApprovalCoordinator
                 ToolDescription = NormalizeOptionalString(customTool.ToolDescription),
                 Args = customTool.Args,
             },
-            PermissionRequestHook hook => new PermissionDetailDto
-            {
-                Kind = HookPermissionKind,
-                Args = hook.ToolArgs,
-                HookMessage = NormalizeOptionalString(hook.HookMessage),
-            },
+            PermissionRequestHook hook => BuildHookPermissionDetail(hook, configuredMcpServers),
             _ => new PermissionDetailDto
             {
                 Kind = NormalizeOptionalString(request.Kind) ?? "unknown",
@@ -430,15 +416,45 @@ internal sealed class CopilotApprovalCoordinator
 
     private const string McpServerApprovalPrefix = "mcp_server:";
 
-    private static string? ResolveMcpServerApprovalKey(PermissionRequest request)
+    private static string? ResolveMcpServerApprovalKey(
+        PermissionRequest request,
+        IReadOnlyList<RunTurnMcpServerConfigDto>? configuredMcpServers)
     {
-        if (request is not PermissionRequestMcp mcp)
+        return request switch
+        {
+            PermissionRequestMcp mcp => BuildMcpServerApprovalKey(mcp.ServerName),
+            PermissionRequestHook hook => ResolveHookMcpServerApprovalKey(hook.ToolName, configuredMcpServers),
+            _ => null,
+        };
+    }
+
+    internal static string? BuildMcpServerApprovalKey(string? serverName)
+    {
+        string? normalizedServerName = NormalizeOptionalString(serverName);
+        return normalizedServerName is not null ? $"{McpServerApprovalPrefix}{normalizedServerName}" : null;
+    }
+
+    internal static string? ResolveHookMcpServerApprovalKey(
+        string? toolName,
+        IReadOnlyList<RunTurnMcpServerConfigDto>? configuredMcpServers)
+        => BuildMcpServerApprovalKey(ResolveHookMcpServerName(toolName, configuredMcpServers));
+
+    internal static string? ResolveHookMcpServerName(
+        string? toolName,
+        IReadOnlyList<RunTurnMcpServerConfigDto>? configuredMcpServers)
+    {
+        string? normalizedToolName = NormalizeOptionalString(toolName);
+        if (normalizedToolName is null || configuredMcpServers is null || configuredMcpServers.Count == 0)
         {
             return null;
         }
 
-        string? serverName = NormalizeOptionalString(mcp.ServerName);
-        return serverName is not null ? $"{McpServerApprovalPrefix}{serverName}" : null;
+        return configuredMcpServers
+            .Select(ResolveConfiguredMcpServerName)
+            .OfType<string>()
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderByDescending(static serverName => serverName.Length)
+            .FirstOrDefault(serverName => MatchesHookMcpServerToolName(normalizedToolName, serverName));
     }
 
     private static string? ResolveApprovalCacheKey(
@@ -518,6 +534,87 @@ internal sealed class CopilotApprovalCoordinator
         }
 
         return HookToolCategories.TryGetValue(normalized, out string? category) ? category : null;
+    }
+
+    private static string ResolvePermissionKind(
+        PermissionRequest request,
+        IReadOnlyList<RunTurnMcpServerConfigDto>? configuredMcpServers)
+    {
+        string permissionKind = string.IsNullOrWhiteSpace(request.Kind)
+            ? "tool access"
+            : request.Kind.Trim();
+
+        if (request is not PermissionRequestHook hook)
+        {
+            return permissionKind;
+        }
+
+        string? resolvedCategory = ResolveHookToolCategory(hook.ToolName);
+        if (resolvedCategory is not null)
+        {
+            return resolvedCategory;
+        }
+
+        return ResolveHookMcpServerName(hook.ToolName, configuredMcpServers) is not null
+            ? McpPermissionKind
+            : permissionKind;
+    }
+
+    private static PermissionDetailDto BuildHookPermissionDetail(
+        PermissionRequestHook hook,
+        IReadOnlyList<RunTurnMcpServerConfigDto>? configuredMcpServers)
+    {
+        string? serverName = ResolveHookMcpServerName(hook.ToolName, configuredMcpServers);
+        if (serverName is null)
+        {
+            return new PermissionDetailDto
+            {
+                Kind = HookPermissionKind,
+                Args = hook.ToolArgs,
+                HookMessage = NormalizeOptionalString(hook.HookMessage),
+            };
+        }
+
+        return new PermissionDetailDto
+        {
+            Kind = McpPermissionKind,
+            ServerName = serverName,
+            ToolTitle = ResolveHookMcpToolTitle(hook.ToolName, serverName),
+            Args = hook.ToolArgs,
+        };
+    }
+
+    private static string? ResolveConfiguredMcpServerName(RunTurnMcpServerConfigDto configuredServer)
+        => NormalizeOptionalString(configuredServer.Name) ?? NormalizeOptionalString(configuredServer.Id);
+
+    private static bool MatchesHookMcpServerToolName(string toolName, string serverName)
+    {
+        if (string.Equals(toolName, serverName, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return toolName.StartsWith($"{serverName}-", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string? ResolveHookMcpToolTitle(string? toolName, string serverName)
+    {
+        string? normalizedToolName = NormalizeOptionalString(toolName);
+        if (normalizedToolName is null)
+        {
+            return null;
+        }
+
+        string prefix = $"{serverName}-";
+        if (!normalizedToolName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return normalizedToolName;
+        }
+
+        string strippedToolName = normalizedToolName[prefix.Length..];
+        return string.IsNullOrWhiteSpace(strippedToolName)
+            ? normalizedToolName
+            : strippedToolName;
     }
 
     private static bool MatchesAutoApprovedTool(

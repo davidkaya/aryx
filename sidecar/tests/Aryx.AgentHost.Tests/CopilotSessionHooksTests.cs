@@ -172,6 +172,40 @@ public sealed class CopilotSessionHooksTests
     }
 
     [Fact]
+    public async Task Create_PreToolUseAutoAllowsWhenMcpServerIsApproved()
+    {
+        RunTurnCommandDto command = CreateCommandWithConfiguredMcpServers(
+            ["icm-mcp"],
+            ["mcp_server:icm-mcp"]);
+        SessionHooks hooks = CopilotSessionHooks.Create(command, command.Pattern.Agents[0], ResolvedHookSet.Empty, new RecordingHookCommandRunner());
+
+        PreToolUseHookOutput? decision = await hooks.OnPreToolUse!(
+            new PreToolUseHookInput
+            {
+                ToolName = "icm-mcp-get_incident_details_by_id",
+            },
+            null!);
+
+        Assert.Equal("allow", decision?.PermissionDecision);
+    }
+
+    [Fact]
+    public async Task Create_PreToolUseRequiresApprovalWhenMcpServerIsNotApproved()
+    {
+        RunTurnCommandDto command = CreateCommandWithConfiguredMcpServers(["icm-mcp"]);
+        SessionHooks hooks = CopilotSessionHooks.Create(command, command.Pattern.Agents[0], ResolvedHookSet.Empty, new RecordingHookCommandRunner());
+
+        PreToolUseHookOutput? decision = await hooks.OnPreToolUse!(
+            new PreToolUseHookInput
+            {
+                ToolName = "icm-mcp-get_incident_details_by_id",
+            },
+            null!);
+
+        Assert.Equal("ask", decision?.PermissionDecision);
+    }
+
+    [Fact]
     public async Task Create_RunsConfiguredNonPreToolHooks()
     {
         RunTurnCommandDto command = CreateCommandWithoutApprovalRules();
@@ -367,6 +401,43 @@ public sealed class CopilotSessionHooksTests
             },
         };
     }
+
+    private static RunTurnCommandDto CreateCommandWithConfiguredMcpServers(
+        IReadOnlyList<string> serverNames,
+        IReadOnlyList<string>? autoApprovedToolNames = null)
+    {
+        RunTurnCommandDto command = CreateCommandWithToolApproval();
+        return new RunTurnCommandDto
+        {
+            RequestId = command.RequestId,
+            SessionId = command.SessionId,
+            ProjectPath = command.ProjectPath,
+            Tooling = new RunTurnToolingConfigDto
+            {
+                McpServers = [.. serverNames.Select(CreateMcpServerConfig)],
+            },
+            Pattern = new PatternDefinitionDto
+            {
+                Id = command.Pattern.Id,
+                Name = command.Pattern.Name,
+                Mode = command.Pattern.Mode,
+                Availability = command.Pattern.Availability,
+                ApprovalPolicy = new ApprovalPolicyDto
+                {
+                    Rules = command.Pattern.ApprovalPolicy?.Rules ?? [],
+                    AutoApprovedToolNames = autoApprovedToolNames ?? [],
+                },
+                Agents = command.Pattern.Agents,
+            },
+        };
+    }
+
+    private static RunTurnMcpServerConfigDto CreateMcpServerConfig(string serverName)
+        => new()
+        {
+            Id = serverName,
+            Name = serverName,
+        };
 
     private static HookCommandDefinition CreateHookCommand(string name)
         => new()

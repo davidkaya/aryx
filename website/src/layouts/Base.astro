@@ -42,6 +42,15 @@ const {
     />
 
     <title>{title}</title>
+
+    <!-- Theme init (FOUC prevention) -->
+    <script is:inline>
+      (function () {
+        var saved = localStorage.getItem('theme');
+        var theme = saved || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+        if (theme === 'light') document.documentElement.setAttribute('data-theme', 'light');
+      })();
+    </script>
   </head>
   <body class="min-h-screen bg-deep font-body text-warm-100 antialiased">
     <!-- Navigation -->
@@ -63,6 +72,19 @@ const {
           <a href="#get-started" class="text-sm text-warm-400 transition hover:text-warm-50"
             >Get Started</a
           >
+          <button
+            class="theme-toggle"
+            id="theme-toggle-desktop"
+            type="button"
+            aria-label="Switch to light theme"
+          >
+            <svg class="icon-sun" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path>
+            </svg>
+            <svg class="icon-moon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>
+            </svg>
+          </button>
           <a
             href="https://github.com/davidkaya/aryx"
             target="_blank"
@@ -108,6 +130,19 @@ const {
             rel="noopener noreferrer"
             class="text-sm text-warm-400 transition hover:text-warm-50">GitHub</a
           >
+          <button
+            class="theme-toggle self-start"
+            id="theme-toggle-mobile"
+            type="button"
+            aria-label="Switch to light theme"
+          >
+            <svg class="icon-sun" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path>
+            </svg>
+            <svg class="icon-moon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>
+            </svg>
+          </button>
         </div>
       </div>
     </nav>
@@ -184,6 +219,56 @@ const {
         { threshold: 0.08, rootMargin: '0px 0px -40px 0px' },
       );
       document.querySelectorAll('[data-reveal]').forEach((el) => observer.observe(el));
+    </script>
+
+    <!-- Theme toggle + screenshot swap -->
+    <script>
+      function getTheme() {
+        return document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+      }
+
+      function applyTheme(theme) {
+        if (theme === 'light') {
+          document.documentElement.setAttribute('data-theme', 'light');
+        } else {
+          document.documentElement.removeAttribute('data-theme');
+        }
+        localStorage.setItem('theme', theme);
+
+        // Update meta theme-color
+        var meta = document.querySelector('meta[name="theme-color"]');
+        if (meta) meta.setAttribute('content', theme === 'light' ? '#f6f4f1' : '#08080a');
+
+        // Update aria-labels
+        var label = theme === 'light' ? 'Switch to dark theme' : 'Switch to light theme';
+        document.querySelectorAll('.theme-toggle').forEach(function (btn) {
+          btn.setAttribute('aria-label', label);
+        });
+
+        // Swap themed images
+        document.querySelectorAll('[data-src-dark]').forEach(function (img) {
+          img.setAttribute('src', theme === 'light' ? img.getAttribute('data-src-light') : img.getAttribute('data-src-dark'));
+        });
+      }
+
+      function toggleTheme() {
+        applyTheme(getTheme() === 'light' ? 'dark' : 'light');
+      }
+
+      // Bind toggle buttons
+      document.querySelectorAll('.theme-toggle').forEach(function (btn) {
+        btn.addEventListener('click', toggleTheme);
+      });
+
+      // Apply on load (screenshots + aria)
+      applyTheme(getTheme());
+
+      // Listen for system preference changes
+      matchMedia('(prefers-color-scheme: light)').addEventListener('change', function (e) {
+        if (!localStorage.getItem('theme')) {
+          applyTheme(e.matches ? 'light' : 'dark');
+        }
+      });
     </script>
   </body>
 </html>

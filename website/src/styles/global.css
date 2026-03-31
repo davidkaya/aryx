@@ -30,6 +30,31 @@
   --color-accent-dim: #5A20E0;
 }
 
+/* ── Light mode token overrides ── */
+[data-theme='light'] {
+  --color-deep: #f6f4f1;
+  --color-base: #efede9;
+  --color-raised: #e7e4df;
+  --color-card: #ffffff;
+  --color-card-hover: #f9f8f6;
+  --color-border: #d8d4cd;
+  --color-border-subtle: #e5e2dc;
+
+  --color-warm-50: #1a1917;
+  --color-warm-100: #2e2c28;
+  --color-warm-200: #403d38;
+  --color-warm-300: #5e5950;
+  --color-warm-400: #7d776e;
+  --color-warm-500: #9e9890;
+  --color-warm-600: #c4bfb5;
+  --color-warm-700: #d8d4cd;
+  --color-warm-800: #eae7e2;
+
+  --color-brand: #1a4fd4;
+  --color-brand-bright: #1d7ae0;
+  --color-accent: #7522c9;
+}
+
 /* ── Grain overlay ── */
 body::after {
   content: '';
@@ -42,6 +67,9 @@ body::after {
   background-repeat: repeat;
   background-size: 256px 256px;
 }
+[data-theme='light'] body::after {
+  opacity: 0.04;
+}
 
 /* ── Dot grid ── */
 .dot-grid {
@@ -51,6 +79,13 @@ body::after {
     transparent 1px
   );
   background-size: 28px 28px;
+}
+[data-theme='light'] .dot-grid {
+  background-image: radial-gradient(
+    circle,
+    rgba(26, 79, 212, 0.10) 1px,
+    transparent 1px
+  );
 }
 
 /* ── Screenshot perspective tilt ── */
@@ -116,3 +151,44 @@ body::after {
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
+[data-theme='light'] .text-gradient-brand {
+  background: linear-gradient(135deg, #1a4fd4, #7522c9);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ── Screenshot frame light-mode shadow ── */
+[data-theme='light'] .screenshot-frame {
+  --tw-shadow-color: rgba(0, 0, 0, 0.08);
+  --tw-ring-color: rgba(0, 0, 0, 0.04);
+}
+
+/* ── Theme toggle ── */
+.theme-toggle {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.5rem;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: var(--color-warm-400);
+  transition: color 0.2s ease, background-color 0.2s ease;
+}
+.theme-toggle:hover {
+  color: var(--color-warm-50);
+  background: var(--color-raised);
+}
+.theme-toggle svg {
+  width: 1.125rem;
+  height: 1.125rem;
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease;
+}
+.theme-toggle .icon-sun { display: none; }
+.theme-toggle .icon-moon { display: block; }
+[data-theme='light'] .theme-toggle .icon-sun { display: block; }
+[data-theme='light'] .theme-toggle .icon-moon { display: none; }

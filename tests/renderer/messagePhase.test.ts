@@ -33,7 +33,7 @@ describe('assistant message phase', () => {
       },
     ], 'running');
 
-    expect(getAssistantMessagePhase(session, session.messages[0], 0)).toBe('thinking');
+    expect(getAssistantMessagePhase(session, session.messages[0])).toBe('thinking');
   });
 
   test('marks the last completed assistant message as final when the session is idle', () => {
@@ -54,8 +54,8 @@ describe('assistant message phase', () => {
       },
     ]);
 
-    expect(getAssistantMessagePhase(session, session.messages[0], 0)).toBe('default');
-    expect(getAssistantMessagePhase(session, session.messages[1], 1)).toBe('final');
+    expect(getAssistantMessagePhase(session, session.messages[0])).toBe('default');
+    expect(getAssistantMessagePhase(session, session.messages[1])).toBe('final');
   });
 
   test('does not mark completed assistant messages as final while the session is still running', () => {
@@ -69,7 +69,7 @@ describe('assistant message phase', () => {
       },
     ], 'running');
 
-    expect(getAssistantMessagePhase(session, session.messages[0], 0)).toBe('default');
+    expect(getAssistantMessagePhase(session, session.messages[0])).toBe('default');
   });
 
   test('ignores non-assistant messages', () => {
@@ -83,7 +83,7 @@ describe('assistant message phase', () => {
       },
     ]);
 
-    expect(getAssistantMessagePhase(session, session.messages[0], 0)).toBe('default');
+    expect(getAssistantMessagePhase(session, session.messages[0])).toBe('default');
   });
 
   test('returns default for thinking-kind messages regardless of other state', () => {
@@ -105,8 +105,8 @@ describe('assistant message phase', () => {
       },
     ]);
 
-    expect(getAssistantMessagePhase(session, session.messages[0], 0)).toBe('default');
-    expect(getAssistantMessagePhase(session, session.messages[1], 1)).toBe('final');
+    expect(getAssistantMessagePhase(session, session.messages[0])).toBe('default');
+    expect(getAssistantMessagePhase(session, session.messages[1])).toBe('final');
   });
 
   test('skips thinking messages when determining the last completed assistant', () => {
@@ -136,8 +136,8 @@ describe('assistant message phase', () => {
       },
     ]);
 
-    expect(getAssistantMessagePhase(session, session.messages[0], 0)).toBe('default');
-    expect(getAssistantMessagePhase(session, session.messages[1], 1)).toBe('default');
-    expect(getAssistantMessagePhase(session, session.messages[2], 2)).toBe('final');
+    expect(getAssistantMessagePhase(session, session.messages[0])).toBe('default');
+    expect(getAssistantMessagePhase(session, session.messages[1])).toBe('default');
+    expect(getAssistantMessagePhase(session, session.messages[2])).toBe('final');
   });
 });

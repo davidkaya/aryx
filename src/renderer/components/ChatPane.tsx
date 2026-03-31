@@ -29,7 +29,7 @@ import {
 } from '@shared/domain/models';
 import { type PatternDefinition, type ReasoningEffort } from '@shared/domain/pattern';
 import { isScratchpadProject, type ProjectRecord } from '@shared/domain/project';
-import { resolveSessionToolingSelection, type SessionBranchOriginAction, type SessionRecord } from '@shared/domain/session';
+import { resolveSessionToolingSelection, type ChatMessageRecord, type SessionBranchOriginAction, type SessionRecord } from '@shared/domain/session';
 import {
   countApprovedToolsInGroups,
   groupApprovalToolsByProvider,
@@ -40,6 +40,10 @@ import {
 } from '@shared/domain/tooling';
 
 /* ── ChatPane ──────────────────────────────────────────────── */
+
+type DisplayItem =
+  | { type: 'message'; message: ChatMessageRecord }
+  | { type: 'thinking-group'; messages: ChatMessageRecord[]; turnStartedAt?: string };
 
 interface ChatPaneProps {
   project: ProjectRecord;
@@ -122,28 +126,51 @@ export function ChatPane({
   const composerRef = useRef<MarkdownComposerHandle>(null);
 
   const isSessionBusy = session.status === 'running';
-  const { visibleMessages, thinkingMessages } = useMemo(() => {
-    const visible: typeof session.messages = [];
-    const thinking: typeof session.messages = [];
+
+  const displayItems = useMemo(() => {
+    const runsByTrigger = new Map(session.runs.map((r) => [r.triggerMessageId, r]));
+    const items: DisplayItem[] = [];
+    let pendingThinking: ChatMessageRecord[] = [];
+    let lastUserMessageId: string | undefined;
+
     for (const message of session.messages) {
       if (message.messageKind === 'thinking') {
-        thinking.push(message);
+        pendingThinking.push(message);
       } else {
-        visible.push(message);
+        if (pendingThinking.length > 0) {
+          const run = lastUserMessageId ? runsByTrigger.get(lastUserMessageId) : undefined;
+          items.push({ type: 'thinking-group', messages: pendingThinking, turnStartedAt: run?.startedAt });
+          pendingThinking = [];
+        }
+        items.push({ type: 'message', message });
+        if (message.role === 'user') {
+          lastUserMessageId = message.id;
+        }
       }
     }
-    return { visibleMessages: visible, thinkingMessages: thinking };
-  }, [session.messages]);
-  const lastAssistantIndex = useMemo(() => {
-    for (let i = visibleMessages.length - 1; i >= 0; i--) {
-      if (visibleMessages[i].role === 'assistant') return i;
+
+    if (pendingThinking.length > 0) {
+      const run = lastUserMessageId ? runsByTrigger.get(lastUserMessageId) : undefined;
+      items.push({ type: 'thinking-group', messages: pendingThinking, turnStartedAt: run?.startedAt });
+    }
+
+    return items;
+  }, [session.messages, session.runs]);
+
+  const lastThinkingGroupIndex = useMemo(() => {
+    for (let i = displayItems.length - 1; i >= 0; i--) {
+      if (displayItems[i].type === 'thinking-group') return i;
     }
     return -1;
-  }, [visibleMessages]);
-  const turnStartedAt = useMemo(() => {
-    if (session.runs.length === 0) return undefined;
-    return session.runs[0].startedAt;
-  }, [session.runs]);
+  }, [displayItems]);
+
+  const lastAssistantId = useMemo(() => {
+    for (let i = session.messages.length - 1; i >= 0; i--) {
+      const m = session.messages[i];
+      if (m.role === 'assistant' && m.messageKind !== 'thinking') return m.id;
+    }
+    return undefined;
+  }, [session.messages]);
   const pendingApproval = session.pendingApproval?.status === 'pending' ? session.pendingApproval : undefined;
   const queuedApprovals = (session.pendingApprovalQueue ?? []).filter((a) => a.status === 'pending');
   const totalPendingCount = (pendingApproval ? 1 : 0) + queuedApprovals.length;
@@ -398,11 +425,25 @@ export function ChatPane({
               />
             )}
             <div className="space-y-1">
-              {visibleMessages.map((message, index) => {
+              {displayItems.map((item, itemIndex) => {
+                if (item.type === 'thinking-group') {
+                  const isLastThinkingGroup = itemIndex === lastThinkingGroupIndex;
+                  return (
+                    <div key={`thinking-${item.messages[0].id}`} className="py-2">
+                      <ThinkingProcess
+                        messages={item.messages}
+                        isActive={isSessionBusy && isLastThinkingGroup}
+                        turnStartedAt={item.turnStartedAt}
+                      />
+                    </div>
+                  );
+                }
+
+                const message = item.message;
                 const isUser = message.role === 'user';
                 const isEditing = editingMessageId === message.id;
-                const isLastAssistant = index === lastAssistantIndex;
-                const phase = getAssistantMessagePhase(session, message, index);
+                const isLastAssistant = message.id === lastAssistantId;
+                const phase = getAssistantMessagePhase(session, message);
                 const assistantContainerClass =
                   phase === 'thinking'
                     ? 'border-[var(--color-accent-sky)]/20 bg-[var(--color-accent-sky)]/5'
@@ -416,19 +457,9 @@ export function ChatPane({
                 const phaseLabel =
                   phase === 'thinking' ? 'Thinking' : phase === 'final' ? 'Final' : undefined;
                 const showActions = !isSessionBusy && !message.pending;
-                const showThinkingBefore = isLastAssistant && thinkingMessages.length > 0;
 
                 return (
                   <div key={message.id}>
-                    {showThinkingBefore && (
-                      <div className="py-2">
-                        <ThinkingProcess
-                          messages={thinkingMessages}
-                          isActive={isSessionBusy}
-                          turnStartedAt={turnStartedAt}
-                        />
-                      </div>
-                    )}
                     <div className="message-enter group py-3" data-message-id={message.id}>
                       <div className="flex gap-3">
                         <div
@@ -523,15 +554,6 @@ export function ChatPane({
                   </div>
                 );
               })}
-              {thinkingMessages.length > 0 && lastAssistantIndex < 0 && (
-                <div className="py-2">
-                  <ThinkingProcess
-                    messages={thinkingMessages}
-                    isActive={isSessionBusy}
-                    turnStartedAt={turnStartedAt}
-                  />
-                </div>
-              )}
             </div>
             {activeSubagents && activeSubagents.length > 0 && (
               <div className="px-6 py-1">

@@ -5,7 +5,6 @@ export type AssistantMessagePhase = 'default' | 'thinking' | 'final';
 export function getAssistantMessagePhase(
   session: SessionRecord,
   message: ChatMessageRecord,
-  index: number,
 ): AssistantMessagePhase {
   if (message.role !== 'assistant') {
     return 'default';
@@ -23,17 +22,17 @@ export function getAssistantMessagePhase(
     return 'default';
   }
 
-  const lastCompletedAssistantIndex = findLastCompletedAssistantIndex(session.messages);
-  return index === lastCompletedAssistantIndex ? 'final' : 'default';
+  const lastId = findLastCompletedAssistantId(session.messages);
+  return message.id === lastId ? 'final' : 'default';
 }
 
-function findLastCompletedAssistantIndex(messages: ChatMessageRecord[]): number {
+function findLastCompletedAssistantId(messages: ChatMessageRecord[]): string | undefined {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
     if (message.role === 'assistant' && !message.pending && message.messageKind !== 'thinking') {
-      return index;
+      return message.id;
     }
   }
 
-  return -1;
+  return undefined;
 }

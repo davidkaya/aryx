@@ -8,7 +8,6 @@ import {
   FileText,
   Globe,
   Server,
-  Terminal,
 } from 'lucide-react';
 
 import type { PermissionDetail } from '@shared/contracts/sidecar';
@@ -59,6 +58,37 @@ export function permissionDetailSummary(detail: PermissionDetail): string | unde
     default:
       return undefined;
   }
+}
+
+/* ── Display helpers ─────────────────────────────────────────── */
+
+/** Recursively parse string values that contain JSON objects or arrays (display-time only). */
+function deepParseJsonStrings(value: unknown): unknown {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (
+      (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+      (trimmed.startsWith('[') && trimmed.endsWith(']'))
+    ) {
+      try {
+        return deepParseJsonStrings(JSON.parse(trimmed));
+      } catch {
+        return value;
+      }
+    }
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map(deepParseJsonStrings);
+  }
+  if (value !== null && typeof value === 'object') {
+    const result: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      result[k] = deepParseJsonStrings(v);
+    }
+    return result;
+  }
+  return value;
 }
 
 /* ── Kind-specific renderers ────────────────────────────────── */
@@ -134,7 +164,7 @@ function McpDetail({ detail }: { detail: PermissionDetail }) {
         )}
       </div>
       {detail.args && Object.keys(detail.args).length > 0 && (
-        <CollapsibleCode label="Arguments" text={JSON.stringify(detail.args, null, 2)} />
+        <CollapsibleCode label="Arguments" text={JSON.stringify(deepParseJsonStrings(detail.args), null, 2)} />
       )}
     </div>
   );
@@ -185,7 +215,7 @@ function CustomToolDetail({ detail }: { detail: PermissionDetail }) {
         <p className="text-[11px] text-[var(--color-text-secondary)]">{detail.toolDescription}</p>
       )}
       {detail.args && Object.keys(detail.args).length > 0 && (
-        <CollapsibleCode label="Arguments" text={JSON.stringify(detail.args, null, 2)} />
+        <CollapsibleCode label="Arguments" text={JSON.stringify(deepParseJsonStrings(detail.args), null, 2)} />
       )}
     </div>
   );
@@ -201,13 +231,13 @@ function HookDetail({ detail }: { detail: PermissionDetail }) {
         </div>
       )}
       {detail.args && Object.keys(detail.args).length > 0 && (
-        <CollapsibleCode label="Arguments" text={JSON.stringify(detail.args, null, 2)} />
+        <CollapsibleCode label="Arguments" text={JSON.stringify(deepParseJsonStrings(detail.args), null, 2)} />
       )}
     </div>
   );
 }
 
-/* ── Shared primitives ──────────────────────────────────────── */
+/* ── Shared primitives──────────────────────────────────────── */
 
 function IntentionLine({ text }: { text: string }) {
   return <p className="text-[11px] italic text-[var(--color-text-secondary)]">{text}</p>;
@@ -242,6 +272,47 @@ function DiffBlock({ text }: { text: string }) {
   );
 }
 
+/* ── JSON syntax highlighting ───────────────────────────────── */
+
+const jsonTokenPattern =
+  /("(?:[^"\\]|\\.)*")(\s*:)?|\b(true|false|null)\b|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)|([{}\[\],])/g;
+
+function JsonHighlighted({ json }: { json: string }) {
+  const elements: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let key = 0;
+
+  for (const match of json.matchAll(jsonTokenPattern)) {
+    const idx = match.index ?? 0;
+    if (idx > lastIndex) elements.push(json.slice(lastIndex, idx));
+
+    if (match[1] && match[2]) {
+      // Object key + colon
+      elements.push(
+        <span key={key++} className="text-[var(--color-text-accent)]">{match[1]}</span>,
+        <span key={key++} className="text-[var(--color-text-muted)]">{match[2]}</span>,
+      );
+    } else if (match[1]) {
+      // String value
+      elements.push(<span key={key++} className="text-[var(--color-status-success)]">{match[1]}</span>);
+    } else if (match[3]) {
+      // true / false / null
+      elements.push(<span key={key++} className="text-[var(--color-accent-sky)]">{match[3]}</span>);
+    } else if (match[4]) {
+      // Number
+      elements.push(<span key={key++} className="text-[var(--color-accent-sky)]">{match[4]}</span>);
+    } else if (match[5]) {
+      // Structural punctuation
+      elements.push(<span key={key++} className="text-[var(--color-text-muted)]">{match[5]}</span>);
+    }
+
+    lastIndex = idx + match[0].length;
+  }
+
+  if (lastIndex < json.length) elements.push(json.slice(lastIndex));
+  return <>{elements}</>;
+}
+
 function CollapsibleCode({
   label,
   text,
@@ -254,6 +325,7 @@ function CollapsibleCode({
   defaultExpanded?: boolean;
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
+  const isJson = text.trimStart().startsWith('{') || text.trimStart().startsWith('[');
 
   return (
     <div className="rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface-1)]">
@@ -272,7 +344,7 @@ function CollapsibleCode({
         <div className="border-t border-[var(--color-border-subtle)] px-2.5 py-1.5">
           {children ?? (
             <pre className="max-h-48 overflow-auto font-mono text-[10px] leading-relaxed text-[var(--color-text-primary)]">
-              {text}
+              {isJson ? <JsonHighlighted json={text} /> : text}
             </pre>
           )}
         </div>

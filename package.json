@@ -1,6 +1,6 @@
 {
   "name": "aryx",
-  "version": "0.0.19",
+  "version": "0.0.20",
   "description": "Orchestrator for Copilot-powered agent workflows across multiple projects.",
   "private": true,
   "main": "dist-electron/main/index.js",

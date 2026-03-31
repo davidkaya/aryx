@@ -5,7 +5,13 @@ import type {
 } from '@shared/domain/approval';
 import type { ToolCallFileChangePreview } from '@shared/contracts/sidecar';
 import type { PatternDefinition, ReasoningEffort } from '@shared/domain/pattern';
-import type { ProjectRecord } from '@shared/domain/project';
+import type {
+  ProjectGitChangeSummary,
+  ProjectGitWorkingTreeFile,
+  ProjectGitWorkingTreeFileStatus,
+  ProjectGitWorkingTreeSnapshot,
+  ProjectRecord,
+} from '@shared/domain/project';
 import { createId } from '@shared/utils/ids';
 
 export type SessionRunStatus = 'running' | 'completed' | 'cancelled' | 'error';
@@ -70,6 +76,7 @@ export interface SessionRunRecord {
   status: SessionRunStatus;
   agents: RunTimelineAgentRecord[];
   events: RunTimelineEventRecord[];
+  preRunGitSnapshot?: ProjectGitWorkingTreeSnapshot;
 }
 
 export interface CreateSessionRunRecordInput {
@@ -79,6 +86,7 @@ export interface CreateSessionRunRecordInput {
   pattern: Pick<PatternDefinition, 'id' | 'name' | 'mode' | 'agents'>;
   triggerMessageId: string;
   startedAt: string;
+  preRunGitSnapshot?: ProjectGitWorkingTreeSnapshot;
 }
 
 export interface AppendRunActivityEventInput {
@@ -120,6 +128,89 @@ function normalizeOptionalString(value: string | undefined): string | undefined 
 
 function normalizeOptionalPreviewText(value: string | undefined): string | undefined {
   return value?.trim() ? value : undefined;
+}
+
+function normalizeNonNegativeInteger(value: number | undefined): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return 0;
+  }
+
+  const normalized = Math.round(value);
+  return normalized >= 0 ? normalized : 0;
+}
+
+function normalizeWorkingTreeFileStatus(
+  value: ProjectGitWorkingTreeFileStatus | undefined,
+): ProjectGitWorkingTreeFileStatus | undefined {
+  switch (value) {
+    case 'added':
+    case 'modified':
+    case 'deleted':
+    case 'renamed':
+    case 'copied':
+    case 'type-changed':
+    case 'unmerged':
+    case 'untracked':
+      return value;
+    default:
+      return undefined;
+  }
+}
+
+function normalizeWorkingTreeChangeSummary(
+  summary: Partial<ProjectGitChangeSummary> | undefined,
+): ProjectGitChangeSummary {
+  return {
+    staged: normalizeNonNegativeInteger(summary?.staged),
+    unstaged: normalizeNonNegativeInteger(summary?.unstaged),
+    untracked: normalizeNonNegativeInteger(summary?.untracked),
+    conflicted: normalizeNonNegativeInteger(summary?.conflicted),
+  };
+}
+
+function normalizeWorkingTreeFile(
+  file: ProjectGitWorkingTreeFile,
+): ProjectGitWorkingTreeFile | undefined {
+  const path = normalizeOptionalString(file.path);
+  if (!path) {
+    return undefined;
+  }
+
+  return {
+    path,
+    previousPath: normalizeOptionalString(file.previousPath),
+    stagedStatus: normalizeWorkingTreeFileStatus(file.stagedStatus),
+    unstagedStatus: normalizeWorkingTreeFileStatus(file.unstagedStatus),
+    ...(file.isConflicted ? { isConflicted: true } : {}),
+  };
+}
+
+function normalizeWorkingTreeSnapshot(
+  snapshot: ProjectGitWorkingTreeSnapshot | undefined,
+): ProjectGitWorkingTreeSnapshot | undefined {
+  if (!snapshot) {
+    return undefined;
+  }
+
+  const scannedAt = normalizeOptionalString(snapshot.scannedAt);
+  const repoRoot = normalizeOptionalString(snapshot.repoRoot);
+  if (!scannedAt || !repoRoot) {
+    return undefined;
+  }
+
+  const files = (snapshot.files ?? []).flatMap((file) => {
+    const normalized = normalizeWorkingTreeFile(file);
+    return normalized ? [normalized] : [];
+  });
+
+  return {
+    scannedAt,
+    repoRoot,
+    branch: normalizeOptionalString(snapshot.branch),
+    changedFileCount: normalizeNonNegativeInteger(snapshot.changedFileCount),
+    changes: normalizeWorkingTreeChangeSummary(snapshot.changes),
+    files,
+  };
 }
 
 function normalizeToolCallFileChange(
@@ -373,6 +464,7 @@ export function createSessionRunRecord(input: CreateSessionRunRecordInput): Sess
     startedAt: input.startedAt,
     status: 'running',
     completedAt: undefined,
+    preRunGitSnapshot: normalizeWorkingTreeSnapshot(input.preRunGitSnapshot),
     agents: input.pattern.agents
       .map((agent): RunTimelineAgentRecord => ({
         agentId: agent.id,
@@ -430,6 +522,7 @@ export function normalizeSessionRunRecords(
         startedAt,
         completedAt: normalizeOptionalString(run.completedAt),
         status: run.status === 'error' ? 'error' : run.status === 'running' ? 'running' : run.status === 'cancelled' ? 'cancelled' : 'completed',
+        preRunGitSnapshot: normalizeWorkingTreeSnapshot(run.preRunGitSnapshot),
         agents: run.agents.flatMap((agent) => {
           const normalized = normalizeRunTimelineAgent(agent);
           return normalized ? [normalized] : [];

@@ -121,4 +121,58 @@ describe('GitService', () => {
       head: undefined,
     });
   });
+
+  test('captures a structured pre-run working tree snapshot', async () => {
+    const service = createService({
+      'rev-parse --show-toplevel': 'C:\\workspace\\repo\n',
+      'status --porcelain=1 --untracked-files=all': 'R  src\\old.ts -> src\\new.ts\n M src\\app.ts\n?? notes.txt\nUU conflict.txt\n',
+      'branch --show-current': 'feature/git-context\n',
+    });
+
+    await expect(service.captureWorkingTreeSnapshot('C:\\workspace\\repo', '2026-03-23T19:00:00.000Z')).resolves.toEqual({
+      scannedAt: '2026-03-23T19:00:00.000Z',
+      repoRoot: 'C:\\workspace\\repo',
+      branch: 'feature/git-context',
+      changedFileCount: 4,
+      changes: {
+        staged: 1,
+        unstaged: 1,
+        untracked: 1,
+        conflicted: 1,
+      },
+      files: [
+        {
+          path: 'src\\new.ts',
+          previousPath: 'src\\old.ts',
+          stagedStatus: 'renamed',
+          unstagedStatus: undefined,
+        },
+        {
+          path: 'src\\app.ts',
+          stagedStatus: undefined,
+          unstagedStatus: 'modified',
+        },
+        {
+          path: 'notes.txt',
+          unstagedStatus: 'untracked',
+        },
+        {
+          path: 'conflict.txt',
+          stagedStatus: 'unmerged',
+          unstagedStatus: 'unmerged',
+          isConflicted: true,
+        },
+      ],
+    });
+  });
+
+  test('returns no working tree snapshot outside a git repository', async () => {
+    const service = createService({
+      'rev-parse --show-toplevel': createGitError('fatal: not a git repository', {
+        stderr: 'fatal: not a git repository (or any of the parent directories): .git',
+      }),
+    });
+
+    await expect(service.captureWorkingTreeSnapshot('C:\\workspace\\not-a-repo', '2026-03-23T19:00:00.000Z')).resolves.toBeUndefined();
+  });
 });

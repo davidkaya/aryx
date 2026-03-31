@@ -692,6 +692,8 @@ export default function App() {
         onSetNotificationsEnabled={(enabled) => void api.setNotificationsEnabled(enabled)}
         minimizeToTray={workspace.settings.minimizeToTray === true}
         onSetMinimizeToTray={(enabled) => void api.setMinimizeToTray(enabled)}
+        gitAutoRefreshEnabled={workspace.settings.gitAutoRefreshEnabled !== false}
+        onSetGitAutoRefreshEnabled={(enabled) => void api.setGitAutoRefreshEnabled(enabled)}
         onOpenAppDataFolder={() => void api.openAppDataFolder()}
         onResetLocalWorkspace={async () => {
           const fresh = await api.resetLocalWorkspace();

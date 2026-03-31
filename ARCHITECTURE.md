@@ -55,7 +55,7 @@ flowchart LR
 | --- | --- | --- | --- |
 | Renderer | Screens, interaction, local view composition, theme application | Filesystem, process spawning, raw Electron access, Copilot runtime | Typed preload API and pushed events |
 | Preload | Narrow bridge between browser context and Electron IPC | Business logic, persistence, orchestration | `ipcRenderer` / `ipcMain` |
-| Main process | Workspace mutation, persistence, git inspection, session lifecycle, native window state, sidecar lifecycle, PTY-backed terminal lifecycle | UI rendering, LLM orchestration internals | IPC, filesystem, git CLI, stdio with sidecar, native child processes |
+| Main process | Workspace mutation, persistence, git inspection and refresh orchestration, session lifecycle, native window state, sidecar lifecycle, PTY-backed terminal lifecycle | UI rendering, LLM orchestration internals | IPC, filesystem, git CLI, stdio with sidecar, native child processes |
 | Sidecar | Capability discovery, pattern validation, run execution, streaming deltas and activity | UI, workspace persistence, Electron APIs | Line-delimited JSON over stdio |
 | External systems | Git data, Copilot account/model access, OS window chrome | Application state and UI behavior | Controlled adapters owned by main or sidecar |
 
@@ -89,7 +89,7 @@ sequenceDiagram
     R->>P: Invoke typed API
     P->>M: IPC request
     M->>M: Append user message
-    M->>M: Create run record and mark session running
+    M->>M: Capture pre-run git snapshot, create run record, and mark session running
     M->>S: run-turn command
     S->>C: Execute workflow
     C-->>S: Partial output / tool activity / handoffs / input requests
@@ -97,7 +97,7 @@ sequenceDiagram
     M-->>R: Push session events and workspace updates
     C-->>S: Final messages or turn boundary
     S-->>M: Completion or error
-    M->>M: Finalize run and persist state
+    M->>M: Finalize run, refresh project git state, and persist state
     M-->>R: Final workspace snapshot
 ```
 
@@ -125,6 +125,8 @@ Projects are the container for context. There are two kinds:
 The scratchpad is modeled inside the same workspace system instead of as a separate subsystem. That keeps the UI and session model consistent while still allowing special rules for scratchpad behavior. Each scratchpad session receives its own working directory under the shared scratchpad root, so session-created files stay isolated from other scratchpad conversations.
 
 Project-backed entries also persist scanned Copilot customization metadata discovered from repository files such as `.github/copilot-instructions.md`, `AGENTS.md`, `.github/agents/*.agent.md`, and `.github/prompts/*.prompt.md`. The main process owns that scan step and stores the normalized results on the project record so repo instructions and enabled custom agent profiles can participate in later run execution without turning the renderer into a filesystem crawler.
+
+For git-backed projects, the main process also owns background git refreshes and captures a structured pre-run working-tree snapshot on each run record. That keeps git CLI access inside the privileged process while giving later renderer features a typed baseline for attributing post-run file changes to a specific turn.
 
 ### Patterns
 

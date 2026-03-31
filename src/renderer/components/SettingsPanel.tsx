@@ -46,6 +46,8 @@ interface SettingsPanelProps {
   onSetNotificationsEnabled: (enabled: boolean) => void;
   minimizeToTray: boolean;
   onSetMinimizeToTray: (enabled: boolean) => void;
+  gitAutoRefreshEnabled: boolean;
+  onSetGitAutoRefreshEnabled: (enabled: boolean) => void;
   onOpenAppDataFolder: () => void;
   onResetLocalWorkspace: () => Promise<void>;
   onResolveUserDiscoveredTooling?: (serverIds: string[], resolution: 'accept' | 'dismiss') => void;
@@ -129,6 +131,8 @@ export function SettingsPanel({
   onSetNotificationsEnabled,
   minimizeToTray,
   onSetMinimizeToTray,
+  gitAutoRefreshEnabled,
+  onSetGitAutoRefreshEnabled,
   onOpenAppDataFolder,
   onResetLocalWorkspace,
   onResolveUserDiscoveredTooling,
@@ -274,6 +278,8 @@ export function SettingsPanel({
                 onSetNotificationsEnabled={onSetNotificationsEnabled}
                 minimizeToTray={minimizeToTray}
                 onSetMinimizeToTray={onSetMinimizeToTray}
+                gitAutoRefreshEnabled={gitAutoRefreshEnabled}
+                onSetGitAutoRefreshEnabled={onSetGitAutoRefreshEnabled}
               />
             )}
             {activeSection === 'connection' && (
@@ -338,6 +344,8 @@ function AppearanceSection({
   onSetNotificationsEnabled,
   minimizeToTray,
   onSetMinimizeToTray,
+  gitAutoRefreshEnabled,
+  onSetGitAutoRefreshEnabled,
 }: {
   theme: AppearanceTheme;
   onSetTheme: (theme: AppearanceTheme) => void;
@@ -345,6 +353,8 @@ function AppearanceSection({
   onSetNotificationsEnabled: (enabled: boolean) => void;
   minimizeToTray: boolean;
   onSetMinimizeToTray: (enabled: boolean) => void;
+  gitAutoRefreshEnabled: boolean;
+  onSetGitAutoRefreshEnabled: (enabled: boolean) => void;
 }){
   return (
     <div>
@@ -433,6 +443,30 @@ function AppearanceSection({
           </p>
         </div>
         <ToggleSwitch enabled={minimizeToTray} />
+      </button>
+
+      {/* Git */}
+      <div className="mt-8 mb-1">
+        <h3 className="font-display text-[13px] font-semibold text-[var(--color-text-primary)]">Git</h3>
+        <p className="mt-0.5 text-[12px] text-[var(--color-text-muted)]">
+          Control how Aryx monitors your repositories
+        </p>
+      </div>
+
+      <button
+        className="mt-4 flex w-full items-center justify-between rounded-lg border border-[var(--color-border)] px-4 py-3 text-left transition hover:bg-[var(--color-surface-3)]/40"
+        onClick={() => onSetGitAutoRefreshEnabled(!gitAutoRefreshEnabled)}
+        type="button"
+      >
+        <div>
+          <span className="text-[13px] font-medium text-[var(--color-text-primary)]">
+            Auto-refresh git status
+          </span>
+          <p className="text-[12px] text-[var(--color-text-muted)]">
+            Periodically poll repository status in the background and refresh on window focus
+          </p>
+        </div>
+        <ToggleSwitch enabled={gitAutoRefreshEnabled} />
       </button>
     </div>
   );

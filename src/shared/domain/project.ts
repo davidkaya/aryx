@@ -18,6 +18,33 @@ export interface ProjectGitCommitSummary {
   committedAt: string;
 }
 
+export type ProjectGitWorkingTreeFileStatus =
+  | 'added'
+  | 'modified'
+  | 'deleted'
+  | 'renamed'
+  | 'copied'
+  | 'type-changed'
+  | 'unmerged'
+  | 'untracked';
+
+export interface ProjectGitWorkingTreeFile {
+  path: string;
+  previousPath?: string;
+  stagedStatus?: ProjectGitWorkingTreeFileStatus;
+  unstagedStatus?: ProjectGitWorkingTreeFileStatus;
+  isConflicted?: boolean;
+}
+
+export interface ProjectGitWorkingTreeSnapshot {
+  scannedAt: string;
+  repoRoot: string;
+  branch?: string;
+  changedFileCount: number;
+  changes: ProjectGitChangeSummary;
+  files: ProjectGitWorkingTreeFile[];
+}
+
 export interface ProjectGitContext {
   status: ProjectGitContextStatus;
   scannedAt: string;

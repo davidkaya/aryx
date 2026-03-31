@@ -241,6 +241,7 @@ export interface ElectronApi {
   setTerminalHeight(input: SetTerminalHeightInput): Promise<WorkspaceState>;
   setNotificationsEnabled(enabled: boolean): Promise<WorkspaceState>;
   setMinimizeToTray(enabled: boolean): Promise<WorkspaceState>;
+  setGitAutoRefreshEnabled(enabled: boolean): Promise<WorkspaceState>;
   checkForUpdates(): Promise<UpdateStatus>;
   installUpdate(): Promise<void>;
   describeTerminal(): Promise<TerminalSnapshot | undefined>;

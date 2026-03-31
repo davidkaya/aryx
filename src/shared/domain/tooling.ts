@@ -66,6 +66,7 @@ export interface WorkspaceSettings {
   terminalHeight?: number;
   notificationsEnabled?: boolean;
   minimizeToTray?: boolean;
+  gitAutoRefreshEnabled?: boolean;
 }
 
 export interface SessionToolingSelection {
@@ -209,6 +210,7 @@ export function normalizeWorkspaceSettings(settings?: Partial<WorkspaceSettings>
     ...(terminalHeight !== undefined ? { terminalHeight } : {}),
     ...(settings?.notificationsEnabled !== undefined ? { notificationsEnabled: settings.notificationsEnabled } : {}),
     ...(settings?.minimizeToTray !== undefined ? { minimizeToTray: settings.minimizeToTray } : {}),
+    ...(settings?.gitAutoRefreshEnabled !== undefined ? { gitAutoRefreshEnabled: settings.gitAutoRefreshEnabled } : {}),
   };
 }
 

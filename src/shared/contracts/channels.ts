@@ -17,6 +17,7 @@ export const ipcChannels = {
   setTerminalHeight: 'settings:set-terminal-height',
   setNotificationsEnabled: 'settings:set-notifications-enabled',
   setMinimizeToTray: 'settings:set-minimize-to-tray',
+  setGitAutoRefreshEnabled: 'settings:set-git-auto-refresh-enabled',
   checkForUpdates: 'app:check-for-updates',
   installUpdate: 'app:install-update',
   saveMcpServer: 'tooling:mcp:save',

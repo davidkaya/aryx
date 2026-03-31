@@ -122,8 +122,25 @@ function GitContextBadge({ git }: { git: ProjectGitContext }) {
   if (git.ahead) parts.push(`↑${git.ahead}`);
   if (git.behind) parts.push(`↓${git.behind}`);
 
+  const tooltipLines: string[] = [branchLabel];
+  if (git.changes) {
+    const breakdown: string[] = [];
+    if (git.changes.staged > 0) breakdown.push(`${git.changes.staged} staged`);
+    if (git.changes.unstaged > 0) breakdown.push(`${git.changes.unstaged} modified`);
+    if (git.changes.untracked > 0) breakdown.push(`${git.changes.untracked} untracked`);
+    if (git.changes.conflicted > 0) breakdown.push(`${git.changes.conflicted} conflicted`);
+    if (breakdown.length > 0) tooltipLines.push(breakdown.join(', '));
+  }
+  if (git.ahead || git.behind) {
+    const sync: string[] = [];
+    if (git.ahead) sync.push(`${git.ahead} ahead`);
+    if (git.behind) sync.push(`${git.behind} behind`);
+    tooltipLines.push(sync.join(', '));
+  }
+  if (git.upstream) tooltipLines.push(`→ ${git.upstream}`);
+
   return (
-    <span className="flex items-center gap-1 text-[10px] text-[var(--color-text-muted)]" title={parts.join(' · ') || branchLabel}>
+    <span className="flex items-center gap-1 text-[10px] text-[var(--color-text-muted)]" title={tooltipLines.join('\n')}>
       <GitBranch className="size-2.5 shrink-0" />
       <span className="max-w-[140px] truncate font-mono">{branchLabel}</span>
       {git.isDirty && <Circle className="size-1.5 shrink-0 fill-amber-500 text-amber-500" />}

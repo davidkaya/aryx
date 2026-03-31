@@ -298,17 +298,34 @@ export function ChatPane({
               {isScratchpad
                 ? `Scratchpad · ${pattern.name}`
                 : `${project.name} · ${pattern.name} · ${pattern.mode}`}
-              {!isScratchpad && project.git?.status === 'ready' && (
-                <span className="ml-2 inline-flex items-center gap-1 text-[var(--color-text-muted)]">
-                  <GitBranch className="inline size-2.5" />
-                  {project.git.branch ?? project.git.head?.shortHash ?? 'HEAD'}
-                  {project.git.isDirty && (
-                    <Circle className="inline size-1.5 fill-amber-500 text-amber-500" />
-                  )}
-                  {(project.git.ahead ?? 0) > 0 && <span>↑{project.git.ahead}</span>}
-                  {(project.git.behind ?? 0) > 0 && <span>↓{project.git.behind}</span>}
-                </span>
-              )}
+              {!isScratchpad && project.git?.status === 'ready' && (() => {
+                const git = project.git;
+                const tipLines: string[] = [git.branch ?? git.head?.shortHash ?? 'HEAD'];
+                if (git.changes) {
+                  const bd: string[] = [];
+                  if (git.changes.staged > 0) bd.push(`${git.changes.staged} staged`);
+                  if (git.changes.unstaged > 0) bd.push(`${git.changes.unstaged} modified`);
+                  if (git.changes.untracked > 0) bd.push(`${git.changes.untracked} untracked`);
+                  if (bd.length > 0) tipLines.push(bd.join(', '));
+                }
+                if (git.ahead || git.behind) {
+                  const sync: string[] = [];
+                  if (git.ahead) sync.push(`${git.ahead} ahead`);
+                  if (git.behind) sync.push(`${git.behind} behind`);
+                  tipLines.push(sync.join(', '));
+                }
+                return (
+                  <span className="ml-2 inline-flex items-center gap-1 text-[var(--color-text-muted)]" title={tipLines.join('\n')}>
+                    <GitBranch className="inline size-2.5" />
+                    {git.branch ?? git.head?.shortHash ?? 'HEAD'}
+                    {git.isDirty && (
+                      <Circle className="inline size-1.5 fill-amber-500 text-amber-500" />
+                    )}
+                    {(git.ahead ?? 0) > 0 && <span>↑{git.ahead}</span>}
+                    {(git.behind ?? 0) > 0 && <span>↓{git.behind}</span>}
+                  </span>
+                );
+              })()}
             </p>
           </div>
           <div className="flex items-center gap-2">

@@ -1,7 +1,14 @@
 import { createRequire } from 'node:module';
 import { promisify } from 'node:util';
 
-import type { ProjectGitChangeSummary, ProjectGitCommitSummary, ProjectGitContext } from '@shared/domain/project';
+import type {
+  ProjectGitChangeSummary,
+  ProjectGitCommitSummary,
+  ProjectGitContext,
+  ProjectGitWorkingTreeFile,
+  ProjectGitWorkingTreeFileStatus,
+  ProjectGitWorkingTreeSnapshot,
+} from '@shared/domain/project';
 import { nowIso } from '@shared/utils/ids';
 
 type ExecFileException = import('node:child_process').ExecFileException;
@@ -102,9 +109,46 @@ function isConflictedStatus(x: string, y: string): boolean {
   );
 }
 
-function parseChangeSummary(stdout: string): {
+function parseWorkingTreeFileStatus(value: string): ProjectGitWorkingTreeFileStatus | undefined {
+  switch (value) {
+    case 'A':
+      return 'added';
+    case 'M':
+      return 'modified';
+    case 'D':
+      return 'deleted';
+    case 'R':
+      return 'renamed';
+    case 'C':
+      return 'copied';
+    case 'T':
+      return 'type-changed';
+    case 'U':
+      return 'unmerged';
+    case '?':
+      return 'untracked';
+    default:
+      return undefined;
+  }
+}
+
+function parseWorkingTreePath(rawPath: string): Pick<ProjectGitWorkingTreeFile, 'path' | 'previousPath'> {
+  const separator = ' -> ';
+  const separatorIndex = rawPath.indexOf(separator);
+  if (separatorIndex < 0) {
+    return { path: rawPath };
+  }
+
+  return {
+    previousPath: rawPath.slice(0, separatorIndex).trim(),
+    path: rawPath.slice(separatorIndex + separator.length).trim(),
+  };
+}
+
+function parseWorkingTree(stdout: string): {
   changedFileCount: number;
   changes: ProjectGitChangeSummary;
+  files: ProjectGitWorkingTreeFile[];
 } {
   const summary: ProjectGitChangeSummary = {
     staged: 0,
@@ -112,6 +156,7 @@ function parseChangeSummary(stdout: string): {
     untracked: 0,
     conflicted: 0,
   };
+  const files: ProjectGitWorkingTreeFile[] = [];
 
   const lines = stdout
     .split(/\r?\n/)
@@ -122,20 +167,42 @@ function parseChangeSummary(stdout: string): {
 
   for (const line of lines) {
     if (line.startsWith('??')) {
+      const path = line.slice(3).trim();
+      if (!path) {
+        continue;
+      }
+
       summary.untracked += 1;
       changedFileCount += 1;
+      files.push({
+        path,
+        unstagedStatus: 'untracked',
+      });
       continue;
     }
 
-    if (line.length < 2) {
+    if (line.length < 3) {
       continue;
     }
 
     const x = line[0];
     const y = line[1];
-    changedFileCount += 1;
+    const rawPath = line.slice(3).trim();
+    if (!rawPath) {
+      continue;
+    }
 
-    if (isConflictedStatus(x, y)) {
+    changedFileCount += 1;
+    const isConflicted = isConflictedStatus(x, y);
+    const pathInfo = parseWorkingTreePath(rawPath);
+    files.push({
+      ...pathInfo,
+      stagedStatus: parseWorkingTreeFileStatus(x),
+      unstagedStatus: parseWorkingTreeFileStatus(y),
+      ...(isConflicted ? { isConflicted: true } : {}),
+    });
+
+    if (isConflicted) {
       summary.conflicted += 1;
       continue;
     }
@@ -152,6 +219,7 @@ function parseChangeSummary(stdout: string): {
   return {
     changedFileCount,
     changes: summary,
+    files,
   };
 }
 
@@ -219,7 +287,7 @@ export class GitService {
       this.tryRun(projectPath, ['log', '-1', '--format=%H%n%h%n%s%n%cI']),
     ]);
 
-    const { changedFileCount, changes } = parseChangeSummary(statusResult.stdout);
+    const { changedFileCount, changes } = parseWorkingTree(statusResult.stdout);
     const upstream = upstreamResult.ok ? upstreamResult.stdout.trim() || undefined : undefined;
     const aheadBehind = countsResult.ok ? parseAheadBehind(countsResult.stdout) : {};
 
@@ -235,6 +303,33 @@ export class GitService {
       changedFileCount,
       changes,
       head: headResult.ok ? parseHead(headResult.stdout) : undefined,
+    };
+  }
+
+  async captureWorkingTreeSnapshot(
+    projectPath: string,
+    scannedAt = nowIso(),
+  ): Promise<ProjectGitWorkingTreeSnapshot | undefined> {
+    const repoRootResult = await this.tryRun(projectPath, ['rev-parse', '--show-toplevel']);
+    if (!repoRootResult.ok) {
+      return undefined;
+    }
+
+    const statusResult = await this.tryRun(projectPath, ['status', '--porcelain=1', '--untracked-files=all']);
+    if (!statusResult.ok) {
+      return undefined;
+    }
+
+    const branchResult = await this.tryRun(projectPath, ['branch', '--show-current']);
+    const { changedFileCount, changes, files } = parseWorkingTree(statusResult.stdout);
+
+    return {
+      scannedAt,
+      repoRoot: repoRootResult.stdout.trim(),
+      branch: branchResult.ok ? parseBranch(branchResult.stdout) : undefined,
+      changedFileCount,
+      changes,
+      files,
     };
   }
 

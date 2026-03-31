@@ -185,6 +185,8 @@ const INTERRUPTED_RUN_ERROR =
   'This session was interrupted because Aryx restarted while a run was in progress.';
 const INTERRUPTED_APPROVAL_ERROR =
   'Pending approval was interrupted because Aryx restarted before a decision was recorded.';
+const GIT_REFRESH_DEBOUNCE_MS = 750;
+const GIT_REFRESH_INTERVAL_MS = 60_000;
 
 export class AryxAppService extends EventEmitter<AppServiceEvents> {
   private readonly workspaceRepository = new WorkspaceRepository();
@@ -201,7 +203,13 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
   private sidecarCapabilities?: SidecarCapabilities;
   private sidecarCapabilitiesPromise?: Promise<SidecarCapabilities>;
   private didScheduleInitialProjectGitRefresh = false;
+  private didStartPeriodicProjectGitRefresh = false;
   private mcpProbeUpdateQueue = Promise.resolve();
+  private pendingProjectGitRefreshIds = new Set<string>();
+  private pendingRefreshAllProjects = false;
+  private projectGitRefreshTimer?: ReturnType<typeof setTimeout>;
+  private periodicProjectGitRefreshTimer?: ReturnType<typeof setInterval>;
+  private runningProjectGitRefresh?: Promise<void>;
 
   constructor() {
     super();
@@ -252,6 +260,9 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
 
     if (!this.didScheduleInitialProjectGitRefresh) {
       this.didScheduleInitialProjectGitRefresh = true;
+      if (this.workspace.settings.gitAutoRefreshEnabled !== false) {
+        this.startPeriodicProjectGitRefresh();
+      }
       void this.refreshProjectGitContext().catch((error) => {
         console.error('[aryx git]', error);
       });
@@ -270,9 +281,40 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
   }
 
   async dispose(): Promise<void> {
+    if (this.projectGitRefreshTimer) {
+      clearTimeout(this.projectGitRefreshTimer);
+      this.projectGitRefreshTimer = undefined;
+    }
+    if (this.periodicProjectGitRefreshTimer) {
+      clearInterval(this.periodicProjectGitRefreshTimer);
+      this.periodicProjectGitRefreshTimer = undefined;
+    }
     this.ptyManager.dispose();
     await this.sidecar.dispose();
     void this.secretStore;
+  }
+
+  isGitAutoRefreshEnabled(): boolean {
+    return this.workspace?.settings.gitAutoRefreshEnabled !== false;
+  }
+
+  scheduleProjectGitRefresh(projectId?: string): void {
+    if (projectId) {
+      this.pendingProjectGitRefreshIds.add(projectId);
+    } else {
+      this.pendingRefreshAllProjects = true;
+      this.pendingProjectGitRefreshIds.clear();
+    }
+
+    if (this.projectGitRefreshTimer) {
+      clearTimeout(this.projectGitRefreshTimer);
+    }
+
+    this.projectGitRefreshTimer = setTimeout(() => {
+      this.projectGitRefreshTimer = undefined;
+      void this.flushScheduledProjectGitRefresh();
+    }, GIT_REFRESH_DEBOUNCE_MS);
+    this.projectGitRefreshTimer.unref?.();
   }
 
   async openAppDataFolder(): Promise<void> {
@@ -524,6 +566,19 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
   async setMinimizeToTray(enabled: boolean): Promise<WorkspaceState> {
     const workspace = await this.loadWorkspace();
     workspace.settings.minimizeToTray = enabled;
+    return this.persistAndBroadcast(workspace);
+  }
+
+  async setGitAutoRefreshEnabled(enabled: boolean): Promise<WorkspaceState> {
+    const workspace = await this.loadWorkspace();
+    workspace.settings.gitAutoRefreshEnabled = enabled;
+
+    if (enabled) {
+      this.startPeriodicProjectGitRefresh();
+    } else {
+      this.stopPeriodicProjectGitRefresh();
+    }
+
     return this.persistAndBroadcast(workspace);
   }
 
@@ -1302,6 +1357,12 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
   ): Promise<void> {
     const workspaceKind = isScratchpadProject(project) ? 'scratchpad' : 'project';
     const { occurredAt, requestId, triggerMessageId, messageMode, attachments } = options;
+    const preRunGitSnapshot = workspaceKind === 'project'
+      ? await this.gitService.captureWorkingTreeSnapshot(session.cwd ?? project.path, occurredAt)
+      : undefined;
+    if (workspaceKind === 'project' && project.git?.status === 'ready' && !preRunGitSnapshot) {
+      console.warn(`[aryx git] Failed to capture pre-run git snapshot for project "${project.id}".`);
+    }
 
     session.title = resolveSessionTitle(session, effectivePattern, session.messages);
     session.status = 'running';
@@ -1317,6 +1378,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
         pattern: effectivePattern,
         triggerMessageId,
         startedAt: occurredAt,
+        preRunGitSnapshot,
       }),
       ...session.runs,
     ];
@@ -1376,10 +1438,16 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
       await this.awaitFinalResponseApproval(workspace, session.id, requestId, effectivePattern, responseMessages);
       this.finalizeTurn(workspace, session.id, requestId, responseMessages);
       await this.persistAndBroadcast(workspace);
+      if (workspaceKind === 'project') {
+        this.scheduleProjectGitRefresh(project.id);
+      }
     } catch (error) {
       if (error instanceof TurnCancelledError) {
         this.finalizeCancelledTurn(workspace, session, requestId);
         await this.persistAndBroadcast(workspace);
+        if (workspaceKind === 'project') {
+          this.scheduleProjectGitRefresh(project.id);
+        }
         return;
       }
 
@@ -1402,6 +1470,9 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
       }
 
       await this.persistAndBroadcast(workspace);
+      if (workspaceKind === 'project') {
+        this.scheduleProjectGitRefresh(project.id);
+      }
     }
   }
 
@@ -1486,9 +1557,13 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
   }
 
   async refreshProjectGitContext(projectId?: string): Promise<WorkspaceState> {
+    return this.refreshProjectGitContexts(projectId ? [projectId] : undefined);
+  }
+
+  private async refreshProjectGitContexts(projectIds?: readonly string[]): Promise<WorkspaceState> {
     const workspace = await this.loadWorkspace();
-    const projects = projectId
-      ? [this.requireProject(workspace, projectId)]
+    const projects = projectIds?.length
+      ? projectIds.map((currentProjectId) => this.requireProject(workspace, currentProjectId))
       : workspace.projects;
 
     let didRefreshGit = false;
@@ -1601,6 +1676,54 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
 
     project.git = await this.gitService.describeProject(project.path);
     return true;
+  }
+
+  private startPeriodicProjectGitRefresh(): void {
+    if (this.didStartPeriodicProjectGitRefresh) {
+      return;
+    }
+
+    this.didStartPeriodicProjectGitRefresh = true;
+    this.periodicProjectGitRefreshTimer = setInterval(() => {
+      this.scheduleProjectGitRefresh();
+    }, GIT_REFRESH_INTERVAL_MS);
+    this.periodicProjectGitRefreshTimer.unref?.();
+  }
+
+  private stopPeriodicProjectGitRefresh(): void {
+    if (this.periodicProjectGitRefreshTimer) {
+      clearInterval(this.periodicProjectGitRefreshTimer);
+      this.periodicProjectGitRefreshTimer = undefined;
+    }
+    this.didStartPeriodicProjectGitRefresh = false;
+  }
+
+  private async flushScheduledProjectGitRefresh(): Promise<void> {
+    if (this.runningProjectGitRefresh) {
+      return;
+    }
+
+    const projectIds = this.pendingRefreshAllProjects
+      ? undefined
+      : [...this.pendingProjectGitRefreshIds];
+    this.pendingRefreshAllProjects = false;
+    this.pendingProjectGitRefreshIds.clear();
+
+    this.runningProjectGitRefresh = this.refreshProjectGitContexts(projectIds).then(
+      () => undefined,
+      (error) => {
+        console.error('[aryx git]', error);
+      },
+    );
+
+    try {
+      await this.runningProjectGitRefresh;
+    } finally {
+      this.runningProjectGitRefresh = undefined;
+      if (this.pendingRefreshAllProjects || this.pendingProjectGitRefreshIds.size > 0) {
+        this.scheduleProjectGitRefresh();
+      }
+    }
   }
 
   private requirePattern(workspace: WorkspaceState, patternId: string): PatternDefinition {

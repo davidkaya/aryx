@@ -8,6 +8,7 @@ import {
   ChevronDown,
   ChevronRight,
   CircleDot,
+  GitBranch,
   MessageSquare,
   Play,
   Wrench,
@@ -25,6 +26,7 @@ import {
   type CollapsedTimelineEvent,
 } from '@renderer/lib/runTimelineFormatting';
 import type { OrchestrationMode } from '@shared/domain/pattern';
+import type { ProjectGitWorkingTreeSnapshot } from '@shared/domain/project';
 import type { RunTimelineEventRecord, SessionRunRecord } from '@shared/domain/runTimeline';
 import { FileChangePreview } from '@renderer/components/chat/FileChangePreview';
 
@@ -229,6 +231,39 @@ function CollapsedEventRow({
   return <TimelineEventRow event={item.event} isLast={isLast} onJumpToMessage={onJumpToMessage} />;
 }
 
+/* ── Git baseline snapshot ──────────────────────────────────── */
+
+function RunGitBaseline({ snapshot }: { snapshot: ProjectGitWorkingTreeSnapshot }) {
+  const { branch, changes, changedFileCount } = snapshot;
+
+  const parts: string[] = [];
+  if (changes.staged > 0) parts.push(`${changes.staged} staged`);
+  if (changes.unstaged > 0) parts.push(`${changes.unstaged} modified`);
+  if (changes.untracked > 0) parts.push(`${changes.untracked} untracked`);
+  if (changes.conflicted > 0) parts.push(`${changes.conflicted} conflicted`);
+
+  return (
+    <div className="mb-1.5 flex items-center gap-1.5 text-[9px] text-[var(--color-text-muted)]">
+      <GitBranch className="size-2.5 shrink-0" />
+      {branch && <span className="font-mono text-[var(--color-text-secondary)]">{branch}</span>}
+      {changedFileCount > 0 ? (
+        <>
+          <span>·</span>
+          <span className="text-[var(--color-status-warning)]">{changedFileCount} changed</span>
+          {parts.length > 0 && (
+            <span className="text-[var(--color-text-muted)]">({parts.join(', ')})</span>
+          )}
+        </>
+      ) : (
+        <>
+          <span>·</span>
+          <span className="text-[var(--color-status-success)]">clean</span>
+        </>
+      )}
+    </div>
+  );
+}
+
 /* ── Run card ──────────────────────────────────────────────── */
 
 function RunCard({
@@ -292,6 +327,11 @@ function RunCard({
                 </span>
               ))}
             </div>
+          )}
+
+          {/* Git baseline */}
+          {run.preRunGitSnapshot && (
+            <RunGitBaseline snapshot={run.preRunGitSnapshot} />
           )}
 
           {/* Timeline events */}

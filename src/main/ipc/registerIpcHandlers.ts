@@ -52,6 +52,12 @@ export function registerIpcHandlers(
   service: AryxAppService,
   autoUpdateService: AutoUpdateService,
 ): void {
+  window.on('focus', () => {
+    if (service.isGitAutoRefreshEnabled()) {
+      service.scheduleProjectGitRefresh();
+    }
+  });
+
   ipcMain.handle(ipcChannels.describeSidecarCapabilities, () => service.describeSidecarCapabilities());
   ipcMain.handle(ipcChannels.refreshSidecarCapabilities, () => service.refreshSidecarCapabilities());
   ipcMain.handle(ipcChannels.loadWorkspace, () => service.loadWorkspace());
@@ -104,6 +110,10 @@ export function registerIpcHandlers(
   ipcMain.handle(
     ipcChannels.setMinimizeToTray,
     (_event, enabled: boolean) => service.setMinimizeToTray(enabled),
+  );
+  ipcMain.handle(
+    ipcChannels.setGitAutoRefreshEnabled,
+    (_event, enabled: boolean) => service.setGitAutoRefreshEnabled(enabled),
   );
   ipcMain.handle(ipcChannels.checkForUpdates, () => autoUpdateService.checkForUpdates());
   ipcMain.handle(ipcChannels.installUpdate, () => {

@@ -28,6 +28,7 @@ const api: ElectronApi = {
   setTerminalHeight: (input) => ipcRenderer.invoke(ipcChannels.setTerminalHeight, input),
   setNotificationsEnabled: (enabled) => ipcRenderer.invoke(ipcChannels.setNotificationsEnabled, enabled),
   setMinimizeToTray: (enabled) => ipcRenderer.invoke(ipcChannels.setMinimizeToTray, enabled),
+  setGitAutoRefreshEnabled: (enabled) => ipcRenderer.invoke(ipcChannels.setGitAutoRefreshEnabled, enabled),
   checkForUpdates: () => ipcRenderer.invoke(ipcChannels.checkForUpdates),
   installUpdate: () => ipcRenderer.invoke(ipcChannels.installUpdate),
   saveMcpServer: (input) => ipcRenderer.invoke(ipcChannels.saveMcpServer, input),

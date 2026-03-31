@@ -6,7 +6,12 @@ import type {
 import type { ToolCallFileChangePreview } from '@shared/contracts/sidecar';
 import type { PatternDefinition, ReasoningEffort } from '@shared/domain/pattern';
 import type {
+  ProjectGitBaselineFile,
   ProjectGitChangeSummary,
+  ProjectGitDiffPreview,
+  ProjectGitRunChangeCounts,
+  ProjectGitRunChangedFile,
+  ProjectGitRunChangeSummary,
   ProjectGitWorkingTreeFile,
   ProjectGitWorkingTreeFileStatus,
   ProjectGitWorkingTreeSnapshot,
@@ -66,6 +71,7 @@ export interface SessionRunRecord {
   requestId: string;
   projectId: string;
   projectPath: string;
+  workingDirectory?: string;
   workspaceKind: SessionRunWorkspaceKind;
   patternId: string;
   patternName: string;
@@ -77,16 +83,20 @@ export interface SessionRunRecord {
   agents: RunTimelineAgentRecord[];
   events: RunTimelineEventRecord[];
   preRunGitSnapshot?: ProjectGitWorkingTreeSnapshot;
+  preRunGitBaselineFiles?: ProjectGitBaselineFile[];
+  postRunGitSummary?: ProjectGitRunChangeSummary;
 }
 
 export interface CreateSessionRunRecordInput {
   requestId: string;
   project: Pick<ProjectRecord, 'id' | 'path'>;
+  workingDirectory?: string;
   workspaceKind: SessionRunWorkspaceKind;
   pattern: Pick<PatternDefinition, 'id' | 'name' | 'mode' | 'agents'>;
   triggerMessageId: string;
   startedAt: string;
   preRunGitSnapshot?: ProjectGitWorkingTreeSnapshot;
+  preRunGitBaselineFiles?: ProjectGitBaselineFile[];
 }
 
 export interface AppendRunActivityEventInput {
@@ -209,6 +219,145 @@ function normalizeWorkingTreeSnapshot(
     branch: normalizeOptionalString(snapshot.branch),
     changedFileCount: normalizeNonNegativeInteger(snapshot.changedFileCount),
     changes: normalizeWorkingTreeChangeSummary(snapshot.changes),
+    files,
+  };
+}
+
+function normalizeGitDiffPreview(
+  preview: ProjectGitDiffPreview,
+): ProjectGitDiffPreview | undefined {
+  const path = normalizeOptionalString(preview.path);
+  if (!path) {
+    return undefined;
+  }
+
+  return {
+    path,
+    previousPath: normalizeOptionalString(preview.previousPath),
+    diff: normalizeOptionalPreviewText(preview.diff),
+    newFileContents: normalizeOptionalPreviewText(preview.newFileContents),
+    ...(preview.isBinary ? { isBinary: true } : {}),
+  };
+}
+
+function normalizeGitBaselineFile(
+  file: ProjectGitBaselineFile,
+): ProjectGitBaselineFile | undefined {
+  const path = normalizeOptionalString(file.path);
+  if (!path) {
+    return undefined;
+  }
+
+  return {
+    path,
+    previousPath: normalizeOptionalString(file.previousPath),
+    combinedDiff: normalizeOptionalPreviewText(file.combinedDiff),
+    untrackedContentBase64: normalizeOptionalString(file.untrackedContentBase64),
+    ...(file.isBinary ? { isBinary: true } : {}),
+  };
+}
+
+function normalizeGitBaselineFiles(
+  files: readonly ProjectGitBaselineFile[] | undefined,
+): ProjectGitBaselineFile[] | undefined {
+  if (!files || files.length === 0) {
+    return undefined;
+  }
+
+  const normalized = files.flatMap((file) => {
+    const nextFile = normalizeGitBaselineFile(file);
+    return nextFile ? [nextFile] : [];
+  });
+
+  return normalized.length > 0 ? normalized : undefined;
+}
+
+function normalizeGitRunChangeKind(
+  value: ProjectGitRunChangedFile['kind'] | undefined,
+): ProjectGitRunChangedFile['kind'] | undefined {
+  switch (value) {
+    case 'cleaned':
+      return value;
+    case 'added':
+    case 'modified':
+    case 'deleted':
+    case 'renamed':
+    case 'copied':
+    case 'type-changed':
+    case 'unmerged':
+    case 'untracked':
+      return value;
+    default:
+      return undefined;
+  }
+}
+
+function normalizeGitRunChangeCounts(
+  counts: Partial<ProjectGitRunChangeCounts> | undefined,
+): ProjectGitRunChangeCounts {
+  return {
+    added: normalizeNonNegativeInteger(counts?.added),
+    modified: normalizeNonNegativeInteger(counts?.modified),
+    deleted: normalizeNonNegativeInteger(counts?.deleted),
+    renamed: normalizeNonNegativeInteger(counts?.renamed),
+    copied: normalizeNonNegativeInteger(counts?.copied),
+    typeChanged: normalizeNonNegativeInteger(counts?.typeChanged),
+    unmerged: normalizeNonNegativeInteger(counts?.unmerged),
+    untracked: normalizeNonNegativeInteger(counts?.untracked),
+    cleaned: normalizeNonNegativeInteger(counts?.cleaned),
+  };
+}
+
+function normalizeGitRunChangedFile(
+  file: ProjectGitRunChangedFile,
+): ProjectGitRunChangedFile | undefined {
+  const path = normalizeOptionalString(file.path);
+  const kind = normalizeGitRunChangeKind(file.kind);
+  if (!path || !kind) {
+    return undefined;
+  }
+
+  return {
+    path,
+    previousPath: normalizeOptionalString(file.previousPath),
+    kind,
+    origin: file.origin === 'pre-existing' ? 'pre-existing' : 'run-created',
+    stagedStatus: normalizeWorkingTreeFileStatus(file.stagedStatus),
+    unstagedStatus: normalizeWorkingTreeFileStatus(file.unstagedStatus),
+    ...(file.isConflicted ? { isConflicted: true } : {}),
+    additions: normalizeNonNegativeInteger(file.additions),
+    deletions: normalizeNonNegativeInteger(file.deletions),
+    canRevert: file.canRevert === true,
+    preview: file.preview ? normalizeGitDiffPreview(file.preview) : undefined,
+  };
+}
+
+function normalizeGitRunChangeSummary(
+  summary: ProjectGitRunChangeSummary | undefined,
+): ProjectGitRunChangeSummary | undefined {
+  if (!summary) {
+    return undefined;
+  }
+
+  const generatedAt = normalizeOptionalString(summary.generatedAt);
+  if (!generatedAt) {
+    return undefined;
+  }
+
+  const files = (summary.files ?? []).flatMap((file) => {
+    const normalized = normalizeGitRunChangedFile(file);
+    return normalized ? [normalized] : [];
+  });
+
+  return {
+    generatedAt,
+    branchAtStart: normalizeOptionalString(summary.branchAtStart),
+    branchAtEnd: normalizeOptionalString(summary.branchAtEnd),
+    ...(summary.branchChanged ? { branchChanged: true } : {}),
+    fileCount: normalizeNonNegativeInteger(summary.fileCount),
+    additions: normalizeNonNegativeInteger(summary.additions),
+    deletions: normalizeNonNegativeInteger(summary.deletions),
+    counts: normalizeGitRunChangeCounts(summary.counts),
     files,
   };
 }
@@ -456,6 +605,7 @@ export function createSessionRunRecord(input: CreateSessionRunRecordInput): Sess
     requestId: input.requestId,
     projectId: input.project.id,
     projectPath: input.project.path,
+    workingDirectory: normalizeOptionalString(input.workingDirectory),
     workspaceKind: input.workspaceKind,
     patternId: input.pattern.id,
     patternName: input.pattern.name,
@@ -465,6 +615,8 @@ export function createSessionRunRecord(input: CreateSessionRunRecordInput): Sess
     status: 'running',
     completedAt: undefined,
     preRunGitSnapshot: normalizeWorkingTreeSnapshot(input.preRunGitSnapshot),
+    preRunGitBaselineFiles: normalizeGitBaselineFiles(input.preRunGitBaselineFiles),
+    postRunGitSummary: undefined,
     agents: input.pattern.agents
       .map((agent): RunTimelineAgentRecord => ({
         agentId: agent.id,
@@ -500,6 +652,7 @@ export function normalizeSessionRunRecords(
     const requestId = normalizeOptionalString(run.requestId);
     const projectId = normalizeOptionalString(run.projectId);
     const projectPath = normalizeOptionalString(run.projectPath);
+    const workingDirectory = normalizeOptionalString(run.workingDirectory);
     const patternId = normalizeOptionalString(run.patternId);
     const patternName = normalizeOptionalString(run.patternName);
     const triggerMessageId = normalizeOptionalString(run.triggerMessageId);
@@ -514,6 +667,7 @@ export function normalizeSessionRunRecords(
         requestId,
         projectId,
         projectPath,
+        workingDirectory,
         workspaceKind: run.workspaceKind === 'scratchpad' ? 'scratchpad' : 'project',
         patternId,
         patternName,
@@ -523,6 +677,8 @@ export function normalizeSessionRunRecords(
         completedAt: normalizeOptionalString(run.completedAt),
         status: run.status === 'error' ? 'error' : run.status === 'running' ? 'running' : run.status === 'cancelled' ? 'cancelled' : 'completed',
         preRunGitSnapshot: normalizeWorkingTreeSnapshot(run.preRunGitSnapshot),
+        preRunGitBaselineFiles: normalizeGitBaselineFiles(run.preRunGitBaselineFiles),
+        postRunGitSummary: normalizeGitRunChangeSummary(run.postRunGitSummary),
         agents: run.agents.flatMap((agent) => {
           const normalized = normalizeRunTimelineAgent(agent);
           return normalized ? [normalized] : [];
@@ -769,4 +925,27 @@ export function failSessionRunRecord(
     status: 'error',
     error,
   });
+}
+
+export function setSessionRunGitSummary(
+  run: SessionRunRecord,
+  summary: ProjectGitRunChangeSummary | undefined,
+): SessionRunRecord {
+  const normalizedSummary = normalizeGitRunChangeSummary(summary);
+  if (normalizedSummary === undefined && run.postRunGitSummary === undefined) {
+    return run;
+  }
+
+  if (
+    normalizedSummary !== undefined
+    && run.postRunGitSummary !== undefined
+    && JSON.stringify(normalizedSummary) === JSON.stringify(run.postRunGitSummary)
+  ) {
+    return run;
+  }
+
+  return {
+    ...run,
+    postRunGitSummary: normalizedSummary,
+  };
 }

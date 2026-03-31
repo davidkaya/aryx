@@ -55,22 +55,37 @@ describe('run timeline helpers', () => {
     const run = createSessionRunRecord({
       requestId: 'turn-1',
       project: createProject(),
+      workingDirectory: 'C:\\workspace\\alpha\\packages\\app',
       workspaceKind: 'project',
       pattern: createPattern(),
       triggerMessageId: 'msg-user-1',
       startedAt: '2026-03-23T00:00:01.000Z',
+      preRunGitBaselineFiles: [
+        {
+          path: 'src\\alpha.ts',
+          combinedDiff: '@@ -1 +1 @@\n-old\n+new\n',
+        },
+      ],
     });
 
     expect(run).toMatchObject({
       requestId: 'turn-1',
       projectId: 'project-1',
       projectPath: 'C:\\workspace\\alpha',
+      workingDirectory: 'C:\\workspace\\alpha\\packages\\app',
       patternId: 'pattern-sequential',
       patternName: 'Sequential Trio Review',
       patternMode: 'sequential',
       triggerMessageId: 'msg-user-1',
       status: 'running',
     });
+    expect(run.preRunGitBaselineFiles).toEqual([
+      {
+        path: 'src\\alpha.ts',
+        previousPath: undefined,
+        combinedDiff: '@@ -1 +1 @@\n-old\n+new\n',
+      },
+    ]);
     expect(run.agents).toEqual([
       {
         agentId: 'agent-writer',

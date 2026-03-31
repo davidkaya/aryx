@@ -62,7 +62,14 @@ import {
   type PendingApprovalMessageRecord,
   type PendingApprovalRecord,
 } from '@shared/domain/approval';
-import { isScratchpadProject, type ProjectRecord } from '@shared/domain/project';
+import {
+  isScratchpadProject,
+  type ProjectGitCommitMessageSuggestion,
+  type ProjectGitDetails,
+  type ProjectGitDiffPreview,
+  type ProjectGitFileReference,
+  type ProjectRecord,
+} from '@shared/domain/project';
 import {
   branchSessionRecord,
   duplicateSessionRecord,
@@ -93,6 +100,7 @@ import {
   completeSessionRunRecord,
   createSessionRunRecord,
   failSessionRunRecord,
+  setSessionRunGitSummary,
   upsertRunApprovalEvent,
   upsertRunMessageEvent,
   upsertSessionRunRecord,
@@ -130,6 +138,7 @@ import {
   SidecarClient,
 } from '@main/sidecar/sidecarProcess';
 import { TurnCancelledError } from '@main/sidecar/turnCancelledError';
+import { buildProjectGitCommitMessageSuggestion } from '@main/git/gitCommitMessageSuggestion';
 import { GitService } from '@main/git/gitService';
 import {
   buildRunTurnToolingConfig as buildSessionToolingConfig,
@@ -1357,8 +1366,12 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
   ): Promise<void> {
     const workspaceKind = isScratchpadProject(project) ? 'scratchpad' : 'project';
     const { occurredAt, requestId, triggerMessageId, messageMode, attachments } = options;
+    const runWorkingDirectory = session.cwd ?? project.path;
     const preRunGitSnapshot = workspaceKind === 'project'
-      ? await this.gitService.captureWorkingTreeSnapshot(session.cwd ?? project.path, occurredAt)
+      ? await this.gitService.captureWorkingTreeSnapshot(runWorkingDirectory, occurredAt)
+      : undefined;
+    const preRunGitBaselineFiles = workspaceKind === 'project' && preRunGitSnapshot
+      ? await this.gitService.captureWorkingTreeBaseline(runWorkingDirectory, preRunGitSnapshot)
       : undefined;
     if (workspaceKind === 'project' && project.git?.status === 'ready' && !preRunGitSnapshot) {
       console.warn(`[aryx git] Failed to capture pre-run git snapshot for project "${project.id}".`);
@@ -1374,11 +1387,13 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
       createSessionRunRecord({
         requestId,
         project,
+        workingDirectory: runWorkingDirectory,
         workspaceKind,
         pattern: effectivePattern,
         triggerMessageId,
         startedAt: occurredAt,
         preRunGitSnapshot,
+        preRunGitBaselineFiles,
       }),
       ...session.runs,
     ];
@@ -1397,7 +1412,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
           type: 'run-turn',
           requestId,
           sessionId: session.id,
-          projectPath: session.cwd ?? project.path,
+          projectPath: runWorkingDirectory,
           workspaceKind,
           mode: session.interactionMode ?? 'interactive',
           messageMode,
@@ -1437,6 +1452,12 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
 
       await this.awaitFinalResponseApproval(workspace, session.id, requestId, effectivePattern, responseMessages);
       this.finalizeTurn(workspace, session.id, requestId, responseMessages);
+      if (workspaceKind === 'project') {
+        const completedRun = await this.refreshSessionRunGitSummary(session, project, requestId, nowIso());
+        if (completedRun) {
+          this.emitRunUpdated(session.id, nowIso(), completedRun);
+        }
+      }
       await this.persistAndBroadcast(workspace);
       if (workspaceKind === 'project') {
         this.scheduleProjectGitRefresh(project.id);
@@ -1444,6 +1465,12 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     } catch (error) {
       if (error instanceof TurnCancelledError) {
         this.finalizeCancelledTurn(workspace, session, requestId);
+        if (workspaceKind === 'project') {
+          const cancelledRun = await this.refreshSessionRunGitSummary(session, project, requestId, nowIso());
+          if (cancelledRun) {
+            this.emitRunUpdated(session.id, nowIso(), cancelledRun);
+          }
+        }
         await this.persistAndBroadcast(workspace);
         if (workspaceKind === 'project') {
           this.scheduleProjectGitRefresh(project.id);
@@ -1467,6 +1494,13 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
       });
       if (failedRun) {
         this.emitRunUpdated(session.id, failedAt, failedRun);
+      }
+
+      if (workspaceKind === 'project') {
+        const summarizedRun = await this.refreshSessionRunGitSummary(session, project, requestId, failedAt);
+        if (summarizedRun) {
+          this.emitRunUpdated(session.id, failedAt, summarizedRun);
+        }
       }
 
       await this.persistAndBroadcast(workspace);
@@ -1560,6 +1594,157 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     return this.refreshProjectGitContexts(projectId ? [projectId] : undefined);
   }
 
+  async getProjectGitDetails(projectId: string, commitLimit = 20): Promise<ProjectGitDetails> {
+    const workspace = await this.loadWorkspace();
+    const project = this.requireProject(workspace, projectId);
+    return this.gitService.describeProjectGitDetails(project.path, nowIso(), commitLimit);
+  }
+
+  async getProjectGitFilePreview(
+    projectId: string,
+    file: ProjectGitFileReference,
+  ): Promise<ProjectGitDiffPreview | undefined> {
+    const workspace = await this.loadWorkspace();
+    const project = this.requireProject(workspace, projectId);
+    return this.gitService.getWorkingTreeFilePreview(project.path, file);
+  }
+
+  async discardSessionRunGitChanges(
+    sessionId: string,
+    runId: string,
+    files?: ProjectGitFileReference[],
+  ): Promise<WorkspaceState> {
+    const workspace = await this.loadWorkspace();
+    const session = this.requireSession(workspace, sessionId);
+    const project = this.requireProject(workspace, session.projectId);
+    const run = this.requireSessionRun(session, runId);
+    if (run.workspaceKind !== 'project') {
+      throw new Error('Run change review is only available for project-backed sessions.');
+    }
+
+    if (!run.postRunGitSummary) {
+      throw new Error('This run does not have any tracked git changes to discard.');
+    }
+
+    await this.gitService.discardRunChanges(
+      this.resolveRunWorkingDirectory(session, project, run),
+      {
+        summary: run.postRunGitSummary,
+        preRunBaselineFiles: run.preRunGitBaselineFiles,
+        files,
+      },
+    );
+
+    await this.refreshProjectGitContexts([project.id]);
+    const refreshedWorkspace = await this.loadWorkspace();
+    const refreshedSession = this.requireSession(refreshedWorkspace, sessionId);
+    const refreshedProject = this.requireProject(refreshedWorkspace, refreshedSession.projectId);
+    const nextRun = await this.refreshSessionRunGitSummary(
+      refreshedSession,
+      refreshedProject,
+      run.requestId,
+      nowIso(),
+    );
+    if (nextRun) {
+      this.emitRunUpdated(refreshedSession.id, nowIso(), nextRun);
+    }
+
+    return this.persistAndBroadcast(refreshedWorkspace);
+  }
+
+  async stageProjectGitFiles(projectId: string, files: ProjectGitFileReference[]): Promise<WorkspaceState> {
+    return this.runProjectGitMutation(projectId, async (project) => {
+      await this.gitService.stageFiles(project.path, files);
+    });
+  }
+
+  async unstageProjectGitFiles(projectId: string, files: ProjectGitFileReference[]): Promise<WorkspaceState> {
+    return this.runProjectGitMutation(projectId, async (project) => {
+      await this.gitService.unstageFiles(project.path, files);
+    });
+  }
+
+  async suggestProjectGitCommitMessage(
+    sessionId: string,
+    runId?: string,
+    conventionalType?: ProjectGitCommitMessageSuggestion['type'],
+  ): Promise<ProjectGitCommitMessageSuggestion> {
+    const workspace = await this.loadWorkspace();
+    const session = this.requireSession(workspace, sessionId);
+    const run = runId
+      ? this.requireSessionRun(session, runId)
+      : session.runs[0];
+    if (!run) {
+      throw new Error('This session does not have a run to summarize into a commit message.');
+    }
+
+    return buildProjectGitCommitMessageSuggestion({
+      session,
+      run,
+      summary: run.postRunGitSummary,
+      conventionalType,
+    });
+  }
+
+  async commitProjectGitChanges(
+    projectId: string,
+    message: string,
+    files?: ProjectGitFileReference[],
+    push = false,
+  ): Promise<WorkspaceState> {
+    return this.runProjectGitMutation(projectId, async (project) => {
+      if (files && files.length > 0) {
+        await this.gitService.stageFiles(project.path, files);
+      }
+
+      await this.gitService.commit(project.path, message);
+      if (push) {
+        await this.gitService.push(project.path);
+      }
+    });
+  }
+
+  async pushProjectGit(projectId: string): Promise<WorkspaceState> {
+    return this.runProjectGitMutation(projectId, async (project) => {
+      await this.gitService.push(project.path);
+    });
+  }
+
+  async fetchProjectGit(projectId: string): Promise<WorkspaceState> {
+    return this.runProjectGitMutation(projectId, async (project) => {
+      await this.gitService.fetch(project.path);
+    });
+  }
+
+  async pullProjectGit(projectId: string, rebase = false): Promise<WorkspaceState> {
+    return this.runProjectGitMutation(projectId, async (project) => {
+      await this.gitService.pull(project.path, rebase);
+    });
+  }
+
+  async createProjectGitBranch(
+    projectId: string,
+    name: string,
+    startPoint?: string,
+    checkout = true,
+  ): Promise<WorkspaceState> {
+    return this.runProjectGitMutation(projectId, async (project) => {
+      await this.gitService.createBranch(project.path, name, startPoint, checkout);
+    });
+  }
+
+  async switchProjectGitBranch(projectId: string, name: string): Promise<WorkspaceState> {
+    return this.runProjectGitMutation(projectId, async (project) => {
+      await this.gitService.switchBranch(project.path, name);
+    });
+  }
+
+  async deleteProjectGitBranch(projectId: string, name: string, force = false): Promise<WorkspaceState> {
+    return this.runProjectGitMutation(projectId, async (project) => {
+      await this.gitService.deleteBranch(project.path, name, force);
+    });
+  }
+
   private async refreshProjectGitContexts(projectIds?: readonly string[]): Promise<WorkspaceState> {
     const workspace = await this.loadWorkspace();
     const projects = projectIds?.length
@@ -1643,6 +1828,61 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     }
 
     return project;
+  }
+
+  private requireSessionRun(session: SessionRecord, runId: string): SessionRunRecord {
+    const run = session.runs.find((candidate) => candidate.id === runId);
+    if (!run) {
+      throw new Error(`Run "${runId}" was not found for session "${session.id}".`);
+    }
+
+    return run;
+  }
+
+  private resolveRunWorkingDirectory(
+    session: SessionRecord,
+    project: ProjectRecord,
+    run: SessionRunRecord,
+  ): string {
+    return run.workingDirectory ?? session.cwd ?? run.projectPath ?? project.path;
+  }
+
+  private async refreshSessionRunGitSummary(
+    session: SessionRecord,
+    project: ProjectRecord,
+    requestId: string,
+    occurredAt: string,
+  ): Promise<SessionRunRecord | undefined> {
+    const run = session.runs.find((candidate) => candidate.requestId === requestId);
+    if (!run || run.workspaceKind !== 'project' || !run.preRunGitSnapshot) {
+      return undefined;
+    }
+
+    const summary = await this.gitService.computeRunChangeSummary(
+      this.resolveRunWorkingDirectory(session, project, run),
+      {
+        generatedAt: occurredAt,
+        preRunSnapshot: run.preRunGitSnapshot,
+        preRunBaselineFiles: run.preRunGitBaselineFiles,
+      },
+    );
+
+    return this.updateSessionRun(session, requestId, (currentRun) =>
+      setSessionRunGitSummary(currentRun, summary));
+  }
+
+  private async runProjectGitMutation(
+    projectId: string,
+    mutation: (project: ProjectRecord) => Promise<void>,
+  ): Promise<WorkspaceState> {
+    const workspace = await this.loadWorkspace();
+    const project = this.requireProject(workspace, projectId);
+    if (isScratchpadProject(project)) {
+      throw new Error('Git operations are not available for the Scratchpad project.');
+    }
+
+    await mutation(project);
+    return this.refreshProjectGitContexts([project.id]);
   }
 
   private resolveTerminalWorkingDirectory(workspace: WorkspaceState): string {

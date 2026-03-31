@@ -1,7 +1,14 @@
 import type { ApprovalDecision } from '@shared/domain/approval';
 import type { SidecarCapabilities, InteractionMode, MessageMode, QuotaSnapshot } from '@shared/contracts/sidecar';
 import type { PatternDefinition, ReasoningEffort } from '@shared/domain/pattern';
-import type { ProjectRecord } from '@shared/domain/project';
+import type {
+  ProjectGitBranchSummary,
+  ProjectGitCommitMessageSuggestion,
+  ProjectGitDetails,
+  ProjectGitDiffPreview,
+  ProjectGitFileReference,
+  ProjectRecord,
+} from '@shared/domain/project';
 import type { QuerySessionsInput, SessionQueryResult } from '@shared/domain/sessionLibrary';
 import type { SessionEventRecord } from '@shared/domain/event';
 import type { TerminalExitInfo, TerminalSnapshot } from '@shared/domain/terminal';
@@ -175,6 +182,59 @@ export interface SetTerminalHeightInput {
   height?: number;
 }
 
+export interface ProjectGitInput {
+  projectId: string;
+}
+
+export interface ProjectGitDetailsInput extends ProjectGitInput {
+  commitLimit?: number;
+}
+
+export interface ProjectGitFilePreviewInput extends ProjectGitInput {
+  file: ProjectGitFileReference;
+}
+
+export interface ProjectGitFileSelectionInput extends ProjectGitInput {
+  files: ProjectGitFileReference[];
+}
+
+export interface DiscardSessionRunGitChangesInput {
+  sessionId: string;
+  runId: string;
+  files?: ProjectGitFileReference[];
+}
+
+export interface SuggestProjectGitCommitMessageInput {
+  sessionId: string;
+  runId?: string;
+  conventionalType?: ProjectGitCommitMessageSuggestion['type'];
+}
+
+export interface CommitProjectGitChangesInput extends ProjectGitInput {
+  message: string;
+  files?: ProjectGitFileReference[];
+  push?: boolean;
+}
+
+export interface PullProjectGitInput extends ProjectGitInput {
+  rebase?: boolean;
+}
+
+export interface CreateProjectGitBranchInput extends ProjectGitInput {
+  name: string;
+  startPoint?: string;
+  checkout?: boolean;
+}
+
+export interface SwitchProjectGitBranchInput extends ProjectGitInput {
+  name: string;
+}
+
+export interface DeleteProjectGitBranchInput extends ProjectGitInput {
+  name: string;
+  force?: boolean;
+}
+
 export type UpdateStatusState = 'idle' | 'checking' | 'up-to-date' | 'available' | 'downloading' | 'downloaded' | 'error';
 
 export interface UpdateDownloadProgress {
@@ -253,6 +313,19 @@ export interface ElectronApi {
   openAppDataFolder(): Promise<void>;
   resetLocalWorkspace(): Promise<WorkspaceState>;
   getQuota(): Promise<Record<string, QuotaSnapshot>>;
+  getProjectGitDetails(input: ProjectGitDetailsInput): Promise<ProjectGitDetails>;
+  getProjectGitFilePreview(input: ProjectGitFilePreviewInput): Promise<ProjectGitDiffPreview | undefined>;
+  discardSessionRunGitChanges(input: DiscardSessionRunGitChangesInput): Promise<WorkspaceState>;
+  stageProjectGitFiles(input: ProjectGitFileSelectionInput): Promise<WorkspaceState>;
+  unstageProjectGitFiles(input: ProjectGitFileSelectionInput): Promise<WorkspaceState>;
+  suggestProjectGitCommitMessage(input: SuggestProjectGitCommitMessageInput): Promise<ProjectGitCommitMessageSuggestion>;
+  commitProjectGitChanges(input: CommitProjectGitChangesInput): Promise<WorkspaceState>;
+  pushProjectGit(input: ProjectGitInput): Promise<WorkspaceState>;
+  fetchProjectGit(input: ProjectGitInput): Promise<WorkspaceState>;
+  pullProjectGit(input: PullProjectGitInput): Promise<WorkspaceState>;
+  createProjectGitBranch(input: CreateProjectGitBranchInput): Promise<WorkspaceState>;
+  switchProjectGitBranch(input: SwitchProjectGitBranchInput): Promise<WorkspaceState>;
+  deleteProjectGitBranch(input: DeleteProjectGitBranchInput): Promise<WorkspaceState>;
   onTerminalData(listener: (data: string) => void): () => void;
   onTerminalExit(listener: (info: TerminalExitInfo) => void): () => void;
   onWorkspaceUpdated(listener: (workspace: WorkspaceState) => void): () => void;

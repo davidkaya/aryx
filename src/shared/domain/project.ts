@@ -18,6 +18,11 @@ export interface ProjectGitCommitSummary {
   committedAt: string;
 }
 
+export interface ProjectGitCommitLogEntry extends ProjectGitCommitSummary {
+  authorName: string;
+  refNames?: string;
+}
+
 export type ProjectGitWorkingTreeFileStatus =
   | 'added'
   | 'modified'
@@ -36,6 +41,23 @@ export interface ProjectGitWorkingTreeFile {
   isConflicted?: boolean;
 }
 
+export interface ProjectGitFileReference {
+  path: string;
+  previousPath?: string;
+}
+
+export interface ProjectGitDiffPreview extends ProjectGitFileReference {
+  diff?: string;
+  newFileContents?: string;
+  isBinary?: boolean;
+}
+
+export interface ProjectGitBaselineFile extends ProjectGitFileReference {
+  combinedDiff?: string;
+  untrackedContentBase64?: string;
+  isBinary?: boolean;
+}
+
 export interface ProjectGitWorkingTreeSnapshot {
   scannedAt: string;
   repoRoot: string;
@@ -43,6 +65,73 @@ export interface ProjectGitWorkingTreeSnapshot {
   changedFileCount: number;
   changes: ProjectGitChangeSummary;
   files: ProjectGitWorkingTreeFile[];
+}
+
+export type ProjectGitRunChangeOrigin = 'run-created' | 'pre-existing';
+export type ProjectGitRunChangeKind = ProjectGitWorkingTreeFileStatus | 'cleaned';
+
+export interface ProjectGitRunChangeCounts {
+  added: number;
+  modified: number;
+  deleted: number;
+  renamed: number;
+  copied: number;
+  typeChanged: number;
+  unmerged: number;
+  untracked: number;
+  cleaned: number;
+}
+
+export interface ProjectGitRunChangedFile extends ProjectGitFileReference {
+  kind: ProjectGitRunChangeKind;
+  origin: ProjectGitRunChangeOrigin;
+  stagedStatus?: ProjectGitWorkingTreeFileStatus;
+  unstagedStatus?: ProjectGitWorkingTreeFileStatus;
+  isConflicted?: boolean;
+  additions: number;
+  deletions: number;
+  canRevert: boolean;
+  preview?: ProjectGitDiffPreview;
+}
+
+export interface ProjectGitRunChangeSummary {
+  generatedAt: string;
+  branchAtStart?: string;
+  branchAtEnd?: string;
+  branchChanged?: boolean;
+  fileCount: number;
+  additions: number;
+  deletions: number;
+  counts: ProjectGitRunChangeCounts;
+  files: ProjectGitRunChangedFile[];
+}
+
+export interface ProjectGitBranchSummary {
+  name: string;
+  isCurrent: boolean;
+  upstream?: string;
+}
+
+export interface ProjectGitDetails {
+  scannedAt: string;
+  context: ProjectGitContext;
+  workingTree?: ProjectGitWorkingTreeSnapshot;
+  branches: ProjectGitBranchSummary[];
+  recentCommits: ProjectGitCommitLogEntry[];
+}
+
+export type ProjectGitConventionalCommitType =
+  | 'feat'
+  | 'fix'
+  | 'refactor'
+  | 'docs'
+  | 'test'
+  | 'chore';
+
+export interface ProjectGitCommitMessageSuggestion {
+  type: ProjectGitConventionalCommitType;
+  subject: string;
+  message: string;
 }
 
 export interface ProjectGitContext {

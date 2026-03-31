@@ -6,12 +6,23 @@ import type {
   BranchSessionInput,
   CancelSessionTurnInput,
   CreateSessionInput,
+  CreateProjectGitBranchInput,
   DismissSessionMcpAuthInput,
   DismissSessionPlanReviewInput,
+  DeleteProjectGitBranchInput,
   DeleteSessionInput,
+  DiscardSessionRunGitChangesInput,
   EditAndResendSessionMessageInput,
+  CommitProjectGitChangesInput,
+  ProjectGitDetailsInput,
+  ProjectGitFilePreviewInput,
+  ProjectGitFileSelectionInput,
+  ProjectGitInput,
+  PullProjectGitInput,
   RegenerateSessionMessageInput,
   StartSessionMcpAuthInput,
+  SuggestProjectGitCommitMessageInput,
+  SwitchProjectGitBranchInput,
   DuplicateSessionInput,
   RenameSessionInput,
   RescanProjectConfigsInput,
@@ -70,6 +81,12 @@ export function registerIpcHandlers(
   );
   ipcMain.handle(ipcChannels.refreshProjectGitContext, (_event, projectId?: string) =>
     service.refreshProjectGitContext(projectId),
+  );
+  ipcMain.handle(ipcChannels.getProjectGitDetails, (_event, input: ProjectGitDetailsInput) =>
+    service.getProjectGitDetails(input.projectId, input.commitLimit),
+  );
+  ipcMain.handle(ipcChannels.getProjectGitFilePreview, (_event, input: ProjectGitFilePreviewInput) =>
+    service.getProjectGitFilePreview(input.projectId, input.file),
   );
   ipcMain.handle(ipcChannels.rescanProjectConfigs, (_event, input: RescanProjectConfigsInput) =>
     service.rescanProjectConfigs(input.projectId),
@@ -208,9 +225,56 @@ export function registerIpcHandlers(
     service.startSessionMcpAuth(input.sessionId),
   );
   ipcMain.handle(
+    ipcChannels.discardSessionRunGitChanges,
+    (_event, input: DiscardSessionRunGitChangesInput) =>
+      service.discardSessionRunGitChanges(input.sessionId, input.runId, input.files),
+  );
+  ipcMain.handle(
+    ipcChannels.suggestProjectGitCommitMessage,
+    (_event, input: SuggestProjectGitCommitMessageInput) =>
+      service.suggestProjectGitCommitMessage(input.sessionId, input.runId, input.conventionalType),
+  );
+  ipcMain.handle(
     ipcChannels.updateSessionModelConfig,
     (_event, input: UpdateSessionModelConfigInput) =>
       service.updateSessionModelConfig(input.sessionId, input.model, input.reasoningEffort),
+  );
+  ipcMain.handle(
+    ipcChannels.stageProjectGitFiles,
+    (_event, input: ProjectGitFileSelectionInput) => service.stageProjectGitFiles(input.projectId, input.files),
+  );
+  ipcMain.handle(
+    ipcChannels.unstageProjectGitFiles,
+    (_event, input: ProjectGitFileSelectionInput) => service.unstageProjectGitFiles(input.projectId, input.files),
+  );
+  ipcMain.handle(
+    ipcChannels.commitProjectGitChanges,
+    (_event, input: CommitProjectGitChangesInput) =>
+      service.commitProjectGitChanges(input.projectId, input.message, input.files, input.push),
+  );
+  ipcMain.handle(ipcChannels.pushProjectGit, (_event, input: ProjectGitInput) =>
+    service.pushProjectGit(input.projectId),
+  );
+  ipcMain.handle(ipcChannels.fetchProjectGit, (_event, input: ProjectGitInput) =>
+    service.fetchProjectGit(input.projectId),
+  );
+  ipcMain.handle(ipcChannels.pullProjectGit, (_event, input: PullProjectGitInput) =>
+    service.pullProjectGit(input.projectId, input.rebase),
+  );
+  ipcMain.handle(
+    ipcChannels.createProjectGitBranch,
+    (_event, input: CreateProjectGitBranchInput) =>
+      service.createProjectGitBranch(input.projectId, input.name, input.startPoint, input.checkout),
+  );
+  ipcMain.handle(
+    ipcChannels.switchProjectGitBranch,
+    (_event, input: SwitchProjectGitBranchInput) =>
+      service.switchProjectGitBranch(input.projectId, input.name),
+  );
+  ipcMain.handle(
+    ipcChannels.deleteProjectGitBranch,
+    (_event, input: DeleteProjectGitBranchInput) =>
+      service.deleteProjectGitBranch(input.projectId, input.name, input.force),
   );
   ipcMain.handle(ipcChannels.querySessions, (_event, input: QuerySessionsInput) => service.querySessions(input));
   ipcMain.handle(ipcChannels.selectProject, (_event, projectId?: string) => service.selectProject(projectId));

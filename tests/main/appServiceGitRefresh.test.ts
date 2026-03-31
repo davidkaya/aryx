@@ -2,7 +2,11 @@ import { describe, expect, mock, test } from 'bun:test';
 
 import type { RunTurnCommand } from '@shared/contracts/sidecar';
 import type { PatternDefinition } from '@shared/domain/pattern';
-import type { ProjectGitWorkingTreeSnapshot, ProjectRecord } from '@shared/domain/project';
+import type {
+  ProjectGitRunChangeSummary,
+  ProjectGitWorkingTreeSnapshot,
+  ProjectRecord,
+} from '@shared/domain/project';
 import { SCRATCHPAD_PROJECT_ID } from '@shared/domain/project';
 import type { SessionRecord } from '@shared/domain/session';
 import { createWorkspaceSeed, type WorkspaceState } from '@shared/domain/workspace';
@@ -131,12 +135,50 @@ function createSnapshot(): ProjectGitWorkingTreeSnapshot {
   };
 }
 
+function createRunSummary(): ProjectGitRunChangeSummary {
+  return {
+    generatedAt: TIMESTAMP,
+    branchAtStart: 'main',
+    branchAtEnd: 'main',
+    fileCount: 1,
+    additions: 4,
+    deletions: 1,
+    counts: {
+      added: 1,
+      modified: 0,
+      deleted: 0,
+      renamed: 0,
+      copied: 0,
+      typeChanged: 0,
+      unmerged: 0,
+      untracked: 0,
+      cleaned: 0,
+    },
+    files: [
+      {
+        path: 'src\\generated.ts',
+        kind: 'added',
+        origin: 'run-created',
+        additions: 4,
+        deletions: 1,
+        canRevert: true,
+        preview: {
+          path: 'src\\generated.ts',
+          diff: '@@ -0,0 +1,4 @@\n+export const generated = true;\n',
+        },
+      },
+    ],
+  };
+}
+
 function createService(
   workspace: WorkspaceState,
   pattern: PatternDefinition,
   options?: {
     snapshot?: ProjectGitWorkingTreeSnapshot;
+    runSummary?: ProjectGitRunChangeSummary;
     onCaptureSnapshot?: (projectPath: string, scannedAt: string) => void;
+    onComputeRunSummary?: (projectPath: string) => void;
     onScheduleRefresh?: (projectId?: string) => void;
     runTurn?: (command: RunTurnCommand) => Promise<[]>;
   },
@@ -170,6 +212,8 @@ function createService(
           projectPath: string,
           scannedAt: string,
         ) => Promise<ProjectGitWorkingTreeSnapshot | undefined>;
+        captureWorkingTreeBaseline: () => Promise<[]>;
+        computeRunChangeSummary: (projectPath: string) => Promise<ProjectGitRunChangeSummary | undefined>;
       };
     }
   ).sidecar = {
@@ -184,12 +228,19 @@ function createService(
           projectPath: string,
           scannedAt: string,
         ) => Promise<ProjectGitWorkingTreeSnapshot | undefined>;
+        captureWorkingTreeBaseline: () => Promise<[]>;
+        computeRunChangeSummary: (projectPath: string) => Promise<ProjectGitRunChangeSummary | undefined>;
       };
     }
   ).gitService = {
     captureWorkingTreeSnapshot: async (projectPath, scannedAt) => {
       options?.onCaptureSnapshot?.(projectPath, scannedAt);
       return options?.snapshot;
+    },
+    captureWorkingTreeBaseline: async () => [],
+    computeRunChangeSummary: async (projectPath) => {
+      options?.onComputeRunSummary?.(projectPath);
+      return options?.runSummary;
     },
   };
 
@@ -227,6 +278,23 @@ describe('AryxAppService git refresh integration', () => {
     await service.sendSessionMessage(session.id, 'Implement auth hardening.');
 
     expect(scheduledProjectIds).toEqual([project.id]);
+  });
+
+  test('sendSessionMessage stores a post-run git summary on the completed run', async () => {
+    const { workspace, pattern, session, project } = createFixture();
+    const computedProjectPaths: string[] = [];
+    const service = createService(workspace, pattern, {
+      snapshot: createSnapshot(),
+      runSummary: createRunSummary(),
+      onComputeRunSummary: (projectPath) => {
+        computedProjectPaths.push(projectPath);
+      },
+    });
+
+    await service.sendSessionMessage(session.id, 'Implement auth hardening.');
+
+    expect(computedProjectPaths).toEqual([project.path]);
+    expect(workspace.sessions[0]?.runs[0]?.postRunGitSummary).toEqual(createRunSummary());
   });
 
   test('sendSessionMessage schedules a git refresh after a failed project turn', async () => {

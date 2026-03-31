@@ -26,9 +26,10 @@ import {
   type CollapsedTimelineEvent,
 } from '@renderer/lib/runTimelineFormatting';
 import type { OrchestrationMode } from '@shared/domain/pattern';
-import type { ProjectGitWorkingTreeSnapshot } from '@shared/domain/project';
+import type { ProjectGitFileReference, ProjectGitWorkingTreeSnapshot } from '@shared/domain/project';
 import type { RunTimelineEventRecord, SessionRunRecord } from '@shared/domain/runTimeline';
 import { FileChangePreview } from '@renderer/components/chat/FileChangePreview';
+import { RunChangeSummaryCard } from '@renderer/components/chat/RunChangeSummaryCard';
 
 /* ── Mode accent colours (shared with ActivityPanel) ───────── */
 
@@ -271,11 +272,17 @@ function RunCard({
   expanded,
   onToggle,
   onJumpToMessage,
+  sessionId,
+  onDiscard,
+  onOpenCommitComposer,
 }: {
   run: SessionRunRecord;
   expanded: boolean;
   onToggle: () => void;
   onJumpToMessage?: (messageId: string) => void;
+  sessionId: string;
+  onDiscard?: (sessionId: string, runId: string, files?: ProjectGitFileReference[]) => Promise<unknown>;
+  onOpenCommitComposer?: () => void;
 }) {
   const accent = modeAccent[run.patternMode] ?? modeAccent.single;
   const statusStyle = runStatusStyles[run.status];
@@ -352,6 +359,19 @@ function RunCard({
               Duration: {duration}
             </div>
           )}
+
+          {/* Post-run git changes */}
+          {run.postRunGitSummary && run.status !== 'running' && onDiscard && (
+            <div className="mt-2">
+              <RunChangeSummaryCard
+                onDiscard={onDiscard}
+                onOpenCommitComposer={onOpenCommitComposer}
+                runId={run.requestId}
+                sessionId={sessionId}
+                summary={run.postRunGitSummary}
+              />
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -372,10 +392,13 @@ function EmptyTimeline() {
 
 interface RunTimelineProps {
   runs: readonly SessionRunRecord[];
+  sessionId: string;
   onJumpToMessage?: (messageId: string) => void;
+  onDiscard?: (sessionId: string, runId: string, files?: ProjectGitFileReference[]) => Promise<unknown>;
+  onOpenCommitComposer?: () => void;
 }
 
-export function RunTimeline({ runs, onJumpToMessage }: RunTimelineProps) {
+export function RunTimeline({ runs, sessionId, onJumpToMessage, onDiscard, onOpenCommitComposer }: RunTimelineProps) {
   const latestRunId = runs.length > 0 ? runs[0].id : undefined;
   const [expandedRunId, setExpandedRunId] = useState<string | undefined>(latestRunId);
 
@@ -394,9 +417,12 @@ export function RunTimeline({ runs, onJumpToMessage }: RunTimelineProps) {
         <RunCard
           expanded={expandedRunId === run.id}
           key={run.id}
+          onDiscard={onDiscard}
           onJumpToMessage={onJumpToMessage}
+          onOpenCommitComposer={onOpenCommitComposer}
           onToggle={() => setExpandedRunId(expandedRunId === run.id ? undefined : run.id)}
           run={run}
+          sessionId={sessionId}
         />
       ))}
     </div>

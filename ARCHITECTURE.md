@@ -302,6 +302,8 @@ This lets the application treat tooling as reusable workspace capability while s
 
 Project-backed sessions can carry repository context such as branch and dirty state, while scratchpad sessions omit git context but still support MCP, LSP, and runtime tooling. Scratchpad execution uses a per-session working directory instead of a single shared scratchpad folder, so file-based context and generated artifacts stay scoped to the active scratchpad session. Both session kinds share the same tooling selection and approval model. This keeps the architecture grounded in real codebases without forcing every conversation to be project-heavy, while still letting scratchpad sessions leverage configured tools when useful.
 
+For git-backed projects, the renderer surfaces three specialized components. `RunChangeSummaryCard` appears inline in the run timeline after each completed run, showing the files changed during that run with per-file diff previews, origin attribution (run-created vs. pre-existing), and selective discard actions. `CommitComposer` is a slide-over panel for staging files, editing an AI-suggested commit message, selecting a conventional commit type, and committing (with optional push). `GitPanel` is embedded in the activity panel and provides branch management, push/pull/fetch network operations, working-tree change inspection, and recent commit history. All git write operations flow through IPC to the main process; the renderer never runs git commands directly.
+
 ### Execution observability
 
 The architecture treats execution as observable by design:

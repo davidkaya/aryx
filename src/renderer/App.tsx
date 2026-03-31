@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { CommitComposer } from '@renderer/components/chat/CommitComposer';
 import { AppShell } from '@renderer/components/AppShell';
 import { ActivityPanel } from '@renderer/components/ActivityPanel';
 import { ChatPane } from '@renderer/components/ChatPane';
@@ -43,6 +44,7 @@ import { createDefaultToolApprovalPolicy } from '@shared/domain/approval';
 import { listPendingDiscoveredMcpServers } from '@shared/domain/discoveredTooling';
 import { syncPatternGraph, type PatternDefinition } from '@shared/domain/pattern';
 import { isScratchpadProject, SCRATCHPAD_PROJECT_ID } from '@shared/domain/project';
+import type { ProjectGitFileReference } from '@shared/domain/project';
 import { applySessionModelConfig } from '@shared/domain/session';
 import type { AppearanceTheme, LspProfileDefinition, McpServerDefinition } from '@shared/domain/tooling';
 import type { WorkspaceState } from '@shared/domain/workspace';
@@ -123,6 +125,9 @@ export default function App() {
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [showBookmarks, setShowBookmarks] = useState(false);
+
+  // Commit composer state
+  const [commitComposerCtx, setCommitComposerCtx] = useState<{ projectId: string; sessionId: string; runId?: string }>();
 
   // Terminal state
   const [terminalOpen, setTerminalOpen] = useState(false);
@@ -487,6 +492,20 @@ export default function App() {
     }
   }, []);
 
+  const handleDiscardRunChanges = useCallback(
+    (sessionId: string, runId: string, files?: ProjectGitFileReference[]) =>
+      api.discardSessionRunGitChanges({ sessionId, runId, files }),
+    [api],
+  );
+
+  const handleOpenCommitComposer = useCallback(() => {
+    if (!selectedSession) return;
+    setCommitComposerCtx({
+      projectId: selectedSession.projectId,
+      sessionId: selectedSession.id,
+    });
+  }, [selectedSession]);
+
   const handleCreateScratchpad = useCallback(() => {
     if (!workspace) return;
     const singlePatterns = workspace.patterns
@@ -632,7 +651,9 @@ export default function App() {
     detailPanel = (
       <ActivityPanel
         activity={activityForSession}
+        onDiscard={handleDiscardRunChanges}
         onJumpToMessage={jumpToMessage}
+        onOpenCommitComposer={handleOpenCommitComposer}
         pattern={patternForSession}
         session={selectedSession}
         sessionRequestUsage={requestUsageForSession}
@@ -885,6 +906,15 @@ export default function App() {
           onUnpinMessage={(sessionId, messageId) => {
             void api.setSessionMessagePinned({ sessionId, messageId, isPinned: false });
           }}
+        />
+      )}
+
+      {commitComposerCtx && (
+        <CommitComposer
+          onClose={() => setCommitComposerCtx(undefined)}
+          projectId={commitComposerCtx.projectId}
+          runId={commitComposerCtx.runId}
+          sessionId={commitComposerCtx.sessionId}
         />
       )}
     </>

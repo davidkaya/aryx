@@ -1,5 +1,5 @@
 import { useMemo, type ReactNode } from 'react';
-import { Activity, ArrowRight, BarChart3, CheckCircle2, Clock, Cog, ShieldAlert, Sparkles, Users, Zap } from 'lucide-react';
+import { Activity, AlertTriangle, ArrowRight, BarChart3, CheckCircle2, Clock, Cog, ShieldAlert, Sparkles, Users, Zap } from 'lucide-react';
 
 import {
   buildAgentActivityRows,
@@ -190,6 +190,8 @@ function TurnEventIcon({ kind, phase, success }: { kind: SessionEventKind; phase
       return <Sparkles className={`${base} text-[var(--color-accent-purple)]`} />;
     case 'session-compaction':
       return <CheckCircle2 className={`${base} ${phase === 'start' ? 'animate-pulse text-[var(--color-status-warning)]' : 'text-[var(--color-status-success)]'}`} />;
+    case 'workflow-diagnostic':
+      return <AlertTriangle className={`${base} ${success === false ? 'text-[var(--color-status-error)]' : 'text-[var(--color-status-warning)]'}`} />;
     default:
       return <Zap className={`${base} text-[var(--color-text-muted)]`} />;
   }

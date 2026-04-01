@@ -3,6 +3,7 @@ import { describe, expect, test } from 'bun:test';
 import {
   applySessionEventActivity,
   applyAssistantUsageEvent,
+  applyTurnEventLog,
   buildAgentActivityRows,
   formatAgentActivityLabel,
   formatDuration,
@@ -525,5 +526,81 @@ describe('usage formatting helpers', () => {
   test('formatDuration formats milliseconds', () => {
     expect(formatDuration(8200)).toBe('8.2s');
     expect(formatDuration(150_000)).toBe('2.5m');
+  });
+});
+
+describe('workflow diagnostic turn events', () => {
+  function makeDiagnosticEvent(overrides: Partial<SessionEventRecord> = {}): SessionEventRecord {
+    return {
+      sessionId: 'session-1',
+      kind: 'workflow-diagnostic',
+      occurredAt: '2026-03-23T00:00:00.000Z',
+      diagnosticSeverity: 'error',
+      diagnosticKind: 'executor-failed',
+      diagnosticMessage: 'Tool crashed.',
+      ...overrides,
+    };
+  }
+
+  test('formats executor-failed with full metadata', () => {
+    const result = applyTurnEventLog({}, makeDiagnosticEvent({
+      executorId: 'Primary',
+      exceptionType: 'InvalidOperationException',
+    }));
+    const entries = result['session-1']!;
+    expect(entries).toHaveLength(1);
+    expect(entries[0].label).toBe('Executor failed');
+    expect(entries[0].detail).toBe('Primary · InvalidOperationException · Tool crashed.');
+    expect(entries[0].success).toBe(false);
+  });
+
+  test('formats workflow-warning with message only', () => {
+    const result = applyTurnEventLog({}, makeDiagnosticEvent({
+      diagnosticSeverity: 'warning',
+      diagnosticKind: 'workflow-warning',
+      diagnosticMessage: 'Token budget is nearly exhausted.',
+      executorId: undefined,
+      exceptionType: undefined,
+    }));
+    const entries = result['session-1']!;
+    expect(entries[0].label).toBe('Workflow warning');
+    expect(entries[0].detail).toBe('Token budget is nearly exhausted.');
+    expect(entries[0].success).toBeUndefined();
+  });
+
+  test('formats subworkflow-error with subworkflow ID', () => {
+    const result = applyTurnEventLog({}, makeDiagnosticEvent({
+      diagnosticKind: 'subworkflow-error',
+      subworkflowId: 'subworkflow-review',
+      exceptionType: 'InvalidOperationException',
+      diagnosticMessage: 'Reviewer agent failed.',
+    }));
+    const entries = result['session-1']!;
+    expect(entries[0].label).toBe('Subworkflow error');
+    expect(entries[0].detail).toBe('subworkflow-review · InvalidOperationException · Reviewer agent failed.');
+  });
+
+  test('formats workflow-error without optional fields', () => {
+    const result = applyTurnEventLog({}, makeDiagnosticEvent({
+      diagnosticKind: 'workflow-error',
+      diagnosticMessage: 'Workflow terminated unexpectedly.',
+      executorId: undefined,
+      subworkflowId: undefined,
+      exceptionType: undefined,
+    }));
+    const entries = result['session-1']!;
+    expect(entries[0].label).toBe('Workflow error');
+    expect(entries[0].detail).toBe('Workflow terminated unexpectedly.');
+    expect(entries[0].success).toBe(false);
+  });
+
+  test('falls back to severity when diagnosticKind is missing', () => {
+    const result = applyTurnEventLog({}, makeDiagnosticEvent({
+      diagnosticKind: undefined,
+      diagnosticSeverity: 'warning',
+      diagnosticMessage: 'Something odd happened.',
+    }));
+    const entries = result['session-1']!;
+    expect(entries[0].label).toBe('Workflow warning');
   });
 });

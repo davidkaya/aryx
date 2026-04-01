@@ -1,6 +1,6 @@
 import type { PatternDefinition } from '@shared/domain/pattern';
 import type { SessionEventRecord } from '@shared/domain/event';
-import type { QuotaSnapshot } from '@shared/contracts/sidecar';
+import type { QuotaSnapshot, WorkflowDiagnosticKind, WorkflowDiagnosticSeverity } from '@shared/contracts/sidecar';
 
 export interface AgentActivityState {
   agentId: string;
@@ -260,6 +260,22 @@ function formatHookType(hookType: string | undefined): string {
   return hookTypeLabels[hookType] ?? hookType;
 }
 
+const diagnosticLabels: Record<WorkflowDiagnosticKind, string> = {
+  'workflow-warning': 'Workflow warning',
+  'workflow-error': 'Workflow error',
+  'executor-failed': 'Executor failed',
+  'subworkflow-warning': 'Subworkflow warning',
+  'subworkflow-error': 'Subworkflow error',
+};
+
+function formatDiagnosticLabel(
+  kind: WorkflowDiagnosticKind | undefined,
+  severity: WorkflowDiagnosticSeverity | undefined,
+): string {
+  if (kind) return diagnosticLabels[kind] ?? kind;
+  return severity === 'error' ? 'Workflow error' : 'Workflow warning';
+}
+
 function formatTurnEventEntry(event: SessionEventRecord): TurnEventEntry | undefined {
   switch (event.kind) {
     case 'subagent':
@@ -300,6 +316,21 @@ function formatTurnEventEntry(event: SessionEventRecord): TurnEventEntry | undef
         phase: event.compactionPhase,
         success: event.compactionSuccess,
       };
+    case 'workflow-diagnostic': {
+      const label = formatDiagnosticLabel(event.diagnosticKind, event.diagnosticSeverity);
+      const detailParts: string[] = [];
+      if (event.executorId) detailParts.push(event.executorId);
+      if (event.subworkflowId) detailParts.push(event.subworkflowId);
+      if (event.exceptionType) detailParts.push(event.exceptionType);
+      if (event.diagnosticMessage) detailParts.push(event.diagnosticMessage);
+      return {
+        kind: event.kind,
+        occurredAt: event.occurredAt,
+        label,
+        detail: detailParts.length > 0 ? detailParts.join(' · ') : undefined,
+        success: event.diagnosticSeverity === 'error' ? false : undefined,
+      };
+    }
     default:
       return undefined;
   }

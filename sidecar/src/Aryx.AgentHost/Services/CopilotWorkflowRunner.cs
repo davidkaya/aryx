@@ -353,6 +353,14 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
             updateAgent = resolvedUpdateAgent;
             authorName = resolvedUpdateAgent.AgentName;
         }
+        else if (state.ActiveAgent is AgentIdentity activeAgent)
+        {
+            updateAgent = activeAgent;
+            authorName = activeAgent.AgentName;
+            TraceHandoff(
+                command,
+                $"Agent response update fell back to active agent {activeAgent.AgentName} ({activeAgent.AgentId}) for executor '{update.ExecutorId}' and message '{update.Update.MessageId ?? "<none>"}'.");
+        }
 
         if (updateAgent.HasValue)
         {

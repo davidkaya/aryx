@@ -800,6 +800,61 @@ public sealed class CopilotWorkflowRunnerTests
     }
 
     [Fact]
+    public async Task HandleWorkflowEventAsync_FallsBackToActiveAgentForUnresolvedStreamingUpdates()
+    {
+        RunTurnCommandDto command = CreateHandoffCommand();
+        CopilotTurnExecutionState state = new(command);
+        state.ObserveSessionEvent(
+            CreateAgent("agent-handoff-ux", "UX Specialist"),
+            SessionEvent.FromJson(
+                """
+                {
+                  "type": "assistant.reasoning_delta",
+                  "data": {
+                    "reasoningId": "reasoning-1",
+                    "deltaContent": "Polishing the UI."
+                  },
+                  "id": "77777777-7777-7777-7777-777777777777",
+                  "timestamp": "2026-03-27T00:00:00Z"
+                }
+                """));
+        _ = state.DrainPendingEvents();
+        List<TurnDeltaEventDto> deltas = [];
+
+        MethodInfo handleWorkflowEvent = typeof(CopilotWorkflowRunner).GetMethod(
+            "HandleWorkflowEventAsync",
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+        Task<bool> handleTask = (Task<bool>)handleWorkflowEvent.Invoke(
+            null,
+            [
+                command,
+                new AgentResponseUpdateEvent(
+                    "copilot-executor-ux",
+                    new AgentResponseUpdate(ChatRole.Assistant, "The button is ready.")
+                    {
+                        MessageId = "msg-ux-1",
+                    }),
+                Array.Empty<ChatMessage>(),
+                state,
+                (Func<TurnDeltaEventDto, Task>)(delta =>
+                {
+                    deltas.Add(delta);
+                    return Task.CompletedTask;
+                }),
+                (Func<SidecarEventDto, Task>)(_ => Task.CompletedTask),
+            ])!;
+
+        bool shouldEndTurn = await handleTask;
+
+        Assert.False(shouldEndTurn);
+        TurnDeltaEventDto delta = Assert.Single(deltas);
+        Assert.Equal("msg-ux-1", delta.MessageId);
+        Assert.Equal("UX Specialist", delta.AuthorName);
+        Assert.Equal("The button is ready.", delta.ContentDelta);
+        Assert.Equal("The button is ready.", delta.Content);
+    }
+
+    [Fact]
     public async Task HandleWorkflowEventAsync_EmitsWorkflowCheckpointSavedEvent()
     {
         RunTurnCommandDto command = CreateHandoffCommand();

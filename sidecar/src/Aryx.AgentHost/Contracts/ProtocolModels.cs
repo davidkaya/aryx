@@ -188,6 +188,7 @@ public sealed class RunTurnCommandDto : SidecarCommandEnvelope
     public PatternDefinitionDto Pattern { get; init; } = new();
     public IReadOnlyList<ChatMessageDto> Messages { get; init; } = [];
     public RunTurnToolingConfigDto? Tooling { get; init; }
+    public WorkflowCheckpointResumeDto? ResumeFromCheckpoint { get; init; }
 }
 
 public sealed class CancelTurnCommandDto : SidecarCommandEnvelope
@@ -488,6 +489,15 @@ public sealed class PendingMessagesModifiedEventDto : SidecarEventDto
     public string? AgentName { get; init; }
 }
 
+public sealed class WorkflowCheckpointSavedEventDto : SidecarEventDto
+{
+    public string SessionId { get; init; } = string.Empty;
+    public string WorkflowSessionId { get; init; } = string.Empty;
+    public string CheckpointId { get; init; } = string.Empty;
+    public string StorePath { get; init; } = string.Empty;
+    public int StepNumber { get; init; }
+}
+
 public sealed class WorkflowDiagnosticEventDto : SidecarEventDto
 {
     public string SessionId { get; init; } = string.Empty;
@@ -602,6 +612,13 @@ public sealed class ExitPlanModeRequestedEventDto : SidecarEventDto
     public string PlanContent { get; init; } = string.Empty;
     public IReadOnlyList<string>? Actions { get; init; }
     public string? RecommendedAction { get; init; }
+}
+
+public sealed class WorkflowCheckpointResumeDto
+{
+    public string WorkflowSessionId { get; init; } = string.Empty;
+    public string CheckpointId { get; init; } = string.Empty;
+    public string StorePath { get; init; } = string.Empty;
 }
 
 public sealed class CommandErrorEventDto : SidecarEventDto

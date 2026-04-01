@@ -72,6 +72,12 @@ export interface ValidatePatternCommand {
 export type InteractionMode = 'interactive' | 'plan';
 export type MessageMode = 'enqueue' | 'immediate';
 
+export interface WorkflowCheckpointResume {
+  workflowSessionId: string;
+  checkpointId: string;
+  storePath: string;
+}
+
 export interface RunTurnCommand {
   type: 'run-turn';
   requestId: string;
@@ -85,6 +91,7 @@ export interface RunTurnCommand {
   messages: ChatMessageRecord[];
   attachments?: ChatMessageAttachment[];
   tooling?: RunTurnToolingConfig;
+  resumeFromCheckpoint?: WorkflowCheckpointResume;
 }
 
 export interface CancelTurnCommand {
@@ -384,6 +391,16 @@ export interface PendingMessagesModifiedEvent {
   agentName?: string;
 }
 
+export interface WorkflowCheckpointSavedEvent {
+  type: 'workflow-checkpoint-saved';
+  requestId: string;
+  sessionId: string;
+  workflowSessionId: string;
+  checkpointId: string;
+  storePath: string;
+  stepNumber: number;
+}
+
 export type WorkflowDiagnosticSeverity = 'warning' | 'error';
 export type WorkflowDiagnosticKind =
   | 'workflow-warning'
@@ -585,6 +602,7 @@ export type SidecarEvent =
   | SessionUsageEvent
   | SessionCompactionEvent
   | PendingMessagesModifiedEvent
+  | WorkflowCheckpointSavedEvent
   | WorkflowDiagnosticEvent
   | ApprovalRequestedEvent
   | UserInputRequestedEvent

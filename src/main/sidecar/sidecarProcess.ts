@@ -452,12 +452,13 @@ export class SidecarClient {
       case 'skill-invoked':
       case 'hook-lifecycle':
       case 'session-usage':
-      case 'session-compaction':
-      case 'pending-messages-modified':
-      case 'workflow-diagnostic':
-      case 'assistant-usage':
-      case 'assistant-intent':
-      case 'reasoning-delta':
+       case 'session-compaction':
+       case 'pending-messages-modified':
+      case 'workflow-checkpoint-saved':
+       case 'workflow-diagnostic':
+       case 'assistant-usage':
+       case 'assistant-intent':
+       case 'reasoning-delta':
         if (pending.kind === 'run-turn' && shouldHandleRunTurnEvent(pending)) {
           this.invokeRunTurnHandler(event.requestId, pending, () => pending.onTurnScopedEvent(event));
         }

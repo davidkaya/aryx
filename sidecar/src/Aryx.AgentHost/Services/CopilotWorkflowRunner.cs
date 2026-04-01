@@ -1,7 +1,9 @@
+using System.IO;
 using System.Linq;
 using Aryx.AgentHost.Contracts;
 using GitHub.Copilot.SDK;
 using Microsoft.Agents.AI.Workflows;
+using Microsoft.Agents.AI.Workflows.Checkpointing;
 using Microsoft.Extensions.AI;
 
 namespace Aryx.AgentHost.Services;
@@ -81,7 +83,16 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
             List<ChatMessage> inputMessages = command.Messages.Select(WorkflowTranscriptProjector.ToChatMessage).ToList();
             WorkflowTranscriptProjector.AttachMessageMode(inputMessages, command.MessageMode);
 
-            await using StreamingRun run = await InProcessExecution.RunStreamingAsync(workflow, inputMessages).ConfigureAwait(false);
+            using FileSystemJsonCheckpointStore? checkpointStore = CreateCheckpointStore(command);
+            CheckpointManager? checkpointManager = checkpointStore is not null
+                ? CheckpointManager.CreateJson(checkpointStore)
+                : null;
+
+            await using StreamingRun run = await OpenWorkflowRunAsync(
+                command,
+                workflow,
+                inputMessages,
+                checkpointManager).ConfigureAwait(false);
             await run.TrySendMessageAsync(new TurnToken(emitEvents: true)).ConfigureAwait(false);
 
             await foreach (WorkflowEvent evt in run.WatchStreamAsync(runCancellation.Token).ConfigureAwait(false))
@@ -118,6 +129,62 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
         {
             _approvalCoordinator.ClearRequestApprovals(command.RequestId);
         }
+    }
+
+    internal static FileSystemJsonCheckpointStore? CreateCheckpointStore(RunTurnCommandDto command)
+    {
+        if (!ShouldEnableWorkflowCheckpointing(command))
+        {
+            return null;
+        }
+
+        DirectoryInfo checkpointDirectory = new(GetCheckpointStorePath(command));
+        return new FileSystemJsonCheckpointStore(checkpointDirectory);
+    }
+
+    internal static bool ShouldEnableWorkflowCheckpointing(RunTurnCommandDto command)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        return string.Equals(command.Pattern.Mode, "handoff", StringComparison.OrdinalIgnoreCase);
+    }
+
+    internal static string GetCheckpointStorePath(RunTurnCommandDto command)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+
+        if (!string.IsNullOrWhiteSpace(command.ResumeFromCheckpoint?.StorePath))
+        {
+            return command.ResumeFromCheckpoint.StorePath;
+        }
+
+        string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        return Path.Combine(localAppData, "Aryx", "workflow-checkpoints", command.SessionId, command.RequestId);
+    }
+
+    private static ValueTask<StreamingRun> OpenWorkflowRunAsync(
+        RunTurnCommandDto command,
+        Workflow workflow,
+        IReadOnlyList<ChatMessage> inputMessages,
+        CheckpointManager? checkpointManager)
+    {
+        if (checkpointManager is not null && command.ResumeFromCheckpoint is { } resumeFromCheckpoint)
+        {
+            return InProcessExecution.ResumeStreamingAsync(
+                workflow,
+                new CheckpointInfo(resumeFromCheckpoint.WorkflowSessionId, resumeFromCheckpoint.CheckpointId),
+                checkpointManager);
+        }
+
+        if (checkpointManager is not null)
+        {
+            return InProcessExecution.RunStreamingAsync(
+                workflow,
+                inputMessages.ToList(),
+                checkpointManager,
+                sessionId: command.RequestId);
+        }
+
+        return InProcessExecution.RunStreamingAsync(workflow, inputMessages.ToList());
     }
 
     internal static void ConfigureHookLifecycleEventSuppression(
@@ -208,6 +275,12 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
             }
 
             await EmitActivityAsync(command, state, activity, onEvent).ConfigureAwait(false);
+            return false;
+        }
+
+        if (TryCreateWorkflowCheckpointSavedEvent(command, evt, out WorkflowCheckpointSavedEventDto? checkpointSaved))
+        {
+            await onEvent(checkpointSaved).ConfigureAwait(false);
             return false;
         }
 
@@ -345,6 +418,33 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
                 new AgentIdentity(activity.AgentId, activity.AgentName),
                 onEvent).ConfigureAwait(false);
         }
+    }
+
+    internal static bool TryCreateWorkflowCheckpointSavedEvent(
+        RunTurnCommandDto command,
+        WorkflowEvent evt,
+        out WorkflowCheckpointSavedEventDto checkpointSaved)
+    {
+        checkpointSaved = default!;
+
+        if (!ShouldEnableWorkflowCheckpointing(command)
+            || evt is not SuperStepCompletedEvent superStepCompleted
+            || superStepCompleted.CompletionInfo?.Checkpoint is not CheckpointInfo checkpoint)
+        {
+            return false;
+        }
+
+        checkpointSaved = new WorkflowCheckpointSavedEventDto
+        {
+            Type = "workflow-checkpoint-saved",
+            RequestId = command.RequestId,
+            SessionId = command.SessionId,
+            WorkflowSessionId = checkpoint.SessionId,
+            CheckpointId = checkpoint.CheckpointId,
+            StorePath = GetCheckpointStorePath(command),
+            StepNumber = superStepCompleted.StepNumber,
+        };
+        return true;
     }
 
     private static bool TryCreateWorkflowDiagnosticEvent(

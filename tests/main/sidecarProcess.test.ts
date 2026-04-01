@@ -2,7 +2,12 @@ import { EventEmitter } from 'node:events';
 
 import { describe, expect, mock, test } from 'bun:test';
 
-import type { RunTurnCommand, SidecarCapabilities, WorkflowDiagnosticEvent } from '@shared/contracts/sidecar';
+import type {
+  RunTurnCommand,
+  SidecarCapabilities,
+  WorkflowCheckpointSavedEvent,
+  WorkflowDiagnosticEvent,
+} from '@shared/contracts/sidecar';
 
 class FakeReadableStream extends EventEmitter {
   setEncoding(_encoding: BufferEncoding): void {}
@@ -231,6 +236,98 @@ describe('SidecarClient', () => {
         diagnosticKind: 'executor-failed',
         message: 'Tool crashed.',
         executorId: 'agent-1',
+      }),
+    ]);
+
+    const dispose = client.dispose();
+    spawnedProcesses[0]!.completeExit();
+    await dispose;
+  });
+
+  test('routes workflow checkpoint events through the turn-scoped callback', async () => {
+    spawnedProcesses.length = 0;
+    const client = new SidecarClient();
+    const checkpoints: WorkflowCheckpointSavedEvent[] = [];
+    const command: RunTurnCommand = {
+      type: 'run-turn',
+      requestId: 'turn-1',
+      sessionId: 'session-1',
+      projectPath: 'C:\\workspace\\project',
+      pattern: {
+        id: 'pattern-1',
+        name: 'Handoff',
+        description: '',
+        mode: 'handoff',
+        availability: 'available',
+        maxIterations: 1,
+        agents: [
+          {
+            id: 'agent-1',
+            name: 'Primary',
+            description: '',
+            instructions: 'Help with the request.',
+            model: 'gpt-5.4',
+          },
+        ],
+        createdAt: '2026-04-01T00:00:00.000Z',
+        updatedAt: '2026-04-01T00:00:00.000Z',
+      },
+      messages: [],
+    };
+
+    const turn = client.runTurn(
+      command,
+      async () => undefined,
+      async () => undefined,
+      async () => undefined,
+      async () => undefined,
+      async () => undefined,
+      async () => undefined,
+      async () => undefined,
+      async (event) => {
+        if (event.type === 'workflow-checkpoint-saved') {
+          checkpoints.push(event);
+        }
+      },
+    );
+
+    await Promise.resolve();
+    expect(spawnedProcesses).toHaveLength(1);
+
+    spawnedProcesses[0]!.emitStdout(
+      `${JSON.stringify({
+        type: 'workflow-checkpoint-saved',
+        requestId: command.requestId,
+        sessionId: command.sessionId,
+        workflowSessionId: 'turn-1',
+        checkpointId: 'checkpoint-1',
+        storePath: 'C:\\Users\\tester\\AppData\\Local\\Aryx\\workflow-checkpoints\\session-1\\turn-1',
+        stepNumber: 2,
+      } satisfies WorkflowCheckpointSavedEvent)}\n`,
+    );
+    spawnedProcesses[0]!.emitStdout(
+      `${JSON.stringify({
+        type: 'turn-complete',
+        requestId: command.requestId,
+        sessionId: command.sessionId,
+        messages: [],
+        cancelled: false,
+      })}\n`,
+    );
+    spawnedProcesses[0]!.emitStdout(
+      `${JSON.stringify({
+        type: 'command-complete',
+        requestId: command.requestId,
+      })}\n`,
+    );
+
+    await expect(turn).resolves.toEqual([]);
+    expect(checkpoints).toEqual([
+      expect.objectContaining({
+        type: 'workflow-checkpoint-saved',
+        workflowSessionId: 'turn-1',
+        checkpointId: 'checkpoint-1',
+        stepNumber: 2,
       }),
     ]);
 

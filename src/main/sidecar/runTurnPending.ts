@@ -12,6 +12,7 @@ import type {
   SessionUsageEvent,
   SessionCompactionEvent,
   PendingMessagesModifiedEvent,
+  WorkflowCheckpointSavedEvent,
   AssistantUsageEvent,
   AssistantIntentEvent,
   ReasoningDeltaEvent,
@@ -26,6 +27,7 @@ export type TurnScopedEvent =
   | SessionUsageEvent
   | SessionCompactionEvent
   | PendingMessagesModifiedEvent
+  | WorkflowCheckpointSavedEvent
   | AssistantUsageEvent
   | AssistantIntentEvent
   | ReasoningDeltaEvent

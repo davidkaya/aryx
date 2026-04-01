@@ -12,10 +12,13 @@ import type {
   McpOauthRequiredEvent,
   MessageReclassifiedEvent,
   RunTurnCustomAgentConfig,
+  RunTurnCommand,
   RunTurnToolingConfig,
   SidecarCapabilities,
   UserInputRequestedEvent,
   TurnDeltaEvent,
+  WorkflowCheckpointResume,
+  WorkflowCheckpointSavedEvent,
 } from '@shared/contracts/sidecar';
 import type { TurnScopedEvent } from '@main/sidecar/runTurnPending';
 import {
@@ -104,6 +107,7 @@ import {
   upsertRunApprovalEvent,
   upsertRunMessageEvent,
   upsertSessionRunRecord,
+  type RunTimelineEventRecord,
   type SessionRunRecord,
 } from '@shared/domain/runTimeline';
 import {
@@ -170,6 +174,15 @@ type PendingUserInputHandle = {
   resolve: (answer: string, wasFreeform: boolean) => void | Promise<void>;
 };
 
+type WorkflowCheckpointRecoveryState = {
+  workflowSessionId: string;
+  checkpointId: string;
+  storePath: string;
+  stepNumber: number;
+  sessionMessages: ChatMessageRecord[];
+  runEvents: RunTimelineEventRecord[];
+};
+
 type DiscoveredToolingResolution = 'accept' | 'dismiss';
 
 function isBuiltinPattern(patternId: string): boolean {
@@ -190,6 +203,16 @@ function isSidecarStoppedBeforeCompletionError(error: unknown): error is Error {
   return error instanceof Error && error.message === SIDECAR_STOPPED_BEFORE_COMPLETION_MESSAGE;
 }
 
+function isUnexpectedSidecarTerminationError(error: unknown): error is Error {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const { message } = error;
+  return isSidecarStoppedBeforeCompletionError(error)
+    || message.startsWith('The .NET sidecar exited unexpectedly with code ');
+}
+
 const INTERRUPTED_RUN_ERROR =
   'This session was interrupted because Aryx restarted while a run was in progress.';
 const INTERRUPTED_APPROVAL_ERROR =
@@ -208,6 +231,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
   private readonly ptyManager = new PtyManager();
   private readonly pendingApprovalHandles = new Map<string, PendingApprovalHandle>();
   private readonly pendingUserInputHandles = new Map<string, PendingUserInputHandle>();
+  private readonly workflowCheckpointRecoveries = new Map<string, WorkflowCheckpointRecoveryState>();
   private workspace?: WorkspaceState;
   private sidecarCapabilities?: SidecarCapabilities;
   private sidecarCapabilitiesPromise?: Promise<SidecarCapabilities>;
@@ -1407,21 +1431,29 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     });
 
     try {
-      const responseMessages = await this.sidecar.runTurn(
-        {
-          type: 'run-turn',
-          requestId,
-          sessionId: session.id,
-          projectPath: runWorkingDirectory,
-          workspaceKind,
-          mode: session.interactionMode ?? 'interactive',
-          messageMode,
-          projectInstructions,
-          pattern: effectivePattern,
-          messages: session.messages,
-          attachments: attachments?.length ? attachments : undefined,
-          tooling: this.buildRunTurnToolingConfig(workspace, session),
-        },
+      const createRunTurnCommand = (
+        resumeFromCheckpoint?: WorkflowCheckpointResume,
+      ): RunTurnCommand => ({
+        type: 'run-turn',
+        requestId,
+        sessionId: session.id,
+        projectPath: runWorkingDirectory,
+        workspaceKind,
+        mode: session.interactionMode ?? 'interactive',
+        messageMode,
+        projectInstructions,
+        pattern: effectivePattern,
+        messages: session.messages,
+        attachments: attachments?.length ? attachments : undefined,
+        tooling: this.buildRunTurnToolingConfig(workspace, session),
+        resumeFromCheckpoint,
+      });
+
+      const responseMessages = await this.runSidecarTurnWithCheckpointRecovery(
+        workspace,
+        session,
+        requestId,
+        createRunTurnCommand,
         async (event) => {
           await this.applyTurnDelta(workspace, session.id, requestId, event);
         },
@@ -1459,6 +1491,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
         }
       }
       await this.persistAndBroadcast(workspace);
+      await this.cleanupWorkflowCheckpointRecovery(requestId);
       if (workspaceKind === 'project') {
         this.scheduleProjectGitRefresh(project.id);
       }
@@ -1472,6 +1505,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
           }
         }
         await this.persistAndBroadcast(workspace);
+        await this.cleanupWorkflowCheckpointRecovery(requestId);
         if (workspaceKind === 'project') {
           this.scheduleProjectGitRefresh(project.id);
         }
@@ -1504,6 +1538,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
       }
 
       await this.persistAndBroadcast(workspace);
+      await this.cleanupWorkflowCheckpointRecovery(requestId);
       if (workspaceKind === 'project') {
         this.scheduleProjectGitRefresh(project.id);
       }
@@ -2421,13 +2456,22 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
   }
 
   private handleTurnScopedEvent(
-    _workspace: WorkspaceState,
+    workspace: WorkspaceState,
     sessionId: string,
     event: TurnScopedEvent,
   ): void {
     const occurredAt = nowIso();
 
     switch (event.type) {
+      case 'workflow-checkpoint-saved': {
+        const session = this.requireSession(workspace, sessionId);
+        const run = session.runs.find((candidate) => candidate.requestId === event.requestId);
+        if (run) {
+          this.recordWorkflowCheckpointRecovery(session, run, event);
+        }
+
+        return;
+      }
       case 'subagent-event':
         this.emitSessionEvent({
           sessionId,
@@ -2537,6 +2581,119 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
           usageQuotaSnapshots: event.quotaSnapshots,
         });
         return;
+    }
+  }
+
+  private async runSidecarTurnWithCheckpointRecovery(
+    workspace: WorkspaceState,
+    session: SessionRecord,
+    requestId: string,
+    createCommand: (resumeFromCheckpoint?: WorkflowCheckpointResume) => RunTurnCommand,
+    onDelta: (event: TurnDeltaEvent) => void | Promise<void>,
+    onActivity: (event: AgentActivityEvent) => void | Promise<void>,
+    onApproval: (event: ApprovalRequestedEvent) => void | Promise<void>,
+    onUserInput: (event: UserInputRequestedEvent) => void | Promise<void>,
+    onMcpOAuthRequired: (event: McpOauthRequiredEvent) => void | Promise<void>,
+    onExitPlanMode: (event: ExitPlanModeRequestedEvent) => void | Promise<void>,
+    onMessageReclassified: (event: MessageReclassifiedEvent) => void | Promise<void>,
+    onTurnScopedEvent: (event: TurnScopedEvent) => void | Promise<void>,
+  ): Promise<ChatMessageRecord[]> {
+    const invokeTurn = (resumeFromCheckpoint?: WorkflowCheckpointResume) => this.sidecar.runTurn(
+      createCommand(resumeFromCheckpoint),
+      onDelta,
+      onActivity,
+      onApproval,
+      onUserInput,
+      onMcpOAuthRequired,
+      onExitPlanMode,
+      onMessageReclassified,
+      onTurnScopedEvent,
+    );
+
+    try {
+      return await invokeTurn();
+    } catch (error) {
+      const recovery = this.workflowCheckpointRecoveries.get(requestId);
+      if (!isUnexpectedSidecarTerminationError(error) || !recovery) {
+        throw error;
+      }
+
+      const restoredRun = this.restoreWorkflowCheckpointRecovery(session, requestId, recovery);
+      await this.persistAndBroadcast(workspace);
+      if (restoredRun) {
+        this.emitRunUpdated(session.id, session.updatedAt, restoredRun);
+      }
+
+      return invokeTurn({
+        workflowSessionId: recovery.workflowSessionId,
+        checkpointId: recovery.checkpointId,
+        storePath: recovery.storePath,
+      });
+    }
+  }
+
+  private recordWorkflowCheckpointRecovery(
+    session: SessionRecord,
+    run: SessionRunRecord,
+    event: WorkflowCheckpointSavedEvent,
+  ): void {
+    this.workflowCheckpointRecoveries.set(event.requestId, {
+      workflowSessionId: event.workflowSessionId,
+      checkpointId: event.checkpointId,
+      storePath: event.storePath,
+      stepNumber: event.stepNumber,
+      sessionMessages: structuredClone(session.messages),
+      runEvents: structuredClone(run.events),
+    });
+  }
+
+  private restoreWorkflowCheckpointRecovery(
+    session: SessionRecord,
+    requestId: string,
+    recovery: WorkflowCheckpointRecoveryState,
+  ): SessionRunRecord | undefined {
+    session.messages = structuredClone(recovery.sessionMessages);
+    session.status = 'running';
+    session.lastError = undefined;
+    session.updatedAt = nowIso();
+    this.clearPendingRunState(session, requestId);
+
+    return this.updateSessionRun(session, requestId, (run) => ({
+      ...run,
+      events: structuredClone(recovery.runEvents),
+    }));
+  }
+
+  private clearPendingRunState(session: SessionRecord, requestId: string): void {
+    this.setSessionPendingApprovalState(session, {});
+    session.pendingUserInput = undefined;
+    session.pendingPlanReview = undefined;
+    session.pendingMcpAuth = undefined;
+
+    for (const [approvalId, handle] of this.pendingApprovalHandles.entries()) {
+      if (handle.sessionId === session.id && handle.requestId === requestId) {
+        this.pendingApprovalHandles.delete(approvalId);
+      }
+    }
+
+    for (const [userInputId, handle] of this.pendingUserInputHandles.entries()) {
+      if (handle.sessionId === session.id && handle.requestId === requestId) {
+        this.pendingUserInputHandles.delete(userInputId);
+      }
+    }
+  }
+
+  private async cleanupWorkflowCheckpointRecovery(requestId: string): Promise<void> {
+    const recovery = this.workflowCheckpointRecoveries.get(requestId);
+    this.workflowCheckpointRecoveries.delete(requestId);
+    if (!recovery) {
+      return;
+    }
+
+    try {
+      await rm(recovery.storePath, { recursive: true, force: true });
+    } catch (error) {
+      console.warn('[aryx workflow-checkpoint] Failed to clean checkpoint store:', error);
     }
   }
 

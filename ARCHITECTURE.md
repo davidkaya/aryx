@@ -225,6 +225,7 @@ The protocol also carries **turn-scoped lifecycle events** alongside output delt
 - **Session usage events**: current token count and context-window limit from `session.usage_info` for context-bar rendering
 - **Pending-messages-modified events**: emitted when mid-turn steering changes the pending message queue
 - **Workflow diagnostic events**: normalized warnings and errors from Agent Framework (`WorkflowWarningEvent`, `WorkflowErrorEvent`, `ExecutorFailedEvent`) with optional executor or subworkflow metadata for richer debugging surfaces
+- **Workflow checkpoint events**: emitted at Agent Framework superstep boundaries with workflow session ID, checkpoint ID, step number, and checkpoint-store path so the main process can prepare crash-recovery state
 
 These events flow through a single `onTurnScopedEvent` callback on the `runTurn` command, avoiding per-event-type callback proliferation. The main process maps each event to a `SessionEventRecord` and pushes it to the renderer, where lightweight state maps (activity, usage, turn-event log) consume them without touching the persisted workspace.
 
@@ -235,6 +236,8 @@ The same boundary also supports server-scoped sidecar commands that do not requi
 For project-backed sessions, the sidecar also discovers GitHub Copilot CLI hook definitions from `.github/hooks/*.json` under the repository root. Those files are parsed and merged once per run bundle, then projected onto the SDK session hook delegates. Hook commands run synchronously in the sidecar through the platform shell, with stdin JSON payloads shaped to match Copilot CLI hook expectations as closely as the SDK allows. Hook failures are logged to stderr and treated as non-fatal diagnostics, while `preToolUse` hook outputs can still deny a tool call before Aryx falls back to its built-in approval policy.
 
 The `run-turn` command now also carries a project-instruction payload derived from scanned repo customization files. The main process composes that payload from repo-level instruction files and merges enabled discovered custom agent profiles into the primary pattern agent's Copilot configuration before sending the command across the stdio boundary. The sidecar then folds those project instructions into the final SDK system message alongside the agent's own instructions and runtime guidance.
+
+For handoff workflows, the sidecar now also enables Agent Framework JSON checkpointing backed by a per-turn filesystem store under local app data. Each saved checkpoint is surfaced to the main process, which pairs the durable Agent Framework checkpoint with an in-memory rollback snapshot of `session.messages` and the active run timeline events. If the sidecar child process exits unexpectedly during the same app lifetime, Aryx restores the latest snapshot, clears pending approval/user-input/MCP-auth state for that run, and retries the `run-turn` request once with `resumeFromCheckpoint`. Checkpoint directories are deleted after the turn completes, cancels, or fails. This recovery path is intentionally scoped to same-app sidecar restarts; full app-restart workflow rehydration would require durable rollback snapshots in addition to the Agent Framework checkpoint payloads.
 
 ## Security model
 

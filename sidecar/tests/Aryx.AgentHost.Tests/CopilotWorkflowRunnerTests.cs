@@ -1,3 +1,4 @@
+using System.IO;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using Aryx.AgentHost.Contracts;
@@ -796,6 +797,50 @@ public sealed class CopilotWorkflowRunnerTests
                 Assert.Equal("agent-handoff-ux", thinking.AgentId);
                 Assert.Equal("UX Specialist", thinking.AgentName);
             });
+    }
+
+    [Fact]
+    public async Task HandleWorkflowEventAsync_EmitsWorkflowCheckpointSavedEvent()
+    {
+        RunTurnCommandDto command = CreateHandoffCommand();
+        CopilotTurnExecutionState state = new(command);
+        List<WorkflowCheckpointSavedEventDto> checkpoints = [];
+
+        MethodInfo handleWorkflowEvent = typeof(CopilotWorkflowRunner).GetMethod(
+            "HandleWorkflowEventAsync",
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+        Task<bool> handleTask = (Task<bool>)handleWorkflowEvent.Invoke(
+            null,
+            [
+                command,
+                new SuperStepCompletedEvent(
+                    3,
+                    new SuperStepCompletionInfo([])
+                    {
+                        Checkpoint = new CheckpointInfo(command.RequestId, "checkpoint-1"),
+                    }),
+                Array.Empty<ChatMessage>(),
+                state,
+                (Func<TurnDeltaEventDto, Task>)(_ => Task.CompletedTask),
+                (Func<SidecarEventDto, Task>)(sidecarEvent =>
+                {
+                    checkpoints.Add(Assert.IsType<WorkflowCheckpointSavedEventDto>(sidecarEvent));
+                    return Task.CompletedTask;
+                }),
+            ])!;
+
+        bool shouldEndTurn = await handleTask;
+
+        Assert.False(shouldEndTurn);
+        WorkflowCheckpointSavedEventDto checkpoint = Assert.Single(checkpoints);
+        Assert.Equal("workflow-checkpoint-saved", checkpoint.Type);
+        Assert.Equal(command.SessionId, checkpoint.SessionId);
+        Assert.Equal(command.RequestId, checkpoint.WorkflowSessionId);
+        Assert.Equal("checkpoint-1", checkpoint.CheckpointId);
+        Assert.Equal(3, checkpoint.StepNumber);
+        Assert.EndsWith(
+            Path.Combine("Aryx", "workflow-checkpoints", command.SessionId, command.RequestId),
+            checkpoint.StorePath);
     }
 
     [Fact]

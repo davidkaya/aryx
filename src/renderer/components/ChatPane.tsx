@@ -535,13 +535,7 @@ export function ChatPane({
                                   )}
                                 </div>
                               )}
-                              {!isUser && message.pending ? (
-                                <div className="whitespace-pre-wrap break-words text-[14px] leading-relaxed text-[var(--color-text-primary)]">
-                                  {message.content}
-                                </div>
-                              ) : (
-                                <MarkdownContent content={message.content} />
-                              )}
+                              <MarkdownContent content={message.content} />
                               {message.pending && message.content && (
                                 <span className="mt-1 inline-block h-4 w-[2px] animate-pulse rounded-sm bg-[var(--color-accent)]" />
                               )}

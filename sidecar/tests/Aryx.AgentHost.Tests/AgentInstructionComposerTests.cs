@@ -54,7 +54,7 @@ public sealed class AgentInstructionComposerTests
     }
 
     [Fact]
-    public void Compose_StrengthensHandoffTriageInstructions()
+    public void Compose_LeavesHandoffTriagePromptFocusedOnAgentInstructions()
     {
         PatternDefinitionDto pattern = new()
         {
@@ -70,14 +70,13 @@ public sealed class AgentInstructionComposerTests
 
         string instructions = AgentInstructionComposer.Compose(pattern, triage, agentIndex: 0);
 
-        Assert.Contains("routing gate", instructions, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("Do not inspect files", instructions, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("actual handoff", instructions, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("Do not claim that you handed work off", instructions, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("You triage requests and must hand them off to the most appropriate specialist.", instructions);
+        Assert.DoesNotContain("routing", instructions, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("actual handoff", instructions, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
-    public void Compose_StrengthensHandoffSpecialistInstructions()
+    public void Compose_LeavesHandoffSpecialistPromptFocusedOnAgentInstructions()
     {
         PatternDefinitionDto pattern = new()
         {
@@ -93,8 +92,9 @@ public sealed class AgentInstructionComposerTests
 
         string instructions = AgentInstructionComposer.Compose(pattern, specialist, agentIndex: 1);
 
-        Assert.Contains("Once the triage agent hands work to you", instructions, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("own the substantive answer", instructions, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("You focus on navigation, UX, and interaction details.", instructions);
+        Assert.DoesNotContain("triage agent", instructions, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("substantive answer", instructions, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

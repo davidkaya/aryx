@@ -11,8 +11,12 @@ public sealed class HandoffWorkflowGuidanceTests
         string instructions = HandoffWorkflowGuidance.CreateWorkflowInstructions();
 
         Assert.Contains("explicit handoffs", instructions, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("routing or triage agent", instructions, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("best specialist", instructions, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Do not inspect files", instructions, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Do not claim that you delegated", instructions, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Do not narrate a handoff", instructions, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("own the substantive answer", instructions, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Specialists should complete the substantive work", instructions, StringComparison.OrdinalIgnoreCase);
     }
 

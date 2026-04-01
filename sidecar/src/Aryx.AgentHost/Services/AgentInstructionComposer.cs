@@ -51,27 +51,7 @@ internal static class AgentInstructionComposer
             return JoinInstructionBlocks(baseInstructions, repositoryInstructions, workspaceGuidance, planModeGuidance, groupChatGuidance);
         }
 
-        if (!string.Equals(pattern.Mode, "handoff", StringComparison.OrdinalIgnoreCase))
-        {
-            return JoinInstructionBlocks(baseInstructions, repositoryInstructions, workspaceGuidance, planModeGuidance);
-        }
-
-        string runtimeGuidance = agentIndex == 0
-            ? """
-              You are the routing gate for this handoff workflow.
-              Your job is to classify the request and hand it off to the most appropriate specialist as soon as you know who should own the substantive work.
-              For any substantive task, your next meaningful action must be the actual handoff rather than a plain-text promise to delegate later.
-              Do not inspect files, call tools, draft the implementation, or produce the final user-facing answer yourself once a specialist is appropriate.
-              Do not claim that you handed work off unless you actually executed the handoff.
-              Only answer directly if the user is asking for pure triage or a minimal clarification that must happen before delegation.
-              """
-            : """
-              You are a specialist participating in a handoff workflow.
-              Once the triage agent hands work to you, you own the substantive answer within your specialty and should carry it through.
-              Do not push the actual work back to triage unless you are blocked or the request is clearly outside your specialty.
-              """;
-
-        return JoinInstructionBlocks(baseInstructions, repositoryInstructions, workspaceGuidance, planModeGuidance, runtimeGuidance);
+        return JoinInstructionBlocks(baseInstructions, repositoryInstructions, workspaceGuidance, planModeGuidance);
     }
 
     private static string JoinInstructionBlocks(params string[] blocks)

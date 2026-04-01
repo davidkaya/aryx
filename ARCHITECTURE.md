@@ -224,6 +224,7 @@ The protocol also carries **turn-scoped lifecycle events** alongside output delt
 - **Session compaction events**: start and complete, with token-reduction metrics when infinite sessions trigger context trimming
 - **Session usage events**: current token count and context-window limit from `session.usage_info` for context-bar rendering
 - **Pending-messages-modified events**: emitted when mid-turn steering changes the pending message queue
+- **Workflow diagnostic events**: normalized warnings and errors from Agent Framework (`WorkflowWarningEvent`, `WorkflowErrorEvent`, `ExecutorFailedEvent`) with optional executor or subworkflow metadata for richer debugging surfaces
 
 These events flow through a single `onTurnScopedEvent` callback on the `runTurn` command, avoiding per-event-type callback proliferation. The main process maps each event to a `SessionEventRecord` and pushes it to the renderer, where lightweight state maps (activity, usage, turn-event log) consume them without touching the persisted workspace.
 

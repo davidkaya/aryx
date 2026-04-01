@@ -2504,6 +2504,21 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
           agentName: event.agentName,
         });
         return;
+      case 'workflow-diagnostic':
+        this.emitSessionEvent({
+          sessionId,
+          kind: 'workflow-diagnostic',
+          occurredAt,
+          agentId: event.agentId,
+          agentName: event.agentName,
+          diagnosticSeverity: event.severity,
+          diagnosticKind: event.diagnosticKind,
+          diagnosticMessage: event.message,
+          executorId: event.executorId,
+          subworkflowId: event.subworkflowId,
+          exceptionType: event.exceptionType,
+        });
+        return;
       case 'assistant-usage':
         this.emitSessionEvent({
           sessionId,

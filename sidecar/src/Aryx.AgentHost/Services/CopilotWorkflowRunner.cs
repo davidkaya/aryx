@@ -211,6 +211,12 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
             return false;
         }
 
+        if (TryCreateWorkflowDiagnosticEvent(command, evt, state, out WorkflowDiagnosticEventDto? diagnostic))
+        {
+            await onEvent(diagnostic).ConfigureAwait(false);
+            return false;
+        }
+
         if (evt is AgentResponseUpdateEvent update)
         {
             await HandleAgentResponseUpdateAsync(command, update, state, onDelta, onEvent).ConfigureAwait(false);
@@ -339,6 +345,94 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
                 new AgentIdentity(activity.AgentId, activity.AgentName),
                 onEvent).ConfigureAwait(false);
         }
+    }
+
+    private static bool TryCreateWorkflowDiagnosticEvent(
+        RunTurnCommandDto command,
+        WorkflowEvent evt,
+        CopilotTurnExecutionState state,
+        out WorkflowDiagnosticEventDto diagnostic)
+    {
+        diagnostic = default!;
+
+        switch (evt)
+        {
+            case ExecutorFailedEvent executorFailed:
+            {
+                AgentIdentity? agent = AgentIdentityResolver.TryResolveObservedAgentIdentity(
+                    command.Pattern,
+                    executorFailed.ExecutorId,
+                    state.ActiveAgent,
+                    out AgentIdentity resolvedAgent)
+                    ? resolvedAgent
+                    : null;
+                Exception? exception = executorFailed.Data;
+                diagnostic = new WorkflowDiagnosticEventDto
+                {
+                    Type = "workflow-diagnostic",
+                    RequestId = command.RequestId,
+                    SessionId = command.SessionId,
+                    Severity = "error",
+                    DiagnosticKind = "executor-failed",
+                    Message = ResolveDiagnosticMessage(exception, "Executor failed."),
+                    AgentId = agent?.AgentId,
+                    AgentName = agent?.AgentName,
+                    ExecutorId = executorFailed.ExecutorId,
+                    ExceptionType = exception?.GetBaseException().GetType().Name,
+                };
+                return true;
+            }
+            case WorkflowWarningEvent workflowWarning:
+                diagnostic = new WorkflowDiagnosticEventDto
+                {
+                    Type = "workflow-diagnostic",
+                    RequestId = command.RequestId,
+                    SessionId = command.SessionId,
+                    Severity = "warning",
+                    DiagnosticKind = workflowWarning is SubworkflowWarningEvent
+                        ? "subworkflow-warning"
+                        : "workflow-warning",
+                    Message = ResolveDiagnosticMessage(workflowWarning.Data as string, "Workflow warning."),
+                    SubworkflowId = workflowWarning is SubworkflowWarningEvent subworkflowWarning
+                        ? subworkflowWarning.SubWorkflowId
+                        : null,
+                };
+                return true;
+            case WorkflowErrorEvent workflowError:
+            {
+                Exception? exception = workflowError.Exception;
+                diagnostic = new WorkflowDiagnosticEventDto
+                {
+                    Type = "workflow-diagnostic",
+                    RequestId = command.RequestId,
+                    SessionId = command.SessionId,
+                    Severity = "error",
+                    DiagnosticKind = workflowError is SubworkflowErrorEvent
+                        ? "subworkflow-error"
+                        : "workflow-error",
+                    Message = ResolveDiagnosticMessage(exception, "Workflow failed."),
+                    SubworkflowId = workflowError is SubworkflowErrorEvent subworkflowError
+                        ? subworkflowError.SubworkflowId
+                        : null,
+                    ExceptionType = exception?.GetBaseException().GetType().Name,
+                };
+                return true;
+            }
+            default:
+                return false;
+        }
+    }
+
+    private static string ResolveDiagnosticMessage(Exception? exception, string fallback)
+    {
+        return ResolveDiagnosticMessage(
+            exception?.GetBaseException().Message,
+            fallback);
+    }
+
+    private static string ResolveDiagnosticMessage(string? message, string fallback)
+    {
+        return string.IsNullOrWhiteSpace(message) ? fallback : message;
     }
 
     private static bool IsHandoffFunctionName(string? candidate)

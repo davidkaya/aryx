@@ -1,7 +1,12 @@
 import type { SessionRunRecord } from '@shared/domain/runTimeline';
 import type { ChatMessageKind } from '@shared/domain/session';
 
-import type { QuotaSnapshot, ToolCallFileChangePreview } from '@shared/contracts/sidecar';
+import type {
+  QuotaSnapshot,
+  ToolCallFileChangePreview,
+  WorkflowDiagnosticKind,
+  WorkflowDiagnosticSeverity,
+} from '@shared/contracts/sidecar';
 
 export type SessionActivityType = 'thinking' | 'tool-calling' | 'handoff' | 'completed';
 
@@ -19,7 +24,8 @@ export type SessionEventKind =
   | 'session-usage'
   | 'session-compaction'
   | 'pending-messages-modified'
-  | 'assistant-usage';
+  | 'assistant-usage'
+  | 'workflow-diagnostic';
 
 export type SubagentEventKind = 'started' | 'completed' | 'failed' | 'selected' | 'deselected';
 
@@ -86,4 +92,12 @@ export interface SessionEventRecord {
   usageDuration?: number;
   usageTotalNanoAiu?: number;
   usageQuotaSnapshots?: Record<string, QuotaSnapshot>;
+
+  // Workflow diagnostic fields
+  diagnosticSeverity?: WorkflowDiagnosticSeverity;
+  diagnosticKind?: WorkflowDiagnosticKind;
+  diagnosticMessage?: string;
+  executorId?: string;
+  subworkflowId?: string;
+  exceptionType?: string;
 }

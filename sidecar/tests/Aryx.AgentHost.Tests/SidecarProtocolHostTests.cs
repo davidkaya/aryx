@@ -233,6 +233,77 @@ public sealed class SidecarProtocolHostTests
     }
 
     [Fact]
+    public async Task RunTurnCommand_ReturnsWorkflowDiagnosticEventsAndCompletion()
+    {
+        SidecarProtocolHost host = new(
+            new PatternValidator(),
+            new FakeWorkflowRunner(async (command, onDelta, onActivity, onApproval, onUserInput, onMcpOAuthRequired, onExitPlanMode, cancellationToken) =>
+            {
+                await onActivity(new WorkflowDiagnosticEventDto
+                {
+                    Type = "workflow-diagnostic",
+                    RequestId = command.RequestId,
+                    SessionId = command.SessionId,
+                    Severity = "error",
+                    DiagnosticKind = "executor-failed",
+                    Message = "Tool crashed.",
+                    AgentId = "agent-1",
+                    AgentName = "Primary",
+                    ExecutorId = "agent-1",
+                    ExceptionType = "InvalidOperationException",
+                });
+
+                return [];
+            }));
+
+        IReadOnlyList<JsonElement> events = await RunHostAsync(
+            new RunTurnCommandDto
+            {
+                Type = "run-turn",
+                RequestId = "turn-diagnostic",
+                SessionId = "session-1",
+                ProjectPath = "C:\\workspace\\project",
+                Pattern = new PatternDefinitionDto
+                {
+                    Id = "pattern-1",
+                    Name = "Single Agent",
+                    Mode = "single",
+                    Availability = "available",
+                    Agents =
+                    [
+                        CreateAgent(name: "Primary"),
+                    ],
+                },
+                Messages = [],
+            },
+            host);
+
+        Assert.Collection(
+            events,
+            diagnosticEvent =>
+            {
+                Assert.Equal("workflow-diagnostic", diagnosticEvent.GetProperty("type").GetString());
+                Assert.Equal("turn-diagnostic", diagnosticEvent.GetProperty("requestId").GetString());
+                Assert.Equal("session-1", diagnosticEvent.GetProperty("sessionId").GetString());
+                Assert.Equal("error", diagnosticEvent.GetProperty("severity").GetString());
+                Assert.Equal("executor-failed", diagnosticEvent.GetProperty("diagnosticKind").GetString());
+                Assert.Equal("Tool crashed.", diagnosticEvent.GetProperty("message").GetString());
+                Assert.Equal("agent-1", diagnosticEvent.GetProperty("executorId").GetString());
+            },
+            completionEvent =>
+            {
+                Assert.Equal("turn-complete", completionEvent.GetProperty("type").GetString());
+                Assert.Equal("session-1", completionEvent.GetProperty("sessionId").GetString());
+                Assert.False(completionEvent.GetProperty("cancelled").GetBoolean());
+            },
+            commandCompleteEvent =>
+            {
+                Assert.Equal("command-complete", commandCompleteEvent.GetProperty("type").GetString());
+                Assert.Equal("turn-diagnostic", commandCompleteEvent.GetProperty("requestId").GetString());
+            });
+    }
+
+    [Fact]
     public async Task RunTurnCommand_DeserializesInteractionMode()
     {
         string? capturedMode = null;

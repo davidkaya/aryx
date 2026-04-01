@@ -384,6 +384,28 @@ export interface PendingMessagesModifiedEvent {
   agentName?: string;
 }
 
+export type WorkflowDiagnosticSeverity = 'warning' | 'error';
+export type WorkflowDiagnosticKind =
+  | 'workflow-warning'
+  | 'workflow-error'
+  | 'executor-failed'
+  | 'subworkflow-warning'
+  | 'subworkflow-error';
+
+export interface WorkflowDiagnosticEvent {
+  type: 'workflow-diagnostic';
+  requestId: string;
+  sessionId: string;
+  severity: WorkflowDiagnosticSeverity;
+  diagnosticKind: WorkflowDiagnosticKind;
+  message: string;
+  agentId?: string;
+  agentName?: string;
+  executorId?: string;
+  subworkflowId?: string;
+  exceptionType?: string;
+}
+
 export interface CopilotSessionInfo {
   copilotSessionId: string;
   managedByAryx: boolean;
@@ -563,6 +585,7 @@ export type SidecarEvent =
   | SessionUsageEvent
   | SessionCompactionEvent
   | PendingMessagesModifiedEvent
+  | WorkflowDiagnosticEvent
   | ApprovalRequestedEvent
   | UserInputRequestedEvent
   | McpOauthRequiredEvent

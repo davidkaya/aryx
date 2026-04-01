@@ -799,6 +799,117 @@ public sealed class CopilotWorkflowRunnerTests
     }
 
     [Fact]
+    public async Task HandleWorkflowEventAsync_EmitsExecutorFailedDiagnostic()
+    {
+        RunTurnCommandDto command = CreateApprovalCommand();
+        CopilotTurnExecutionState state = new(command);
+        List<WorkflowDiagnosticEventDto> diagnostics = [];
+
+        MethodInfo handleWorkflowEvent = typeof(CopilotWorkflowRunner).GetMethod(
+            "HandleWorkflowEventAsync",
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+        Task<bool> handleTask = (Task<bool>)handleWorkflowEvent.Invoke(
+            null,
+            [
+                command,
+                new ExecutorFailedEvent("agent-1", new InvalidOperationException("Tool crashed.")),
+                Array.Empty<ChatMessage>(),
+                state,
+                (Func<TurnDeltaEventDto, Task>)(_ => Task.CompletedTask),
+                (Func<SidecarEventDto, Task>)(sidecarEvent =>
+                {
+                    diagnostics.Add(Assert.IsType<WorkflowDiagnosticEventDto>(sidecarEvent));
+                    return Task.CompletedTask;
+                }),
+            ])!;
+
+        bool shouldEndTurn = await handleTask;
+
+        Assert.False(shouldEndTurn);
+        WorkflowDiagnosticEventDto diagnostic = Assert.Single(diagnostics);
+        Assert.Equal("workflow-diagnostic", diagnostic.Type);
+        Assert.Equal("error", diagnostic.Severity);
+        Assert.Equal("executor-failed", diagnostic.DiagnosticKind);
+        Assert.Equal("Tool crashed.", diagnostic.Message);
+        Assert.Equal("agent-1", diagnostic.AgentId);
+        Assert.Equal("Primary", diagnostic.AgentName);
+        Assert.Equal("agent-1", diagnostic.ExecutorId);
+        Assert.Equal("InvalidOperationException", diagnostic.ExceptionType);
+    }
+
+    [Fact]
+    public async Task HandleWorkflowEventAsync_EmitsWorkflowWarningDiagnostic()
+    {
+        RunTurnCommandDto command = CreateApprovalCommand();
+        CopilotTurnExecutionState state = new(command);
+        List<WorkflowDiagnosticEventDto> diagnostics = [];
+
+        MethodInfo handleWorkflowEvent = typeof(CopilotWorkflowRunner).GetMethod(
+            "HandleWorkflowEventAsync",
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+        Task<bool> handleTask = (Task<bool>)handleWorkflowEvent.Invoke(
+            null,
+            [
+                command,
+                new WorkflowWarningEvent("Token budget is nearly exhausted."),
+                Array.Empty<ChatMessage>(),
+                state,
+                (Func<TurnDeltaEventDto, Task>)(_ => Task.CompletedTask),
+                (Func<SidecarEventDto, Task>)(sidecarEvent =>
+                {
+                    diagnostics.Add(Assert.IsType<WorkflowDiagnosticEventDto>(sidecarEvent));
+                    return Task.CompletedTask;
+                }),
+            ])!;
+
+        bool shouldEndTurn = await handleTask;
+
+        Assert.False(shouldEndTurn);
+        WorkflowDiagnosticEventDto diagnostic = Assert.Single(diagnostics);
+        Assert.Equal("warning", diagnostic.Severity);
+        Assert.Equal("workflow-warning", diagnostic.DiagnosticKind);
+        Assert.Equal("Token budget is nearly exhausted.", diagnostic.Message);
+        Assert.Null(diagnostic.SubworkflowId);
+        Assert.Null(diagnostic.ExceptionType);
+    }
+
+    [Fact]
+    public async Task HandleWorkflowEventAsync_EmitsSubworkflowErrorDiagnostic()
+    {
+        RunTurnCommandDto command = CreateApprovalCommand();
+        CopilotTurnExecutionState state = new(command);
+        List<WorkflowDiagnosticEventDto> diagnostics = [];
+
+        MethodInfo handleWorkflowEvent = typeof(CopilotWorkflowRunner).GetMethod(
+            "HandleWorkflowEventAsync",
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+        Task<bool> handleTask = (Task<bool>)handleWorkflowEvent.Invoke(
+            null,
+            [
+                command,
+                new SubworkflowErrorEvent("subworkflow-review", new InvalidOperationException("Reviewer agent failed.")),
+                Array.Empty<ChatMessage>(),
+                state,
+                (Func<TurnDeltaEventDto, Task>)(_ => Task.CompletedTask),
+                (Func<SidecarEventDto, Task>)(sidecarEvent =>
+                {
+                    diagnostics.Add(Assert.IsType<WorkflowDiagnosticEventDto>(sidecarEvent));
+                    return Task.CompletedTask;
+                }),
+            ])!;
+
+        bool shouldEndTurn = await handleTask;
+
+        Assert.False(shouldEndTurn);
+        WorkflowDiagnosticEventDto diagnostic = Assert.Single(diagnostics);
+        Assert.Equal("error", diagnostic.Severity);
+        Assert.Equal("subworkflow-error", diagnostic.DiagnosticKind);
+        Assert.Equal("Reviewer agent failed.", diagnostic.Message);
+        Assert.Equal("subworkflow-review", diagnostic.SubworkflowId);
+        Assert.Equal("InvalidOperationException", diagnostic.ExceptionType);
+    }
+
+    [Fact]
     public void RequiresToolCallApproval_HonorsAutoApprovedToolNames()
     {
         ApprovalPolicyDto policy = new()

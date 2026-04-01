@@ -454,6 +454,7 @@ export class SidecarClient {
       case 'session-usage':
       case 'session-compaction':
       case 'pending-messages-modified':
+      case 'workflow-diagnostic':
       case 'assistant-usage':
       case 'assistant-intent':
       case 'reasoning-delta':

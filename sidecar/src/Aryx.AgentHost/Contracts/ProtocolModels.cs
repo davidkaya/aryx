@@ -488,6 +488,19 @@ public sealed class PendingMessagesModifiedEventDto : SidecarEventDto
     public string? AgentName { get; init; }
 }
 
+public sealed class WorkflowDiagnosticEventDto : SidecarEventDto
+{
+    public string SessionId { get; init; } = string.Empty;
+    public string Severity { get; init; } = string.Empty;
+    public string DiagnosticKind { get; init; } = string.Empty;
+    public string Message { get; init; } = string.Empty;
+    public string? AgentId { get; init; }
+    public string? AgentName { get; init; }
+    public string? ExecutorId { get; init; }
+    public string? SubworkflowId { get; init; }
+    public string? ExceptionType { get; init; }
+}
+
 public sealed class SessionsListedEventDto : SidecarEventDto
 {
     public IReadOnlyList<CopilotSessionInfoDto> Sessions { get; init; } = [];

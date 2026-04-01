@@ -15,6 +15,7 @@ import type {
   AssistantUsageEvent,
   AssistantIntentEvent,
   ReasoningDeltaEvent,
+  WorkflowDiagnosticEvent,
 } from '@shared/contracts/sidecar';
 import type { ChatMessageRecord } from '@shared/domain/session';
 
@@ -27,7 +28,8 @@ export type TurnScopedEvent =
   | PendingMessagesModifiedEvent
   | AssistantUsageEvent
   | AssistantIntentEvent
-  | ReasoningDeltaEvent;
+  | ReasoningDeltaEvent
+  | WorkflowDiagnosticEvent;
 
 export interface RunTurnPendingCommand {
   kind: 'run-turn';

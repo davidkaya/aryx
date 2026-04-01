@@ -4,6 +4,7 @@ using Aryx.AgentHost.Contracts;
 using GitHub.Copilot.SDK;
 using Aryx.AgentHost.Services;
 using Microsoft.Agents.AI;
+using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
 
 namespace Aryx.AgentHost.Tests;
@@ -109,6 +110,24 @@ public sealed class CopilotAgentBundleTests
         });
 
         Assert.Throws<NotSupportedException>(() => AryxCopilotAgent.CreateConfiguredSessionConfig(new SessionConfig(), options));
+    }
+
+    [Fact]
+    public void CreateHandoffWorkflowBuilder_ExplicitlyUsesHandoffOnlyFiltering()
+    {
+        ChatClientAgent entryAgent = CreateChatClientAgent("agent-1", "Primary");
+
+        HandoffsWorkflowBuilder builder = CopilotAgentBundle.CreateHandoffWorkflowBuilder(entryAgent);
+
+        FieldInfo field = typeof(HandoffsWorkflowBuilder).GetField(
+            "_toolCallFilteringBehavior",
+            BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("Expected HandoffsWorkflowBuilder to expose a filtering field.");
+
+        HandoffToolCallFilteringBehavior behavior = Assert.IsType<HandoffToolCallFilteringBehavior>(field.GetValue(builder));
+
+        Assert.Equal(HandoffToolCallFilteringBehavior.HandoffOnly, behavior);
+        Assert.Equal(HandoffWorkflowGuidance.CreateWorkflowInstructions(), builder.HandoffInstructions);
     }
 
     [Fact]
@@ -369,8 +388,48 @@ public sealed class CopilotAgentBundleTests
             CreateTool().JsonSchema);
     }
 
+    private static ChatClientAgent CreateChatClientAgent(string id, string name)
+    {
+        return new ChatClientAgent(
+            new StubChatClient(),
+            id,
+            name,
+            "Stub agent for handoff builder tests.",
+            [],
+            null!,
+            null!);
+    }
+
     private sealed class ToolTarget
     {
         public string Echo() => "ok";
+    }
+
+    private sealed class StubChatClient : IChatClient
+    {
+        public void Dispose()
+        {
+        }
+
+        public Task<ChatResponse> GetResponseAsync(
+            IEnumerable<ChatMessage> messages,
+            ChatOptions? options,
+            CancellationToken cancellationToken)
+        {
+            throw new NotSupportedException();
+        }
+
+        public object? GetService(Type serviceType, object? serviceKey = null)
+        {
+            return null;
+        }
+
+        public IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+            IEnumerable<ChatMessage> messages,
+            ChatOptions? options,
+            CancellationToken cancellationToken)
+        {
+            throw new NotSupportedException();
+        }
     }
 }

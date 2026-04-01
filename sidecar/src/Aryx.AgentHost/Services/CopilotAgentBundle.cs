@@ -222,8 +222,7 @@ internal sealed class CopilotAgentBundle : IAsyncDisposable
             : pattern.Agents.FirstOrDefault()?.Id ?? topology.EntryAgentId;
         AIAgent entryAgent = agentMap.GetValueOrDefault(entryAgentId) ?? Agents[0];
 
-        HandoffsWorkflowBuilder builder = AgentWorkflowBuilder.CreateHandoffBuilderWith(entryAgent)
-            .WithHandoffInstructions(HandoffWorkflowGuidance.CreateWorkflowInstructions());
+        HandoffsWorkflowBuilder builder = CreateHandoffWorkflowBuilder(entryAgent);
 
         foreach (PatternHandoffRoute route in topology.Routes)
         {
@@ -248,6 +247,16 @@ internal sealed class CopilotAgentBundle : IAsyncDisposable
         }
 
         return builder.Build();
+    }
+
+    internal static HandoffsWorkflowBuilder CreateHandoffWorkflowBuilder(AIAgent entryAgent)
+    {
+        return AgentWorkflowBuilder.CreateHandoffBuilderWith(entryAgent)
+            // Preserve normal tool-call history across handoffs while still hiding the
+            // workflow's handoff plumbing. Make this explicit so AF default changes
+            // cannot silently alter Aryx handoff behavior.
+            .WithToolCallFilteringBehavior(HandoffToolCallFilteringBehavior.HandoffOnly)
+            .WithHandoffInstructions(HandoffWorkflowGuidance.CreateWorkflowInstructions());
     }
 
     private Workflow BuildGroupChatWorkflow(PatternDefinitionDto pattern)

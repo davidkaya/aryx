@@ -189,9 +189,9 @@ internal sealed class CopilotAgentBundle : IAsyncDisposable
     {
         return pattern.Mode switch
         {
-            "single" => AgentWorkflowBuilder.BuildSequential(pattern.Name, ResolveOrderedAgents(pattern)),
-            "sequential" => AgentWorkflowBuilder.BuildSequential(pattern.Name, ResolveOrderedAgents(pattern)),
-            "concurrent" => AgentWorkflowBuilder.BuildConcurrent(pattern.Name, ResolveOrderedAgents(pattern)),
+            "single" => BuildSequentialWorkflow(pattern),
+            "sequential" => BuildSequentialWorkflow(pattern),
+            "concurrent" => BuildConcurrentWorkflow(pattern),
             "handoff" => BuildHandoffWorkflow(pattern),
             "group-chat" => BuildGroupChatWorkflow(pattern),
             "magentic" => throw new NotSupportedException(
@@ -249,6 +249,23 @@ internal sealed class CopilotAgentBundle : IAsyncDisposable
         return builder.Build();
     }
 
+    internal static AIAgentHostOptions CreateAgentHostOptions()
+    {
+        return new AIAgentHostOptions
+        {
+            // Aryx controls per-turn streaming with TurnToken(emitEvents: true), so keep this
+            // null to preserve that behavior while making the host defaults explicit in code.
+            EmitAgentUpdateEvents = null,
+            // Aryx already projects streamed transcript state itself; enabling this would add
+            // extra response events that need separate reconciliation first.
+            EmitAgentResponseEvents = false,
+            InterceptUserInputRequests = false,
+            InterceptUnterminatedFunctionCalls = false,
+            ReassignOtherAgentsAsUsers = true,
+            ForwardIncomingMessages = true,
+        };
+    }
+
     internal static HandoffsWorkflowBuilder CreateHandoffWorkflowBuilder(AIAgent entryAgent)
     {
         return AgentWorkflowBuilder.CreateHandoffBuilderWith(entryAgent)
@@ -259,19 +276,108 @@ internal sealed class CopilotAgentBundle : IAsyncDisposable
             .WithHandoffInstructions(HandoffWorkflowGuidance.CreateWorkflowInstructions());
     }
 
+    private Workflow BuildSequentialWorkflow(PatternDefinitionDto pattern)
+    {
+        IReadOnlyList<AIAgent> agents = ResolveOrderedAgents(pattern);
+        List<ExecutorBinding> agentExecutors = agents
+            .Select(CreateAgentExecutorBinding)
+            .ToList();
+
+        ExecutorBinding previous = agentExecutors[0];
+        WorkflowBuilder builder = new(previous);
+
+        foreach (ExecutorBinding next in agentExecutors.Skip(1))
+        {
+            builder.AddEdge(previous, next);
+            previous = next;
+        }
+
+        WorkflowOutputMessagesExecutor end = new();
+        builder = builder.AddEdge(previous, end).WithOutputFrom(end);
+
+        if (pattern.Name is not null)
+        {
+            builder = builder.WithName(pattern.Name);
+        }
+
+        return builder.Build();
+    }
+
+    private Workflow BuildConcurrentWorkflow(PatternDefinitionDto pattern)
+    {
+        IReadOnlyList<AIAgent> agents = ResolveOrderedAgents(pattern);
+        ChatForwardingExecutor start = new("Start");
+        WorkflowBuilder builder = new(start);
+
+        ExecutorBinding[] agentExecutors = agents
+            .Select(CreateAgentExecutorBinding)
+            .ToArray();
+        ExecutorBinding[] accumulators = agentExecutors
+            .Select(executor => CreateAggregateMessagesExecutorBinding($"Batcher/{executor.Id}"))
+            .ToArray();
+
+        builder.AddFanOutEdge(start, agentExecutors);
+
+        for (int index = 0; index < agentExecutors.Length; index++)
+        {
+            builder.AddEdge(agentExecutors[index], accumulators[index]);
+        }
+
+        Func<string, string, ValueTask<WorkflowConcurrentEndExecutor>> endFactory =
+            (_, __) => new(new WorkflowConcurrentEndExecutor(agentExecutors.Length, AggregateConcurrentResults));
+        ExecutorBinding end = endFactory.BindExecutor(WorkflowConcurrentEndExecutor.ExecutorId);
+
+        builder.AddFanInBarrierEdge(accumulators, end);
+        builder = builder.WithOutputFrom(end);
+
+        if (pattern.Name is not null)
+        {
+            builder = builder.WithName(pattern.Name);
+        }
+
+        return builder.Build();
+    }
+
     private Workflow BuildGroupChatWorkflow(PatternDefinitionDto pattern)
     {
         int maximumIterations = pattern.MaxIterations <= 0 ? 5 : pattern.MaxIterations;
+        AIAgent[] agents = ResolveOrderedAgents(pattern).ToArray();
+        Dictionary<AIAgent, ExecutorBinding> agentMap = agents.ToDictionary(
+            agent => agent,
+            CreateAgentExecutorBinding);
 
-        return AgentWorkflowBuilder
-            .CreateGroupChatBuilderWith(agents =>
-                new RoundRobinGroupChatManager(agents)
-                {
-                    MaximumIterationCount = maximumIterations,
-                })
-            .AddParticipants(ResolveOrderedAgents(pattern).ToArray())
-            .Build();
+        Func<string, string, ValueTask<WorkflowRoundRobinGroupChatHost>> groupChatHostFactory =
+            (id, _) => new(new WorkflowRoundRobinGroupChatHost(
+                id,
+                agents,
+                agentMap,
+                maximumIterations));
+
+        ExecutorBinding host = groupChatHostFactory.BindExecutor("GroupChatHost");
+        WorkflowBuilder builder = new(host);
+
+        foreach (ExecutorBinding participant in agentMap.Values)
+        {
+            builder
+                .AddEdge(host, participant)
+                .AddEdge(participant, host);
+        }
+
+        return builder.WithOutputFrom(host).Build();
     }
+
+    private static ExecutorBinding CreateAgentExecutorBinding(AIAgent agent)
+        => agent.BindAsExecutor(CreateAgentHostOptions());
+
+    private static ExecutorBinding CreateAggregateMessagesExecutorBinding(string id)
+    {
+        Func<string, string, ValueTask<WorkflowAggregateTurnMessagesExecutor>> factory =
+            (_, __) => new(new WorkflowAggregateTurnMessagesExecutor(id));
+        return factory.BindExecutor(id);
+    }
+
+    private static List<ChatMessage> AggregateConcurrentResults(IList<List<ChatMessage>> lists)
+        => [.. from list in lists where list.Count > 0 select list.Last()];
 
     private IReadOnlyList<AIAgent> ResolveOrderedAgents(PatternDefinitionDto pattern)
     {

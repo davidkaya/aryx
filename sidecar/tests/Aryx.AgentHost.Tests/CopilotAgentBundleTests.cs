@@ -130,6 +130,36 @@ public sealed class CopilotAgentBundleTests
         Assert.Equal(HandoffWorkflowGuidance.CreateWorkflowInstructions(), builder.HandoffInstructions);
     }
 
+    [Theory]
+    [InlineData("single", 1)]
+    [InlineData("sequential", 2)]
+    [InlineData("concurrent", 2)]
+    [InlineData("group-chat", 2)]
+    public void BuildWorkflow_ExplicitlyConfiguresAgentHostOptions(string mode, int agentCount)
+    {
+        CopilotAgentBundle bundle = new(CreateAgents(agentCount), hasConfiguredHooks: false);
+        PatternDefinitionDto pattern = CreatePattern(mode, agentCount);
+
+        Workflow workflow = bundle.BuildWorkflow(pattern);
+
+        AIAgentBinding[] bindings = workflow.ReflectExecutors().Values
+            .OfType<AIAgentBinding>()
+            .ToArray();
+
+        Assert.Equal(agentCount, bindings.Length);
+
+        foreach (AIAgentBinding binding in bindings)
+        {
+            AIAgentHostOptions options = Assert.IsType<AIAgentHostOptions>(binding.Options);
+            Assert.Null(options.EmitAgentUpdateEvents);
+            Assert.False(options.EmitAgentResponseEvents);
+            Assert.False(options.InterceptUserInputRequests);
+            Assert.False(options.InterceptUnterminatedFunctionCalls);
+            Assert.True(options.ReassignOtherAgentsAsUsers);
+            Assert.True(options.ForwardIncomingMessages);
+        }
+    }
+
     [Fact]
     public void ConvertToolRequestsToFunctionCalls_MapsCallIdsNamesAndArguments()
     {
@@ -386,6 +416,33 @@ public sealed class CopilotAgentBundleTests
             "handoff_to_1",
             "Transfer ownership to a specialist",
             CreateTool().JsonSchema);
+    }
+
+    private static IReadOnlyList<AIAgent> CreateAgents(int count)
+        => Enumerable.Range(1, count)
+            .Select(index => (AIAgent)CreateChatClientAgent($"agent-{index}", $"Agent {index}"))
+            .ToArray();
+
+    private static PatternDefinitionDto CreatePattern(string mode, int agentCount)
+    {
+        return new PatternDefinitionDto
+        {
+            Id = $"pattern-{mode}",
+            Name = $"Pattern {mode}",
+            Mode = mode,
+            Availability = "available",
+            Agents =
+            [
+                .. Enumerable.Range(1, agentCount).Select(index => new PatternAgentDefinitionDto
+                {
+                    Id = $"agent-{index}",
+                    Name = $"Agent {index}",
+                    Description = $"Agent {index} description.",
+                    Instructions = $"Agent {index} instructions.",
+                    Model = "gpt-5.4",
+                }),
+            ],
+        };
     }
 
     private static ChatClientAgent CreateChatClientAgent(string id, string name)

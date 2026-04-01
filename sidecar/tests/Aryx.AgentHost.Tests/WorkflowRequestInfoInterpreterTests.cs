@@ -87,6 +87,26 @@ public sealed class WorkflowRequestInfoInterpreterTests
     }
 
     [Fact]
+    public void TryCreateActivityFromRequest_SkipsDuplicateTrackedToolCallIds()
+    {
+        ConcurrentDictionary<string, string> toolNamesByCallId = new(StringComparer.Ordinal)
+        {
+            ["call-1"] = "view",
+        };
+        RequestInfoEvent requestInfo = CreateRequestInfoEvent(
+            new FunctionCallContent("call-1", "view", new Dictionary<string, object?>()));
+
+        AgentActivityEventDto? activity = WorkflowRequestInfoInterpreter.TryCreateActivityFromRequest(
+            CreateSingleAgentCommand(),
+            requestInfo,
+            new AgentIdentity("agent-1", "Primary"),
+            toolNamesByCallId);
+
+        Assert.Null(activity);
+        Assert.Equal("view", toolNamesByCallId["call-1"]);
+    }
+
+    [Fact]
     public void TryCreateActivityFromRequest_ReturnsHandoffActivityForKnownTargets()
     {
         ConcurrentDictionary<string, string> toolNamesByCallId = new(StringComparer.Ordinal);

@@ -57,12 +57,17 @@ internal static class WorkflowRequestInfoInterpreter
         };
     }
 
-    private static AgentActivityEventDto CreateToolCallingActivity(
+    private static AgentActivityEventDto? CreateToolCallingActivity(
         RunTurnCommandDto command,
         AgentIdentity activeAgent,
         ToolRequestInterpretation tool,
         ConcurrentDictionary<string, string> toolNamesByCallId)
     {
+        if (tool.ToolCallId is not null && toolNamesByCallId.ContainsKey(tool.ToolCallId))
+        {
+            return null;
+        }
+
         TrackToolCallId(toolNamesByCallId, tool.ToolCallId, tool.ToolName);
 
         return new AgentActivityEventDto

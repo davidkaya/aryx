@@ -89,7 +89,16 @@ internal sealed class CopilotTurnExecutionState
             case ToolExecutionStartEvent toolExecutionStart
                 when !string.IsNullOrWhiteSpace(toolExecutionStart.Data?.ToolCallId)
                     && !string.IsNullOrWhiteSpace(toolExecutionStart.Data?.ToolName):
-                ToolNamesByCallId[toolExecutionStart.Data.ToolCallId.Trim()] = toolExecutionStart.Data.ToolName.Trim();
+                string toolCallId = toolExecutionStart.Data.ToolCallId.Trim();
+                string toolName = toolExecutionStart.Data.ToolName.Trim();
+                ToolNamesByCallId[toolCallId] = toolName;
+                ActiveAgent = agent;
+                AgentActivityEventDto? toolActivity = CreateToolCallingActivity(agent, toolName, toolCallId);
+                if (toolActivity is not null)
+                {
+                    _pendingEvents.Enqueue(toolActivity);
+                }
+
                 QueueMessageReclassifiedIfNeeded(_lastObservedMessageId);
                 break;
             case AssistantIntentEvent intentEvent:
@@ -275,6 +284,29 @@ internal sealed class CopilotTurnExecutionState
             ActivityType = "thinking",
             AgentId = agent.AgentId,
             AgentName = agent.AgentName,
+        };
+    }
+
+    private AgentActivityEventDto? CreateToolCallingActivity(
+        AgentIdentity agent,
+        string toolName,
+        string toolCallId)
+    {
+        if (toolName.StartsWith("handoff_to_", StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        return new AgentActivityEventDto
+        {
+            Type = "agent-activity",
+            RequestId = _command.RequestId,
+            SessionId = _command.SessionId,
+            ActivityType = "tool-calling",
+            AgentId = agent.AgentId,
+            AgentName = agent.AgentName,
+            ToolName = toolName,
+            ToolCallId = toolCallId,
         };
     }
 

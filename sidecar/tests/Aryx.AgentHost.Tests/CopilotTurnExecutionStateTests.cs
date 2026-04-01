@@ -60,7 +60,7 @@ public sealed class CopilotTurnExecutionStateTests
     }
 
     [Fact]
-    public void ObserveSessionEvent_ToolExecutionStart_TracksToolNameByCallId()
+    public void ObserveSessionEvent_ToolExecutionStart_TracksToolNameByCallIdAndQueuesToolActivity()
     {
         RunTurnCommandDto command = CreateCommand();
         CopilotTurnExecutionState state = new(command);
@@ -68,20 +68,30 @@ public sealed class CopilotTurnExecutionStateTests
         state.ObserveSessionEvent(
             command.Pattern.Agents[0],
             SessionEvent.FromJson(
-                """
-                {
-                  "type": "tool.execution_start",
-                  "data": {
-                    "toolCallId": "tool-call-1",
-                    "toolName": "view"
-                  },
-                  "id": "33333333-3333-3333-3333-333333333333",
-                  "timestamp": "2026-03-27T00:00:00Z"
-                }
-                """));
+                """{"type":"tool.execution_start","data":{"toolCallId":"tool-call-1","toolName":"view"},"id":"33333333-3333-3333-3333-333333333333","timestamp":"2026-03-27T00:00:00Z"}"""));
 
+        AgentActivityEventDto toolActivity = Assert.Single(state.DrainPendingEvents().OfType<AgentActivityEventDto>());
+        Assert.Equal("tool-calling", toolActivity.ActivityType);
+        Assert.Equal("view", toolActivity.ToolName);
+        Assert.Equal("tool-call-1", toolActivity.ToolCallId);
         Assert.True(state.ToolNamesByCallId.TryGetValue("tool-call-1", out string? toolName));
         Assert.Equal("view", toolName);
+    }
+
+    [Fact]
+    public void ObserveSessionEvent_ToolExecutionStart_DoesNotQueueToolActivityForHandoffTools()
+    {
+        RunTurnCommandDto command = CreateCommand();
+        CopilotTurnExecutionState state = new(command);
+
+        state.ObserveSessionEvent(
+            command.Pattern.Agents[0],
+            SessionEvent.FromJson(
+                """{"type":"tool.execution_start","data":{"toolCallId":"tool-call-1","toolName":"handoff_to_specialist"},"id":"1ce9d1dc-68f1-4df5-9728-f97017233279","timestamp":"2026-03-27T00:00:00Z"}"""));
+
+        Assert.Empty(state.DrainPendingEvents().OfType<AgentActivityEventDto>());
+        Assert.True(state.ToolNamesByCallId.TryGetValue("tool-call-1", out string? toolName));
+        Assert.Equal("handoff_to_specialist", toolName);
     }
 
     [Fact]
@@ -178,6 +188,10 @@ public sealed class CopilotTurnExecutionStateTests
 
         IReadOnlyList<SidecarEventDto> pending = state.DrainPendingEvents();
 
+        AgentActivityEventDto[] toolActivities = [.. pending.OfType<AgentActivityEventDto>().Where(activity => activity.ActivityType == "tool-calling")];
+        Assert.Equal(2, toolActivities.Length);
+        Assert.Contains(toolActivities, activity => activity.ToolCallId == "tool-call-1" && activity.ToolName == "rg");
+        Assert.Contains(toolActivities, activity => activity.ToolCallId == "tool-call-2" && activity.ToolName == "view");
         MessageReclassifiedEventDto reclassified = Assert.Single(pending.OfType<MessageReclassifiedEventDto>());
         Assert.Equal("msg-3", reclassified.MessageId);
         Assert.True(state.ToolNamesByCallId.TryGetValue("tool-call-1", out string? firstToolName));

@@ -185,7 +185,7 @@ public sealed class CopilotAgentBundleTests
     }
 
     [Fact]
-    public void ConvertToolRequestsToFunctionCalls_SkipsNonHandoffToolCalls()
+    public void ConvertToolRequestsToFunctionCalls_MapsNonHandoffToolCalls()
     {
         AssistantMessageDataToolRequestsItem[] toolRequests =
         {
@@ -197,9 +197,99 @@ public sealed class CopilotAgentBundleTests
 
         IReadOnlyList<FunctionCallContent> result = AryxCopilotAgent.ConvertToolRequestsToFunctionCalls(toolRequests);
 
-        FunctionCallContent single = Assert.Single(result);
-        Assert.Equal("call-003", single.CallId);
-        Assert.Equal("handoff_to_reviewer", single.Name);
+        Assert.Collection(
+            result,
+            functionCall =>
+            {
+                Assert.Equal("call-001", functionCall.CallId);
+                Assert.Equal("ask_user", functionCall.Name);
+            },
+            functionCall =>
+            {
+                Assert.Equal("call-002", functionCall.CallId);
+                Assert.Equal("web_fetch", functionCall.Name);
+            },
+            functionCall =>
+            {
+                Assert.Equal("call-003", functionCall.CallId);
+                Assert.Equal("handoff_to_reviewer", functionCall.Name);
+            },
+            functionCall =>
+            {
+                Assert.Equal("call-004", functionCall.CallId);
+                Assert.Equal("grep", functionCall.Name);
+            });
+    }
+
+    [Fact]
+    public void TryCreateToolResultContent_UsesSdkResultContentForNonHandoffTools()
+    {
+        ToolExecutionCompleteEvent toolExecutionComplete = new()
+        {
+            Data = new ToolExecutionCompleteData
+            {
+                ToolCallId = "call-123",
+                Success = true,
+                Result = new ToolExecutionCompleteDataResult
+                {
+                    Content = "Search complete.",
+                    DetailedContent = "Search complete with extra context.",
+                },
+            },
+        };
+
+        FunctionResultContent? toolResult = AryxCopilotAgent.TryCreateToolResultContent(toolExecutionComplete, "rg");
+
+        Assert.NotNull(toolResult);
+        Assert.Equal("call-123", toolResult.CallId);
+        Assert.Equal("Search complete.", Assert.IsType<string>(toolResult.Result));
+        Assert.Same(toolExecutionComplete, toolResult.RawRepresentation);
+    }
+
+    [Fact]
+    public void TryCreateToolResultContent_UsesSdkErrorMessageForFailedTools()
+    {
+        ToolExecutionCompleteEvent toolExecutionComplete = new()
+        {
+            Data = new ToolExecutionCompleteData
+            {
+                ToolCallId = "call-456",
+                Success = false,
+                Error = new ToolExecutionCompleteDataError
+                {
+                    Message = "Permission denied.",
+                },
+            },
+        };
+
+        FunctionResultContent? toolResult = AryxCopilotAgent.TryCreateToolResultContent(toolExecutionComplete, "view");
+
+        Assert.NotNull(toolResult);
+        Assert.Equal("call-456", toolResult.CallId);
+        Assert.Equal("Permission denied.", Assert.IsType<string>(toolResult.Result));
+    }
+
+    [Fact]
+    public void TryCreateToolResultContent_SkipsHandoffTools()
+    {
+        ToolExecutionCompleteEvent toolExecutionComplete = new()
+        {
+            Data = new ToolExecutionCompleteData
+            {
+                ToolCallId = "call-789",
+                Success = true,
+                Result = new ToolExecutionCompleteDataResult
+                {
+                    Content = "Transferred.",
+                },
+            },
+        };
+
+        FunctionResultContent? toolResult = AryxCopilotAgent.TryCreateToolResultContent(
+            toolExecutionComplete,
+            "handoff_to_reviewer");
+
+        Assert.Null(toolResult);
     }
 
     [Fact]

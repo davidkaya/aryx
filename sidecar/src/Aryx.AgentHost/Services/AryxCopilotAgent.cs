@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
@@ -104,6 +105,7 @@ internal sealed class AryxCopilotAgent : AIAgent, IAsyncDisposable
         try
         {
             Channel<AgentResponseUpdate> channel = Channel.CreateUnbounded<AgentResponseUpdate>();
+            ConcurrentDictionary<string, string> toolNamesByCallId = new(StringComparer.Ordinal);
 
             using IDisposable subscription = copilotSession.On(evt =>
             {
@@ -114,7 +116,17 @@ internal sealed class AryxCopilotAgent : AIAgent, IAsyncDisposable
                         break;
 
                     case AssistantMessageEvent assistantMessage:
+                        TrackToolRequestNames(toolNamesByCallId, assistantMessage.Data?.ToolRequests);
                         channel.Writer.TryWrite(ConvertToAgentResponseUpdate(assistantMessage));
+                        break;
+
+                    case ToolExecutionCompleteEvent toolExecutionComplete:
+                        AgentResponseUpdate? toolResultUpdate = ConvertToAgentResponseUpdate(toolExecutionComplete, toolNamesByCallId);
+                        if (toolResultUpdate is not null)
+                        {
+                            channel.Writer.TryWrite(toolResultUpdate);
+                        }
+
                         break;
 
                     case AssistantUsageEvent usageEvent:
@@ -232,16 +244,6 @@ internal sealed class AryxCopilotAgent : AIAgent, IAsyncDisposable
                 continue;
             }
 
-            // Only project handoff tool calls as FunctionCallContent for the Agent Framework.
-            // Other tool calls (ask_user, MCP tools, etc.) are resolved by the Copilot SDK
-            // internally and must not be surfaced, because AIAgentHostExecutor tracks every
-            // FunctionCallContent as an outstanding request.  An unmatched request prevents
-            // the executor from emitting a TurnToken, which stalls group-chat advancement.
-            if (!IsHandoffToolName(toolRequest.Name))
-            {
-                continue;
-            }
-
             contents.Add(new FunctionCallContent(
                 toolRequest.ToolCallId,
                 toolRequest.Name,
@@ -249,6 +251,26 @@ internal sealed class AryxCopilotAgent : AIAgent, IAsyncDisposable
         }
 
         return contents;
+    }
+
+    internal static FunctionResultContent? TryCreateToolResultContent(
+        ToolExecutionCompleteEvent toolExecutionComplete,
+        string? toolName = null)
+    {
+        // Regular Copilot tools need their result projected back into AF so the function call
+        // remains part of workflow-visible history. Handoff tools are finalized separately by
+        // HandoffAgentExecutor, which already injects its own "Transferred." result.
+        string? toolCallId = toolExecutionComplete.Data?.ToolCallId?.Trim();
+        if (string.IsNullOrWhiteSpace(toolCallId) || IsHandoffToolName(toolName))
+        {
+            return null;
+        }
+
+        string result = ResolveToolResultText(toolExecutionComplete.Data);
+        return new FunctionResultContent(toolCallId, result)
+        {
+            RawRepresentation = toolExecutionComplete,
+        };
     }
 
     private static bool IsHandoffToolName(string? name)
@@ -441,6 +463,36 @@ internal sealed class AryxCopilotAgent : AIAgent, IAsyncDisposable
         };
     }
 
+    private AgentResponseUpdate? ConvertToAgentResponseUpdate(
+        ToolExecutionCompleteEvent toolExecutionComplete,
+        ConcurrentDictionary<string, string> toolNamesByCallId)
+    {
+        string? toolCallId = toolExecutionComplete.Data?.ToolCallId?.Trim();
+        if (string.IsNullOrWhiteSpace(toolCallId))
+        {
+            return null;
+        }
+
+        string? toolName = null;
+        if (toolNamesByCallId.TryRemove(toolCallId, out string? trackedToolName))
+        {
+            toolName = trackedToolName;
+        }
+
+        FunctionResultContent? toolResult = TryCreateToolResultContent(toolExecutionComplete, toolName);
+        if (toolResult is null)
+        {
+            return null;
+        }
+
+        return new AgentResponseUpdate(ChatRole.Tool, [toolResult])
+        {
+            AgentId = Id,
+            MessageId = toolCallId,
+            CreatedAt = toolExecutionComplete.Timestamp,
+        };
+    }
+
     private AgentResponseUpdate ConvertToAgentResponseUpdate(SessionEvent sessionEvent)
     {
         AIContent content = new()
@@ -453,6 +505,45 @@ internal sealed class AryxCopilotAgent : AIAgent, IAsyncDisposable
             AgentId = Id,
             CreatedAt = sessionEvent.Timestamp,
         };
+    }
+
+    private static void TrackToolRequestNames(
+        ConcurrentDictionary<string, string> toolNamesByCallId,
+        AssistantMessageDataToolRequestsItem[]? toolRequests)
+    {
+        if (toolRequests is not { Length: > 0 })
+        {
+            return;
+        }
+
+        foreach (AssistantMessageDataToolRequestsItem toolRequest in toolRequests)
+        {
+            string? toolCallId = toolRequest.ToolCallId?.Trim();
+            string? toolName = toolRequest.Name?.Trim();
+            if (string.IsNullOrWhiteSpace(toolCallId) || string.IsNullOrWhiteSpace(toolName))
+            {
+                continue;
+            }
+
+            toolNamesByCallId[toolCallId] = toolName;
+        }
+    }
+
+    private static string ResolveToolResultText(ToolExecutionCompleteData? toolExecutionCompleteData)
+    {
+        if (toolExecutionCompleteData is null)
+        {
+            return string.Empty;
+        }
+
+        if (toolExecutionCompleteData.Success)
+        {
+            return toolExecutionCompleteData.Result?.Content
+                ?? toolExecutionCompleteData.Result?.DetailedContent
+                ?? string.Empty;
+        }
+
+        return toolExecutionCompleteData.Error?.Message ?? string.Empty;
     }
 
     private static Dictionary<string, object?>? ParseToolArguments(object? arguments)

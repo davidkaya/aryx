@@ -195,6 +195,30 @@ export function ChatPane({
   const promptFiles = useMemo(() => project.customization?.promptFiles ?? [], [project.customization?.promptFiles]);
   const [armedPrompt, setArmedPrompt] = useState<ArmedPrompt | null>(null);
 
+  // Map assistant message IDs to the actual model that executed the run, but only
+  // when it differs from the session's primary agent model (i.e. a prompt override).
+  const modelOverrideByMessageId = useMemo(() => {
+    const runsByTrigger = new Map(session.runs.map((r) => [r.triggerMessageId, r]));
+    const map = new Map<string, string>();
+    let activeOverrideModel: string | undefined;
+
+    for (const message of session.messages) {
+      if (message.role === 'user') {
+        const run = runsByTrigger.get(message.id);
+        const runModel = run?.agents[0]?.model;
+        if (runModel && runModel !== primaryAgent?.model) {
+          const resolved = findModel(runModel, availableModels);
+          activeOverrideModel = resolved?.name ?? runModel;
+        } else {
+          activeOverrideModel = undefined;
+        }
+      } else if (activeOverrideModel && message.messageKind !== 'thinking') {
+        map.set(message.id, activeOverrideModel);
+      }
+    }
+    return map;
+  }, [session.messages, session.runs, primaryAgent?.model, availableModels]);
+
   const toolSelection = useMemo(() => resolveSessionToolingSelection(session), [session]);
   const mcpServers = toolingSettings.mcpServers;
   const lspProfiles = toolingSettings.lspProfiles;
@@ -469,6 +493,7 @@ export function ChatPane({
                     : 'border-[var(--color-status-success)]/20 bg-[var(--color-status-success)]/10 text-[var(--color-status-success)]';
                 const phaseLabel =
                   phase === 'thinking' ? 'Thinking' : phase === 'final' ? 'Final' : undefined;
+                const modelOverride = !isUser ? modelOverrideByMessageId.get(message.id) : undefined;
                 const showActions = !isSessionBusy && !message.pending;
 
                 return (
@@ -493,6 +518,11 @@ export function ChatPane({
                                 className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] ${assistantBadgeClass}`}
                               >
                                 {phaseLabel}
+                              </span>
+                            )}
+                            {modelOverride && (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-[var(--color-accent-purple)]/10 px-2 py-0.5 text-[10px] font-medium text-[var(--color-accent-purple)]">
+                                {modelOverride}
                               </span>
                             )}
                             {showActions && (

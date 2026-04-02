@@ -2944,9 +2944,16 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
 
     let didChange = false;
     const agents = pattern.agents.map((agent) => {
-      const reasoningEffort = resolvedModel
-        ? resolveReasoningEffort(resolvedModel, agent.reasoningEffort)
-        : agent.reasoningEffort;
+      // When overriding the model, re-normalize reasoning effort for the target model.
+      // If the target model's reasoning capabilities are unknown (supportedReasoningEfforts
+      // is undefined — common for dynamically-discovered models), strip reasoning effort
+      // entirely to avoid sending it to a model that may not support it.
+      let reasoningEffort: ReasoningEffort | undefined;
+      if (resolvedModel?.supportedReasoningEfforts) {
+        reasoningEffort = resolveReasoningEffort(resolvedModel, agent.reasoningEffort);
+      } else {
+        reasoningEffort = undefined;
+      }
 
       if (agent.model === effectiveModelId && agent.reasoningEffort === reasoningEffort) {
         return agent;

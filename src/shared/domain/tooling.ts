@@ -6,6 +6,8 @@ import {
   type ProjectDiscoveredTooling,
 } from '@shared/domain/discoveredTooling';
 import { nowIso } from '@shared/utils/ids';
+import type { WorkspaceAgentDefinition } from '@shared/domain/workspaceAgent';
+import { normalizeWorkspaceAgentDefinition } from '@shared/domain/workspaceAgent';
 
 export type McpServerTransport = 'local' | 'http' | 'sse';
 
@@ -63,6 +65,7 @@ export interface WorkspaceSettings {
   theme: AppearanceTheme;
   tooling: WorkspaceToolingSettings;
   discoveredUserTooling: DiscoveredToolingState;
+  agents?: WorkspaceAgentDefinition[];
   terminalHeight?: number;
   notificationsEnabled?: boolean;
   minimizeToTray?: boolean;
@@ -207,6 +210,7 @@ export function normalizeWorkspaceSettings(settings?: Partial<WorkspaceSettings>
       lspProfiles: (settings?.tooling?.lspProfiles ?? []).map(normalizeLspProfileDefinition),
     },
     discoveredUserTooling: normalizeDiscoveredToolingState(settings?.discoveredUserTooling),
+    agents: (settings?.agents ?? []).map(normalizeWorkspaceAgentDefinition),
     ...(terminalHeight !== undefined ? { terminalHeight } : {}),
     ...(settings?.notificationsEnabled !== undefined ? { notificationsEnabled: settings.notificationsEnabled } : {}),
     ...(settings?.minimizeToTray !== undefined ? { minimizeToTray: settings.minimizeToTray } : {}),

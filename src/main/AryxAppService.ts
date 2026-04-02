@@ -37,6 +37,11 @@ import {
   validatePatternDefinition,
 } from '@shared/domain/pattern';
 import {
+  normalizeWorkspaceAgentDefinition,
+  resolvePatternAgents,
+  type WorkspaceAgentDefinition,
+} from '@shared/domain/workspaceAgent';
+import {
   applyDiscoveredMcpServerStatus,
   listAcceptedDiscoveredMcpServers,
   normalizeDiscoveredToolingState,
@@ -813,6 +818,39 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     return this.persistAndBroadcast(workspace);
   }
 
+  async saveWorkspaceAgent(agent: WorkspaceAgentDefinition): Promise<WorkspaceState> {
+    const workspace = await this.loadWorkspace();
+    const agents = workspace.settings.agents ?? [];
+    const existingIndex = agents.findIndex((current) => current.id === agent.id);
+    const timestamp = nowIso();
+    const candidate = normalizeWorkspaceAgentDefinition({
+      ...agent,
+      createdAt: existingIndex >= 0 ? agents[existingIndex].createdAt : timestamp,
+      updatedAt: timestamp,
+    });
+
+    if (!candidate.name) {
+      throw new Error('Workspace agent name is required.');
+    }
+
+    if (existingIndex >= 0) {
+      agents[existingIndex] = candidate;
+    } else {
+      agents.push(candidate);
+    }
+
+    workspace.settings.agents = agents;
+    return this.persistAndBroadcast(workspace);
+  }
+
+  async deleteWorkspaceAgent(agentId: string): Promise<WorkspaceState> {
+    const workspace = await this.loadWorkspace();
+    workspace.settings.agents = (workspace.settings.agents ?? []).filter(
+      (agent) => agent.id !== agentId,
+    );
+    return this.persistAndBroadcast(workspace);
+  }
+
   async createSession(projectId: string, patternId: string): Promise<WorkspaceState> {
     const workspace = await this.loadWorkspace();
     const project = this.requireProject(workspace, projectId);
@@ -955,7 +993,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     const project = this.requireProject(workspace, session.projectId);
     const pattern = this.requirePattern(workspace, session.patternId);
     const effectivePattern = this.applyProjectCustomizationToPattern(
-      await this.buildEffectivePattern(pattern, session),
+      await this.buildEffectivePattern(pattern, session, workspace.settings.agents ?? []),
       project,
     );
     const projectInstructions = resolveProjectInstructionsContent(project.customization);
@@ -1014,7 +1052,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     const project = this.requireProject(workspace, session.projectId);
     const pattern = this.requirePattern(workspace, session.patternId);
     const effectivePattern = this.applyProjectCustomizationToPattern(
-      await this.buildEffectivePattern(pattern, session),
+      await this.buildEffectivePattern(pattern, session, workspace.settings.agents ?? []),
       project,
     );
     const projectInstructions = resolveProjectInstructionsContent(project.customization);
@@ -1068,7 +1106,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     const project = this.requireProject(workspace, session.projectId);
     const pattern = this.requirePattern(workspace, session.patternId);
     const effectivePattern = this.applyProjectCustomizationToPattern(
-      await this.buildEffectivePattern(pattern, session),
+      await this.buildEffectivePattern(pattern, session, workspace.settings.agents ?? []),
       project,
     );
     const projectInstructions = resolveProjectInstructionsContent(project.customization);
@@ -2919,10 +2957,12 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
   private async buildEffectivePattern(
     pattern: PatternDefinition,
     session: SessionRecord,
+    workspaceAgents: ReadonlyArray<WorkspaceAgentDefinition>,
   ): Promise<PatternDefinition> {
+    const resolvedPattern = resolvePatternAgents(pattern, workspaceAgents);
     const patternWithSessionConfig = session.sessionModelConfig
-      ? applySessionModelConfig(pattern, session)
-      : pattern;
+      ? applySessionModelConfig(resolvedPattern, session)
+      : resolvedPattern;
     const patternWithApprovalSettings = applySessionApprovalSettings(patternWithSessionConfig, session);
 
     const modelCatalog = await this.loadAvailableModelCatalog();

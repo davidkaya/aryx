@@ -49,6 +49,7 @@ import { isScratchpadProject, SCRATCHPAD_PROJECT_ID } from '@shared/domain/proje
 import type { ProjectGitFileReference } from '@shared/domain/project';
 import { applySessionModelConfig } from '@shared/domain/session';
 import type { AppearanceTheme, LspProfileDefinition, McpServerDefinition } from '@shared/domain/tooling';
+import type { WorkspaceAgentDefinition } from '@shared/domain/workspaceAgent';
 import type { WorkspaceState } from '@shared/domain/workspace';
 import type { UpdateStatus } from '@shared/contracts/ipc';
 import { createId, nowIso } from '@shared/utils/ids';
@@ -101,6 +102,20 @@ function createDraftLspProfile(): LspProfileDefinition {
     args: ['--stdio'],
     languageId: 'typescript',
     fileExtensions: ['.ts', '.tsx'],
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+}
+
+function createDraftWorkspaceAgent(defaultModelId: string): WorkspaceAgentDefinition {
+  const timestamp = nowIso();
+  return {
+    id: createId('agent'),
+    name: '',
+    description: '',
+    instructions: '',
+    model: defaultModelId,
+    reasoningEffort: 'high',
     createdAt: timestamp,
     updatedAt: timestamp,
   };
@@ -728,6 +743,17 @@ export default function App() {
         onSavePattern={async (pattern) => {
           await api.savePattern({ pattern });
         }}
+        onSaveWorkspaceAgent={async (agent) => {
+          await api.saveWorkspaceAgent({ agent });
+        }}
+        onDeleteWorkspaceAgent={async (id) => {
+          await api.deleteWorkspaceAgent(id);
+        }}
+        onNewWorkspaceAgent={() => {
+          const defaultModel = availableModels[0] ?? findModel('gpt-5.4', availableModels) ?? findModel('gpt-5.4');
+          return createDraftWorkspaceAgent(defaultModel?.id ?? 'gpt-5.4');
+        }}
+        workspaceAgents={workspace.settings.agents ?? []}
         onSetTheme={(theme) => void api.setTheme(theme)}
         notificationsEnabled={workspace.settings.notificationsEnabled !== false}
         onSetNotificationsEnabled={(enabled) => void api.setNotificationsEnabled(enabled)}

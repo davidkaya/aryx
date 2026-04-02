@@ -1,11 +1,12 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { ChevronLeft, ChevronRight, CircleCheck, Code, Cpu, FolderOpen, Palette, Plus, RefreshCw, Server, TriangleAlert, Workflow, Wrench } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CircleCheck, Code, Cpu, FolderOpen, Palette, Plus, RefreshCw, Server, TriangleAlert, UserCircle, Workflow, Wrench } from 'lucide-react';
 
 import { CopilotStatusCard } from '@renderer/components/CopilotStatusCard';
 import { PatternEditor } from '@renderer/components/PatternEditor';
 import { ToggleSwitch } from '@renderer/components/ui';
 import { LspProfileEditor } from '@renderer/components/settings/LspProfileEditor';
 import { McpServerEditor } from '@renderer/components/settings/McpServerEditor';
+import { WorkspaceAgentEditor } from '@renderer/components/settings/WorkspaceAgentEditor';
 import type { SidecarCapabilities, QuotaSnapshot } from '@shared/contracts/sidecar';
 import type { DiscoveredMcpServer, DiscoveredToolingState } from '@shared/domain/discoveredTooling';
 import { listAcceptedDiscoveredMcpServers, listPendingDiscoveredMcpServers } from '@shared/domain/discoveredTooling';
@@ -20,6 +21,7 @@ import {
   type McpServerDefinition,
   type WorkspaceToolingSettings,
 } from '@shared/domain/tooling';
+import { normalizeWorkspaceAgentDefinition, findWorkspaceAgentUsages, type WorkspaceAgentDefinition } from '@shared/domain/workspaceAgent';
 
 interface SettingsPanelProps {
   availableModels: ReadonlyArray<ModelDefinition>;
@@ -41,6 +43,10 @@ interface SettingsPanelProps {
   onSaveLspProfile: (profile: LspProfileDefinition) => Promise<void>;
   onDeleteLspProfile: (profileId: string) => Promise<void>;
   onNewLspProfile: () => LspProfileDefinition;
+  onSaveWorkspaceAgent: (agent: WorkspaceAgentDefinition) => Promise<void>;
+  onDeleteWorkspaceAgent: (agentId: string) => Promise<void>;
+  onNewWorkspaceAgent: () => WorkspaceAgentDefinition;
+  workspaceAgents: WorkspaceAgentDefinition[];
   onSetTheme: (theme: AppearanceTheme) => void;
   notificationsEnabled: boolean;
   onSetNotificationsEnabled: (enabled: boolean) => void;
@@ -54,7 +60,7 @@ interface SettingsPanelProps {
   onGetQuota?: () => Promise<Record<string, QuotaSnapshot>>;
 }
 
-export type SettingsSection = 'appearance' | 'connection' | 'patterns' | 'mcp-servers' | 'lsp-profiles' | 'troubleshooting';
+export type SettingsSection = 'appearance' | 'connection' | 'patterns' | 'agents' | 'mcp-servers' | 'lsp-profiles' | 'troubleshooting';
 
 interface NavItem {
   id: SettingsSection;
@@ -84,6 +90,7 @@ const navGroups: NavGroup[] = [
     label: 'Orchestration',
     items: [
       { id: 'patterns', label: 'Patterns', icon: <Workflow className="size-3.5" /> },
+      { id: 'agents', label: 'Agents', icon: <UserCircle className="size-3.5" /> },
     ],
   },
   {
@@ -126,6 +133,10 @@ export function SettingsPanel({
   onSaveLspProfile,
   onDeleteLspProfile,
   onNewLspProfile,
+  onSaveWorkspaceAgent,
+  onDeleteWorkspaceAgent,
+  onNewWorkspaceAgent,
+  workspaceAgents,
   onSetTheme,
   notificationsEnabled,
   onSetNotificationsEnabled,
@@ -142,6 +153,7 @@ export function SettingsPanel({
   const [editingPattern, setEditingPattern] = useState<PatternDefinition | null>(null);
   const [editingMcpServer, setEditingMcpServer] = useState<McpServerDefinition | null>(null);
   const [editingLspProfile, setEditingLspProfile] = useState<LspProfileDefinition | null>(null);
+  const [editingWorkspaceAgent, setEditingWorkspaceAgent] = useState<WorkspaceAgentDefinition | null>(null);
 
   if (editingPattern) {
     const isBuiltin = editingPattern.id.startsWith('pattern-');
@@ -167,6 +179,8 @@ export function SettingsPanel({
           pattern={editingPattern}
           runtimeTools={sidecarCapabilities?.runtimeTools}
           toolingSettings={toolingSettings}
+          workspaceAgents={workspaceAgents}
+          onSaveWorkspaceAgent={onSaveWorkspaceAgent}
         />
       </div>
     );
@@ -217,6 +231,33 @@ export function SettingsPanel({
             setEditingLspProfile(null);
           }}
           profile={editingLspProfile}
+        />
+      </div>
+    );
+  }
+
+  if (editingWorkspaceAgent) {
+    const exists = workspaceAgents.some((a) => a.id === editingWorkspaceAgent.id);
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col bg-[var(--color-surface-0)]">
+        <WorkspaceAgentEditor
+          agent={editingWorkspaceAgent}
+          availableModels={availableModels}
+          onBack={() => setEditingWorkspaceAgent(null)}
+          onChange={setEditingWorkspaceAgent}
+          onDelete={
+            exists
+              ? async () => {
+                  await onDeleteWorkspaceAgent(editingWorkspaceAgent.id);
+                  setEditingWorkspaceAgent(null);
+                }
+              : undefined
+          }
+          onSave={async () => {
+            await onSaveWorkspaceAgent(normalizeWorkspaceAgentDefinition(editingWorkspaceAgent));
+            setEditingWorkspaceAgent(null);
+          }}
+          patterns={patterns}
         />
       </div>
     );
@@ -296,6 +337,14 @@ export function SettingsPanel({
                 onEditPattern={(pattern) => setEditingPattern(structuredClone(pattern))}
                 onNewPattern={() => setEditingPattern(onNewPattern())}
                 patterns={patterns}
+              />
+            )}
+            {activeSection === 'agents' && (
+              <WorkspaceAgentsSection
+                agents={workspaceAgents}
+                patterns={patterns}
+                onEditAgent={(agent) => setEditingWorkspaceAgent(structuredClone(agent))}
+                onNewAgent={() => setEditingWorkspaceAgent(onNewWorkspaceAgent())}
               />
             )}
             {activeSection === 'mcp-servers' && (
@@ -550,6 +599,76 @@ function PatternsSection({
           </button>
         ))}
       </div>
+    </div>
+  );
+}
+
+function WorkspaceAgentsSection({
+  agents,
+  patterns,
+  onEditAgent,
+  onNewAgent,
+}: {
+  agents: WorkspaceAgentDefinition[];
+  patterns: PatternDefinition[];
+  onEditAgent: (agent: WorkspaceAgentDefinition) => void;
+  onNewAgent: () => void;
+}) {
+  return (
+    <div>
+      <SectionHeader
+        description="Define reusable agents that can be shared across multiple patterns"
+        title="Workspace Agents"
+      >
+        <SectionAction label="New Agent" onClick={onNewAgent} />
+      </SectionHeader>
+
+      {agents.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-[var(--color-border)] px-6 py-10 text-center">
+          <UserCircle className="mx-auto size-8 text-[var(--color-text-muted)]" />
+          <p className="mt-3 text-[13px] font-medium text-[var(--color-text-secondary)]">
+            No workspace agents yet
+          </p>
+          <p className="mt-1 text-[12px] text-[var(--color-text-muted)]">
+            Create agents here and reference them in multiple patterns.
+            Changes to a workspace agent automatically propagate to all linked patterns.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-1">
+          {agents.map((agent) => {
+            const usageCount = findWorkspaceAgentUsages(agent.id, patterns).length;
+            return (
+              <button
+                className="group flex w-full items-center gap-3 rounded-xl border border-transparent px-4 py-3 text-left transition-all duration-200 hover:border-[var(--color-border)] hover:bg-[var(--color-surface-1)]"
+                key={agent.id}
+                onClick={() => onEditAgent(agent)}
+                type="button"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[13px] font-medium text-[var(--color-text-primary)]">{agent.name}</span>
+                    <span className="rounded-full bg-[var(--color-surface-3)] px-2 py-0.5 text-[10px] font-medium text-[var(--color-text-muted)]">
+                      {agent.model}
+                    </span>
+                  </div>
+                  {agent.description && (
+                    <p className="mt-0.5 truncate text-[12px] text-[var(--color-text-muted)]">{agent.description}</p>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  {usageCount > 0 && (
+                    <span className="text-[12px] text-[var(--color-text-muted)]">
+                      {usageCount} pattern{usageCount === 1 ? '' : 's'}
+                    </span>
+                  )}
+                  <ChevronRight className="size-4 text-[var(--color-text-muted)]" />
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

@@ -33,6 +33,7 @@ export const reasoningEffortOptions: ReadonlyArray<{ value: ReasoningEffort; lab
 ];
 
 import type { PatternAgentCopilotConfig } from '@shared/contracts/sidecar';
+import type { PatternAgentOverrides } from '@shared/domain/workspaceAgent';
 
 export interface PatternAgentDefinition {
   id: string;
@@ -42,6 +43,10 @@ export interface PatternAgentDefinition {
   model: string;
   reasoningEffort?: ReasoningEffort;
   copilot?: PatternAgentCopilotConfig;
+  /** When set, this agent references a workspace agent instead of being fully inline. */
+  workspaceAgentId?: string;
+  /** Per-pattern overrides applied on top of the workspace agent base. */
+  overrides?: PatternAgentOverrides;
 }
 
 export interface PatternGraphPosition {

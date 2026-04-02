@@ -21,6 +21,7 @@ import type {
 import type { WorkspaceState } from '@shared/domain/workspace';
 import type { ChatMessageAttachment } from '@shared/domain/attachment';
 import type { ProjectPromptInvocation } from '@shared/domain/projectCustomization';
+import type { WorkspaceAgentDefinition } from '@shared/domain/workspaceAgent';
 
 export interface CreateSessionInput {
   projectId: string;
@@ -116,6 +117,10 @@ export interface SaveMcpServerInput {
 
 export interface SaveLspProfileInput {
   profile: LspProfileDefinition;
+}
+
+export interface SaveWorkspaceAgentInput {
+  agent: WorkspaceAgentDefinition;
 }
 
 export type DiscoveredToolingResolution = 'accept' | 'dismiss';
@@ -273,6 +278,8 @@ export interface ElectronApi {
   deleteMcpServer(serverId: string): Promise<WorkspaceState>;
   saveLspProfile(input: SaveLspProfileInput): Promise<WorkspaceState>;
   deleteLspProfile(profileId: string): Promise<WorkspaceState>;
+  saveWorkspaceAgent(input: SaveWorkspaceAgentInput): Promise<WorkspaceState>;
+  deleteWorkspaceAgent(agentId: string): Promise<WorkspaceState>;
   updateSessionTooling(input: UpdateSessionToolingInput): Promise<WorkspaceState>;
   updateSessionApprovalSettings(input: UpdateSessionApprovalSettingsInput): Promise<WorkspaceState>;
   createSession(input: CreateSessionInput): Promise<WorkspaceState>;

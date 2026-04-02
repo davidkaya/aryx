@@ -3,14 +3,18 @@ import {
   AlertCircle,
   ArrowLeftRight,
   CheckCircle,
+  ChevronDown,
   ChevronLeft,
   GitFork,
+  Library,
+  Link2,
   ListOrdered,
   Lock,
   MessageSquare,
   Plus,
   ShieldCheck,
   Trash2,
+  Unlink,
   Users,
   type LucideIcon,
 } from 'lucide-react';
@@ -35,7 +39,9 @@ import {
   type RuntimeToolDefinition,
   type WorkspaceToolingSettings,
 } from '@shared/domain/tooling';
+import type { WorkspaceAgentDefinition } from '@shared/domain/workspaceAgent';
 
+import { useClickOutside } from '@renderer/hooks/useClickOutside';
 import { ToggleSwitch } from '@renderer/components/ui';
 import { PatternGraphCanvas } from './pattern-graph/PatternGraphCanvas';
 import { PatternGraphInspector } from './pattern-graph/PatternGraphInspector';
@@ -46,6 +52,8 @@ interface PatternEditorProps {
   isBuiltin: boolean;
   toolingSettings: WorkspaceToolingSettings;
   runtimeTools?: ReadonlyArray<RuntimeToolDefinition>;
+  workspaceAgents: WorkspaceAgentDefinition[];
+  onSaveWorkspaceAgent: (agent: WorkspaceAgentDefinition) => Promise<void>;
   onChange: (pattern: PatternDefinition) => void;
   onDelete?: () => void;
   onSave: () => void;
@@ -134,12 +142,16 @@ export function PatternEditor({
   isBuiltin,
   toolingSettings,
   runtimeTools,
+  workspaceAgents,
+  onSaveWorkspaceAgent,
   onChange,
   onDelete,
   onSave,
   onBack,
 }: PatternEditorProps) {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [addAgentMenuOpen, setAddAgentMenuOpen] = useState(false);
+  const addAgentMenuRef = useClickOutside<HTMLDivElement>(() => setAddAgentMenuOpen(false), addAgentMenuOpen);
   const issues = validatePatternDefinition(pattern);
   const graph = resolvePatternGraph(pattern);
 
@@ -166,6 +178,47 @@ export function PatternEditor({
     };
     const updatedGraph = addAgentToGraph(graph, pattern.mode, newAgent);
     onChange({ ...pattern, agents: [...pattern.agents, newAgent], graph: updatedGraph });
+    setAddAgentMenuOpen(false);
+  }
+
+  function addAgentFromLibrary(wa: WorkspaceAgentDefinition) {
+    const newAgent: PatternAgentDefinition = {
+      id: `agent-${crypto.randomUUID()}`,
+      name: wa.name,
+      description: wa.description,
+      instructions: wa.instructions,
+      model: wa.model,
+      reasoningEffort: wa.reasoningEffort,
+      copilot: wa.copilot,
+      workspaceAgentId: wa.id,
+    };
+    const updatedGraph = addAgentToGraph(graph, pattern.mode, newAgent);
+    onChange({ ...pattern, agents: [...pattern.agents, newAgent], graph: updatedGraph });
+    setAddAgentMenuOpen(false);
+  }
+
+  async function promoteAgent(agentId: string) {
+    const agent = pattern.agents.find((a) => a.id === agentId);
+    if (!agent || agent.workspaceAgentId) return;
+
+    const timestamp = new Date().toISOString();
+    const workspaceAgent: WorkspaceAgentDefinition = {
+      id: `agent-${crypto.randomUUID()}`,
+      name: agent.name,
+      description: agent.description,
+      instructions: agent.instructions,
+      model: agent.model,
+      reasoningEffort: agent.reasoningEffort,
+      copilot: agent.copilot,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    };
+    await onSaveWorkspaceAgent(workspaceAgent);
+    updateAgent(agentId, { workspaceAgentId: workspaceAgent.id, overrides: undefined });
+  }
+
+  function unlinkAgent(agentId: string) {
+    updateAgent(agentId, { workspaceAgentId: undefined, overrides: undefined });
   }
 
   function updateAgent(agentId: string, patch: Partial<PatternAgentDefinition>) {
@@ -313,14 +366,46 @@ export function PatternEditor({
             <h4 className="text-[12px] font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
               Topology
             </h4>
-            <button
-              className="flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[12px] font-medium text-[var(--color-text-secondary)] transition-all duration-200 hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-primary)]"
-              onClick={addAgent}
-              type="button"
-            >
-              <Plus className="size-3" />
-              Add agent
-            </button>
+            <div className="relative" ref={addAgentMenuRef}>
+              <button
+                className="flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[12px] font-medium text-[var(--color-text-secondary)] transition-all duration-200 hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-primary)]"
+                onClick={() => workspaceAgents.length > 0 ? setAddAgentMenuOpen(!addAgentMenuOpen) : addAgent()}
+                type="button"
+              >
+                <Plus className="size-3" />
+                Add agent
+                {workspaceAgents.length > 0 && <ChevronDown className="size-3" />}
+              </button>
+              {addAgentMenuOpen && (
+                <div className="absolute right-0 z-50 mt-1 w-56 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-1)] py-1 shadow-xl">
+                  <button
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] text-[var(--color-text-secondary)] transition hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-primary)]"
+                    onClick={addAgent}
+                    type="button"
+                  >
+                    <Plus className="size-3.5" />
+                    New inline agent
+                  </button>
+                  <div className="my-1 border-t border-[var(--color-border)]" />
+                  <div className="px-3 py-1.5">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
+                      From library
+                    </span>
+                  </div>
+                  {workspaceAgents.map((wa) => (
+                    <button
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] text-[var(--color-text-secondary)] transition hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-primary)]"
+                      key={wa.id}
+                      onClick={() => addAgentFromLibrary(wa)}
+                      type="button"
+                    >
+                      <Library className="size-3.5 text-[var(--color-accent)]" />
+                      <span className="truncate">{wa.name}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="min-h-[300px] flex-1 px-5 py-3">
@@ -473,8 +558,11 @@ export function PatternEditor({
             graph={graph}
             mode={pattern.mode}
             selectedNodeId={selectedNodeId}
+            workspaceAgents={workspaceAgents}
             onAgentChange={updateAgent}
             onAgentRemove={removeAgent}
+            onAgentPromote={promoteAgent}
+            onAgentUnlink={unlinkAgent}
             onGraphChange={emitGraphChange}
           />
         </div>

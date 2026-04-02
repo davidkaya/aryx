@@ -1,4 +1,4 @@
-import { Bot, ChevronDown, ChevronUp, CircleUser, Layers, Radio, Shuffle, Trash2 } from 'lucide-react';
+import { Bot, ChevronDown, ChevronUp, CircleUser, Layers, Library, Link2, Radio, Shuffle, Trash2, Unlink } from 'lucide-react';
 
 import {
   findModel,
@@ -12,6 +12,7 @@ import type {
   PatternGraph,
   PatternGraphNodeKind,
 } from '@shared/domain/pattern';
+import type { WorkspaceAgentDefinition } from '@shared/domain/workspaceAgent';
 import {
   canMoveSequential,
   findAgentForNode,
@@ -25,8 +26,11 @@ interface PatternGraphInspectorProps {
   graph: PatternGraph;
   mode: OrchestrationMode;
   selectedNodeId: string | null;
+  workspaceAgents: WorkspaceAgentDefinition[];
   onAgentChange: (agentId: string, patch: Partial<PatternAgentDefinition>) => void;
   onAgentRemove: (agentId: string) => void;
+  onAgentPromote: (agentId: string) => void;
+  onAgentUnlink: (agentId: string) => void;
   onGraphChange: (graph: PatternGraph) => void;
 }
 
@@ -118,8 +122,11 @@ function AgentNodeInspector({
   mode,
   graph,
   nodeId,
+  workspaceAgents,
   onAgentChange,
   onAgentRemove,
+  onAgentPromote,
+  onAgentUnlink,
   onGraphChange,
 }: {
   agent: PatternAgentDefinition;
@@ -127,17 +134,45 @@ function AgentNodeInspector({
   mode: OrchestrationMode;
   graph: PatternGraph;
   nodeId: string;
+  workspaceAgents: WorkspaceAgentDefinition[];
   onAgentChange: (agentId: string, patch: Partial<PatternAgentDefinition>) => void;
   onAgentRemove: (agentId: string) => void;
+  onAgentPromote: (agentId: string) => void;
+  onAgentUnlink: (agentId: string) => void;
   onGraphChange: (graph: PatternGraph) => void;
 }) {
   const model = findModel(agent.model, availableModels);
   const showReorder = mode === 'sequential' || mode === 'single' || mode === 'magentic';
   const canUp = showReorder && canMoveSequential(graph, nodeId, 'up');
   const canDown = showReorder && canMoveSequential(graph, nodeId, 'down');
+  const isLinked = Boolean(agent.workspaceAgentId);
+  const linkedWorkspaceAgent = isLinked
+    ? workspaceAgents.find((wa) => wa.id === agent.workspaceAgentId)
+    : undefined;
 
   return (
     <div className="space-y-4">
+      {/* Linked workspace agent banner */}
+      {isLinked && (
+        <div className="flex items-center justify-between rounded-lg border border-[var(--color-accent)]/20 bg-[var(--color-accent)]/5 px-3 py-2">
+          <div className="flex items-center gap-2">
+            <Link2 className="size-3.5 text-[var(--color-accent)]" />
+            <span className="text-[11px] text-[var(--color-text-secondary)]">
+              Linked to <strong className="text-[var(--color-text-primary)]">{linkedWorkspaceAgent?.name ?? 'unknown agent'}</strong>
+            </span>
+          </div>
+          <button
+            className="flex items-center gap-1 rounded px-2 py-1 text-[11px] text-[var(--color-text-muted)] transition hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-secondary)]"
+            onClick={() => onAgentUnlink(agent.id)}
+            title="Unlink from workspace agent (convert to inline)"
+            type="button"
+          >
+            <Unlink className="size-3" />
+            Unlink
+          </button>
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2.5">
           <div className="flex size-8 items-center justify-center rounded-lg bg-[var(--color-surface-2)]">
@@ -218,6 +253,19 @@ function AgentNodeInspector({
         placeholder="System prompt for this agent..."
         value={agent.instructions}
       />
+
+      {/* Promote / Unlink action */}
+      {!isLinked && (
+        <button
+          className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-[var(--color-border)] px-3 py-2 text-[12px] text-[var(--color-text-muted)] transition hover:border-[var(--color-accent)]/30 hover:bg-[var(--color-accent)]/5 hover:text-[var(--color-accent)]"
+          onClick={() => onAgentPromote(agent.id)}
+          title="Save this agent to the workspace library for reuse across patterns"
+          type="button"
+        >
+          <Library className="size-3.5" />
+          Save to Agent Library
+        </button>
+      )}
     </div>
   );
 }
@@ -228,8 +276,11 @@ export function PatternGraphInspector({
   graph,
   mode,
   selectedNodeId,
+  workspaceAgents,
   onAgentChange,
   onAgentRemove,
+  onAgentPromote,
+  onAgentUnlink,
   onGraphChange,
 }: PatternGraphInspectorProps) {
   if (!selectedNodeId) {
@@ -268,8 +319,11 @@ export function PatternGraphInspector({
         mode={mode}
         graph={graph}
         nodeId={selectedNodeId}
+        workspaceAgents={workspaceAgents}
         onAgentChange={onAgentChange}
         onAgentRemove={onAgentRemove}
+        onAgentPromote={onAgentPromote}
+        onAgentUnlink={onAgentUnlink}
         onGraphChange={onGraphChange}
       />
     </div>

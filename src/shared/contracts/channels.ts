@@ -26,6 +26,8 @@ export const ipcChannels = {
   deleteMcpServer: 'tooling:mcp:delete',
   saveLspProfile: 'tooling:lsp:save',
   deleteLspProfile: 'tooling:lsp:delete',
+  saveWorkspaceAgent: 'workspace-agents:save',
+  deleteWorkspaceAgent: 'workspace-agents:delete',
   describeTerminal: 'terminal:describe',
   createTerminal: 'terminal:create',
   restartTerminal: 'terminal:restart',

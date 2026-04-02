@@ -25,6 +25,8 @@ export interface GraphNodeData extends Record<string, unknown> {
   provider?: ModelProvider;
   /** Short display name for the agent's model (agent nodes only). */
   modelLabel?: string;
+  /** True when the agent references a workspace agent definition. */
+  isLinked?: boolean;
 }
 
 /* ── View-model projection ─────────────────────────────────── */
@@ -81,6 +83,10 @@ export function toCanvasNodes(
       }
     }
 
+    const isLinked = node.kind === 'agent' && node.agentId
+      ? Boolean(agents.find((a) => a.id === node.agentId)?.workspaceAgentId)
+      : false;
+
     return {
       id: node.id,
       type: resolveNodeType(node.kind),
@@ -93,6 +99,7 @@ export function toCanvasNodes(
         readOnly: isSystemNode(node.kind),
         provider,
         modelLabel,
+        isLinked,
       },
       draggable: true,
       selectable: true,

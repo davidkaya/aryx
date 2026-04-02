@@ -34,6 +34,7 @@ import type {
   SaveLspProfileInput,
   SaveMcpServerInput,
   SavePatternInput,
+  SaveWorkspaceAgentInput,
   SendSessionMessageInput,
   SetPatternFavoriteInput,
   SetProjectAgentProfileEnabledInput,
@@ -147,6 +148,12 @@ export function registerIpcHandlers(
   );
   ipcMain.handle(ipcChannels.deleteLspProfile, (_event, profileId: string) =>
     service.deleteLspProfile(profileId),
+  );
+  ipcMain.handle(ipcChannels.saveWorkspaceAgent, (_event, input: SaveWorkspaceAgentInput) =>
+    service.saveWorkspaceAgent(input.agent),
+  );
+  ipcMain.handle(ipcChannels.deleteWorkspaceAgent, (_event, agentId: string) =>
+    service.deleteWorkspaceAgent(agentId),
   );
   ipcMain.handle(ipcChannels.describeTerminal, () => service.describeTerminal());
   ipcMain.handle(ipcChannels.createTerminal, () => service.createTerminal());

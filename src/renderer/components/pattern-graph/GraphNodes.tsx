@@ -1,6 +1,6 @@
 import { memo } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
-import { CircleUser, Shuffle, Layers, Radio, Bot } from 'lucide-react';
+import { CircleUser, Link2, Shuffle, Layers, Radio, Bot } from 'lucide-react';
 
 import type { GraphNodeData } from '@renderer/lib/patternGraph';
 import type { PatternGraphNodeKind } from '@shared/domain/pattern';
@@ -54,6 +54,11 @@ function GraphNodeContent({ data, selected }: { data: GraphNodeData; selected: b
       {data.readOnly && (
         <span className="ml-1 rounded bg-[var(--color-surface-3)]/50 px-1 py-0.5 text-[8px] font-medium text-[var(--color-text-muted)]">
           SYS
+        </span>
+      )}
+      {data.isLinked && (
+        <span className="ml-1 flex size-4 items-center justify-center rounded bg-[var(--color-accent)]/15" title="Linked workspace agent">
+          <Link2 className="size-2.5 text-[var(--color-accent)]" />
         </span>
       )}
     </div>

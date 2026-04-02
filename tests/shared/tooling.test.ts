@@ -109,6 +109,7 @@ describe('tooling settings helpers', () => {
       discoveredUserTooling: {
         mcpServers: [],
       },
+      agents: [],
     });
   });
 

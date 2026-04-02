@@ -87,7 +87,7 @@ const navGroups: NavGroup[] = [
     ],
   },
   {
-    label: 'Orchestration',
+    label: 'Workflows',
     items: [
       { id: 'patterns', label: 'Patterns', icon: <Workflow className="size-3.5" /> },
       { id: 'agents', label: 'Agents', icon: <UserCircle className="size-3.5" /> },
@@ -566,7 +566,7 @@ function PatternsSection({
     <div>
       <SectionHeader
         description="Define reusable agent configurations for your sessions"
-        title="Orchestration Patterns"
+        title="Workflow Patterns"
       >
         <SectionAction label="New Pattern" onClick={onNewPattern} />
       </SectionHeader>

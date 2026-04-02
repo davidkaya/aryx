@@ -5,7 +5,7 @@ import { ToggleSwitch } from '@renderer/components/ui';
 import type { ProjectRecord, ProjectGitContext } from '@shared/domain/project';
 import type { DiscoveredMcpServer } from '@shared/domain/discoveredTooling';
 import { listAcceptedDiscoveredMcpServers, listPendingDiscoveredMcpServers } from '@shared/domain/discoveredTooling';
-import type { ProjectAgentProfile, ProjectInstructionFile, ProjectPromptFile } from '@shared/domain/projectCustomization';
+import type { ProjectAgentProfile, ProjectInstructionApplicationMode, ProjectInstructionFile, ProjectPromptFile } from '@shared/domain/projectCustomization';
 
 /* ── Types ────────────────────────────────────────────────── */
 
@@ -335,7 +335,7 @@ function InstructionsContent({
   return (
     <div>
       <SectionHeader
-        description="Repository instructions automatically included in every session. Discovered from .github/copilot-instructions.md and AGENTS.md."
+        description="Repository instructions discovered from copilot-instructions.md, AGENTS.md, CLAUDE.md, and .github/instructions/**/*.instructions.md."
         title="Instructions"
       >
         <RescanButton onClick={onRescan} />
@@ -343,7 +343,7 @@ function InstructionsContent({
 
       {instructions.length === 0 ? (
         <EmptyState>
-          No instruction files found. Add a <code className="text-[var(--color-text-secondary)]">.github/copilot-instructions.md</code> or <code className="text-[var(--color-text-secondary)]">AGENTS.md</code> file to your project root.
+          No instruction files found. Add <code className="text-[var(--color-text-secondary)]">.github/copilot-instructions.md</code>, <code className="text-[var(--color-text-secondary)]">AGENTS.md</code>, <code className="text-[var(--color-text-secondary)]">CLAUDE.md</code>, or <code className="text-[var(--color-text-secondary)]">*.instructions.md</code> files under <code className="text-[var(--color-text-secondary)]">.github/instructions/</code>.
         </EmptyState>
       ) : (
         <div className="space-y-3">
@@ -359,6 +359,7 @@ function InstructionsContent({
 function InstructionCard({ instruction }: { instruction: ProjectInstructionFile }) {
   const [expanded, setExpanded] = useState(false);
   const isLong = instruction.content.length > 300;
+  const displayName = instruction.name ?? instruction.sourcePath;
 
   return (
     <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-glass)]">
@@ -368,13 +369,30 @@ function InstructionCard({ instruction }: { instruction: ProjectInstructionFile 
         type="button"
       >
         <FileCode2 className="size-4 shrink-0 text-[var(--color-text-accent)]" />
-        <span className="flex-1 text-[13px] font-medium text-[var(--color-text-primary)]">{instruction.sourcePath}</span>
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <span className="truncate text-[13px] font-medium text-[var(--color-text-primary)]">{displayName}</span>
+          <InstructionModeBadge mode={instruction.applicationMode} />
+          {instruction.applyTo && (
+            <span
+              className="truncate rounded bg-[var(--color-surface-3)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-text-muted)]"
+              title={`Applies to files matching: ${instruction.applyTo}`}
+            >
+              {instruction.applyTo}
+            </span>
+          )}
+        </div>
         <ChevronDown
           className={`size-3.5 shrink-0 text-[var(--color-text-muted)] transition-transform ${expanded ? 'rotate-180' : ''}`}
         />
       </button>
       {expanded && (
         <div className="border-t border-[var(--color-border)] px-5 py-4">
+          {instruction.description && (
+            <p className="mb-2 text-[11px] italic text-[var(--color-text-muted)]">{instruction.description}</p>
+          )}
+          {instruction.name && (
+            <p className="mb-2 text-[11px] text-[var(--color-text-muted)]">{instruction.sourcePath}</p>
+          )}
           <pre className="whitespace-pre-wrap text-[11px] leading-relaxed text-[var(--color-text-secondary)]">
             {instruction.content}
           </pre>
@@ -382,6 +400,9 @@ function InstructionCard({ instruction }: { instruction: ProjectInstructionFile 
       )}
       {!expanded && (
         <div className="px-5 pb-3">
+          {instruction.description && (
+            <p className="mb-1 text-[11px] italic text-[var(--color-text-muted)]">{instruction.description}</p>
+          )}
           <p className={`text-[11px] leading-relaxed text-[var(--color-text-muted)] ${isLong ? 'line-clamp-2' : ''}`}>
             {instruction.content}
           </p>
@@ -389,6 +410,38 @@ function InstructionCard({ instruction }: { instruction: ProjectInstructionFile 
       )}
     </div>
   );
+}
+
+function InstructionModeBadge({ mode }: { mode: ProjectInstructionApplicationMode }) {
+  switch (mode) {
+    case 'always':
+      return (
+        <span className="shrink-0 rounded-full bg-[var(--color-status-success)]/10 px-2 py-0.5 text-[10px] font-medium text-[var(--color-status-success)]">
+          always
+        </span>
+      );
+    case 'file':
+      return (
+        <span className="shrink-0 rounded-full bg-[var(--color-text-accent)]/10 px-2 py-0.5 text-[10px] font-medium text-[var(--color-text-accent)]">
+          file
+        </span>
+      );
+    case 'task':
+      return (
+        <span className="shrink-0 rounded-full bg-[var(--color-status-warning)]/10 px-2 py-0.5 text-[10px] font-medium text-[var(--color-status-warning)]">
+          task
+        </span>
+      );
+    case 'manual':
+      return (
+        <span
+          className="shrink-0 rounded-full bg-[var(--color-surface-3)] px-2 py-0.5 text-[10px] font-medium text-[var(--color-text-muted)]"
+          title="Discovered but not auto-applied to sessions"
+        >
+          manual
+        </span>
+      );
+  }
 }
 
 /* ── Custom Agents ────────────────────────────────────────── */
@@ -407,7 +460,7 @@ function AgentsContent({
   return (
     <div>
       <SectionHeader
-        description="Custom agent profiles discovered from .github/agents/*.agent.md. Enable or disable individual agents."
+        description="Custom agent profiles discovered from .github/agents/**/*.agent.md. Enable or disable individual agents."
         title="Custom Agents"
       >
         <RescanButton onClick={onRescan} />
@@ -415,7 +468,7 @@ function AgentsContent({
 
       {agents.length === 0 ? (
         <EmptyState>
-          No custom agents found. Add <code className="text-[var(--color-text-secondary)]">.agent.md</code> files to <code className="text-[var(--color-text-secondary)]">.github/agents/</code> in your project.
+          No custom agents found. Add <code className="text-[var(--color-text-secondary)]">.agent.md</code> files under <code className="text-[var(--color-text-secondary)]">.github/agents/</code> in your project.
         </EmptyState>
       ) : (
         <>
@@ -496,7 +549,7 @@ function PromptsContent({
   return (
     <div>
       <SectionHeader
-        description="Reusable prompt templates discovered from .github/prompts/*.prompt.md. Use them from the Prompts pill in the chat input."
+        description="Reusable prompt templates discovered from .github/prompts/**/*.prompt.md. Use them from the Prompts pill in the chat input."
         title="Prompt Files"
       >
         <RescanButton onClick={onRescan} />
@@ -504,7 +557,7 @@ function PromptsContent({
 
       {promptFiles.length === 0 ? (
         <EmptyState>
-          No prompt files found. Add <code className="text-[var(--color-text-secondary)]">.prompt.md</code> files to <code className="text-[var(--color-text-secondary)]">.github/prompts/</code> in your project.
+          No prompt files found. Add <code className="text-[var(--color-text-secondary)]">.prompt.md</code> files under <code className="text-[var(--color-text-secondary)]">.github/prompts/</code> in your project.
         </EmptyState>
       ) : (
         <div className="space-y-2">

@@ -20,14 +20,22 @@ async function createTempDirectory(): Promise<string> {
 }
 
 describe('ProjectCustomizationScanner', () => {
-  test('discovers project instructions, custom agents, and prompt files', async () => {
+  test('discovers recursive instruction, agent, and prompt files with metadata', async () => {
     const projectPath = await createTempDirectory();
-    await mkdir(join(projectPath, '.github', 'agents'), { recursive: true });
-    await mkdir(join(projectPath, '.github', 'prompts'), { recursive: true });
+    await mkdir(join(projectPath, '.claude'), { recursive: true });
+    await mkdir(join(projectPath, '.github', 'agents', 'docs'), { recursive: true });
+    await mkdir(join(projectPath, '.github', 'instructions', 'frontend'), { recursive: true });
+    await mkdir(join(projectPath, '.github', 'instructions', 'tasks'), { recursive: true });
+    await mkdir(join(projectPath, '.github', 'prompts', 'docs'), { recursive: true });
 
     await writeFile(
       join(projectPath, '.github', 'copilot-instructions.md'),
-      '# Repo instructions\nUse TypeScript.\n',
+      `---
+applyTo: "**"
+---
+# Repo instructions
+Use TypeScript.
+`,
       'utf8',
     );
     await writeFile(
@@ -36,7 +44,37 @@ describe('ProjectCustomizationScanner', () => {
       'utf8',
     );
     await writeFile(
-      join(projectPath, '.github', 'agents', 'readme-specialist.agent.md'),
+      join(projectPath, '.claude', 'CLAUDE.md'),
+      '# Claude guidance\nPrefer cohesive designs.\n',
+      'utf8',
+    );
+    await writeFile(
+      join(projectPath, '.github', 'instructions', 'frontend', 'react.instructions.md'),
+      `---
+name: React Standards
+description: React file conventions
+applyTo: "**/*.tsx"
+---
+Use hooks and keep components focused.
+`,
+      'utf8',
+    );
+    await writeFile(
+      join(projectPath, '.github', 'instructions', 'tasks', 'planning.instructions.md'),
+      `---
+description: Planning workflows
+---
+Create phased plans before implementation.
+`,
+      'utf8',
+    );
+    await writeFile(
+      join(projectPath, '.github', 'instructions', 'manual.instructions.md'),
+      'Only attach manually.',
+      'utf8',
+    );
+    await writeFile(
+      join(projectPath, '.github', 'agents', 'docs', 'readme-specialist.agent.md'),
       `---
 name: readme-specialist
 description: README specialist
@@ -56,8 +94,9 @@ Focus on repository documentation only.
       'utf8',
     );
     await writeFile(
-      join(projectPath, '.github', 'prompts', 'explain-code.prompt.md'),
+      join(projectPath, '.github', 'prompts', 'docs', 'explain-code.prompt.md'),
       `---
+name: explain-selected-code
 agent: agent
 description: Generate a clear explanation
 ---
@@ -73,13 +112,44 @@ Audience: \${input:audience:Who is this for?}
     expect(scanned.instructions).toEqual([
       {
         id: expect.any(String),
+        sourcePath: '.claude\\CLAUDE.md',
+        content: '# Claude guidance\nPrefer cohesive designs.',
+        applicationMode: 'always',
+      },
+      {
+        id: expect.any(String),
         sourcePath: '.github\\copilot-instructions.md',
         content: '# Repo instructions\nUse TypeScript.',
+        applyTo: '**',
+        applicationMode: 'always',
+      },
+      {
+        id: expect.any(String),
+        sourcePath: '.github\\instructions\\frontend\\react.instructions.md',
+        name: 'React Standards',
+        description: 'React file conventions',
+        applyTo: '**/*.tsx',
+        content: 'Use hooks and keep components focused.',
+        applicationMode: 'file',
+      },
+      {
+        id: expect.any(String),
+        sourcePath: '.github\\instructions\\manual.instructions.md',
+        content: 'Only attach manually.',
+        applicationMode: 'manual',
+      },
+      {
+        id: expect.any(String),
+        sourcePath: '.github\\instructions\\tasks\\planning.instructions.md',
+        description: 'Planning workflows',
+        content: 'Create phased plans before implementation.',
+        applicationMode: 'task',
       },
       {
         id: expect.any(String),
         sourcePath: 'AGENTS.md',
         content: '# Agent guidance\nPrefer clear tests.',
+        applicationMode: 'always',
       },
     ]);
     expect(scanned.agentProfiles).toEqual([
@@ -97,14 +167,14 @@ Audience: \${input:audience:Who is this for?}
             type: 'local',
           },
         },
-        sourcePath: '.github\\agents\\readme-specialist.agent.md',
+        sourcePath: '.github\\agents\\docs\\readme-specialist.agent.md',
         enabled: true,
       },
     ]);
     expect(scanned.promptFiles).toEqual([
       {
         id: expect.any(String),
-        name: 'explain-code',
+        name: 'explain-selected-code',
         description: 'Generate a clear explanation',
         agent: 'agent',
         template: 'Explain the following code:\n${input:code:Paste your code here}\nAudience: ${input:audience:Who is this for?}',
@@ -112,7 +182,7 @@ Audience: \${input:audience:Who is this for?}
           { name: 'code', placeholder: 'Paste your code here' },
           { name: 'audience', placeholder: 'Who is this for?' },
         ],
-        sourcePath: '.github\\prompts\\explain-code.prompt.md',
+        sourcePath: '.github\\prompts\\docs\\explain-code.prompt.md',
       },
     ]);
     expect(scanned.lastScannedAt).toEqual(expect.any(String));

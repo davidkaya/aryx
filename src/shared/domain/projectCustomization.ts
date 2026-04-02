@@ -1,7 +1,13 @@
+export type ProjectInstructionApplicationMode = 'always' | 'file' | 'task' | 'manual';
+
 export interface ProjectInstructionFile {
   id: string;
   sourcePath: string;
   content: string;
+  name?: string;
+  description?: string;
+  applyTo?: string;
+  applicationMode: ProjectInstructionApplicationMode;
 }
 
 export interface ProjectAgentProfileMcpServerConfig {
@@ -111,8 +117,34 @@ export function listEnabledProjectAgentProfiles(
 export function resolveProjectInstructionsContent(
   state?: Partial<ProjectCustomizationState>,
 ): string | undefined {
-  const content = normalizeProjectCustomizationState(state).instructions
-    .map((instruction) => instruction.content)
+  const instructions = normalizeProjectCustomizationState(state).instructions;
+  const contentBlocks = instructions
+    .filter((instruction) => instruction.applicationMode === 'always')
+    .map((instruction) => instruction.content);
+
+  const fileScopedInstructions = instructions.filter((instruction) => instruction.applicationMode === 'file');
+  if (fileScopedInstructions.length > 0) {
+    contentBlocks.push(
+      formatProjectInstructionSection(
+        'Repository file-scoped instructions:',
+        'Apply each instruction only when working on files whose relative workspace path matches the listed glob.',
+        fileScopedInstructions,
+      ),
+    );
+  }
+
+  const taskScopedInstructions = instructions.filter((instruction) => instruction.applicationMode === 'task');
+  if (taskScopedInstructions.length > 0) {
+    contentBlocks.push(
+      formatProjectInstructionSection(
+        'Repository task-scoped instructions:',
+        'Apply each instruction only when the current task matches its description.',
+        taskScopedInstructions,
+      ),
+    );
+  }
+
+  const content = contentBlocks
     .filter((value) => value.length > 0)
     .join('\n\n')
     .trim();
@@ -139,11 +171,35 @@ export function setProjectAgentProfileEnabled(
 }
 
 function normalizeProjectInstructionFile(file: ProjectInstructionFile): ProjectInstructionFile {
-  return {
+  const normalizedSourcePath = normalizePathLikeString(file.sourcePath);
+  const normalizedName = normalizeOptionalString(file.name);
+  const normalizedDescription = normalizeOptionalString(file.description);
+  const normalizedApplyTo = normalizeOptionalString(file.applyTo);
+  const normalizedInstruction: ProjectInstructionFile = {
     id: file.id.trim(),
-    sourcePath: normalizePathLikeString(file.sourcePath),
+    sourcePath: normalizedSourcePath,
     content: file.content.trim(),
+    applicationMode: normalizeInstructionApplicationMode(
+      file.applicationMode,
+      normalizedSourcePath,
+      normalizedApplyTo,
+      normalizedDescription,
+    ),
   };
+
+  if (normalizedName) {
+    normalizedInstruction.name = normalizedName;
+  }
+
+  if (normalizedDescription) {
+    normalizedInstruction.description = normalizedDescription;
+  }
+
+  if (normalizedApplyTo) {
+    normalizedInstruction.applyTo = normalizedApplyTo;
+  }
+
+  return normalizedInstruction;
 }
 
 function normalizeProjectAgentProfile(profile: ProjectAgentProfile): ProjectAgentProfile {
@@ -216,6 +272,38 @@ function compareProjectFiles(
   return left.sourcePath.localeCompare(right.sourcePath) || left.id.localeCompare(right.id);
 }
 
+function formatProjectInstructionSection(
+  title: string,
+  guidance: string,
+  instructions: ReadonlyArray<ProjectInstructionFile>,
+): string {
+  return [`${title}\n${guidance}`, ...instructions.map(formatProjectInstructionEntry)]
+    .filter((block) => block.length > 0)
+    .join('\n\n')
+    .trim();
+}
+
+function formatProjectInstructionEntry(instruction: ProjectInstructionFile): string {
+  const lines = [`Source: ${instruction.sourcePath}`];
+
+  if (instruction.name) {
+    lines.push(`Name: ${instruction.name}`);
+  }
+
+  if (instruction.description) {
+    lines.push(`Description: ${instruction.description}`);
+  }
+
+  if (instruction.applyTo) {
+    lines.push(`ApplyTo: ${instruction.applyTo}`);
+  }
+
+  lines.push('Instructions:');
+  lines.push(instruction.content);
+
+  return lines.join('\n');
+}
+
 function normalizeOptionalMcpServers(
   value?: Record<string, ProjectAgentProfileMcpServerConfig>,
 ): Record<string, ProjectAgentProfileMcpServerConfig> | undefined {
@@ -242,6 +330,19 @@ function normalizeOptionalString(value?: string): string | undefined {
   return trimmed ? trimmed : undefined;
 }
 
+function normalizeInstructionApplicationMode(
+  value: ProjectInstructionApplicationMode | undefined,
+  sourcePath: string,
+  applyTo?: string,
+  description?: string,
+): ProjectInstructionApplicationMode {
+  if (value === 'always' || value === 'file' || value === 'task' || value === 'manual') {
+    return value;
+  }
+
+  return inferInstructionApplicationMode(sourcePath, applyTo, description);
+}
+
 function normalizeOptionalStringArray(values?: ReadonlyArray<string>): string[] | undefined {
   if (!values) {
     return undefined;
@@ -252,6 +353,43 @@ function normalizeOptionalStringArray(values?: ReadonlyArray<string>): string[] 
 
 function normalizePathLikeString(value: string): string {
   return value.trim().replaceAll('/', '\\');
+}
+
+function inferInstructionApplicationMode(
+  sourcePath: string,
+  applyTo?: string,
+  description?: string,
+): ProjectInstructionApplicationMode {
+  if (isAlwaysOnInstructionSource(sourcePath) || isMatchAllInstructionGlob(applyTo)) {
+    return 'always';
+  }
+
+  if (applyTo) {
+    return 'file';
+  }
+
+  if (description) {
+    return 'task';
+  }
+
+  return 'manual';
+}
+
+function isAlwaysOnInstructionSource(sourcePath: string): boolean {
+  const normalizedSourcePath = normalizePathLikeString(sourcePath).toLowerCase();
+  return normalizedSourcePath === '.github\\copilot-instructions.md'
+    || normalizedSourcePath === 'agents.md'
+    || normalizedSourcePath === 'claude.md'
+    || normalizedSourcePath === '.claude\\claude.md';
+}
+
+function isMatchAllInstructionGlob(value?: string): boolean {
+  if (!value) {
+    return false;
+  }
+
+  const normalizedValue = value.trim().replaceAll('\\', '/');
+  return normalizedValue === '**' || normalizedValue === '**/*';
 }
 
 function normalizeYamlValue(value: unknown): unknown {

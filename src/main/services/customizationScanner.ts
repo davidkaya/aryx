@@ -7,6 +7,7 @@ import {
   mergeProjectCustomizationState,
   normalizeProjectCustomizationState,
   type ProjectAgentProfile,
+  type ProjectInstructionApplicationMode,
   type ProjectCustomizationState,
   type ProjectInstructionFile,
   type ProjectPromptFile,
@@ -42,34 +43,29 @@ export class ProjectCustomizationScanner {
     previous: ProjectCustomizationState,
   ): Promise<ProjectInstructionFile[]> {
     const previousByPath = new Map(previous.instructions.map((instruction) => [instruction.sourcePath, instruction]));
-    const sourcePaths = ['.github\\copilot-instructions.md', 'AGENTS.md'] as const;
+    const sourcePaths = [
+      '.github\\copilot-instructions.md',
+      'AGENTS.md',
+      'CLAUDE.md',
+      '.claude\\CLAUDE.md',
+    ] as const;
     const instructions: ProjectInstructionFile[] = [];
 
     for (const sourcePath of sourcePaths) {
       const filePath = join(projectPath, ...sourcePath.split('\\'));
-      const contents = await this.readProjectFile(filePath);
-      if (contents.kind === 'missing') {
-        continue;
+      const instruction = await this.scanInstructionFile(filePath, sourcePath, previousByPath, 'always');
+      if (instruction) {
+        instructions.push(instruction);
       }
+    }
 
-      if (contents.kind === 'retain-previous') {
-        const existing = previousByPath.get(sourcePath);
-        if (existing) {
-          instructions.push(existing);
-        }
-        continue;
+    const instructionFilePaths = await this.listProjectFiles(join(projectPath, '.github', 'instructions'), '.instructions.md');
+    for (const filePath of instructionFilePaths) {
+      const sourcePath = toProjectSourcePath(projectPath, filePath);
+      const instruction = await this.scanInstructionFile(filePath, sourcePath, previousByPath);
+      if (instruction) {
+        instructions.push(instruction);
       }
-
-      const content = contents.value.trim();
-      if (!content) {
-        continue;
-      }
-
-      instructions.push({
-        id: buildProjectCustomizationItemId('instruction', sourcePath),
-        sourcePath,
-        content,
-      });
     }
 
     return instructions;
@@ -170,7 +166,7 @@ export class ProjectCustomizationScanner {
 
       promptFiles.push({
         id: buildProjectCustomizationItemId('prompt', sourcePath),
-        name: basename(filePath, '.prompt.md'),
+        name: readOptionalString(parsedFile.attributes, ['name']) ?? basename(filePath, '.prompt.md'),
         description: readOptionalString(parsedFile.attributes, ['description']),
         agent: readOptionalString(parsedFile.attributes, ['agent']),
         template,
@@ -183,19 +179,31 @@ export class ProjectCustomizationScanner {
   }
 
   private async listProjectFiles(directoryPath: string, suffix: string): Promise<string[]> {
+    const filePaths: string[] = [];
+    await this.collectProjectFiles(directoryPath, suffix, filePaths);
+    return filePaths.sort((left, right) => left.localeCompare(right));
+  }
+
+  private async collectProjectFiles(directoryPath: string, suffix: string, filePaths: string[]): Promise<void> {
     try {
       const entries = await readdir(directoryPath, { withFileTypes: true });
-      return entries
-        .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith(suffix))
-        .map((entry) => join(directoryPath, entry.name))
-        .sort((left, right) => left.localeCompare(right));
+      for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
+        const entryPath = join(directoryPath, entry.name);
+        if (entry.isDirectory()) {
+          await this.collectProjectFiles(entryPath, suffix, filePaths);
+          continue;
+        }
+
+        if (entry.isFile() && entry.name.toLowerCase().endsWith(suffix)) {
+          filePaths.push(entryPath);
+        }
+      }
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-        return [];
+        return;
       }
 
       console.warn(`[aryx customization] Failed to read directory ${directoryPath}:`, error);
-      return [];
     }
   }
 
@@ -217,6 +225,56 @@ export class ProjectCustomizationScanner {
       console.warn(`[aryx customization] Failed to read ${filePath}:`, error);
       return { kind: 'retain-previous' };
     }
+  }
+
+  private async scanInstructionFile(
+    filePath: string,
+    sourcePath: string,
+    previousByPath: ReadonlyMap<string, ProjectInstructionFile>,
+    applicationMode?: ProjectInstructionApplicationMode,
+  ): Promise<ProjectInstructionFile | undefined> {
+    const contents = await this.readProjectFile(filePath);
+    if (contents.kind === 'missing') {
+      return undefined;
+    }
+
+    if (contents.kind === 'retain-previous') {
+      return previousByPath.get(sourcePath);
+    }
+
+    const parsedFile = parseProjectFrontmatter(contents.value, sourcePath);
+    if (!parsedFile) {
+      return previousByPath.get(sourcePath);
+    }
+
+    const content = parsedFile.body.trim();
+    if (!content) {
+      return undefined;
+    }
+
+    const description = readOptionalString(parsedFile.attributes, ['description']);
+    const applyTo = readOptionalString(parsedFile.attributes, ['applyTo']);
+    const instruction: ProjectInstructionFile = {
+      id: buildProjectCustomizationItemId('instruction', sourcePath),
+      sourcePath,
+      content,
+      applicationMode: applicationMode ?? resolveInstructionApplicationMode(applyTo, description),
+    };
+
+    const name = readOptionalString(parsedFile.attributes, ['name']);
+    if (name) {
+      instruction.name = name;
+    }
+
+    if (description) {
+      instruction.description = description;
+    }
+
+    if (applyTo) {
+      instruction.applyTo = applyTo;
+    }
+
+    return instruction;
   }
 }
 
@@ -309,6 +367,25 @@ function readOptionalString(
   return undefined;
 }
 
+function resolveInstructionApplicationMode(
+  applyTo: string | undefined,
+  description: string | undefined,
+): ProjectInstructionApplicationMode {
+  if (isMatchAllInstructionGlob(applyTo)) {
+    return 'always';
+  }
+
+  if (applyTo) {
+    return 'file';
+  }
+
+  if (description) {
+    return 'task';
+  }
+
+  return 'manual';
+}
+
 function readOptionalStringArray(value: unknown): string[] | undefined {
   if (value === undefined) {
     return undefined;
@@ -367,4 +444,13 @@ function normalizeYamlValue(value: unknown): unknown {
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isMatchAllInstructionGlob(value: string | undefined): boolean {
+  if (!value) {
+    return false;
+  }
+
+  const normalizedValue = value.trim().replaceAll('\\', '/');
+  return normalizedValue === '**' || normalizedValue === '**/*';
 }

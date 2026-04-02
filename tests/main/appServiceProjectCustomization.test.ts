@@ -131,11 +131,13 @@ describe('AryxAppService project customization', () => {
             id: 'instruction-repo',
             sourcePath: '.github\\copilot-instructions.md',
             content: 'Use TypeScript.',
+            applicationMode: 'always',
           },
           {
             id: 'instruction-agents',
             sourcePath: 'AGENTS.md',
             content: 'Prefer focused tests.',
+            applicationMode: 'always',
           },
         ],
         agentProfiles: [
@@ -198,6 +200,86 @@ describe('AryxAppService project customization', () => {
         infer: undefined,
       },
     ]);
+  });
+
+  test('sendSessionMessage formats file-scoped and task-scoped project instructions for the sidecar', async () => {
+    const workspace = createWorkspaceSeed();
+    const pattern = workspace.patterns.find((candidate) => candidate.mode === 'single');
+    if (!pattern) {
+      throw new Error('Expected a single-agent pattern in the workspace seed.');
+    }
+
+    const project = createProject({
+      customization: {
+        instructions: [
+          {
+            id: 'instruction-repo',
+            sourcePath: '.github\\copilot-instructions.md',
+            content: 'Use TypeScript.',
+            applicationMode: 'always',
+          },
+          {
+            id: 'instruction-react',
+            sourcePath: '.github\\instructions\\frontend\\react.instructions.md',
+            name: 'React Standards',
+            description: 'React file conventions',
+            applyTo: '**/*.tsx',
+            content: 'Use hooks.',
+            applicationMode: 'file',
+          },
+          {
+            id: 'instruction-planning',
+            sourcePath: '.github\\instructions\\tasks\\planning.instructions.md',
+            description: 'Planning workflows',
+            content: 'Create phased plans before implementation.',
+            applicationMode: 'task',
+          },
+          {
+            id: 'instruction-manual',
+            sourcePath: '.github\\instructions\\manual.instructions.md',
+            content: 'Never auto-apply me.',
+            applicationMode: 'manual',
+          },
+        ],
+        agentProfiles: [],
+        promptFiles: [],
+        lastScannedAt: TIMESTAMP,
+      },
+    });
+    const session = createSession(project.id, pattern.id);
+
+    workspace.projects = [project];
+    workspace.sessions = [session];
+    workspace.selectedProjectId = project.id;
+    workspace.selectedPatternId = pattern.id;
+    workspace.selectedSessionId = session.id;
+
+    let command: RunTurnCommand | undefined;
+    const service = createService(workspace, pattern, {
+      captureRunTurn: (capturedCommand) => {
+        command = capturedCommand;
+      },
+    });
+
+    await service.sendSessionMessage(session.id, 'Handle the frontend task.');
+
+    expect(command?.projectInstructions).toBe(
+      'Use TypeScript.\n\n'
+      + 'Repository file-scoped instructions:\n'
+      + 'Apply each instruction only when working on files whose relative workspace path matches the listed glob.\n\n'
+      + 'Source: .github\\instructions\\frontend\\react.instructions.md\n'
+      + 'Name: React Standards\n'
+      + 'Description: React file conventions\n'
+      + 'ApplyTo: **/*.tsx\n'
+      + 'Instructions:\n'
+      + 'Use hooks.\n\n'
+      + 'Repository task-scoped instructions:\n'
+      + 'Apply each instruction only when the current task matches its description.\n\n'
+      + 'Source: .github\\instructions\\tasks\\planning.instructions.md\n'
+      + 'Description: Planning workflows\n'
+      + 'Instructions:\n'
+      + 'Create phased plans before implementation.',
+    );
   });
 
   test('setProjectAgentProfileEnabled persists the updated enabled state', async () => {

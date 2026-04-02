@@ -22,7 +22,7 @@ async function createTempDirectory(): Promise<string> {
 describe('ProjectCustomizationScanner', () => {
   test('discovers recursive instruction, agent, and prompt files with metadata', async () => {
     const projectPath = await createTempDirectory();
-    await mkdir(join(projectPath, '.claude'), { recursive: true });
+    await mkdir(join(projectPath, '.claude', 'rules'), { recursive: true });
     await mkdir(join(projectPath, '.github', 'agents', 'docs'), { recursive: true });
     await mkdir(join(projectPath, '.github', 'instructions', 'frontend'), { recursive: true });
     await mkdir(join(projectPath, '.github', 'instructions', 'tasks'), { recursive: true });
@@ -49,14 +49,34 @@ Use TypeScript.
       'utf8',
     );
     await writeFile(
+      join(projectPath, '.claude', 'rules', 'typescript.md'),
+      `---
+name: Claude TypeScript Rules
+description: Claude-format TypeScript rules
+paths:
+  - "src/**/*.ts"
+  - "src/**/*.tsx"
+---
+Always use strict TypeScript settings.
+`,
+      'utf8',
+    );
+    await writeFile(
       join(projectPath, '.github', 'instructions', 'frontend', 'react.instructions.md'),
       `---
 name: React Standards
 description: React file conventions
 applyTo: "**/*.tsx"
 ---
+Apply the [shared standards](./shared-standards.md).
+
 Use hooks and keep components focused.
 `,
+      'utf8',
+    );
+    await writeFile(
+      join(projectPath, '.github', 'instructions', 'frontend', 'shared-standards.md'),
+      '# Shared Standards\nPrefer explicit props and accessible interactions.\n',
       'utf8',
     );
     await writeFile(
@@ -98,6 +118,8 @@ Focus on repository documentation only.
       `---
 name: explain-selected-code
 agent: agent
+model: Claude Sonnet 4.5
+argument-hint: Paste code or describe the area you want explained
 description: Generate a clear explanation
 tools:
   - view
@@ -106,7 +128,14 @@ tools:
 Explain the following code:
 \${input:code:Paste your code here}
 Audience: \${input:audience:Who is this for?}
+
+Follow the [shared explanation rubric](./explanation-rubric.md)
 `,
+      'utf8',
+    );
+    await writeFile(
+      join(projectPath, '.github', 'prompts', 'docs', 'explanation-rubric.md'),
+      '# Explanation rubric\n- Start with a summary.\n- Call out edge cases.\n',
       'utf8',
     );
 
@@ -121,6 +150,15 @@ Audience: \${input:audience:Who is this for?}
       },
       {
         id: expect.any(String),
+        sourcePath: '.claude\\rules\\typescript.md',
+        name: 'Claude TypeScript Rules',
+        description: 'Claude-format TypeScript rules',
+        applyTo: 'src/**/*.ts,src/**/*.tsx',
+        content: 'Always use strict TypeScript settings.',
+        applicationMode: 'file',
+      },
+      {
+        id: expect.any(String),
         sourcePath: '.github\\copilot-instructions.md',
         content: '# Repo instructions\nUse TypeScript.',
         applyTo: '**',
@@ -132,7 +170,13 @@ Audience: \${input:audience:Who is this for?}
         name: 'React Standards',
         description: 'React file conventions',
         applyTo: '**/*.tsx',
-        content: 'Use hooks and keep components focused.',
+        content:
+          'Apply the [shared standards](./shared-standards.md).\n\n'
+          + 'Use hooks and keep components focused.\n\n'
+          + 'Referenced file context:\n\n'
+          + 'Source: .github\\instructions\\frontend\\shared-standards.md\n'
+          + 'Contents:\n'
+          + '# Shared Standards\nPrefer explicit props and accessible interactions.',
         applicationMode: 'file',
       },
       {
@@ -179,9 +223,19 @@ Audience: \${input:audience:Who is this for?}
         id: expect.any(String),
         name: 'explain-selected-code',
         description: 'Generate a clear explanation',
+        argumentHint: 'Paste code or describe the area you want explained',
         agent: 'agent',
+        model: 'Claude Sonnet 4.5',
         tools: ['view', 'glob'],
-        template: 'Explain the following code:\n${input:code:Paste your code here}\nAudience: ${input:audience:Who is this for?}',
+        template:
+          'Explain the following code:\n'
+          + '${input:code:Paste your code here}\n'
+          + 'Audience: ${input:audience:Who is this for?}\n\n'
+          + 'Follow the [shared explanation rubric](./explanation-rubric.md)\n\n'
+          + 'Referenced file context:\n\n'
+          + 'Source: .github\\prompts\\docs\\explanation-rubric.md\n'
+          + 'Contents:\n'
+          + '# Explanation rubric\n- Start with a summary.\n- Call out edge cases.',
         variables: [
           { name: 'code', placeholder: 'Paste your code here' },
           { name: 'audience', placeholder: 'Who is this for?' },
@@ -190,6 +244,64 @@ Audience: \${input:audience:Who is this for?}
       },
     ]);
     expect(scanned.lastScannedAt).toEqual(expect.any(String));
+  });
+
+  test('discovers customization files from parent repository roots', async () => {
+    const repoRoot = await createTempDirectory();
+    const projectPath = join(repoRoot, 'packages', 'frontend');
+    await mkdir(join(repoRoot, '.git'), { recursive: true });
+    await mkdir(join(projectPath, 'src'), { recursive: true });
+    await mkdir(join(repoRoot, '.github', 'prompts'), { recursive: true });
+    await mkdir(join(repoRoot, '.claude', 'rules'), { recursive: true });
+    await mkdir(join(repoRoot, 'docs'), { recursive: true });
+
+    await writeFile(
+      join(repoRoot, '.github', 'prompts', 'repo-review.prompt.md'),
+      `---
+name: repo-review
+model: GPT-5.4
+---
+Review the repo using the [checklist](../../docs/review-checklist.md).
+`,
+      'utf8',
+    );
+    await writeFile(
+      join(repoRoot, '.claude', 'rules', 'global.md'),
+      'Use the monorepo release process.',
+      'utf8',
+    );
+    await writeFile(
+      join(repoRoot, 'docs', 'review-checklist.md'),
+      '# Checklist\n- Confirm changelog updates.\n- Check release notes.\n',
+      'utf8',
+    );
+
+    const scanned = await new ProjectCustomizationScanner().scanProject(projectPath);
+
+    expect(scanned.instructions).toEqual([
+      {
+        id: expect.any(String),
+        sourcePath: '..\\..\\.claude\\rules\\global.md',
+        applyTo: '**',
+        content: 'Use the monorepo release process.',
+        applicationMode: 'always',
+      },
+    ]);
+    expect(scanned.promptFiles).toEqual([
+      {
+        id: expect.any(String),
+        name: 'repo-review',
+        model: 'GPT-5.4',
+        template:
+          'Review the repo using the [checklist](../../docs/review-checklist.md).\n\n'
+          + 'Referenced file context:\n\n'
+          + 'Source: ..\\..\\docs\\review-checklist.md\n'
+          + 'Contents:\n'
+          + '# Checklist\n- Confirm changelog updates.\n- Check release notes.',
+        variables: [],
+        sourcePath: '..\\..\\.github\\prompts\\repo-review.prompt.md',
+      },
+    ]);
   });
 
   test('retains the previous parsed agent profile when frontmatter becomes malformed', async () => {

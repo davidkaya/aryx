@@ -210,6 +210,7 @@ public sealed class AgentInstructionComposerTests
                 SourcePath = @".github\prompts\docs\doc-review.prompt.md",
                 Description = "Review docs for missing steps",
                 Agent = "plan",
+                Model = "Claude Sonnet 4.5",
                 Tools = ["view", "glob"],
                 ResolvedPrompt = "Review the docs for missing steps and propose updates."
             });
@@ -219,6 +220,7 @@ public sealed class AgentInstructionComposerTests
         Assert.Contains("Name: doc-review", instructions, StringComparison.Ordinal);
         Assert.Contains("Description: Review docs for missing steps", instructions, StringComparison.Ordinal);
         Assert.Contains("Agent: plan", instructions, StringComparison.Ordinal);
+        Assert.Contains("Model: Claude Sonnet 4.5", instructions, StringComparison.Ordinal);
         Assert.Contains("Tools: view, glob", instructions, StringComparison.Ordinal);
         Assert.Contains(
             "Prompt instructions:\nReview the docs for missing steps and propose updates.",

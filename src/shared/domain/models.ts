@@ -178,6 +178,20 @@ export function findModel(
   return models.find((model) => model.id === id);
 }
 
+export function findModelByReference(
+  reference: string,
+  models: ReadonlyArray<ModelDefinition> = modelCatalog,
+): ModelDefinition | undefined {
+  const trimmedReference = reference.trim();
+  if (!trimmedReference) {
+    return undefined;
+  }
+
+  return models.find((model) =>
+    model.id === trimmedReference
+    || model.name.localeCompare(trimmedReference, undefined, { sensitivity: 'accent' }) === 0);
+}
+
 export function inferProvider(modelId: string): ModelProvider | undefined {
   if (modelId.startsWith('gpt-')) return 'openai';
   if (modelId.startsWith('claude-')) return 'anthropic';

@@ -36,7 +36,9 @@ export interface ProjectPromptFile {
   id: string;
   name: string;
   description?: string;
+  argumentHint?: string;
   agent?: string;
+  model?: string;
   tools?: string[];
   template: string;
   variables: ProjectPromptVariable[];
@@ -50,6 +52,7 @@ export interface ProjectPromptInvocation {
   resolvedPrompt: string;
   description?: string;
   agent?: string;
+  model?: string;
   tools?: string[];
 }
 
@@ -268,9 +271,19 @@ function normalizeProjectPromptFile(promptFile: ProjectPromptFile): ProjectPromp
     normalizedPromptFile.description = description;
   }
 
+  const argumentHint = normalizeOptionalString(promptFile.argumentHint);
+  if (argumentHint) {
+    normalizedPromptFile.argumentHint = argumentHint;
+  }
+
   const agent = normalizeOptionalString(promptFile.agent);
   if (agent) {
     normalizedPromptFile.agent = agent;
+  }
+
+  const model = normalizeOptionalString(promptFile.model);
+  if (model) {
+    normalizedPromptFile.model = model;
   }
 
   const tools = normalizeOptionalStringArray(promptFile.tools);
@@ -311,6 +324,11 @@ export function normalizeProjectPromptInvocation(
   const agent = normalizeOptionalString(promptInvocation.agent);
   if (agent) {
     normalizedPromptInvocation.agent = agent;
+  }
+
+  const model = normalizeOptionalString(promptInvocation.model);
+  if (model) {
+    normalizedPromptInvocation.model = model;
   }
 
   const tools = normalizeOptionalStringArray(promptInvocation.tools);

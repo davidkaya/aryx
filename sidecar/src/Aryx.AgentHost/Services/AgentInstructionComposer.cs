@@ -100,6 +100,11 @@ internal static class AgentInstructionComposer
             lines.Add($"Agent: {promptInvocation.Agent.Trim()}");
         }
 
+        if (!string.IsNullOrWhiteSpace(promptInvocation.Model))
+        {
+            lines.Add($"Model: {promptInvocation.Model.Trim()}");
+        }
+
         if (promptInvocation.Tools is not null)
         {
             List<string> toolNames = promptInvocation.Tools

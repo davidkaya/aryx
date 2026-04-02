@@ -2,6 +2,8 @@ import { watch } from 'node:fs';
 import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 
+import { resolveProjectCustomizationRoots } from '@main/services/projectCustomizationRoots';
+
 export interface ProjectCustomizationWatchTarget {
   id: string;
   path: string;
@@ -128,11 +130,15 @@ export class ProjectCustomizationWatcher {
 }
 
 export async function collectProjectCustomizationWatchPaths(projectPath: string): Promise<string[]> {
-  const paths = new Set<string>([projectPath]);
+  const paths = new Set<string>();
 
-  for (const relativeRoot of ['.github', '.claude']) {
-    for (const directoryPath of await collectExistingDirectories(join(projectPath, relativeRoot))) {
-      paths.add(directoryPath);
+  for (const customizationRoot of await resolveProjectCustomizationRoots(projectPath)) {
+    paths.add(customizationRoot);
+
+    for (const relativeRoot of ['.github', '.claude']) {
+      for (const directoryPath of await collectExistingDirectories(join(customizationRoot, relativeRoot))) {
+        paths.add(directoryPath);
+      }
     }
   }
 

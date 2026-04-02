@@ -1,6 +1,7 @@
 import { describe, expect, mock, test } from 'bun:test';
 
 import type { RunTurnCommand } from '@shared/contracts/sidecar';
+import { buildAvailableModelCatalog } from '@shared/domain/models';
 import type { PatternDefinition } from '@shared/domain/pattern';
 import type { ProjectRecord } from '@shared/domain/project';
 import type { SessionRecord } from '@shared/domain/session';
@@ -76,6 +77,7 @@ function createService(
   internals.loadWorkspace = async () => workspace;
   internals.persistAndBroadcast = async (nextWorkspace: WorkspaceState) => nextWorkspace;
   internals.buildEffectivePattern = async () => pattern;
+  internals.loadAvailableModelCatalog = async () => buildAvailableModelCatalog();
   internals.awaitFinalResponseApproval = async () => undefined;
   internals.finalizeTurn = () => undefined;
   internals.emitSessionEvent = () => undefined;
@@ -342,6 +344,84 @@ describe('AryxAppService project customization', () => {
       resolvedPrompt: 'Review the docs for missing steps and propose updates.',
     });
     expect(command?.messages.at(-1)?.content).toBe('Run prompt file: doc-review');
+  });
+
+  test('sendSessionMessage hydrates prompt model metadata and overrides the turn pattern model', async () => {
+    const workspace = createWorkspaceSeed();
+    const basePattern = workspace.patterns.find((candidate) => candidate.mode === 'single');
+    if (!basePattern) {
+      throw new Error('Expected a single-agent pattern in the workspace seed.');
+    }
+
+    const pattern: PatternDefinition = {
+      ...basePattern,
+      agents: [
+        {
+          ...basePattern.agents[0]!,
+          model: 'gpt-5.4',
+          reasoningEffort: 'high',
+        },
+      ],
+    };
+
+    const project = createProject({
+      customization: {
+        instructions: [],
+        agentProfiles: [],
+        promptFiles: [
+          {
+            id: 'project_customization_prompt_rest_review',
+            name: 'rest-review',
+            description: 'Review the REST API surface',
+            model: 'Claude Sonnet 4.5',
+            template: 'Review the REST API for security gaps.',
+            variables: [],
+            sourcePath: '.github\\prompts\\rest-review.prompt.md',
+          },
+        ],
+        lastScannedAt: TIMESTAMP,
+      },
+    });
+    const session = createSession(project.id, pattern.id);
+
+    workspace.projects = [project];
+    workspace.sessions = [session];
+    workspace.selectedProjectId = project.id;
+    workspace.selectedPatternId = pattern.id;
+    workspace.selectedSessionId = session.id;
+
+    let command: RunTurnCommand | undefined;
+    const service = createService(workspace, pattern, {
+      captureRunTurn: (capturedCommand) => {
+        command = capturedCommand;
+      },
+    });
+
+    await service.sendSessionMessage(session.id, '', undefined, undefined, {
+      id: 'project_customization_prompt_rest_review',
+      name: 'rest-review',
+      sourcePath: '.github\\prompts\\rest-review.prompt.md',
+      resolvedPrompt: 'Review the REST API for security gaps.',
+    });
+
+    expect(session.messages.at(-1)?.promptInvocation).toEqual({
+      id: 'project_customization_prompt_rest_review',
+      name: 'rest-review',
+      sourcePath: '.github\\prompts\\rest-review.prompt.md',
+      description: 'Review the REST API surface',
+      model: 'Claude Sonnet 4.5',
+      resolvedPrompt: 'Review the REST API for security gaps.',
+    });
+    expect(command?.pattern.agents[0]?.model).toBe('claude-sonnet-4.5');
+    expect(command?.pattern.agents[0]?.reasoningEffort).toBeUndefined();
+    expect(command?.promptInvocation).toEqual({
+      id: 'project_customization_prompt_rest_review',
+      name: 'rest-review',
+      sourcePath: '.github\\prompts\\rest-review.prompt.md',
+      description: 'Review the REST API surface',
+      model: 'Claude Sonnet 4.5',
+      resolvedPrompt: 'Review the REST API for security gaps.',
+    });
   });
 
   test('setProjectAgentProfileEnabled persists the updated enabled state', async () => {

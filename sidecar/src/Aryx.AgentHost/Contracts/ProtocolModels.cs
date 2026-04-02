@@ -200,6 +200,7 @@ public sealed class RunTurnPromptInvocationDto
     public string ResolvedPrompt { get; init; } = string.Empty;
     public string? Description { get; init; }
     public string? Agent { get; init; }
+    public string? Model { get; init; }
     public IReadOnlyList<string>? Tools { get; init; }
 }
 

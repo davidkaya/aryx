@@ -38,6 +38,25 @@ describe('ProjectCustomizationWatcher', () => {
     ]);
   });
 
+  test('includes parent repository roots when the project is nested inside a monorepo', async () => {
+    const repoRoot = await createTempDirectory();
+    const projectPath = join(repoRoot, 'packages', 'frontend');
+    await mkdir(join(repoRoot, '.git'), { recursive: true });
+    await mkdir(join(projectPath, 'src'), { recursive: true });
+    await mkdir(join(repoRoot, '.github', 'prompts'), { recursive: true });
+    await mkdir(join(repoRoot, '.claude', 'rules'), { recursive: true });
+
+    expect(await collectProjectCustomizationWatchPaths(projectPath)).toEqual([
+      join(repoRoot, '.claude'),
+      join(repoRoot, '.claude', 'rules'),
+      join(repoRoot, '.github'),
+      join(repoRoot, '.github', 'prompts'),
+      join(repoRoot, 'packages'),
+      projectPath,
+      repoRoot,
+    ].sort((left, right) => left.localeCompare(right)));
+  });
+
   test('debounces change notifications and closes watches when projects are removed', async () => {
     const changeCalls: string[] = [];
     const closeByPath = new Map<string, ReturnType<typeof mock>>();

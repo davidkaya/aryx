@@ -4,6 +4,7 @@ import type { SidecarModelCapability } from '@shared/contracts/sidecar';
 import {
   buildAvailableModelCatalog,
   findModel,
+  findModelByReference,
   normalizePatternModels,
   resolveReasoningEffort,
 } from '@shared/domain/models';
@@ -60,6 +61,13 @@ describe('dynamic model catalog', () => {
     const model = findModel('claude-sonnet-4.5', catalog);
 
     expect(resolveReasoningEffort(model, 'high')).toBeUndefined();
+  });
+
+  test('resolves model references by id or display name', () => {
+    const catalog = buildAvailableModelCatalog(availableModels);
+
+    expect(findModelByReference('gpt-5.4', catalog)?.id).toBe('gpt-5.4');
+    expect(findModelByReference('Claude Sonnet 4.5', catalog)?.id).toBe('claude-sonnet-4.5');
   });
 
   test('normalizes pattern agents before runtime execution', () => {

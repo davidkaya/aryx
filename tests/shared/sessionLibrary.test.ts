@@ -161,6 +161,7 @@ describe('session library helpers', () => {
             name: 'doc-review',
             sourcePath: '.github\\prompts\\docs\\doc-review.prompt.md',
             resolvedPrompt: 'Review the docs for missing steps.',
+            model: 'Claude Sonnet 4.5',
             tools: ['view'],
           },
         },
@@ -189,6 +190,7 @@ describe('session library helpers', () => {
       name: 'doc-review',
       sourcePath: '.github\\prompts\\docs\\doc-review.prompt.md',
       resolvedPrompt: 'Review the docs for missing steps.',
+      model: 'Claude Sonnet 4.5',
       tools: ['view'],
     });
     expect(session.messages[0]?.promptInvocation).not.toBe(sourceSession.messages[0]?.promptInvocation);
@@ -508,6 +510,7 @@ describe('session library helpers', () => {
             name: 'alt-plan',
             sourcePath: '.github\\prompts\\alt-plan.prompt.md',
             resolvedPrompt: 'Try a different approach focused on session state.',
+            model: 'GPT-5.4',
             tools: ['view', 'glob'],
           },
           attachments: [

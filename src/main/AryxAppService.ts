@@ -25,6 +25,7 @@ import type { TurnScopedEvent } from '@main/sidecar/runTurnPending';
 import {
   buildAvailableModelCatalog,
   findModel,
+  findModelByReference,
   normalizePatternModels,
   resolveReasoningEffort,
 } from '@shared/domain/models';
@@ -50,6 +51,7 @@ import {
   resolveProjectInstructionsContent,
   setProjectAgentProfileEnabled,
   type ProjectAgentProfile,
+  type ProjectPromptFile,
   type ProjectPromptInvocation,
   type ProjectCustomizationState,
 } from '@shared/domain/projectCustomization';
@@ -209,6 +211,40 @@ function buildPromptInvocationFallbackContent(promptInvocation?: ProjectPromptIn
   }
 
   return `Run prompt file: ${promptInvocation.name}`;
+}
+
+function hydratePromptInvocationMetadata(
+  promptInvocation: ProjectPromptInvocation | undefined,
+  projectCustomization: ProjectCustomizationState | undefined,
+): ProjectPromptInvocation | undefined {
+  if (!promptInvocation) {
+    return undefined;
+  }
+
+  const matchingPromptFile = findMatchingPromptFile(projectCustomization?.promptFiles, promptInvocation);
+  if (!matchingPromptFile) {
+    return promptInvocation;
+  }
+
+  return normalizeProjectPromptInvocation({
+    ...promptInvocation,
+    description: promptInvocation.description ?? matchingPromptFile.description,
+    agent: promptInvocation.agent ?? matchingPromptFile.agent,
+    model: promptInvocation.model ?? matchingPromptFile.model,
+    tools: promptInvocation.tools ?? matchingPromptFile.tools,
+  });
+}
+
+function findMatchingPromptFile(
+  promptFiles: ReadonlyArray<ProjectPromptFile> | undefined,
+  promptInvocation: ProjectPromptInvocation,
+): ProjectPromptFile | undefined {
+  if (!promptFiles || promptFiles.length === 0) {
+    return undefined;
+  }
+
+  return promptFiles.find((promptFile) => promptFile.id === promptInvocation.id)
+    ?? promptFiles.find((promptFile) => promptFile.sourcePath === promptInvocation.sourcePath);
 }
 
 function isPlanPromptInvocation(promptInvocation?: ProjectPromptInvocation): boolean {
@@ -1037,7 +1073,10 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     );
     const projectInstructions = resolveProjectInstructionsContent(project.customization);
 
-    const normalizedPromptInvocation = normalizeProjectPromptInvocation(promptInvocation);
+    const normalizedPromptInvocation = hydratePromptInvocationMetadata(
+      normalizeProjectPromptInvocation(promptInvocation),
+      project.customization,
+    );
     const preparedContent = prepareChatMessageContent(content)
       ?? buildPromptInvocationFallbackContent(normalizedPromptInvocation);
     if (!preparedContent) {
@@ -1422,6 +1461,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     const workspaceKind = isScratchpadProject(project) ? 'scratchpad' : 'project';
     const { occurredAt, requestId, triggerMessageId, messageMode, attachments } = options;
     const promptInvocation = this.resolveRunTurnPromptInvocation(session, triggerMessageId);
+    const patternForTurn = await this.applyPromptInvocationToPattern(effectivePattern, promptInvocation);
     const interactionMode: InteractionMode = isPlanPromptInvocation(promptInvocation)
       ? 'plan'
       : session.interactionMode ?? 'interactive';
@@ -1436,7 +1476,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
       console.warn(`[aryx git] Failed to capture pre-run git snapshot for project "${project.id}".`);
     }
 
-    session.title = resolveSessionTitle(session, effectivePattern, session.messages);
+    session.title = resolveSessionTitle(session, patternForTurn, session.messages);
     session.status = 'running';
     session.lastError = undefined;
     session.pendingPlanReview = undefined;
@@ -1448,7 +1488,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
         project,
         workingDirectory: runWorkingDirectory,
         workspaceKind,
-        pattern: effectivePattern,
+        pattern: patternForTurn,
         triggerMessageId,
         startedAt: occurredAt,
         preRunGitSnapshot,
@@ -1477,7 +1517,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
         mode: interactionMode,
         messageMode,
         projectInstructions,
-        pattern: effectivePattern,
+        pattern: patternForTurn,
         messages: session.messages,
         attachments: attachments?.length ? attachments : undefined,
         promptInvocation,
@@ -2887,6 +2927,40 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
 
     const modelCatalog = await this.loadAvailableModelCatalog();
     return normalizePatternModels(patternWithApprovalSettings, modelCatalog);
+  }
+
+  private async applyPromptInvocationToPattern(
+    pattern: PatternDefinition,
+    promptInvocation?: ProjectPromptInvocation,
+  ): Promise<PatternDefinition> {
+    const requestedModel = promptInvocation?.model?.trim();
+    if (!requestedModel) {
+      return pattern;
+    }
+
+    const modelCatalog = await this.loadAvailableModelCatalog();
+    const resolvedModel = findModelByReference(requestedModel, modelCatalog);
+    const effectiveModelId = resolvedModel?.id ?? requestedModel;
+
+    let didChange = false;
+    const agents = pattern.agents.map((agent) => {
+      const reasoningEffort = resolvedModel
+        ? resolveReasoningEffort(resolvedModel, agent.reasoningEffort)
+        : agent.reasoningEffort;
+
+      if (agent.model === effectiveModelId && agent.reasoningEffort === reasoningEffort) {
+        return agent;
+      }
+
+      didChange = true;
+      return {
+        ...agent,
+        model: effectiveModelId,
+        reasoningEffort,
+      };
+    });
+
+    return didChange ? { ...pattern, agents } : pattern;
   }
 
   private applyProjectCustomizationToPattern(

@@ -14,6 +14,8 @@ import {
   type ProjectPromptVariable,
 } from '@shared/domain/projectCustomization';
 import { nowIso } from '@shared/utils/ids';
+import { expandMarkdownFileLinks } from '@main/services/projectCustomizationLinkResolver';
+import { resolveProjectCustomizationRoots } from '@main/services/projectCustomizationRoots';
 
 const promptVariablePattern = /\$\{input:([a-zA-Z0-9_-]+):([^}]+)\}/g;
 
@@ -23,9 +25,21 @@ export class ProjectCustomizationScanner {
     current?: ProjectCustomizationState,
   ): Promise<ProjectCustomizationState> {
     const previous = normalizeProjectCustomizationState(current);
-    const instructions = await this.scanInstructionFiles(projectPath, previous);
-    const agentProfiles = await this.scanAgentProfiles(projectPath, previous);
-    const promptFiles = await this.scanPromptFiles(projectPath, previous);
+    const customizationRoots = await resolveProjectCustomizationRoots(projectPath);
+    const allowedRootPath = customizationRoots.at(-1) ?? projectPath;
+    const instructions = await this.scanInstructionFiles(
+      projectPath,
+      customizationRoots,
+      allowedRootPath,
+      previous,
+    );
+    const agentProfiles = await this.scanAgentProfiles(projectPath, customizationRoots, previous);
+    const promptFiles = await this.scanPromptFiles(
+      projectPath,
+      customizationRoots,
+      allowedRootPath,
+      previous,
+    );
 
     return mergeProjectCustomizationState(
       previous,
@@ -40,31 +54,60 @@ export class ProjectCustomizationScanner {
 
   private async scanInstructionFiles(
     projectPath: string,
+    customizationRoots: ReadonlyArray<string>,
+    allowedRootPath: string,
     previous: ProjectCustomizationState,
   ): Promise<ProjectInstructionFile[]> {
     const previousByPath = new Map(previous.instructions.map((instruction) => [instruction.sourcePath, instruction]));
-    const sourcePaths = [
-      '.github\\copilot-instructions.md',
-      'AGENTS.md',
-      'CLAUDE.md',
-      '.claude\\CLAUDE.md',
-    ] as const;
     const instructions: ProjectInstructionFile[] = [];
 
-    for (const sourcePath of sourcePaths) {
-      const filePath = join(projectPath, ...sourcePath.split('\\'));
-      const instruction = await this.scanInstructionFile(filePath, sourcePath, previousByPath, 'always');
-      if (instruction) {
-        instructions.push(instruction);
-      }
-    }
+    for (const customizationRoot of customizationRoots) {
+      const alwaysOnSourcePaths = [
+        '.github\\copilot-instructions.md',
+        'AGENTS.md',
+        'CLAUDE.md',
+        '.claude\\CLAUDE.md',
+      ] as const;
 
-    const instructionFilePaths = await this.listProjectFiles(join(projectPath, '.github', 'instructions'), '.instructions.md');
-    for (const filePath of instructionFilePaths) {
-      const sourcePath = toProjectSourcePath(projectPath, filePath);
-      const instruction = await this.scanInstructionFile(filePath, sourcePath, previousByPath);
-      if (instruction) {
-        instructions.push(instruction);
+      for (const sourcePath of alwaysOnSourcePaths) {
+        const filePath = join(customizationRoot, ...sourcePath.split('\\'));
+        const normalizedSourcePath = toProjectSourcePath(projectPath, filePath);
+        const instruction = await this.scanInstructionFile(filePath, normalizedSourcePath, previousByPath, {
+          applicationMode: 'always',
+          projectPath,
+          allowedRootPath,
+        });
+        if (instruction) {
+          instructions.push(instruction);
+        }
+      }
+
+      const instructionFilePaths = await this.listProjectFiles(
+        join(customizationRoot, '.github', 'instructions'),
+        '.instructions.md',
+      );
+      for (const filePath of instructionFilePaths) {
+        const sourcePath = toProjectSourcePath(projectPath, filePath);
+        const instruction = await this.scanInstructionFile(filePath, sourcePath, previousByPath, {
+          projectPath,
+          allowedRootPath,
+        });
+        if (instruction) {
+          instructions.push(instruction);
+        }
+      }
+
+      const claudeRuleFilePaths = await this.listProjectFiles(join(customizationRoot, '.claude', 'rules'), '.md');
+      for (const filePath of claudeRuleFilePaths) {
+        const sourcePath = toProjectSourcePath(projectPath, filePath);
+        const instruction = await this.scanInstructionFile(filePath, sourcePath, previousByPath, {
+          projectPath,
+          allowedRootPath,
+          usesClaudeRulePaths: true,
+        });
+        if (instruction) {
+          instructions.push(instruction);
+        }
       }
     }
 
@@ -73,55 +116,58 @@ export class ProjectCustomizationScanner {
 
   private async scanAgentProfiles(
     projectPath: string,
+    customizationRoots: ReadonlyArray<string>,
     previous: ProjectCustomizationState,
   ): Promise<ProjectAgentProfile[]> {
     const previousByPath = new Map(previous.agentProfiles.map((profile) => [profile.sourcePath, profile]));
-    const filePaths = await this.listProjectFiles(join(projectPath, '.github', 'agents'), '.agent.md');
     const profiles: ProjectAgentProfile[] = [];
 
-    for (const filePath of filePaths) {
-      const sourcePath = toProjectSourcePath(projectPath, filePath);
-      const contents = await this.readProjectFile(filePath);
-      if (contents.kind === 'retain-previous') {
-        const existing = previousByPath.get(sourcePath);
-        if (existing) {
-          profiles.push(existing);
+    for (const customizationRoot of customizationRoots) {
+      const filePaths = await this.listProjectFiles(join(customizationRoot, '.github', 'agents'), '.agent.md');
+      for (const filePath of filePaths) {
+        const sourcePath = toProjectSourcePath(projectPath, filePath);
+        const contents = await this.readProjectFile(filePath);
+        if (contents.kind === 'retain-previous') {
+          const existing = previousByPath.get(sourcePath);
+          if (existing) {
+            profiles.push(existing);
+          }
+          continue;
         }
-        continue;
-      }
 
-      if (contents.kind === 'missing') {
-        continue;
-      }
-
-      const parsedFile = parseProjectFrontmatter(contents.value, sourcePath);
-      if (!parsedFile) {
-        const existing = previousByPath.get(sourcePath);
-        if (existing) {
-          profiles.push(existing);
+        if (contents.kind === 'missing') {
+          continue;
         }
-        continue;
-      }
 
-      const name = readOptionalString(parsedFile.attributes, ['name'])
-        ?? basename(filePath, '.agent.md');
-      const prompt = parsedFile.body.trim();
-      if (!name || !prompt) {
-        continue;
-      }
+        const parsedFile = parseProjectFrontmatter(contents.value, sourcePath);
+        if (!parsedFile) {
+          const existing = previousByPath.get(sourcePath);
+          if (existing) {
+            profiles.push(existing);
+          }
+          continue;
+        }
 
-      profiles.push({
-        id: buildProjectCustomizationItemId('agent', sourcePath),
-        name,
-        displayName: readOptionalString(parsedFile.attributes, ['displayName', 'display-name']),
-        description: readOptionalString(parsedFile.attributes, ['description']),
-        tools: readOptionalStringArray(parsedFile.attributes.tools),
-        prompt,
-        mcpServers: readOptionalNamedObjectMap(parsedFile.attributes['mcp-servers']),
-        infer: typeof parsedFile.attributes.infer === 'boolean' ? parsedFile.attributes.infer : undefined,
-        sourcePath,
-        enabled: previousByPath.get(sourcePath)?.enabled ?? true,
-      });
+        const name = readOptionalString(parsedFile.attributes, ['name'])
+          ?? basename(filePath, '.agent.md');
+        const prompt = parsedFile.body.trim();
+        if (!name || !prompt) {
+          continue;
+        }
+
+        profiles.push({
+          id: buildProjectCustomizationItemId('agent', sourcePath),
+          name,
+          displayName: readOptionalString(parsedFile.attributes, ['displayName', 'display-name']),
+          description: readOptionalString(parsedFile.attributes, ['description']),
+          tools: readOptionalStringArray(parsedFile.attributes.tools),
+          prompt,
+          mcpServers: readOptionalNamedObjectMap(parsedFile.attributes['mcp-servers']),
+          infer: typeof parsedFile.attributes.infer === 'boolean' ? parsedFile.attributes.infer : undefined,
+          sourcePath,
+          enabled: previousByPath.get(sourcePath)?.enabled ?? true,
+        });
+      }
     }
 
     return profiles;
@@ -129,51 +175,61 @@ export class ProjectCustomizationScanner {
 
   private async scanPromptFiles(
     projectPath: string,
+    customizationRoots: ReadonlyArray<string>,
+    allowedRootPath: string,
     previous: ProjectCustomizationState,
   ): Promise<ProjectPromptFile[]> {
     const previousByPath = new Map(previous.promptFiles.map((promptFile) => [promptFile.sourcePath, promptFile]));
-    const filePaths = await this.listProjectFiles(join(projectPath, '.github', 'prompts'), '.prompt.md');
     const promptFiles: ProjectPromptFile[] = [];
 
-    for (const filePath of filePaths) {
-      const sourcePath = toProjectSourcePath(projectPath, filePath);
-      const contents = await this.readProjectFile(filePath);
-      if (contents.kind === 'retain-previous') {
-        const existing = previousByPath.get(sourcePath);
-        if (existing) {
-          promptFiles.push(existing);
+    for (const customizationRoot of customizationRoots) {
+      const filePaths = await this.listProjectFiles(join(customizationRoot, '.github', 'prompts'), '.prompt.md');
+      for (const filePath of filePaths) {
+        const sourcePath = toProjectSourcePath(projectPath, filePath);
+        const contents = await this.readProjectFile(filePath);
+        if (contents.kind === 'retain-previous') {
+          const existing = previousByPath.get(sourcePath);
+          if (existing) {
+            promptFiles.push(existing);
+          }
+          continue;
         }
-        continue;
-      }
 
-      if (contents.kind === 'missing') {
-        continue;
-      }
-
-      const parsedFile = parseProjectFrontmatter(contents.value, sourcePath);
-      if (!parsedFile) {
-        const existing = previousByPath.get(sourcePath);
-        if (existing) {
-          promptFiles.push(existing);
+        if (contents.kind === 'missing') {
+          continue;
         }
-        continue;
-      }
 
-      const template = parsedFile.body.trim();
-      if (!template) {
-        continue;
-      }
+        const parsedFile = parseProjectFrontmatter(contents.value, sourcePath);
+        if (!parsedFile) {
+          const existing = previousByPath.get(sourcePath);
+          if (existing) {
+            promptFiles.push(existing);
+          }
+          continue;
+        }
 
-      promptFiles.push({
-        id: buildProjectCustomizationItemId('prompt', sourcePath),
-        name: readOptionalString(parsedFile.attributes, ['name']) ?? basename(filePath, '.prompt.md'),
-        description: readOptionalString(parsedFile.attributes, ['description']),
-        agent: readOptionalString(parsedFile.attributes, ['agent']),
-        tools: readOptionalStringArray(parsedFile.attributes.tools),
-        template,
-        variables: extractPromptVariables(template),
-        sourcePath,
-      });
+        const template = await expandMarkdownFileLinks(parsedFile.body, {
+          sourceFilePath: filePath,
+          projectPath,
+          allowedRootPath,
+        });
+        if (!template) {
+          continue;
+        }
+
+        promptFiles.push({
+          id: buildProjectCustomizationItemId('prompt', sourcePath),
+          name: readOptionalString(parsedFile.attributes, ['name']) ?? basename(filePath, '.prompt.md'),
+          description: readOptionalString(parsedFile.attributes, ['description']),
+          argumentHint: readOptionalString(parsedFile.attributes, ['argument-hint', 'argumentHint']),
+          agent: readOptionalString(parsedFile.attributes, ['agent']),
+          model: readOptionalString(parsedFile.attributes, ['model']),
+          tools: readOptionalStringArray(parsedFile.attributes.tools),
+          template,
+          variables: extractPromptVariables(template),
+          sourcePath,
+        });
+      }
     }
 
     return promptFiles;
@@ -232,7 +288,12 @@ export class ProjectCustomizationScanner {
     filePath: string,
     sourcePath: string,
     previousByPath: ReadonlyMap<string, ProjectInstructionFile>,
-    applicationMode?: ProjectInstructionApplicationMode,
+    options: {
+      applicationMode?: ProjectInstructionApplicationMode;
+      projectPath: string;
+      allowedRootPath: string;
+      usesClaudeRulePaths?: boolean;
+    },
   ): Promise<ProjectInstructionFile | undefined> {
     const contents = await this.readProjectFile(filePath);
     if (contents.kind === 'missing') {
@@ -248,18 +309,22 @@ export class ProjectCustomizationScanner {
       return previousByPath.get(sourcePath);
     }
 
-    const content = parsedFile.body.trim();
+    const content = await expandMarkdownFileLinks(parsedFile.body, {
+      sourceFilePath: filePath,
+      projectPath: options.projectPath,
+      allowedRootPath: options.allowedRootPath,
+    });
     if (!content) {
       return undefined;
     }
 
     const description = readOptionalString(parsedFile.attributes, ['description']);
-    const applyTo = readOptionalString(parsedFile.attributes, ['applyTo']);
+    const applyTo = readInstructionApplyTo(parsedFile.attributes, options.usesClaudeRulePaths === true);
     const instruction: ProjectInstructionFile = {
       id: buildProjectCustomizationItemId('instruction', sourcePath),
       sourcePath,
       content,
-      applicationMode: applicationMode ?? resolveInstructionApplicationMode(applyTo, description),
+      applicationMode: options.applicationMode ?? resolveInstructionApplicationMode(applyTo, description),
     };
 
     const name = readOptionalString(parsedFile.attributes, ['name']);
@@ -366,6 +431,24 @@ function readOptionalString(
   }
 
   return undefined;
+}
+
+function readInstructionApplyTo(
+  record: Record<string, unknown>,
+  usesClaudeRulePaths: boolean,
+): string | undefined {
+  const applyTo = readOptionalString(record, ['applyTo']);
+  const paths = readOptionalStringArray(record.paths);
+
+  if (paths && paths.length > 0) {
+    return paths.join(',');
+  }
+
+  if (applyTo) {
+    return applyTo;
+  }
+
+  return usesClaudeRulePaths ? '**' : undefined;
 }
 
 function resolveInstructionApplicationMode(

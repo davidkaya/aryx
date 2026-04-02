@@ -16,6 +16,10 @@ import type { PendingPlanReviewRecord } from '@shared/domain/planReview';
 import type { PendingMcpAuthRecord } from '@shared/domain/mcpAuth';
 import type { ChatMessageAttachment } from '@shared/domain/attachment';
 import type { InteractionMode } from '@shared/contracts/sidecar';
+import {
+  normalizeProjectPromptInvocation,
+  type ProjectPromptInvocation,
+} from '@shared/domain/projectCustomization';
 
 export type ChatRole = 'system' | 'user' | 'assistant';
 export type ChatMessageKind = 'response' | 'thinking';
@@ -38,6 +42,7 @@ export interface ChatMessageRecord {
   isPinned?: boolean;
   pending?: boolean;
   attachments?: ChatMessageAttachment[];
+  promptInvocation?: ProjectPromptInvocation;
 }
 
 export interface SessionBranchOrigin {
@@ -164,6 +169,20 @@ export function resolveSessionModelConfig(
     model: overrideModel || defaults.model,
     reasoningEffort: session.sessionModelConfig?.reasoningEffort ?? defaults.reasoningEffort,
   };
+}
+
+export function normalizeChatMessageRecord(message: ChatMessageRecord): ChatMessageRecord {
+  const normalizedMessage: ChatMessageRecord = {
+    ...message,
+  };
+  const promptInvocation = normalizeProjectPromptInvocation(message.promptInvocation);
+  if (promptInvocation) {
+    normalizedMessage.promptInvocation = promptInvocation;
+  } else {
+    delete normalizedMessage.promptInvocation;
+  }
+
+  return normalizedMessage;
 }
 
 export function applySessionModelConfig(

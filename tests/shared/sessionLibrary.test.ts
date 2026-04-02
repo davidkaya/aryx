@@ -124,42 +124,50 @@ describe('session library helpers', () => {
   });
 
   test('duplicates sessions as idle unpinned copies', () => {
-    const session = duplicateSessionRecord(
-      createSession({
-        status: 'error',
-        isPinned: true,
-        isArchived: true,
-        lastError: 'sidecar crashed',
-        approvalSettings: {
-          autoApprovedToolNames: ['git.status'],
-        },
-        pendingApproval: {
-          id: 'approval-1',
-          kind: 'tool-call',
+    const sourceSession = createSession({
+      status: 'error',
+      isPinned: true,
+      isArchived: true,
+      lastError: 'sidecar crashed',
+      approvalSettings: {
+        autoApprovedToolNames: ['git.status'],
+      },
+      pendingApproval: {
+        id: 'approval-1',
+        kind: 'tool-call',
+        status: 'pending',
+        requestedAt: '2026-03-23T00:01:00.000Z',
+        title: 'Approve tool access',
+      },
+      pendingApprovalQueue: [
+        {
+          id: 'approval-2',
+          kind: 'final-response',
           status: 'pending',
-          requestedAt: '2026-03-23T00:01:00.000Z',
-          title: 'Approve tool access',
+          requestedAt: '2026-03-23T00:02:00.000Z',
+          title: 'Approve final response',
         },
-        pendingApprovalQueue: [
-          {
-            id: 'approval-2',
-            kind: 'final-response',
-            status: 'pending',
-            requestedAt: '2026-03-23T00:02:00.000Z',
-            title: 'Approve final response',
+      ],
+      messages: [
+        {
+          id: 'msg-1',
+          role: 'assistant',
+          authorName: 'Reviewer',
+          content: 'Done.',
+          createdAt: '2026-03-23T00:00:00.000Z',
+          pending: true,
+          promptInvocation: {
+            id: 'project_customization_prompt_doc_review',
+            name: 'doc-review',
+            sourcePath: '.github\\prompts\\docs\\doc-review.prompt.md',
+            resolvedPrompt: 'Review the docs for missing steps.',
+            tools: ['view'],
           },
-        ],
-        messages: [
-          {
-            id: 'msg-1',
-            role: 'assistant',
-            authorName: 'Reviewer',
-            content: 'Done.',
-            createdAt: '2026-03-23T00:00:00.000Z',
-            pending: true,
-          },
-        ],
-      }),
+        },
+      ],
+    });
+    const session = duplicateSessionRecord(
+      sourceSession,
       'session-copy',
       '2026-03-23T00:07:00.000Z',
     );
@@ -176,6 +184,15 @@ describe('session library helpers', () => {
       updatedAt: '2026-03-23T00:07:00.000Z',
     });
     expect(session.messages[0]?.pending).toBe(false);
+    expect(session.messages[0]?.promptInvocation).toEqual({
+      id: 'project_customization_prompt_doc_review',
+      name: 'doc-review',
+      sourcePath: '.github\\prompts\\docs\\doc-review.prompt.md',
+      resolvedPrompt: 'Review the docs for missing steps.',
+      tools: ['view'],
+    });
+    expect(session.messages[0]?.promptInvocation).not.toBe(sourceSession.messages[0]?.promptInvocation);
+    expect(session.messages[0]?.promptInvocation?.tools).not.toBe(sourceSession.messages[0]?.promptInvocation?.tools);
     expect(session.approvalSettings).toEqual({
       autoApprovedToolNames: ['git.status'],
     });
@@ -486,6 +503,13 @@ describe('session library helpers', () => {
           authorName: 'You',
           content: 'Try a different approach.',
           createdAt: '2026-03-23T00:02:00.000Z',
+          promptInvocation: {
+            id: 'project_customization_prompt_alt_plan',
+            name: 'alt-plan',
+            sourcePath: '.github\\prompts\\alt-plan.prompt.md',
+            resolvedPrompt: 'Try a different approach focused on session state.',
+            tools: ['view', 'glob'],
+          },
           attachments: [
             {
               type: 'file',
@@ -525,6 +549,7 @@ describe('session library helpers', () => {
       id: 'msg-3',
       role: 'user',
       content: 'Focus on session state only.',
+      promptInvocation: undefined,
       attachments: [
         {
           type: 'file',

@@ -37,9 +37,20 @@ export interface ProjectPromptFile {
   name: string;
   description?: string;
   agent?: string;
+  tools?: string[];
   template: string;
   variables: ProjectPromptVariable[];
   sourcePath: string;
+}
+
+export interface ProjectPromptInvocation {
+  id: string;
+  name: string;
+  sourcePath: string;
+  resolvedPrompt: string;
+  description?: string;
+  agent?: string;
+  tools?: string[];
 }
 
 export interface ProjectCustomizationState {
@@ -262,7 +273,52 @@ function normalizeProjectPromptFile(promptFile: ProjectPromptFile): ProjectPromp
     normalizedPromptFile.agent = agent;
   }
 
+  const tools = normalizeOptionalStringArray(promptFile.tools);
+  if (tools) {
+    normalizedPromptFile.tools = tools;
+  }
+
   return normalizedPromptFile;
+}
+
+export function normalizeProjectPromptInvocation(
+  promptInvocation?: ProjectPromptInvocation,
+): ProjectPromptInvocation | undefined {
+  if (!promptInvocation) {
+    return undefined;
+  }
+
+  const normalizedPromptInvocation: ProjectPromptInvocation = {
+    id: promptInvocation.id.trim(),
+    name: promptInvocation.name.trim(),
+    sourcePath: normalizePathLikeString(promptInvocation.sourcePath),
+    resolvedPrompt: promptInvocation.resolvedPrompt.trim(),
+  };
+
+  if (
+    normalizedPromptInvocation.id.length === 0
+    || normalizedPromptInvocation.name.length === 0
+    || normalizedPromptInvocation.resolvedPrompt.length === 0
+  ) {
+    return undefined;
+  }
+
+  const description = normalizeOptionalString(promptInvocation.description);
+  if (description) {
+    normalizedPromptInvocation.description = description;
+  }
+
+  const agent = normalizeOptionalString(promptInvocation.agent);
+  if (agent) {
+    normalizedPromptInvocation.agent = agent;
+  }
+
+  const tools = normalizeOptionalStringArray(promptInvocation.tools);
+  if (tools) {
+    normalizedPromptInvocation.tools = tools;
+  }
+
+  return normalizedPromptInvocation;
 }
 
 function compareProjectFiles(

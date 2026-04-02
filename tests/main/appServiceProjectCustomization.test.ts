@@ -282,6 +282,68 @@ describe('AryxAppService project customization', () => {
     );
   });
 
+  test('sendSessionMessage carries structured prompt invocations and uses prompt agent plan mode', async () => {
+    const workspace = createWorkspaceSeed();
+    const pattern = workspace.patterns.find((candidate) => candidate.mode === 'single');
+    if (!pattern) {
+      throw new Error('Expected a single-agent pattern in the workspace seed.');
+    }
+
+    const project = createProject();
+    const session = createSession(project.id, pattern.id);
+
+    workspace.projects = [project];
+    workspace.sessions = [session];
+    workspace.selectedProjectId = project.id;
+    workspace.selectedPatternId = pattern.id;
+    workspace.selectedSessionId = session.id;
+
+    let command: RunTurnCommand | undefined;
+    const service = createService(workspace, pattern, {
+      captureRunTurn: (capturedCommand) => {
+        command = capturedCommand;
+      },
+    });
+
+    await service.sendSessionMessage(session.id, '', undefined, undefined, {
+      id: 'project_customization_prompt_doc_review',
+      name: 'doc-review',
+      sourcePath: '.github\\prompts\\docs\\doc-review.prompt.md',
+      description: 'Review the docs for missing steps',
+      agent: 'plan',
+      tools: ['view', 'glob'],
+      resolvedPrompt: 'Review the docs for missing steps and propose updates.',
+    });
+
+    expect(session.messages.at(-1)).toMatchObject({
+      id: expect.any(String),
+      role: 'user',
+      authorName: 'You',
+      content: 'Run prompt file: doc-review',
+      createdAt: expect.any(String),
+      promptInvocation: {
+        id: 'project_customization_prompt_doc_review',
+        name: 'doc-review',
+        sourcePath: '.github\\prompts\\docs\\doc-review.prompt.md',
+        description: 'Review the docs for missing steps',
+        agent: 'plan',
+        tools: ['view', 'glob'],
+        resolvedPrompt: 'Review the docs for missing steps and propose updates.',
+      },
+    });
+    expect(command?.mode).toBe('plan');
+    expect(command?.promptInvocation).toEqual({
+      id: 'project_customization_prompt_doc_review',
+      name: 'doc-review',
+      sourcePath: '.github\\prompts\\docs\\doc-review.prompt.md',
+      description: 'Review the docs for missing steps',
+      agent: 'plan',
+      tools: ['view', 'glob'],
+      resolvedPrompt: 'Review the docs for missing steps and propose updates.',
+    });
+    expect(command?.messages.at(-1)?.content).toBe('Run prompt file: doc-review');
+  });
+
   test('setProjectAgentProfileEnabled persists the updated enabled state', async () => {
     const workspace = createWorkspaceSeed();
     const pattern = workspace.patterns.find((candidate) => candidate.mode === 'single');

@@ -2,6 +2,10 @@ import type { PatternDefinition } from '@shared/domain/pattern';
 import { isScratchpadProject, type ProjectRecord } from '@shared/domain/project';
 import type { ChatMessageAttachment } from '@shared/domain/attachment';
 import {
+  normalizeProjectPromptInvocation,
+  type ProjectPromptInvocation,
+} from '@shared/domain/projectCustomization';
+import {
   resolveSessionTitle,
   type ChatMessageRecord,
   type SessionBranchOrigin,
@@ -175,11 +179,26 @@ function cloneAttachments(attachments?: ChatMessageAttachment[]): ChatMessageAtt
   return cloned && cloned.length > 0 ? cloned : undefined;
 }
 
+function clonePromptInvocation(
+  promptInvocation?: ProjectPromptInvocation,
+): ProjectPromptInvocation | undefined {
+  const cloned = normalizeProjectPromptInvocation(promptInvocation);
+  if (!cloned) {
+    return undefined;
+  }
+
+  return {
+    ...cloned,
+    tools: cloned.tools ? [...cloned.tools] : undefined,
+  };
+}
+
 function cloneChatMessageRecord(message: ChatMessageRecord): ChatMessageRecord {
   return {
     ...message,
     pending: false,
     attachments: cloneAttachments(message.attachments),
+    promptInvocation: clonePromptInvocation(message.promptInvocation),
   };
 }
 
@@ -386,6 +405,7 @@ export function editAndResendSessionRecord(
 
   editedMessage.content = content;
   editedMessage.attachments = cloneAttachments(attachments);
+  editedMessage.promptInvocation = undefined;
 
   return {
     ...createDerivedSessionRecord(session, sessionId, editedAt),

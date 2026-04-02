@@ -169,6 +169,7 @@ export class ProjectCustomizationScanner {
         name: readOptionalString(parsedFile.attributes, ['name']) ?? basename(filePath, '.prompt.md'),
         description: readOptionalString(parsedFile.attributes, ['description']),
         agent: readOptionalString(parsedFile.attributes, ['agent']),
+        tools: readOptionalStringArray(parsedFile.attributes.tools),
         template,
         variables: extractPromptVariables(template),
         sourcePath,

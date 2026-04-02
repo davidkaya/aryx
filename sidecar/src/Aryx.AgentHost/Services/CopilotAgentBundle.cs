@@ -11,6 +11,13 @@ namespace Aryx.AgentHost.Services;
 
 internal sealed class CopilotAgentBundle : IAsyncDisposable
 {
+    private static readonly string[] RequiredPromptTools =
+    [
+        "ask_user",
+        "report_intent",
+        "task_complete"
+    ];
+    private const string HandoffToolPrefix = "handoff_to_";
     private readonly List<IAsyncDisposable> _disposables = [];
 
     internal CopilotAgentBundle(IReadOnlyList<AIAgent> agents, bool hasConfiguredHooks)
@@ -62,6 +69,7 @@ internal sealed class CopilotAgentBundle : IAsyncDisposable
                 hookCommandRunner);
 
             ApplySessionTooling(sessionConfig, toolingBundle?.McpServers, toolingBundle?.Tools);
+            ApplyPromptInvocation(sessionConfig, command.PromptInvocation);
 
             AryxCopilotAgent agent = new(
                 client,
@@ -104,7 +112,8 @@ internal sealed class CopilotAgentBundle : IAsyncDisposable
                     agentIndex,
                     command.WorkspaceKind,
                     command.Mode,
-                    command.ProjectInstructions),
+                    command.ProjectInstructions,
+                    command.PromptInvocation),
             },
             WorkingDirectory = command.ProjectPath,
             OnPermissionRequest = onPermissionRequest,
@@ -113,7 +122,7 @@ internal sealed class CopilotAgentBundle : IAsyncDisposable
             OnEvent = onSessionEvent,
             Streaming = true,
             CustomAgents = CreateCustomAgents(definition.Copilot?.CustomAgents),
-            Agent = NormalizeOptionalString(definition.Copilot?.Agent),
+            Agent = ResolveEffectiveAgent(definition.Copilot?.Agent, command.PromptInvocation),
             SkillDirectories = CreateStringList(definition.Copilot?.SkillDirectories),
             DisabledSkills = CreateStringList(definition.Copilot?.DisabledSkills),
             InfiniteSessions = CreateInfiniteSessions(definition.Copilot?.InfiniteSessions),
@@ -134,6 +143,29 @@ internal sealed class CopilotAgentBundle : IAsyncDisposable
         {
             sessionConfig.Tools = tools.ToList();
         }
+    }
+
+    internal static void ApplyPromptInvocation(
+        SessionConfig sessionConfig,
+        RunTurnPromptInvocationDto? promptInvocation)
+    {
+        IReadOnlyList<string>? allowedTools = NormalizeToolNames(promptInvocation?.Tools);
+        if (allowedTools is null)
+        {
+            return;
+        }
+
+        sessionConfig.AvailableTools = BuildAvailableTools(sessionConfig.AvailableTools, allowedTools);
+
+        if (sessionConfig.Tools is null)
+        {
+            return;
+        }
+
+        List<AIFunction> filteredTools = sessionConfig.Tools
+            .Where(tool => IsAlwaysAllowedTool(tool.Name) || allowedTools.Contains(tool.Name, StringComparer.OrdinalIgnoreCase))
+            .ToList();
+        sessionConfig.Tools = filteredTools.Count > 0 ? filteredTools : null;
     }
 
     internal static List<CustomAgentConfig>? CreateCustomAgents(
@@ -178,6 +210,67 @@ internal sealed class CopilotAgentBundle : IAsyncDisposable
         return values is { Count: > 0 }
             ? [.. values]
             : null;
+    }
+
+    private static List<string> BuildAvailableTools(
+        ICollection<string>? existingAvailableTools,
+        IReadOnlyList<string> allowedTools)
+    {
+        List<string> availableTools = existingAvailableTools is { Count: > 0 }
+            ? existingAvailableTools
+                .Where(tool => allowedTools.Contains(tool, StringComparer.OrdinalIgnoreCase))
+                .ToList()
+            : [.. allowedTools];
+
+        foreach (string requiredTool in RequiredPromptTools)
+        {
+            if (!availableTools.Contains(requiredTool, StringComparer.OrdinalIgnoreCase))
+            {
+                availableTools.Add(requiredTool);
+            }
+        }
+
+        return availableTools;
+    }
+
+    private static bool IsAlwaysAllowedTool(string toolName)
+    {
+        return toolName.StartsWith(HandoffToolPrefix, StringComparison.Ordinal)
+            || RequiredPromptTools.Contains(toolName, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static IReadOnlyList<string>? NormalizeToolNames(IReadOnlyList<string>? values)
+    {
+        if (values is null)
+        {
+            return null;
+        }
+
+        return values
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static string? ResolveEffectiveAgent(
+        string? defaultAgent,
+        RunTurnPromptInvocationDto? promptInvocation)
+    {
+        string? promptAgent = NormalizeOptionalString(promptInvocation?.Agent);
+        if (!string.IsNullOrWhiteSpace(promptAgent)
+            && !string.Equals(promptAgent, "plan", StringComparison.OrdinalIgnoreCase))
+        {
+            return promptAgent;
+        }
+
+        IReadOnlyList<string>? promptTools = NormalizeToolNames(promptInvocation?.Tools);
+        if (promptTools is { Count: > 0 })
+        {
+            return "agent";
+        }
+
+        return NormalizeOptionalString(defaultAgent);
     }
 
     private static string? NormalizeOptionalString(string? value)

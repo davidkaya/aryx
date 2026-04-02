@@ -57,7 +57,7 @@ Aryx is a desktop app that turns GitHub Copilot into a full workspace. Connect r
 | Mid-turn steering | Send follow-up messages while an agent is running — input is injected immediately |
 | Plan review & questions | Agents propose plans and ask clarifying questions before acting |
 | Run timeline | Structured history of tool calls, delegations, hooks, and context usage |
-| Copilot customization | Auto-discovers repo instructions (`copilot-instructions.md`, `AGENTS.md`, `CLAUDE.md`, `.instructions.md`), agent profiles, and prompt files from your repo |
+| Copilot customization | Auto-discovers repo instructions (`copilot-instructions.md`, `AGENTS.md`, `CLAUDE.md`, `.instructions.md`), agent profiles, and prompt files from your repo, then auto-rescans when those files change |
 | Model & effort tuning | Choose models, adjust reasoning effort, and set interaction modes per session |
 
 ### Developer tooling

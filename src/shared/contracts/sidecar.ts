@@ -3,6 +3,7 @@ import type { ApprovalCheckpointKind, ApprovalDecision } from '@shared/domain/ap
 import type { ChatMessageRecord } from '@shared/domain/session';
 import type { RuntimeToolDefinition } from '@shared/domain/tooling';
 import type { ChatMessageAttachment } from '@shared/domain/attachment';
+import type { ProjectPromptInvocation } from '@shared/domain/projectCustomization';
 
 export interface SidecarModeCapability {
   available: boolean;
@@ -90,6 +91,7 @@ export interface RunTurnCommand {
   pattern: PatternDefinition;
   messages: ChatMessageRecord[];
   attachments?: ChatMessageAttachment[];
+  promptInvocation?: ProjectPromptInvocation;
   tooling?: RunTurnToolingConfig;
   resumeFromCheckpoint?: WorkflowCheckpointResume;
 }

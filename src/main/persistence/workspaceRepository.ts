@@ -6,7 +6,11 @@ import { isScratchpadProject, mergeScratchpadProject } from '@shared/domain/proj
 import { normalizeDiscoveredToolingState } from '@shared/domain/discoveredTooling';
 import { normalizeProjectCustomizationState } from '@shared/domain/projectCustomization';
 import { normalizeSessionRunRecords } from '@shared/domain/runTimeline';
-import { normalizeSessionBranchOrigin, type SessionRecord } from '@shared/domain/session';
+import {
+  normalizeChatMessageRecord,
+  normalizeSessionBranchOrigin,
+  type SessionRecord,
+} from '@shared/domain/session';
 import {
   normalizeSessionToolingSelection,
   normalizeWorkspaceSettings,
@@ -81,6 +85,7 @@ export class WorkspaceRepository {
     const sessions = await Promise.all((stored.sessions ?? []).map(async (session): Promise<SessionRecord> => {
       const normalizedSession: SessionRecord = {
         ...session,
+        messages: (session.messages ?? []).map(normalizeChatMessageRecord),
         branchOrigin: normalizeSessionBranchOrigin(session.branchOrigin),
         runs: normalizeSessionRunRecords(session.runs),
         tooling: normalizeSessionToolingSelection(session.tooling),

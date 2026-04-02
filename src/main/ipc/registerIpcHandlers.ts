@@ -201,7 +201,13 @@ export function registerIpcHandlers(
     service.editAndResendSessionMessage(input.sessionId, input.messageId, input.content, input.attachments),
   );
   ipcMain.handle(ipcChannels.sendSessionMessage, (_event, input: SendSessionMessageInput) =>
-    service.sendSessionMessage(input.sessionId, input.content, input.attachments, input.messageMode),
+    service.sendSessionMessage(
+      input.sessionId,
+      input.content,
+      input.attachments,
+      input.messageMode,
+      input.promptInvocation,
+    ),
   );
   ipcMain.handle(ipcChannels.cancelSessionTurn, (_event, input: CancelSessionTurnInput) =>
     service.cancelSessionTurn(input.sessionId),

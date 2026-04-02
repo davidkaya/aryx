@@ -20,6 +20,7 @@ import type {
 } from '@shared/domain/tooling';
 import type { WorkspaceState } from '@shared/domain/workspace';
 import type { ChatMessageAttachment } from '@shared/domain/attachment';
+import type { ProjectPromptInvocation } from '@shared/domain/projectCustomization';
 
 export interface CreateSessionInput {
   projectId: string;
@@ -35,6 +36,7 @@ export interface SendSessionMessageInput {
   content: string;
   attachments?: ChatMessageAttachment[];
   messageMode?: MessageMode;
+  promptInvocation?: ProjectPromptInvocation;
 }
 
 export interface CancelSessionTurnInput {

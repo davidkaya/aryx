@@ -55,6 +55,34 @@ public sealed class CopilotAgentBundleTests
     }
 
     [Fact]
+    public void ApplyPromptInvocation_RestrictsAvailableToolsAndKeepsHandoffTools()
+    {
+        SessionConfig sessionConfig = new()
+        {
+            AvailableTools = ["view", "glob", "edit"],
+            Tools = [CreateTool("view"), CreateTool("edit"), CreateTool("handoff_to_reviewer")],
+        };
+
+        CopilotAgentBundle.ApplyPromptInvocation(
+            sessionConfig,
+            new RunTurnPromptInvocationDto
+            {
+                Id = "project_customization_prompt_doc_review",
+                Name = "doc-review",
+                SourcePath = @".github\prompts\docs\doc-review.prompt.md",
+                ResolvedPrompt = "Review the docs for missing steps.",
+                Tools = ["view"],
+            });
+
+        Assert.Equal(["view", "ask_user", "report_intent", "task_complete"], sessionConfig.AvailableTools);
+
+        AIFunction[] tools = Assert.IsAssignableFrom<IEnumerable<AIFunction>>(sessionConfig.Tools).ToArray();
+        Assert.Equal(2, tools.Length);
+        Assert.Contains(tools, tool => tool.Name == "view");
+        Assert.Contains(tools, tool => tool.Name == "handoff_to_reviewer");
+    }
+
+    [Fact]
     public void Constructor_StoresWhetherHooksAreConfigured()
     {
         CopilotAgentBundle bundle = new([], hasConfiguredHooks: true);
@@ -427,6 +455,95 @@ public sealed class CopilotAgentBundleTests
     }
 
     [Fact]
+    public void CreateSessionConfig_UsesPromptAgentOverride()
+    {
+        RunTurnCommandDto command = new()
+        {
+            SessionId = "session-1",
+            ProjectPath = @"C:\workspace\project",
+            WorkspaceKind = "project",
+            Mode = "interactive",
+            PromptInvocation = new RunTurnPromptInvocationDto
+            {
+                Id = "project_customization_prompt_doc_review",
+                Name = "doc-review",
+                SourcePath = @".github\prompts\docs\doc-review.prompt.md",
+                Agent = "designer",
+                ResolvedPrompt = "Review the docs for missing steps.",
+            },
+            Pattern = new PatternDefinitionDto
+            {
+                Id = "pattern-1",
+                Name = "Pattern",
+                Mode = "single",
+                Availability = "available",
+                Agents =
+                [
+                    new PatternAgentDefinitionDto
+                    {
+                        Id = "agent-1",
+                        Name = "Primary",
+                        Model = "gpt-5.4",
+                        Instructions = "Help.",
+                    },
+                ],
+            },
+        };
+
+        SessionConfig sessionConfig = CopilotAgentBundle.CreateSessionConfig(
+            command,
+            command.Pattern.Agents[0],
+            agentIndex: 0);
+
+        Assert.Equal("designer", sessionConfig.Agent);
+        Assert.Contains("Review the docs for missing steps.", sessionConfig.SystemMessage?.Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void CreateSessionConfig_DefaultsPromptToolInvocationsToAgentMode()
+    {
+        RunTurnCommandDto command = new()
+        {
+            SessionId = "session-1",
+            ProjectPath = @"C:\workspace\project",
+            WorkspaceKind = "project",
+            Mode = "interactive",
+            PromptInvocation = new RunTurnPromptInvocationDto
+            {
+                Id = "project_customization_prompt_doc_review",
+                Name = "doc-review",
+                SourcePath = @".github\prompts\docs\doc-review.prompt.md",
+                ResolvedPrompt = "Review the docs for missing steps.",
+                Tools = ["view"],
+            },
+            Pattern = new PatternDefinitionDto
+            {
+                Id = "pattern-1",
+                Name = "Pattern",
+                Mode = "single",
+                Availability = "available",
+                Agents =
+                [
+                    new PatternAgentDefinitionDto
+                    {
+                        Id = "agent-1",
+                        Name = "Primary",
+                        Model = "gpt-5.4",
+                        Instructions = "Help.",
+                    },
+                ],
+            },
+        };
+
+        SessionConfig sessionConfig = CopilotAgentBundle.CreateSessionConfig(
+            command,
+            command.Pattern.Agents[0],
+            agentIndex: 0);
+
+        Assert.Equal("agent", sessionConfig.Agent);
+    }
+
+    [Fact]
     public async Task CopilotSessionHooks_Create_UsesApprovalPolicyForPreToolUse()
     {
         RunTurnCommandDto command = new()
@@ -484,7 +601,7 @@ public sealed class CopilotAgentBundleTests
         Assert.Equal("agent-ux", agentId);
     }
 
-    private static AIFunction CreateTool()
+    private static AIFunction CreateTool(string name = "echo")
     {
         ToolTarget target = new();
         MethodInfo method = typeof(ToolTarget).GetMethod(nameof(ToolTarget.Echo))
@@ -495,7 +612,7 @@ public sealed class CopilotAgentBundleTests
             target,
             new AIFunctionFactoryOptions
             {
-                Name = "echo",
+                Name = name,
                 Description = "Echo test tool",
             });
     }

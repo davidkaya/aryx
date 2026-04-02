@@ -10,10 +10,12 @@ internal static class AgentInstructionComposer
         int agentIndex,
         string workspaceKind = "project",
         string interactionMode = "interactive",
-        string? projectInstructions = null)
+        string? projectInstructions = null,
+        RunTurnPromptInvocationDto? promptInvocation = null)
     {
         string baseInstructions = agent.Instructions.Trim();
         string repositoryInstructions = projectInstructions?.Trim() ?? string.Empty;
+        string promptInvocationInstructions = FormatPromptInvocation(promptInvocation);
         string workspaceGuidance = string.Equals(workspaceKind, "scratchpad", StringComparison.OrdinalIgnoreCase)
             ? """
               You are operating in scratchpad mode.
@@ -48,10 +50,21 @@ internal static class AgentInstructionComposer
                   Focus on refining the answer already in progress.
                   """;
 
-            return JoinInstructionBlocks(baseInstructions, repositoryInstructions, workspaceGuidance, planModeGuidance, groupChatGuidance);
+            return JoinInstructionBlocks(
+                baseInstructions,
+                repositoryInstructions,
+                promptInvocationInstructions,
+                workspaceGuidance,
+                planModeGuidance,
+                groupChatGuidance);
         }
 
-        return JoinInstructionBlocks(baseInstructions, repositoryInstructions, workspaceGuidance, planModeGuidance);
+        return JoinInstructionBlocks(
+            baseInstructions,
+            repositoryInstructions,
+            promptInvocationInstructions,
+            workspaceGuidance,
+            planModeGuidance);
     }
 
     private static string JoinInstructionBlocks(params string[] blocks)
@@ -59,5 +72,48 @@ internal static class AgentInstructionComposer
         return string.Join(
             "\n\n",
             blocks.Where(block => !string.IsNullOrWhiteSpace(block)).Select(block => block.Trim()));
+    }
+
+    private static string FormatPromptInvocation(RunTurnPromptInvocationDto? promptInvocation)
+    {
+        string? resolvedPrompt = promptInvocation?.ResolvedPrompt?.Trim();
+        if (string.IsNullOrWhiteSpace(resolvedPrompt))
+        {
+            return string.Empty;
+        }
+
+        List<string> lines =
+        [
+            "The current turn was started from a repository prompt file.",
+            "Treat the prompt body below as the task directive for this turn rather than as prior user chat history.",
+            $"Source: {promptInvocation!.SourcePath.Trim()}",
+            $"Name: {promptInvocation.Name.Trim()}"
+        ];
+
+        if (!string.IsNullOrWhiteSpace(promptInvocation.Description))
+        {
+            lines.Add($"Description: {promptInvocation.Description.Trim()}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(promptInvocation.Agent))
+        {
+            lines.Add($"Agent: {promptInvocation.Agent.Trim()}");
+        }
+
+        if (promptInvocation.Tools is not null)
+        {
+            List<string> toolNames = promptInvocation.Tools
+                .Where(tool => !string.IsNullOrWhiteSpace(tool))
+                .Select(tool => tool.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            lines.Add(toolNames.Count > 0
+                ? $"Tools: {string.Join(", ", toolNames)}"
+                : "Tools: none");
+        }
+
+        lines.Add("Prompt instructions:");
+        lines.Add(resolvedPrompt);
+        return string.Join("\n", lines);
     }
 }

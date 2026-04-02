@@ -99,6 +99,9 @@ Focus on repository documentation only.
 name: explain-selected-code
 agent: agent
 description: Generate a clear explanation
+tools:
+  - view
+  - glob
 ---
 Explain the following code:
 \${input:code:Paste your code here}
@@ -177,6 +180,7 @@ Audience: \${input:audience:Who is this for?}
         name: 'explain-selected-code',
         description: 'Generate a clear explanation',
         agent: 'agent',
+        tools: ['view', 'glob'],
         template: 'Explain the following code:\n${input:code:Paste your code here}\nAudience: ${input:audience:Who is this for?}',
         variables: [
           { name: 'code', placeholder: 'Paste your code here' },

@@ -184,6 +184,48 @@ public sealed class AgentInstructionComposerTests
             < instructions.IndexOf("scratchpad mode", StringComparison.OrdinalIgnoreCase));
     }
 
+    [Fact]
+    public void Compose_AppendsPromptInvocationAsATaskDirective()
+    {
+        PatternDefinitionDto pattern = new()
+        {
+            Id = "pattern-single",
+            Name = "Single",
+            Mode = "single",
+            Availability = "available",
+        };
+        PatternAgentDefinitionDto agent = CreateAgent(
+            id: "agent-primary",
+            name: "Primary Agent",
+            instructions: "You are a helpful assistant.");
+
+        string instructions = AgentInstructionComposer.Compose(
+            pattern,
+            agent,
+            agentIndex: 0,
+            promptInvocation: new RunTurnPromptInvocationDto
+            {
+                Id = "project_customization_prompt_doc_review",
+                Name = "doc-review",
+                SourcePath = @".github\prompts\docs\doc-review.prompt.md",
+                Description = "Review docs for missing steps",
+                Agent = "plan",
+                Tools = ["view", "glob"],
+                ResolvedPrompt = "Review the docs for missing steps and propose updates."
+            });
+
+        Assert.Contains("repository prompt file", instructions, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(@"Source: .github\prompts\docs\doc-review.prompt.md", instructions, StringComparison.Ordinal);
+        Assert.Contains("Name: doc-review", instructions, StringComparison.Ordinal);
+        Assert.Contains("Description: Review docs for missing steps", instructions, StringComparison.Ordinal);
+        Assert.Contains("Agent: plan", instructions, StringComparison.Ordinal);
+        Assert.Contains("Tools: view, glob", instructions, StringComparison.Ordinal);
+        Assert.Contains(
+            "Prompt instructions:\nReview the docs for missing steps and propose updates.",
+            instructions,
+            StringComparison.Ordinal);
+    }
+
     private static PatternAgentDefinitionDto CreateAgent(string id, string name, string instructions)
     {
         return new PatternAgentDefinitionDto

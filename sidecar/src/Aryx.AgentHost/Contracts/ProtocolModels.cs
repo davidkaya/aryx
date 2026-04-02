@@ -187,8 +187,20 @@ public sealed class RunTurnCommandDto : SidecarCommandEnvelope
     public string? ProjectInstructions { get; init; }
     public PatternDefinitionDto Pattern { get; init; } = new();
     public IReadOnlyList<ChatMessageDto> Messages { get; init; } = [];
+    public RunTurnPromptInvocationDto? PromptInvocation { get; init; }
     public RunTurnToolingConfigDto? Tooling { get; init; }
     public WorkflowCheckpointResumeDto? ResumeFromCheckpoint { get; init; }
+}
+
+public sealed class RunTurnPromptInvocationDto
+{
+    public string Id { get; init; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
+    public string SourcePath { get; init; } = string.Empty;
+    public string ResolvedPrompt { get; init; } = string.Empty;
+    public string? Description { get; init; }
+    public string? Agent { get; init; }
+    public IReadOnlyList<string>? Tools { get; init; }
 }
 
 public sealed class CancelTurnCommandDto : SidecarCommandEnvelope

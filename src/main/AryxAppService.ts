@@ -8,6 +8,7 @@ import type {
   AgentActivityEvent,
   ApprovalRequestedEvent,
   ExitPlanModeRequestedEvent,
+  InteractionMode,
   MessageMode,
   McpOauthRequiredEvent,
   MessageReclassifiedEvent,
@@ -44,10 +45,12 @@ import {
 } from '@shared/domain/discoveredTooling';
 import {
   listEnabledProjectAgentProfiles,
+  normalizeProjectPromptInvocation,
   normalizeProjectCustomizationState,
   resolveProjectInstructionsContent,
   setProjectAgentProfileEnabled,
   type ProjectAgentProfile,
+  type ProjectPromptInvocation,
   type ProjectCustomizationState,
 } from '@shared/domain/projectCustomization';
 import {
@@ -137,6 +140,7 @@ import { getScratchpadSessionPath } from '@main/persistence/appPaths';
 import { SecretStore } from '@main/secrets/secretStore';
 import { ConfigScannerRegistry } from '@main/services/configScanner';
 import { ProjectCustomizationScanner } from '@main/services/customizationScanner';
+import { ProjectCustomizationWatcher } from '@main/services/projectCustomizationWatcher';
 import {
   SIDECAR_STOPPED_BEFORE_COMPLETION_MESSAGE,
   SidecarClient,
@@ -199,6 +203,18 @@ function equalStringArrays(left?: readonly string[], right?: readonly string[]):
   return normalizedLeft.every((value, index) => value === normalizedRight[index]);
 }
 
+function buildPromptInvocationFallbackContent(promptInvocation?: ProjectPromptInvocation): string | undefined {
+  if (!promptInvocation) {
+    return undefined;
+  }
+
+  return `Run prompt file: ${promptInvocation.name}`;
+}
+
+function isPlanPromptInvocation(promptInvocation?: ProjectPromptInvocation): boolean {
+  return promptInvocation?.agent?.trim().toLowerCase() === 'plan';
+}
+
 function isSidecarStoppedBeforeCompletionError(error: unknown): error is Error {
   return error instanceof Error && error.message === SIDECAR_STOPPED_BEFORE_COMPLETION_MESSAGE;
 }
@@ -227,6 +243,8 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
   private readonly gitService = new GitService();
   private readonly configScanner = new ConfigScannerRegistry();
   private readonly customizationScanner = new ProjectCustomizationScanner();
+  private readonly projectCustomizationWatcher = new ProjectCustomizationWatcher((projectId) =>
+    this.handleProjectCustomizationWatcherChange(projectId));
   private readonly probeMcpServers = probeServers;
   private readonly ptyManager = new PtyManager();
   private readonly pendingApprovalHandles = new Map<string, PendingApprovalHandle>();
@@ -243,6 +261,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
   private projectGitRefreshTimer?: ReturnType<typeof setTimeout>;
   private periodicProjectGitRefreshTimer?: ReturnType<typeof setInterval>;
   private runningProjectGitRefresh?: Promise<void>;
+  private customizationWatcherUpdateQueue = Promise.resolve();
 
   constructor() {
     super();
@@ -289,6 +308,8 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
       ) {
         await this.workspaceRepository.save(this.workspace);
       }
+
+      await this.syncProjectCustomizationWatchers(this.workspace);
     }
 
     if (!this.didScheduleInitialProjectGitRefresh) {
@@ -322,6 +343,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
       clearInterval(this.periodicProjectGitRefreshTimer);
       this.periodicProjectGitRefreshTimer = undefined;
     }
+    this.projectCustomizationWatcher.dispose();
     this.ptyManager.dispose();
     await this.sidecar.dispose();
     void this.secretStore;
@@ -356,6 +378,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
   }
 
   async resetLocalWorkspace(): Promise<WorkspaceState> {
+    this.projectCustomizationWatcher.dispose();
     await this.sidecar.dispose();
 
     try {
@@ -392,6 +415,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
       workspace.selectedProjectId = existing.id;
       const didSyncProjectTooling = await this.syncProjectDiscoveredTooling(workspace, existing);
       await this.syncProjectCustomization(existing);
+      await this.syncProjectCustomizationWatchers(workspace);
       if (didSyncProjectTooling) {
         this.pruneUnavailableSessionToolingSelections(workspace);
         await this.pruneUnavailableApprovalTools(workspace);
@@ -411,6 +435,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     workspace.selectedProjectId = project.id;
     await this.syncProjectDiscoveredTooling(workspace, project);
     await this.syncProjectCustomization(project);
+    await this.syncProjectCustomizationWatchers(workspace);
     return this.persistAndBroadcast(workspace);
   }
 
@@ -434,6 +459,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
       workspace.selectedSessionId = undefined;
     }
 
+    await this.syncProjectCustomizationWatchers(workspace);
     return this.persistAndBroadcast(workspace);
   }
 
@@ -480,6 +506,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     const workspace = await this.loadWorkspace();
     const project = this.requireProject(workspace, projectId);
     await this.syncProjectCustomization(project);
+    await this.syncProjectCustomizationWatchers(workspace);
     return this.persistAndBroadcast(workspace);
   }
 
@@ -993,6 +1020,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     content: string,
     attachments?: ChatMessageAttachment[],
     messageMode?: MessageMode,
+    promptInvocation?: ProjectPromptInvocation,
   ): Promise<void> {
     const workspace = await this.loadWorkspace();
     const session = this.requireSession(workspace, sessionId);
@@ -1009,7 +1037,9 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     );
     const projectInstructions = resolveProjectInstructionsContent(project.customization);
 
-    const preparedContent = prepareChatMessageContent(content);
+    const normalizedPromptInvocation = normalizeProjectPromptInvocation(promptInvocation);
+    const preparedContent = prepareChatMessageContent(content)
+      ?? buildPromptInvocationFallbackContent(normalizedPromptInvocation);
     if (!preparedContent) {
       return;
     }
@@ -1024,6 +1054,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
       content: preparedContent,
       createdAt: occurredAt,
       attachments: attachments?.length ? attachments : undefined,
+      promptInvocation: normalizedPromptInvocation,
     });
     await this.runPreparedSessionTurn(workspace, session, project, effectivePattern, projectInstructions, {
       occurredAt,
@@ -1390,6 +1421,10 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
   ): Promise<void> {
     const workspaceKind = isScratchpadProject(project) ? 'scratchpad' : 'project';
     const { occurredAt, requestId, triggerMessageId, messageMode, attachments } = options;
+    const promptInvocation = this.resolveRunTurnPromptInvocation(session, triggerMessageId);
+    const interactionMode: InteractionMode = isPlanPromptInvocation(promptInvocation)
+      ? 'plan'
+      : session.interactionMode ?? 'interactive';
     const runWorkingDirectory = session.cwd ?? project.path;
     const preRunGitSnapshot = workspaceKind === 'project'
       ? await this.gitService.captureWorkingTreeSnapshot(runWorkingDirectory, occurredAt)
@@ -1439,12 +1474,13 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
         sessionId: session.id,
         projectPath: runWorkingDirectory,
         workspaceKind,
-        mode: session.interactionMode ?? 'interactive',
+        mode: interactionMode,
         messageMode,
         projectInstructions,
         pattern: effectivePattern,
         messages: session.messages,
         attachments: attachments?.length ? attachments : undefined,
+        promptInvocation,
         tooling: this.buildRunTurnToolingConfig(workspace, session),
         resumeFromCheckpoint,
       });
@@ -3000,6 +3036,52 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
 
     workspace.settings.discoveredUserTooling = nextState;
     return true;
+  }
+
+  private async syncProjectCustomizationWatchers(workspace: WorkspaceState): Promise<void> {
+    await this.projectCustomizationWatcher.syncProjects(
+      workspace.projects
+        .filter((project) => !isScratchpadProject(project))
+        .map((project) => ({
+          id: project.id,
+          path: project.path,
+        })),
+    );
+  }
+
+  private resolveRunTurnPromptInvocation(
+    session: SessionRecord,
+    triggerMessageId: string,
+  ): ProjectPromptInvocation | undefined {
+    const triggerMessage = session.messages.find((message) => message.id === triggerMessageId);
+    return normalizeProjectPromptInvocation(triggerMessage?.promptInvocation);
+  }
+
+  private async handleProjectCustomizationWatcherChange(projectId: string): Promise<void> {
+    await this.enqueueCustomizationWatcherUpdate(async () => {
+      const workspace = await this.loadWorkspace();
+      const project = workspace.projects.find((candidate) => candidate.id === projectId);
+      await this.syncProjectCustomizationWatchers(workspace);
+
+      if (!project || isScratchpadProject(project)) {
+        return;
+      }
+
+      const didSyncProjectCustomization = await this.syncProjectCustomization(project);
+      await this.syncProjectCustomizationWatchers(workspace);
+      if (didSyncProjectCustomization) {
+        await this.persistAndBroadcast(workspace);
+      }
+    });
+  }
+
+  private enqueueCustomizationWatcherUpdate(task: () => Promise<void>): Promise<void> {
+    const scheduledTask = this.customizationWatcherUpdateQueue.then(task, task);
+    this.customizationWatcherUpdateQueue = scheduledTask.then(
+      () => undefined,
+      () => undefined,
+    );
+    return scheduledTask;
   }
 
   private async syncProjectCustomization(project: ProjectRecord): Promise<boolean> {

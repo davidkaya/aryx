@@ -59,6 +59,47 @@ function requirePattern(workspace: WorkspaceState, mode: PatternDefinition['mode
   return pattern;
 }
 
+describe('AryxAppService deletePattern', () => {
+  test('deletes a built-in pattern and tracks its ID', async () => {
+    const workspace = createWorkspaceSeed();
+    const builtinPattern = requirePattern(workspace, 'sequential');
+    const service = createService(workspace);
+
+    const result = await service.deletePattern(builtinPattern.id);
+
+    expect(result.patterns.find((p) => p.id === builtinPattern.id)).toBeUndefined();
+    expect(result.deletedBuiltinPatternIds).toContain(builtinPattern.id);
+  });
+
+  test('deletes a custom pattern without tracking its ID', async () => {
+    const workspace = createWorkspaceSeed();
+    const customPattern: PatternDefinition = {
+      ...requirePattern(workspace, 'single'),
+      id: 'custom-pattern',
+      name: 'My Custom Pattern',
+    };
+    workspace.patterns.push(customPattern);
+    const service = createService(workspace);
+
+    const result = await service.deletePattern('custom-pattern');
+
+    expect(result.patterns.find((p) => p.id === 'custom-pattern')).toBeUndefined();
+    expect(result.deletedBuiltinPatternIds ?? []).not.toContain('custom-pattern');
+  });
+
+  test('selects first remaining pattern when the active pattern is deleted', async () => {
+    const workspace = createWorkspaceSeed();
+    const targetPattern = requirePattern(workspace, 'single');
+    workspace.selectedPatternId = targetPattern.id;
+    const service = createService(workspace);
+
+    const result = await service.deletePattern(targetPattern.id);
+
+    expect(result.selectedPatternId).toBe(result.patterns[0]?.id);
+    expect(result.selectedPatternId).not.toBe(targetPattern.id);
+  });
+});
+
 describe('AryxAppService savePattern', () => {
   test('preserves a provided custom graph instead of re-syncing it', async () => {
     const workspace = createWorkspaceSeed();

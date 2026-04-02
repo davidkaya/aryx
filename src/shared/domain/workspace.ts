@@ -10,6 +10,8 @@ export interface WorkspaceState {
   patterns: PatternDefinition[];
   sessions: SessionRecord[];
   settings: WorkspaceSettings;
+  /** IDs of built-in patterns the user has deleted. Prevents re-adding on load. */
+  deletedBuiltinPatternIds?: string[];
   /** Runtime-only MCP probe progress for live UI updates. */
   mcpProbingServerIds?: string[];
   selectedProjectId?: string;

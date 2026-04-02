@@ -30,13 +30,16 @@ import {
 } from '@main/persistence/appPaths';
 import { readJsonFile, writeJsonFile } from '@main/persistence/jsonStore';
 
-function mergePatterns(existingPatterns: PatternDefinition[]): PatternDefinition[] {
+function mergePatterns(existingPatterns: PatternDefinition[], deletedBuiltinIds: string[]): PatternDefinition[] {
   const builtinTimestamp = nowIso();
   const builtinPatterns = createBuiltinPatterns(builtinTimestamp);
   const builtinIds = new Set(builtinPatterns.map((pattern) => pattern.id));
+  const deletedSet = new Set(deletedBuiltinIds);
   const existingMap = new Map(existingPatterns.map((pattern) => [pattern.id, pattern]));
 
-  const mergedBuiltins = builtinPatterns.map((builtin) => {
+  const mergedBuiltins = builtinPatterns
+    .filter((builtin) => !deletedSet.has(builtin.id))
+    .map((builtin) => {
     const existing = existingMap.get(builtin.id);
     if (!existing) {
       return builtin;
@@ -108,9 +111,11 @@ export class WorkspaceRepository {
     }));
     const settings = normalizeWorkspaceSettings(stored.settings);
 
+    const deletedBuiltinPatternIds = stored.deletedBuiltinPatternIds ?? [];
+
     const workspace: WorkspaceState = {
       ...stored,
-      patterns: mergePatterns(stored.patterns ?? []).map((pattern) => ({
+      patterns: mergePatterns(stored.patterns ?? [], deletedBuiltinPatternIds).map((pattern) => ({
         ...pattern,
         approvalPolicy: applyDefaultToolApprovalPolicy(pattern.approvalPolicy),
         graph: resolvePatternGraph(pattern),
@@ -118,6 +123,7 @@ export class WorkspaceRepository {
       projects,
       sessions,
       settings,
+      deletedBuiltinPatternIds,
       selectedProjectId: projects.some((project) => project.id === stored.selectedProjectId)
         ? stored.selectedProjectId
         : projects[0]?.id,

@@ -710,12 +710,14 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
   }
 
   async deletePattern(patternId: string): Promise<WorkspaceState> {
-    if (isBuiltinPattern(patternId)) {
-      throw new Error('Built-in patterns cannot be deleted.');
-    }
-
     const workspace = await this.loadWorkspace();
     workspace.patterns = workspace.patterns.filter((pattern) => pattern.id !== patternId);
+
+    if (isBuiltinPattern(patternId)) {
+      const deletedIds = new Set(workspace.deletedBuiltinPatternIds ?? []);
+      deletedIds.add(patternId);
+      workspace.deletedBuiltinPatternIds = [...deletedIds];
+    }
 
     if (workspace.selectedPatternId === patternId) {
       workspace.selectedPatternId = workspace.patterns[0]?.id;

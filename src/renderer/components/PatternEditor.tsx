@@ -311,7 +311,7 @@ export function PatternEditor({
           </div>
         </div>
         <div className="no-drag flex items-center gap-2">
-          {!isBuiltin && onDelete && (
+          {onDelete && (
             <button
               className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[13px] text-[var(--color-status-error)] transition-all duration-200 hover:bg-[var(--color-status-error)]/10"
               onClick={onDelete}

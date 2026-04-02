@@ -165,12 +165,10 @@ export function SettingsPanel({
           onBack={() => setEditingPattern(null)}
           onChange={setEditingPattern}
           onDelete={
-            isBuiltin
-              ? undefined
-              : async () => {
-                  await onDeletePattern(editingPattern.id);
-                  setEditingPattern(null);
-                }
+            async () => {
+              await onDeletePattern(editingPattern.id);
+              setEditingPattern(null);
+            }
           }
           onSave={async () => {
             await onSavePattern(editingPattern);

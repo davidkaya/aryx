@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { ArrowUp, FileText, X } from 'lucide-react';
 
 import { useClickOutside } from '@renderer/hooks/useClickOutside';
-import type { ProjectPromptFile, ProjectPromptVariable } from '@shared/domain/projectCustomization';
+import type { ProjectPromptFile, ProjectPromptInvocation, ProjectPromptVariable } from '@shared/domain/projectCustomization';
 
 const promptVariablePattern = /\$\{input:([a-zA-Z0-9_-]+):[^}]+\}/g;
 
@@ -12,6 +12,21 @@ function resolvePromptTemplate(template: string, values: Record<string, string>)
   });
 }
 
+function buildPromptInvocation(prompt: ProjectPromptFile, resolvedTemplate: string): ProjectPromptInvocation {
+  const invocation: ProjectPromptInvocation = {
+    id: prompt.id,
+    name: prompt.name,
+    sourcePath: prompt.sourcePath,
+    resolvedPrompt: resolvedTemplate,
+  };
+
+  if (prompt.description) invocation.description = prompt.description;
+  if (prompt.agent) invocation.agent = prompt.agent;
+  if (prompt.tools?.length) invocation.tools = prompt.tools;
+
+  return invocation;
+}
+
 export function InlinePromptPill({
   promptFiles,
   disabled,
@@ -19,7 +34,7 @@ export function InlinePromptPill({
 }: {
   promptFiles: ReadonlyArray<ProjectPromptFile>;
   disabled: boolean;
-  onSubmit: (resolvedContent: string) => void;
+  onSubmit: (invocation: ProjectPromptInvocation) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [selectedPrompt, setSelectedPrompt] = useState<ProjectPromptFile | null>(null);
@@ -34,7 +49,7 @@ export function InlinePromptPill({
 
   const handleSelectPrompt = useCallback((prompt: ProjectPromptFile) => {
     if (prompt.variables.length === 0) {
-      onSubmit(prompt.template.trim());
+      onSubmit(buildPromptInvocation(prompt, prompt.template.trim()));
       handleClose();
     } else {
       setSelectedPrompt(prompt);
@@ -46,7 +61,7 @@ export function InlinePromptPill({
     if (!selectedPrompt) return;
     const resolved = resolvePromptTemplate(selectedPrompt.template, variableValues).trim();
     if (!resolved) return;
-    onSubmit(resolved);
+    onSubmit(buildPromptInvocation(selectedPrompt, resolved));
     handleClose();
   }, [selectedPrompt, variableValues, onSubmit, handleClose]);
 
@@ -127,26 +142,36 @@ function PromptList({
         >
           <FileText className="mt-0.5 size-3.5 shrink-0 text-[var(--color-text-muted)]" />
           <div className="min-w-0 flex-1">
-            <div className="truncate text-[12px] font-medium text-[var(--color-text-primary)]">
-              {prompt.name}
+            <div className="flex items-center gap-1.5">
+              <span className="truncate text-[12px] font-medium text-[var(--color-text-primary)]">
+                {prompt.name}
+              </span>
+              {prompt.agent && (
+                <span className="shrink-0 rounded bg-[var(--color-accent-sky)]/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-[var(--color-accent-sky)]">
+                  {prompt.agent}
+                </span>
+              )}
             </div>
             {prompt.description && (
               <div className="mt-0.5 truncate text-[11px] text-[var(--color-text-muted)]">
                 {prompt.description}
               </div>
             )}
-            {prompt.variables.length > 0 && (
-              <div className="mt-1 flex flex-wrap gap-1">
-                {prompt.variables.map((v) => (
-                  <span
-                    key={v.name}
-                    className="rounded bg-[var(--color-surface-2)] px-1.5 py-0.5 text-[10px] text-[var(--color-text-muted)]"
-                  >
-                    {v.name}
-                  </span>
-                ))}
-              </div>
-            )}
+            <div className="mt-1 flex flex-wrap gap-1">
+              {prompt.tools && prompt.tools.length > 0 && (
+                <span className="rounded bg-[var(--color-status-warning)]/10 px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-status-warning)]">
+                  {prompt.tools.length} tool{prompt.tools.length === 1 ? '' : 's'}
+                </span>
+              )}
+              {prompt.variables.map((v) => (
+                <span
+                  key={v.name}
+                  className="rounded bg-[var(--color-surface-2)] px-1.5 py-0.5 text-[10px] text-[var(--color-text-muted)]"
+                >
+                  {v.name}
+                </span>
+              ))}
+            </div>
           </div>
         </button>
       ))}

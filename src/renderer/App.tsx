@@ -588,11 +588,12 @@ export default function App() {
   } else if (selectedSession && patternForSession && projectForSession) {
     content = (
         <ChatPane
-          onSend={(c, attachments, messageMode) => api.sendSessionMessage({
+          onSend={(c, attachments, messageMode, promptInvocation) => api.sendSessionMessage({
             sessionId: selectedSession.id,
             content: c,
             attachments: attachments?.length ? attachments : undefined,
             messageMode,
+            promptInvocation,
           })}
           onCancelTurn={() => { void api.cancelSessionTurn({ sessionId: selectedSession.id }); }}
           onResolveApproval={(approvalId, decision, alwaysApprove) =>

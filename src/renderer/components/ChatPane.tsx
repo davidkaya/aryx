@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, ArrowUp, Bookmark, Bot, Circle, ClipboardList, GitBranch, Loader2, MessageCircleQuestion, Paperclip, RefreshCw, ShieldAlert, Square, User, X } from 'lucide-react';
+import { AlertCircle, ArrowUp, Bookmark, Bot, ChevronDown, ChevronRight, Circle, ClipboardList, FileText, GitBranch, Loader2, MessageCircleQuestion, Paperclip, RefreshCw, ShieldAlert, Square, User, X } from 'lucide-react';
 
 import { MarkdownContent } from '@renderer/components/MarkdownContent';
 import { MarkdownComposer, type MarkdownComposerHandle } from '@renderer/components/MarkdownComposer';
@@ -30,6 +30,7 @@ import {
 import { type PatternDefinition, type ReasoningEffort } from '@shared/domain/pattern';
 import { isScratchpadProject, type ProjectRecord } from '@shared/domain/project';
 import { resolveSessionToolingSelection, type ChatMessageRecord, type SessionBranchOriginAction, type SessionRecord } from '@shared/domain/session';
+import type { ProjectPromptInvocation } from '@shared/domain/projectCustomization';
 import {
   countApprovedToolsInGroups,
   groupApprovalToolsByProvider,
@@ -59,7 +60,7 @@ interface ChatPaneProps {
   terminalRunning?: boolean;
   gitPanelOpen?: boolean;
   gitDirty?: boolean;
-  onSend: (content: string, attachments?: ChatMessageAttachment[], messageMode?: MessageMode) => Promise<void>;
+  onSend: (content: string, attachments?: ChatMessageAttachment[], messageMode?: MessageMode, promptInvocation?: ProjectPromptInvocation) => Promise<void>;
   onCancelTurn?: () => void;
   onResolveApproval?: (approvalId: string, decision: ApprovalDecision, alwaysApprove?: boolean) => Promise<unknown>;
   onResolveUserInput?: (userInputId: string, answer: string, wasFreeform: boolean) => Promise<unknown>;
@@ -504,6 +505,8 @@ export function ChatPane({
                               onSave={(content) => handleEditSave(message.id, content)}
                               onCancel={() => setEditingMessageId(undefined)}
                             />
+                          ) : isUser && message.promptInvocation ? (
+                            <PromptInvocationChrome invocation={message.promptInvocation} />
                           ) : (
                             <div
                               className={
@@ -783,7 +786,7 @@ export function ChatPane({
                   {!isScratchpad && promptFiles.length > 0 && (
                     <InlinePromptPill
                       disabled={isComposerDisabled}
-                      onSubmit={(content) => void onSend(content)}
+                      onSubmit={(promptInvocation) => void onSend('', undefined, undefined, promptInvocation)}
                       promptFiles={promptFiles}
                     />
                   )}
@@ -924,6 +927,54 @@ export function ChatPane({
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ── Prompt invocation chrome ───────────────────────────────── */
+
+function PromptInvocationChrome({ invocation }: { invocation: ProjectPromptInvocation }) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div className="rounded-xl border border-[var(--color-status-success)]/20 bg-[var(--color-status-success)]/5 px-4 py-3">
+      <button
+        className="flex w-full items-center gap-2.5 text-left"
+        onClick={() => setExpanded(!expanded)}
+        type="button"
+        aria-expanded={expanded}
+      >
+        <FileText className="size-3.5 shrink-0 text-[var(--color-status-success)]" />
+        <span className="flex-1 text-[13px] font-medium text-[var(--color-text-primary)]">
+          {invocation.name}
+        </span>
+        <div className="flex items-center gap-1.5">
+          {invocation.agent && (
+            <span className="rounded bg-[var(--color-accent-sky)]/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-[var(--color-accent-sky)]">
+              {invocation.agent}
+            </span>
+          )}
+          {invocation.tools && invocation.tools.length > 0 && (
+            <span className="rounded bg-[var(--color-status-warning)]/10 px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-status-warning)]">
+              {invocation.tools.length} tool{invocation.tools.length === 1 ? '' : 's'}
+            </span>
+          )}
+          {expanded
+            ? <ChevronDown className="size-3.5 text-[var(--color-text-muted)]" />
+            : <ChevronRight className="size-3.5 text-[var(--color-text-muted)]" />}
+        </div>
+      </button>
+      {invocation.description && (
+        <p className="mt-1 pl-6 text-[11px] text-[var(--color-text-muted)]">{invocation.description}</p>
+      )}
+      <p className="mt-0.5 pl-6 text-[10px] text-[var(--color-text-muted)]">{invocation.sourcePath}</p>
+      {expanded && (
+        <div className="mt-2.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-1)] p-3">
+          <div className="max-h-48 overflow-y-auto text-[12px] leading-relaxed text-[var(--color-text-secondary)]">
+            <MarkdownContent content={invocation.resolvedPrompt} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -578,6 +578,11 @@ function PromptCard({ prompt }: { prompt: ProjectPromptFile }) {
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span className="text-[13px] font-medium text-[var(--color-text-primary)]">{prompt.name}</span>
+            {prompt.agent && (
+              <span className="rounded-full bg-[var(--color-accent-sky)]/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--color-accent-sky)]">
+                {prompt.agent}
+              </span>
+            )}
             {prompt.variables.length > 0 && (
               <span className="rounded-full bg-[var(--color-surface-3)] px-2 py-0.5 text-[10px] font-medium text-[var(--color-text-muted)]">
                 {prompt.variables.length} variable{prompt.variables.length === 1 ? '' : 's'}
@@ -586,6 +591,18 @@ function PromptCard({ prompt }: { prompt: ProjectPromptFile }) {
           </div>
           {prompt.description && (
             <p className="mt-1 text-[12px] leading-relaxed text-[var(--color-text-muted)]">{prompt.description}</p>
+          )}
+          {prompt.tools && prompt.tools.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {prompt.tools.map((tool) => (
+                <span
+                  key={tool}
+                  className="rounded-md bg-[var(--color-status-warning)]/10 px-2 py-0.5 text-[10px] font-medium text-[var(--color-status-warning)]"
+                >
+                  {tool}
+                </span>
+              ))}
+            </div>
           )}
           {prompt.variables.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-1.5">

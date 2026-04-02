@@ -22,18 +22,41 @@ function buildPromptInvocation(prompt: ProjectPromptFile, resolvedTemplate: stri
 
   if (prompt.description) invocation.description = prompt.description;
   if (prompt.agent) invocation.agent = prompt.agent;
+  if (prompt.model) invocation.model = prompt.model;
   if (prompt.tools?.length) invocation.tools = prompt.tools;
 
   return invocation;
 }
 
+/** Returns a human-friendly display label for source paths, shortening ancestor-relative segments. */
+function formatPromptSourcePath(sourcePath: string): string {
+  const normalized = sourcePath.replace(/\\/g, '/');
+  const ancestorPrefix = /^(\.\.\/)+(\.github|\.claude)\//;
+  if (ancestorPrefix.test(normalized)) {
+    const segments = normalized.split('/').filter((s) => s !== '..');
+    return `↑ ${segments.join('/')}`;
+  }
+  return normalized;
+}
+
+export interface ArmedPrompt {
+  prompt: ProjectPromptFile;
+  invocation: ProjectPromptInvocation;
+}
+
 export function InlinePromptPill({
   promptFiles,
   disabled,
+  armedPrompt,
+  onArm,
+  onDisarm,
   onSubmit,
 }: {
   promptFiles: ReadonlyArray<ProjectPromptFile>;
   disabled: boolean;
+  armedPrompt?: ArmedPrompt | null;
+  onArm?: (armed: ArmedPrompt) => void;
+  onDisarm?: () => void;
   onSubmit: (invocation: ProjectPromptInvocation) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -47,23 +70,32 @@ export function InlinePromptPill({
     setVariableValues({});
   }, []);
 
+  const armOrSubmit = useCallback((prompt: ProjectPromptFile, resolvedTemplate: string) => {
+    const invocation = buildPromptInvocation(prompt, resolvedTemplate);
+    if (prompt.argumentHint && onArm) {
+      onArm({ prompt, invocation });
+      handleClose();
+    } else {
+      onSubmit(invocation);
+      handleClose();
+    }
+  }, [onArm, onSubmit, handleClose]);
+
   const handleSelectPrompt = useCallback((prompt: ProjectPromptFile) => {
     if (prompt.variables.length === 0) {
-      onSubmit(buildPromptInvocation(prompt, prompt.template.trim()));
-      handleClose();
+      armOrSubmit(prompt, prompt.template.trim());
     } else {
       setSelectedPrompt(prompt);
       setVariableValues({});
     }
-  }, [onSubmit, handleClose]);
+  }, [armOrSubmit]);
 
   const handleSubmitWithVariables = useCallback(() => {
     if (!selectedPrompt) return;
     const resolved = resolvePromptTemplate(selectedPrompt.template, variableValues).trim();
     if (!resolved) return;
-    onSubmit(buildPromptInvocation(selectedPrompt, resolved));
-    handleClose();
-  }, [selectedPrompt, variableValues, onSubmit, handleClose]);
+    armOrSubmit(selectedPrompt, resolved);
+  }, [selectedPrompt, variableValues, armOrSubmit]);
 
   const handleVariableChange = useCallback((name: string, value: string) => {
     setVariableValues((prev) => ({ ...prev, [name]: value }));
@@ -78,18 +110,31 @@ export function InlinePromptPill({
 
   return (
     <div className="relative" ref={ref}>
-      <button
-        aria-expanded={open}
-        aria-haspopup="listbox"
-        className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-[var(--color-text-muted)] transition-all duration-200 hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-primary)]"
-        disabled={disabled}
-        onClick={() => setOpen(!open)}
-        type="button"
-      >
-        <FileText className="size-3" />
-        Prompts
-        <span className="text-[var(--color-text-muted)]">({promptFiles.length})</span>
-      </button>
+      {armedPrompt ? (
+        <button
+          className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-status-success)]/10 px-2.5 py-1 text-[11px] font-medium text-[var(--color-status-success)] transition-all duration-200 hover:bg-[var(--color-status-success)]/20"
+          onClick={() => onDisarm?.()}
+          type="button"
+          aria-label={`Disarm prompt: ${armedPrompt.prompt.name}`}
+        >
+          <FileText className="size-3" />
+          <span className="max-w-[120px] truncate">{armedPrompt.prompt.name}</span>
+          <X className="size-3 opacity-60" />
+        </button>
+      ) : (
+        <button
+          aria-expanded={open}
+          aria-haspopup="listbox"
+          className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-[var(--color-text-muted)] transition-all duration-200 hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-primary)]"
+          disabled={disabled}
+          onClick={() => setOpen(!open)}
+          type="button"
+        >
+          <FileText className="size-3" />
+          Prompts
+          <span className="text-[var(--color-text-muted)]">({promptFiles.length})</span>
+        </button>
+      )}
 
       {open && !disabled && (
         <div
@@ -151,6 +196,11 @@ function PromptList({
                   {prompt.agent}
                 </span>
               )}
+              {prompt.model && (
+                <span className="shrink-0 rounded bg-[var(--color-accent-purple)]/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-[var(--color-accent-purple)]">
+                  {prompt.model}
+                </span>
+              )}
             </div>
             {prompt.description && (
               <div className="mt-0.5 truncate text-[11px] text-[var(--color-text-muted)]">
@@ -163,6 +213,11 @@ function PromptList({
                   {prompt.tools.length} tool{prompt.tools.length === 1 ? '' : 's'}
                 </span>
               )}
+              {prompt.argumentHint && (
+                <span className="rounded bg-[var(--color-surface-2)] px-1.5 py-0.5 text-[10px] italic text-[var(--color-text-muted)]">
+                  hint: {prompt.argumentHint}
+                </span>
+              )}
               {prompt.variables.map((v) => (
                 <span
                   key={v.name}
@@ -172,6 +227,11 @@ function PromptList({
                 </span>
               ))}
             </div>
+            {prompt.sourcePath.startsWith('..') && (
+              <div className="mt-0.5 text-[10px] text-[var(--color-text-muted)]">
+                {formatPromptSourcePath(prompt.sourcePath)}
+              </div>
+            )}
           </div>
         </button>
       ))}
@@ -206,8 +266,15 @@ function PromptVariableForm({
           <X className="size-3" />
         </button>
         <div className="min-w-0 flex-1">
-          <div className="truncate text-[12px] font-medium text-[var(--color-text-primary)]">
-            {prompt.name}
+          <div className="flex items-center gap-1.5">
+            <span className="truncate text-[12px] font-medium text-[var(--color-text-primary)]">
+              {prompt.name}
+            </span>
+            {prompt.model && (
+              <span className="shrink-0 rounded bg-[var(--color-accent-purple)]/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-[var(--color-accent-purple)]">
+                {prompt.model}
+              </span>
+            )}
           </div>
           {prompt.description && (
             <div className="truncate text-[10px] text-[var(--color-text-muted)]">{prompt.description}</div>
@@ -238,7 +305,7 @@ function PromptVariableForm({
         type="button"
       >
         <ArrowUp className="size-3.5" />
-        Send prompt
+        {prompt.argumentHint ? 'Arm prompt' : 'Send prompt'}
       </button>
     </div>
   );

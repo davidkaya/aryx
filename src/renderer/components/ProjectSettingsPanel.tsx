@@ -9,6 +9,13 @@ import type { ProjectAgentProfile, ProjectInstructionApplicationMode, ProjectIns
 
 /* ── Types ────────────────────────────────────────────────── */
 
+/** Shortens ancestor-relative source paths like `..\..\..\.github\prompts\x.md` to `↑ .github/prompts/x.md` */
+function formatSettingsSourcePath(sourcePath: string): string {
+  const normalized = sourcePath.replace(/\\/g, '/');
+  const segments = normalized.split('/').filter((s) => s !== '..');
+  return `↑ ${segments.join('/')}`;
+}
+
 type ProjectSettingsSection = 'overview' | 'instructions' | 'agents' | 'prompts' | 'mcp-servers' | 'danger-zone';
 
 interface NavItem {
@@ -335,7 +342,7 @@ function InstructionsContent({
   return (
     <div>
       <SectionHeader
-        description="Repository instructions discovered from copilot-instructions.md, AGENTS.md, CLAUDE.md, and .github/instructions/**/*.instructions.md."
+        description="Repository instructions discovered from copilot-instructions.md, AGENTS.md, CLAUDE.md, .github/instructions/**/*.instructions.md, and .claude/rules/**/*.md."
         title="Instructions"
       >
         <RescanButton onClick={onRescan} />
@@ -343,7 +350,7 @@ function InstructionsContent({
 
       {instructions.length === 0 ? (
         <EmptyState>
-          No instruction files found. Add <code className="text-[var(--color-text-secondary)]">.github/copilot-instructions.md</code>, <code className="text-[var(--color-text-secondary)]">AGENTS.md</code>, <code className="text-[var(--color-text-secondary)]">CLAUDE.md</code>, or <code className="text-[var(--color-text-secondary)]">*.instructions.md</code> files under <code className="text-[var(--color-text-secondary)]">.github/instructions/</code>.
+          No instruction files found. Add <code className="text-[var(--color-text-secondary)]">.github/copilot-instructions.md</code>, <code className="text-[var(--color-text-secondary)]">AGENTS.md</code>, <code className="text-[var(--color-text-secondary)]">CLAUDE.md</code>, <code className="text-[var(--color-text-secondary)]">*.instructions.md</code> files under <code className="text-[var(--color-text-secondary)]">.github/instructions/</code>, or <code className="text-[var(--color-text-secondary)]">*.md</code> files under <code className="text-[var(--color-text-secondary)]">.claude/rules/</code>.
         </EmptyState>
       ) : (
         <div className="space-y-3">
@@ -359,7 +366,8 @@ function InstructionsContent({
 function InstructionCard({ instruction }: { instruction: ProjectInstructionFile }) {
   const [expanded, setExpanded] = useState(false);
   const isLong = instruction.content.length > 300;
-  const displayName = instruction.name ?? instruction.sourcePath;
+  const isAncestor = instruction.sourcePath.startsWith('..');
+  const displayName = instruction.name ?? (isAncestor ? formatSettingsSourcePath(instruction.sourcePath) : instruction.sourcePath);
 
   return (
     <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-glass)]">
@@ -370,8 +378,13 @@ function InstructionCard({ instruction }: { instruction: ProjectInstructionFile 
       >
         <FileCode2 className="size-4 shrink-0 text-[var(--color-text-accent)]" />
         <div className="flex min-w-0 flex-1 items-center gap-2">
-          <span className="truncate text-[13px] font-medium text-[var(--color-text-primary)]">{displayName}</span>
+          <span className="truncate text-[13px] font-medium text-[var(--color-text-primary)]" title={instruction.sourcePath}>{displayName}</span>
           <InstructionModeBadge mode={instruction.applicationMode} />
+          {isAncestor && (
+            <span className="shrink-0 rounded bg-[var(--color-surface-3)] px-1.5 py-0.5 text-[9px] font-medium text-[var(--color-text-muted)]">
+              parent repo
+            </span>
+          )}
           {instruction.applyTo && (
             <span
               className="truncate rounded bg-[var(--color-surface-3)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-text-muted)]"
@@ -571,6 +584,8 @@ function PromptsContent({
 }
 
 function PromptCard({ prompt }: { prompt: ProjectPromptFile }) {
+  const isAncestor = prompt.sourcePath.startsWith('..');
+
   return (
     <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-glass)] px-5 py-4">
       <div className="flex items-start gap-3">
@@ -578,6 +593,11 @@ function PromptCard({ prompt }: { prompt: ProjectPromptFile }) {
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span className="text-[13px] font-medium text-[var(--color-text-primary)]">{prompt.name}</span>
+            {prompt.model && (
+              <span className="rounded-full bg-[var(--color-accent-purple)]/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--color-accent-purple)]">
+                {prompt.model}
+              </span>
+            )}
             {prompt.agent && (
               <span className="rounded-full bg-[var(--color-accent-sky)]/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--color-accent-sky)]">
                 {prompt.agent}
@@ -588,9 +608,19 @@ function PromptCard({ prompt }: { prompt: ProjectPromptFile }) {
                 {prompt.variables.length} variable{prompt.variables.length === 1 ? '' : 's'}
               </span>
             )}
+            {isAncestor && (
+              <span className="rounded-full bg-[var(--color-surface-3)] px-2 py-0.5 text-[9px] font-medium text-[var(--color-text-muted)]">
+                parent repo
+              </span>
+            )}
           </div>
           {prompt.description && (
             <p className="mt-1 text-[12px] leading-relaxed text-[var(--color-text-muted)]">{prompt.description}</p>
+          )}
+          {prompt.argumentHint && (
+            <p className="mt-1 text-[11px] italic text-[var(--color-text-muted)]">
+              Hint: {prompt.argumentHint}
+            </p>
           )}
           {prompt.tools && prompt.tools.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-1.5">
@@ -617,7 +647,9 @@ function PromptCard({ prompt }: { prompt: ProjectPromptFile }) {
               ))}
             </div>
           )}
-          <p className="mt-1.5 text-[11px] text-[var(--color-text-muted)]">{prompt.sourcePath}</p>
+          <p className="mt-1.5 text-[11px] text-[var(--color-text-muted)]" title={prompt.sourcePath}>
+            {isAncestor ? formatSettingsSourcePath(prompt.sourcePath) : prompt.sourcePath}
+          </p>
         </div>
       </div>
     </div>

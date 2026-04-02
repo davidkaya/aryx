@@ -10,7 +10,7 @@ import { PlanReviewBanner } from '@renderer/components/chat/PlanReviewBanner';
 import { McpAuthBanner } from '@renderer/components/chat/McpAuthBanner';
 import { UserInputBanner } from '@renderer/components/chat/UserInputBanner';
 import { InlineApprovalPill, InlineGitPill, InlineModelPill, InlineTerminalPill, InlineThinkingPill, InlineToolsPill } from '@renderer/components/chat/InlinePills';
-import { InlinePromptPill } from '@renderer/components/chat/InlinePromptPill';
+import { InlinePromptPill, type ArmedPrompt } from '@renderer/components/chat/InlinePromptPill';
 import { ThinkingDots } from '@renderer/components/chat/ThinkingDots';
 import { ThinkingProcess } from '@renderer/components/chat/ThinkingProcess';
 import { SubagentActivityList } from '@renderer/components/chat/SubagentActivityCard';
@@ -193,6 +193,7 @@ export function ChatPane({
   const canSubmitInput = hasComposerContent && !isComposerDisabled;
   const [pendingAttachments, setPendingAttachments] = useState<ChatMessageAttachment[]>([]);
   const promptFiles = useMemo(() => project.customization?.promptFiles ?? [], [project.customization?.promptFiles]);
+  const [armedPrompt, setArmedPrompt] = useState<ArmedPrompt | null>(null);
 
   const toolSelection = useMemo(() => resolveSessionToolingSelection(session), [session]);
   const mcpServers = toolingSettings.mcpServers;
@@ -232,13 +233,24 @@ export function ChatPane({
     setIsResolvingApproval(false);
     setIsUpdatingSessionModelConfig(false);
     setEditingMessageId(undefined);
+    setArmedPrompt(null);
   }, [session.id]);
 
   function handleComposerSubmit(content: string) {
     const attachments = pendingAttachments.length > 0 ? [...pendingAttachments] : undefined;
     const messageMode: MessageMode | undefined = isSessionBusy ? 'immediate' : undefined;
     setPendingAttachments([]);
-    void onSend(content, attachments, messageMode);
+
+    if (armedPrompt) {
+      const invocation = { ...armedPrompt.invocation };
+      if (content.trim()) {
+        invocation.resolvedPrompt = `${invocation.resolvedPrompt}\n\n${content.trim()}`;
+      }
+      setArmedPrompt(null);
+      void onSend('', attachments, messageMode, invocation);
+    } else {
+      void onSend(content, attachments, messageMode);
+    }
   }
 
   const handleCopyMessage = useCallback((content: string) => {
@@ -747,21 +759,23 @@ export function ChatPane({
               onContentChange={setHasComposerContent}
               onSubmit={handleComposerSubmit}
               placeholder={
-                pendingApproval
-                  ? 'Awaiting approval...'
-                  : pendingUserInput
-                    ? 'Awaiting your input above...'
-                    : pendingPlanReview
-                      ? 'Review the plan above...'
-                      : pendingMcpAuth
-                        ? 'MCP server requires authentication...'
-                        : isSessionBusy
-                        ? 'Steer the agent (sends immediately)...'
-                        : isUpdatingSessionModelConfig
-                          ? 'Saving model settings...'
-                          : isPlanMode
-                            ? 'Describe what to plan...'
-                            : 'Message...'
+                armedPrompt?.prompt.argumentHint
+                  ? armedPrompt.prompt.argumentHint
+                  : pendingApproval
+                    ? 'Awaiting approval...'
+                    : pendingUserInput
+                      ? 'Awaiting your input above...'
+                      : pendingPlanReview
+                        ? 'Review the plan above...'
+                        : pendingMcpAuth
+                          ? 'MCP server requires authentication...'
+                          : isSessionBusy
+                          ? 'Steer the agent (sends immediately)...'
+                          : isUpdatingSessionModelConfig
+                            ? 'Saving model settings...'
+                            : isPlanMode
+                              ? 'Describe what to plan...'
+                              : 'Message...'
               }
             >
               {/* Bottom action bar: left = shortcuts, right = buttons */}
@@ -785,7 +799,10 @@ export function ChatPane({
                   )}
                   {!isScratchpad && promptFiles.length > 0 && (
                     <InlinePromptPill
+                      armedPrompt={armedPrompt}
                       disabled={isComposerDisabled}
+                      onArm={setArmedPrompt}
+                      onDisarm={() => setArmedPrompt(null)}
                       onSubmit={(promptInvocation) => void onSend('', undefined, undefined, promptInvocation)}
                       promptFiles={promptFiles}
                     />
@@ -847,9 +864,9 @@ export function ChatPane({
                 {/* Send / Stop / Steer button */}
                 <button
                   className={`flex size-8 items-center justify-center rounded-lg transition-all duration-150 ${
-                    isSessionBusy && !hasComposerContent && pendingAttachments.length === 0
+                    isSessionBusy && !hasComposerContent && pendingAttachments.length === 0 && !armedPrompt
                       ? 'bg-[var(--color-status-error)]/80 text-white hover:bg-[var(--color-status-error)]'
-                      : canSubmitInput || pendingAttachments.length > 0
+                      : canSubmitInput || pendingAttachments.length > 0 || armedPrompt
                         ? isSessionBusy
                           ? 'bg-[var(--color-status-warning)] text-white hover:brightness-110'
                           : isPlanMode
@@ -857,9 +874,9 @@ export function ChatPane({
                             : 'brand-gradient-bg text-white shadow-[0_2px_12px_rgba(36,92,249,0.25)] hover:shadow-[0_4px_20px_rgba(36,92,249,0.35)]'
                         : 'bg-[var(--color-surface-2)] text-[var(--color-text-muted)]'
                   }`}
-                  disabled={!canSubmitInput && !isSessionBusy && pendingAttachments.length === 0}
+                  disabled={!canSubmitInput && !isSessionBusy && pendingAttachments.length === 0 && !armedPrompt}
                   onClick={() => {
-                    if (isSessionBusy && !hasComposerContent && pendingAttachments.length === 0) {
+                    if (isSessionBusy && !hasComposerContent && pendingAttachments.length === 0 && !armedPrompt) {
                       onCancelTurn?.();
                     } else {
                       composerRef.current?.submit();
@@ -867,7 +884,7 @@ export function ChatPane({
                   }}
                   type="button"
                   aria-label={
-                    isSessionBusy && !hasComposerContent && pendingAttachments.length === 0
+                    isSessionBusy && !hasComposerContent && pendingAttachments.length === 0 && !armedPrompt
                       ? 'Stop generating'
                       : isSessionBusy
                         ? 'Steer agent'
@@ -933,8 +950,19 @@ export function ChatPane({
 
 /* ── Prompt invocation chrome ───────────────────────────────── */
 
+function formatInvocationSourcePath(sourcePath: string): string {
+  const normalized = sourcePath.replace(/\\/g, '/');
+  const ancestorPrefix = /^(\.\.\/)+(\.github|\.claude)\//;
+  if (ancestorPrefix.test(normalized)) {
+    const segments = normalized.split('/').filter((s) => s !== '..');
+    return `↑ ${segments.join('/')}`;
+  }
+  return normalized;
+}
+
 function PromptInvocationChrome({ invocation }: { invocation: ProjectPromptInvocation }) {
   const [expanded, setExpanded] = useState(false);
+  const isAncestor = invocation.sourcePath.startsWith('..');
 
   return (
     <div className="rounded-xl border border-[var(--color-status-success)]/20 bg-[var(--color-status-success)]/5 px-4 py-3">
@@ -949,6 +977,11 @@ function PromptInvocationChrome({ invocation }: { invocation: ProjectPromptInvoc
           {invocation.name}
         </span>
         <div className="flex items-center gap-1.5">
+          {invocation.model && (
+            <span className="rounded bg-[var(--color-accent-purple)]/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-[var(--color-accent-purple)]">
+              {invocation.model}
+            </span>
+          )}
           {invocation.agent && (
             <span className="rounded bg-[var(--color-accent-sky)]/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-[var(--color-accent-sky)]">
               {invocation.agent}
@@ -967,7 +1000,16 @@ function PromptInvocationChrome({ invocation }: { invocation: ProjectPromptInvoc
       {invocation.description && (
         <p className="mt-1 pl-6 text-[11px] text-[var(--color-text-muted)]">{invocation.description}</p>
       )}
-      <p className="mt-0.5 pl-6 text-[10px] text-[var(--color-text-muted)]">{invocation.sourcePath}</p>
+      <div className="mt-0.5 flex items-center gap-1.5 pl-6">
+        {isAncestor && (
+          <span className="rounded bg-[var(--color-surface-3)] px-1 py-0.5 text-[9px] font-medium text-[var(--color-text-muted)]">
+            parent repo
+          </span>
+        )}
+        <span className="text-[10px] text-[var(--color-text-muted)]" title={invocation.sourcePath}>
+          {formatInvocationSourcePath(invocation.sourcePath)}
+        </span>
+      </div>
       {expanded && (
         <div className="mt-2.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-1)] p-3">
           <div className="max-h-48 overflow-y-auto text-[12px] leading-relaxed text-[var(--color-text-secondary)]">

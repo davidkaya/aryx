@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useMemo, useState } from 'react';
-import { AlertCircle, CheckCircle, ChevronLeft, ChevronRight, Info, Plus, Trash2, X } from 'lucide-react';
+import { AlertCircle, CheckCircle, ChevronLeft, ChevronRight, Download, Info, Plus, Trash2, Upload, X } from 'lucide-react';
 
 import type { ModelDefinition } from '@shared/domain/models';
 import type {
@@ -18,6 +18,7 @@ import { createId } from '@shared/utils/ids';
 import { ToggleSwitch } from '@renderer/components/ui';
 
 import { WorkflowGraphCanvas } from './workflow/WorkflowGraphCanvas';
+import { ExportDropdown, ExportModal, ImportModal } from './workflow/WorkflowExportImportPanel';
 import { WorkflowGraphInspector } from './workflow/WorkflowGraphInspector';
 import { WorkflowNodePalette } from './workflow/WorkflowNodePalette';
 
@@ -29,6 +30,8 @@ interface WorkflowEditorProps {
   onDelete?: () => void;
   onSave: () => void;
   onBack: () => void;
+  onExportWorkflow?: (format: 'yaml' | 'mermaid' | 'dot') => Promise<{ content: string }>;
+  onImportWorkflow?: (content: string, format: 'yaml' | 'json') => Promise<WorkflowDefinition>;
 }
 
 interface WorkflowBreadcrumb {
@@ -158,10 +161,15 @@ export function WorkflowEditor({
   onDelete,
   onSave,
   onBack,
+  onExportWorkflow,
+  onImportWorkflow,
 }: WorkflowEditorProps) {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [breadcrumbs, setBreadcrumbs] = useState<WorkflowBreadcrumb[]>([]);
+  const [showExportDropdown, setShowExportDropdown] = useState(false);
+  const [exportResult, setExportResult] = useState<{ format: 'yaml' | 'mermaid' | 'dot'; content: string } | null>(null);
+  const [showImportModal, setShowImportModal] = useState(false);
 
   /* ── Active workflow resolution ──────────────────────────── */
 
@@ -371,6 +379,39 @@ export function WorkflowEditor({
           </div>
         </div>
         <div className="no-drag flex items-center gap-2">
+          {onExportWorkflow && (
+            <div className="relative">
+              <button
+                className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[13px] text-[var(--color-text-secondary)] transition-all duration-200 hover:bg-[var(--color-surface-3)]"
+                onClick={() => setShowExportDropdown((prev) => !prev)}
+                type="button"
+                aria-expanded={showExportDropdown}
+                aria-haspopup="listbox"
+              >
+                <Download className="size-3.5" />
+                Export
+              </button>
+              {showExportDropdown && (
+                <ExportDropdown
+                  onSelectFormat={async (format) => {
+                    const result = await onExportWorkflow(format);
+                    setExportResult({ format, content: result.content });
+                  }}
+                  onClose={() => setShowExportDropdown(false)}
+                />
+              )}
+            </div>
+          )}
+          {onImportWorkflow && (
+            <button
+              className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[13px] text-[var(--color-text-secondary)] transition-all duration-200 hover:bg-[var(--color-surface-3)]"
+              onClick={() => setShowImportModal(true)}
+              type="button"
+            >
+              <Upload className="size-3.5" />
+              Import
+            </button>
+          )}
           {onDelete && (
             <button
               className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[13px] text-[var(--color-status-error)] transition-all duration-200 hover:bg-[var(--color-status-error)]/10"
@@ -509,6 +550,25 @@ export function WorkflowEditor({
           />
         </div>
       </div>
+
+      {exportResult && (
+        <ExportModal
+          format={exportResult.format}
+          content={exportResult.content}
+          onClose={() => setExportResult(null)}
+        />
+      )}
+
+      {showImportModal && onImportWorkflow && (
+        <ImportModal
+          onImport={async (content, format) => {
+            const imported = await onImportWorkflow(content, format);
+            onChange(imported);
+            return imported;
+          }}
+          onClose={() => setShowImportModal(false)}
+        />
+      )}
     </div>
   );
 }

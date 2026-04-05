@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { ChevronLeft, ChevronRight, CircleCheck, Code, Cpu, FolderOpen, GitBranch, Palette, Plus, RefreshCw, Server, TriangleAlert, UserCircle, Workflow, Wrench } from 'lucide-react';
+import { ArrowUpRight, ChevronLeft, ChevronRight, CircleCheck, Code, Cpu, FolderOpen, GitBranch, Palette, Plus, RefreshCw, Server, TriangleAlert, UserCircle, Workflow, Wrench } from 'lucide-react';
 
 import { CopilotStatusCard } from '@renderer/components/CopilotStatusCard';
 import { PatternEditor } from '@renderer/components/PatternEditor';
@@ -8,6 +8,7 @@ import { ToggleSwitch } from '@renderer/components/ui';
 import { LspProfileEditor } from '@renderer/components/settings/LspProfileEditor';
 import { McpServerEditor } from '@renderer/components/settings/McpServerEditor';
 import { WorkspaceAgentEditor } from '@renderer/components/settings/WorkspaceAgentEditor';
+import { getElectronApi } from '@renderer/lib/electronApi';
 import type { SidecarCapabilities, QuotaSnapshot } from '@shared/contracts/sidecar';
 import type { DiscoveredMcpServer, DiscoveredToolingState } from '@shared/domain/discoveredTooling';
 import { listAcceptedDiscoveredMcpServers, listPendingDiscoveredMcpServers } from '@shared/domain/discoveredTooling';
@@ -15,6 +16,7 @@ import type { ModelDefinition } from '@shared/domain/models';
 import type { PatternDefinition } from '@shared/domain/pattern';
 import type { UpdateStatus, UpdateStatusState } from '@shared/contracts/ipc';
 import { normalizeWorkflowDefinition, type WorkflowDefinition } from '@shared/domain/workflow';
+import type { WorkflowTemplateCategory, WorkflowTemplateDefinition } from '@shared/domain/workflowTemplate';
 import {
   normalizeLspProfileDefinition,
   normalizeMcpServerDefinition,
@@ -64,6 +66,9 @@ interface SettingsPanelProps {
   onResetLocalWorkspace: () => Promise<void>;
   onResolveUserDiscoveredTooling?: (serverIds: string[], resolution: 'accept' | 'dismiss') => void;
   onGetQuota?: () => Promise<Record<string, QuotaSnapshot>>;
+  workflowTemplates?: WorkflowTemplateDefinition[];
+  onCreateWorkflowFromTemplate?: (templateId: string, name?: string) => Promise<void>;
+  onUpgradePatternToWorkflow?: (patternId: string) => Promise<void>;
 }
 
 export type SettingsSection = 'appearance' | 'connection' | 'patterns' | 'workflows' | 'agents' | 'mcp-servers' | 'lsp-profiles' | 'troubleshooting';
@@ -159,6 +164,9 @@ export function SettingsPanel({
   onResetLocalWorkspace,
   onResolveUserDiscoveredTooling,
   onGetQuota,
+  workflowTemplates,
+  onCreateWorkflowFromTemplate,
+  onUpgradePatternToWorkflow,
 }: SettingsPanelProps) {
   const [activeSection, setActiveSection] = useState<SettingsSection>(initialSection ?? 'appearance');
   const [editingPattern, setEditingPattern] = useState<PatternDefinition | null>(null);
@@ -197,6 +205,7 @@ export function SettingsPanel({
   }
 
   if (editingWorkflow) {
+    const api = getElectronApi();
     return (
       <div className="fixed inset-0 z-50 flex flex-col bg-[var(--color-surface-0)]">
         <WorkflowEditor
@@ -220,6 +229,14 @@ export function SettingsPanel({
           onSave={async () => {
             await onSaveWorkflow(normalizeWorkflowDefinition(editingWorkflow));
             setEditingWorkflow(null);
+          }}
+          onExportWorkflow={async (format) => {
+            const result = await api.exportWorkflow({ workflowId: editingWorkflow.id, format });
+            return result;
+          }}
+          onImportWorkflow={async (content, format) => {
+            const result = await api.importWorkflow({ content, format, options: { save: false } });
+            return result.workflow;
           }}
           workflow={editingWorkflow}
           workflows={workflows}
@@ -378,6 +395,7 @@ export function SettingsPanel({
               <PatternsSection
                 onEditPattern={(pattern) => setEditingPattern(structuredClone(pattern))}
                 onNewPattern={() => setEditingPattern(onNewPattern())}
+                onUpgradePatternToWorkflow={onUpgradePatternToWorkflow}
                 patterns={patterns}
               />
             )}
@@ -386,6 +404,8 @@ export function SettingsPanel({
                 onEditWorkflow={(wf) => setEditingWorkflow(structuredClone(wf))}
                 onNewWorkflow={() => setEditingWorkflow(onNewWorkflow())}
                 workflows={workflows}
+                workflowTemplates={workflowTemplates}
+                onCreateWorkflowFromTemplate={onCreateWorkflowFromTemplate}
               />
             )}
             {activeSection === 'agents' && (
@@ -608,10 +628,12 @@ function PatternsSection({
   patterns,
   onEditPattern,
   onNewPattern,
+  onUpgradePatternToWorkflow,
 }: {
   patterns: PatternDefinition[];
   onEditPattern: (pattern: PatternDefinition) => void;
   onNewPattern: () => void;
+  onUpgradePatternToWorkflow?: (patternId: string) => Promise<void>;
 }) {
   return (
     <div>
@@ -643,6 +665,27 @@ function PatternsSection({
               <span className="text-[12px] text-[var(--color-text-muted)]">
                 {pattern.agents.length} agent{pattern.agents.length === 1 ? '' : 's'}
               </span>
+              {onUpgradePatternToWorkflow && (
+                <span
+                  className="flex size-6 items-center justify-center rounded-md text-[var(--color-text-muted)] opacity-0 transition-all duration-200 hover:bg-[var(--color-accent)]/10 hover:text-[var(--color-accent)] group-hover:opacity-100"
+                  title="Convert to workflow"
+                  role="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void onUpgradePatternToWorkflow(pattern.id);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      void onUpgradePatternToWorkflow(pattern.id);
+                    }
+                  }}
+                  tabIndex={0}
+                >
+                  <ArrowUpRight className="size-3.5" />
+                </span>
+              )}
               <ChevronRight className="size-4 text-[var(--color-text-muted)] transition-all duration-200 group-hover:text-[var(--color-text-muted)]" />
             </div>
           </button>
@@ -652,15 +695,31 @@ function PatternsSection({
   );
 }
 
+const categoryLabels: Record<WorkflowTemplateCategory, string> = {
+  'orchestration': 'Orchestration',
+  'data-pipeline': 'Data Pipeline',
+  'human-in-loop': 'Human-in-Loop',
+};
+
 function WorkflowsSection({
   workflows,
   onEditWorkflow,
   onNewWorkflow,
+  workflowTemplates,
+  onCreateWorkflowFromTemplate,
 }: {
   workflows: WorkflowDefinition[];
   onEditWorkflow: (workflow: WorkflowDefinition) => void;
   onNewWorkflow: () => void;
+  workflowTemplates?: WorkflowTemplateDefinition[];
+  onCreateWorkflowFromTemplate?: (templateId: string, name?: string) => Promise<void>;
 }) {
+  const [categoryFilter, setCategoryFilter] = useState<WorkflowTemplateCategory | 'all'>('all');
+
+  const filteredTemplates = (workflowTemplates ?? []).filter(
+    (t) => categoryFilter === 'all' || t.category === categoryFilter,
+  );
+
   return (
     <div>
       <SectionHeader
@@ -704,6 +763,87 @@ function WorkflowsSection({
           </p>
         )}
       </div>
+
+      {/* Template Gallery */}
+      {workflowTemplates && workflowTemplates.length > 0 && (
+        <div className="mt-8">
+          <div className="mb-3">
+            <h4 className="font-display text-[13px] font-semibold text-[var(--color-text-primary)]">Templates</h4>
+            <p className="mt-0.5 text-[12px] text-[var(--color-text-muted)]">
+              Start from a pre-built workflow template
+            </p>
+          </div>
+
+          <div className="mb-4 flex gap-1.5">
+            {(['all', 'orchestration', 'data-pipeline', 'human-in-loop'] as const).map((cat) => (
+              <button
+                key={cat}
+                className={`rounded-lg px-2.5 py-1 text-[11px] font-medium transition-all duration-200 ${
+                  categoryFilter === cat
+                    ? 'bg-[var(--color-accent)] text-white'
+                    : 'bg-[var(--color-surface-3)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'
+                }`}
+                onClick={() => setCategoryFilter(cat)}
+                type="button"
+              >
+                {cat === 'all' ? 'All' : categoryLabels[cat]}
+              </button>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            {filteredTemplates.map((template) => {
+              const nodeCount = template.workflow.graph.nodes.length;
+              const agentCount = template.workflow.graph.nodes.filter((n) => n.kind === 'agent').length;
+              return (
+                <div
+                  key={template.id}
+                  className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-1)]/50 p-4 transition-all duration-200 hover:border-[var(--color-border-glow)] hover:bg-[var(--color-surface-1)]"
+                >
+                  <div className="mb-2 flex items-start justify-between gap-2">
+                    <h5 className="text-[13px] font-medium text-[var(--color-text-primary)]">{template.name}</h5>
+                    <div className="flex shrink-0 gap-1">
+                      <span className="rounded-full bg-[var(--color-surface-3)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[var(--color-text-secondary)]">
+                        {categoryLabels[template.category]}
+                      </span>
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ${
+                        template.source === 'builtin'
+                          ? 'bg-[var(--color-accent)]/10 text-[var(--color-accent)]'
+                          : 'bg-[var(--color-surface-3)] text-[var(--color-text-secondary)]'
+                      }`}>
+                        {template.source}
+                      </span>
+                    </div>
+                  </div>
+                  <p className="mb-3 line-clamp-2 text-[12px] leading-relaxed text-[var(--color-text-muted)]">
+                    {template.description}
+                  </p>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] text-[var(--color-text-muted)]">
+                      {nodeCount} node{nodeCount === 1 ? '' : 's'} · {agentCount} agent{agentCount === 1 ? '' : 's'}
+                    </span>
+                    {onCreateWorkflowFromTemplate && (
+                      <button
+                        className="rounded-lg bg-[var(--color-accent)] px-3 py-1 text-[11px] font-medium text-white transition-all duration-200 hover:bg-[var(--color-accent-sky)]"
+                        onClick={() => void onCreateWorkflowFromTemplate(template.id)}
+                        type="button"
+                      >
+                        Use Template
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {filteredTemplates.length === 0 && (
+            <p className="py-6 text-center text-[12px] text-[var(--color-text-muted)]">
+              No templates in this category.
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

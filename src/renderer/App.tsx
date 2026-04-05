@@ -828,6 +828,13 @@ export default function App() {
         }}
         patterns={workspace.patterns}
         workflows={workspace.workflows}
+        workflowTemplates={workspace.workflowTemplates}
+        onCreateWorkflowFromTemplate={async (templateId, name) => {
+          await api.createWorkflowFromTemplate({ templateId, options: name ? { name } : undefined });
+        }}
+        onUpgradePatternToWorkflow={async (patternId) => {
+          await api.upgradePatternToWorkflow({ patternId, options: { save: true } });
+        }}
         sidecarCapabilities={sidecarCapabilities}
         theme={workspace.settings.theme}
         toolingSettings={workspace.settings.tooling}

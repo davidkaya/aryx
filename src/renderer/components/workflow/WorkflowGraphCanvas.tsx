@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -17,7 +17,7 @@ import {
   type OnNodesChange,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { LayoutGrid } from 'lucide-react';
+import { LayoutGrid, Maximize2, ZoomIn, ZoomOut } from 'lucide-react';
 
 import type { WorkflowDefinition, WorkflowGraph } from '@shared/domain/workflow';
 import type { ModelDefinition } from '@shared/domain/models';
@@ -54,9 +54,11 @@ function WorkflowGraphCanvasInner({
   onEdgeSelect,
   selectedNodeId,
 }: WorkflowGraphCanvasProps) {
-  const { fitView } = useReactFlow();
+  const reactFlow = useReactFlow();
+  const { fitView } = reactFlow;
   const graph = workflow.graph;
   const draggingRef = useRef(false);
+  const [zoomLevel, setZoomLevel] = useState(1);
 
   const [nodes, setNodes, onNodesChangeBase] = useNodesState(
     toCanvasNodes(graph, availableModels, workflows),
@@ -185,6 +187,36 @@ function WorkflowGraphCanvasInner({
     requestAnimationFrame(() => fitView({ padding: 0.3 }));
   }, [graph, onGraphChange, fitView]);
 
+  const handleZoomIn = useCallback(() => {
+    reactFlow.zoomIn();
+  }, [reactFlow]);
+
+  const handleZoomOut = useCallback(() => {
+    reactFlow.zoomOut();
+  }, [reactFlow]);
+
+  const handleFitView = useCallback(() => {
+    fitView({ padding: 0.3 });
+  }, [fitView]);
+
+  // Ctrl+A to select all nodes
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
+        const target = e.target as HTMLElement;
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
+
+        e.preventDefault();
+        setNodes((currentNodes) =>
+          currentNodes.map((n) => ({ ...n, selected: true })),
+        );
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [setNodes]);
+
   return (
     <div className="h-full w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-0)]/50">
       <ReactFlow
@@ -199,8 +231,10 @@ function WorkflowGraphCanvasInner({
         onNodeClick={handleNodeClick}
         onEdgeClick={handleEdgeClick}
         onPaneClick={handlePaneClick}
+        onMoveEnd={() => setZoomLevel(reactFlow.getZoom())}
         nodeTypes={workflowNodeTypes}
         edgeTypes={workflowEdgeTypes}
+        selectionOnDrag
         fitView
         fitViewOptions={{ padding: 0.3 }}
         minZoom={0.3}
@@ -230,6 +264,38 @@ function WorkflowGraphCanvasInner({
             <LayoutGrid className="size-3.5" />
             Auto layout
           </button>
+        </Panel>
+        <Panel position="bottom-right">
+          <div className="flex items-center gap-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]/90 p-1 shadow-sm backdrop-blur">
+            <button
+              type="button"
+              onClick={handleZoomOut}
+              className="flex size-7 items-center justify-center rounded-md text-[var(--color-text-secondary)] transition hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-primary)]"
+              title="Zoom out"
+            >
+              <ZoomOut className="size-3.5" />
+            </button>
+            <span className="min-w-[3rem] text-center text-[11px] font-medium text-[var(--color-text-secondary)]">
+              {Math.round(zoomLevel * 100)}%
+            </span>
+            <button
+              type="button"
+              onClick={handleZoomIn}
+              className="flex size-7 items-center justify-center rounded-md text-[var(--color-text-secondary)] transition hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-primary)]"
+              title="Zoom in"
+            >
+              <ZoomIn className="size-3.5" />
+            </button>
+            <div className="mx-0.5 h-4 w-px bg-[var(--color-border)]" />
+            <button
+              type="button"
+              onClick={handleFitView}
+              className="flex size-7 items-center justify-center rounded-md text-[var(--color-text-secondary)] transition hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-primary)]"
+              title="Fit view"
+            >
+              <Maximize2 className="size-3.5" />
+            </button>
+          </div>
         </Panel>
       </ReactFlow>
     </div>

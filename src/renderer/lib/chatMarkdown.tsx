@@ -100,10 +100,15 @@ export const chatMarkdownComponents: Components = {
   },
 
   a({ href, children }) {
+    const url = String(href ?? '');
+    const isSafe = /^https?:|^mailto:|^#/i.test(url);
+    if (!isSafe) {
+      return <span className="text-indigo-400">{children as ReactNode}</span>;
+    }
     return (
       <a
         className="text-indigo-400 underline underline-offset-2 transition hover:text-indigo-300"
-        href={String(href)}
+        href={url}
         rel="noopener noreferrer"
         target="_blank"
       >

@@ -177,9 +177,15 @@ export function exportWorkflowDefinition(
   }
 }
 
+const safeYamlOptions = {
+  schema: 'core' as const,
+  customTags: [] as [],
+  merge: false as const,
+};
+
 export function importWorkflowDefinition(content: string, format: 'yaml' | 'json'): WorkflowDefinition {
   const parsed = format === 'yaml'
-    ? parseYaml(content)
+    ? parseYaml(content, safeYamlOptions)
     : JSON.parse(content) as unknown;
 
   return ensureValidWorkflow(coerceWorkflowDefinition(parsed));

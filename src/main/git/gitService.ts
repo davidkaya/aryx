@@ -2,7 +2,7 @@ import { isUtf8 } from 'node:buffer';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { promisify } from 'node:util';
 
 import type {
@@ -31,6 +31,16 @@ const require = createRequire(import.meta.url);
 const { execFile } = require('node:child_process') as typeof import('node:child_process');
 const execFileAsync = promisify(execFile);
 const GIT_TIMEOUT_MS = 5_000;
+
+/** Ensure `filePath` resolves inside `basePath`; throws on traversal. */
+function assertPathInsideBase(basePath: string, filePath: string): string {
+  const resolved = resolve(basePath, filePath);
+  const rel = relative(resolve(basePath), resolved);
+  if (rel.startsWith('..') || isAbsolute(rel)) {
+    throw new Error(`Path traversal detected: "${filePath}" escapes base directory.`);
+  }
+  return resolved;
+}
 
 type GitCommandRunner = (projectPath: string, args: string[]) => Promise<string>;
 
@@ -715,7 +725,7 @@ export class GitService {
 
     if (isPureUntrackedFile(file)) {
       try {
-        const contents = await readFile(join(projectPath, file.path));
+        const contents = await readFile(assertPathInsideBase(projectPath, file.path));
         return {
           path: file.path,
           previousPath: file.previousPath,
@@ -813,7 +823,7 @@ export class GitService {
       throw unstageResult.error;
     }
 
-    await rm(join(projectPath, path), { force: true });
+    await rm(assertPathInsideBase(projectPath, path), { force: true });
   }
 
   private async applyPatch(projectPath: string, diff: string): Promise<void> {

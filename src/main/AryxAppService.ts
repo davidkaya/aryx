@@ -41,6 +41,7 @@ import {
   normalizeWorkflowDefinition,
   validateWorkflowDefinition,
   type WorkflowDefinition,
+  type WorkflowReference,
 } from '@shared/domain/workflow';
 import {
   normalizeWorkspaceAgentDefinition,
@@ -644,6 +645,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
       createdAt: existingIndex >= 0 ? workspace.workflows[existingIndex].createdAt : nowIso(),
       updatedAt: nowIso(),
     };
+    this.validateWorkflowReferences(workspace, candidate);
 
     if (existingIndex >= 0) {
       workspace.workflows[existingIndex] = candidate;
@@ -760,6 +762,16 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
 
   async deleteWorkflow(workflowId: string): Promise<WorkspaceState> {
     const workspace = await this.loadWorkspace();
+    const workflow = this.requireWorkflow(workspace, workflowId);
+    const references = this.listWorkflowReferencesInWorkspace(workspace, workflowId)
+      .filter((reference) => reference.referencingWorkflowId !== workflowId);
+    if (references.length > 0) {
+      const blockingReference = references[0];
+      throw new Error(
+        `Workflow "${workflow.name}" cannot be deleted because workflow "${blockingReference.referencingWorkflowName}" references it from node "${blockingReference.nodeLabel}".`,
+      );
+    }
+
     workspace.workflows = workspace.workflows.filter((workflow) => workflow.id !== workflowId);
 
     if (workspace.selectedWorkflowId === workflowId) {
@@ -767,6 +779,12 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     }
 
     return this.persistAndBroadcast(workspace);
+  }
+
+  async listWorkflowReferences(workflowId: string): Promise<WorkflowReference[]> {
+    const workspace = await this.loadWorkspace();
+    this.requireWorkflow(workspace, workflowId);
+    return this.listWorkflowReferencesInWorkspace(workspace, workflowId);
   }
 
   async saveMcpServer(server: McpServerDefinition): Promise<WorkspaceState> {
@@ -934,7 +952,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     const project = this.requireProject(workspace, projectId);
     const workflow = this.requireWorkflow(workspace, workflowId);
     const modelCatalog = await this.loadAvailableModelCatalog();
-    const executionPattern = normalizePatternModels(buildWorkflowExecutionPattern(workflow), modelCatalog);
+    const executionPattern = normalizePatternModels(this.buildResolvedWorkflowExecutionPattern(workspace, workflow), modelCatalog);
 
     const session: SessionRecord = {
       id: createId('session'),
@@ -1663,6 +1681,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
         projectInstructions,
         pattern: patternForTurn,
         workflow: effectiveWorkflow,
+        workflowLibrary: effectiveWorkflow ? workspace.workflows : undefined,
         messages: session.messages,
         attachments: attachments?.length ? attachments : undefined,
         promptInvocation,
@@ -2248,13 +2267,112 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
       const workflow = this.requireWorkflow(workspace, session.workflowId);
       return {
         workflow,
-        pattern: buildWorkflowExecutionPattern(workflow),
+        pattern: this.buildResolvedWorkflowExecutionPattern(workspace, workflow),
       };
     }
 
     return {
       pattern: this.requirePattern(workspace, session.patternId),
     };
+  }
+
+  private buildResolvedWorkflowExecutionPattern(
+    workspace: WorkspaceState,
+    workflow: WorkflowDefinition,
+  ): PatternDefinition {
+    return buildWorkflowExecutionPattern(workflow, {
+      resolveWorkflow: (workflowId) => workspace.workflows.find((candidate) => candidate.id === workflowId),
+    });
+  }
+
+  private validateWorkflowReferences(
+    workspace: WorkspaceState,
+    workflow: WorkflowDefinition,
+  ): void {
+    const workflowLibrary = new Map<string, WorkflowDefinition>();
+    for (const candidate of workspace.workflows) {
+      if (candidate.id !== workflow.id) {
+        workflowLibrary.set(candidate.id, candidate);
+      }
+    }
+    workflowLibrary.set(workflow.id, workflow);
+
+    const visitWorkflow = (
+      currentWorkflow: WorkflowDefinition,
+      path: string[],
+      visitedInlineWorkflows: Set<WorkflowDefinition>,
+    ): void => {
+      for (const node of currentWorkflow.graph.nodes) {
+        if (node.kind !== 'sub-workflow' || node.config.kind !== 'sub-workflow') {
+          continue;
+        }
+
+        const { inlineWorkflow, workflowId } = node.config;
+        if (workflowId) {
+          const referencedWorkflow = workflowLibrary.get(workflowId);
+          if (!referencedWorkflow) {
+            throw new Error(
+              `Sub-workflow node "${node.label || node.id}" references unknown workflow "${workflowId}".`,
+            );
+          }
+
+          if (path.includes(workflowId)) {
+            throw new Error(
+              `Saving workflow "${workflow.name}" would create a circular sub-workflow reference: ${[...path, workflowId].join(' -> ')}.`,
+            );
+          }
+
+          visitWorkflow(referencedWorkflow, [...path, workflowId], visitedInlineWorkflows);
+        }
+
+        if (inlineWorkflow && !visitedInlineWorkflows.has(inlineWorkflow)) {
+          visitedInlineWorkflows.add(inlineWorkflow);
+          visitWorkflow(inlineWorkflow, path, visitedInlineWorkflows);
+        }
+      }
+    };
+
+    visitWorkflow(workflow, [workflow.id], new Set<WorkflowDefinition>());
+  }
+
+  private listWorkflowReferencesInWorkspace(
+    workspace: WorkspaceState,
+    workflowId: string,
+  ): WorkflowReference[] {
+    const references: WorkflowReference[] = [];
+
+    const visitWorkflow = (
+      referencingWorkflow: WorkflowDefinition,
+      currentWorkflow: WorkflowDefinition,
+      visitedInlineWorkflows: Set<WorkflowDefinition>,
+    ): void => {
+      for (const node of currentWorkflow.graph.nodes) {
+        if (node.kind !== 'sub-workflow' || node.config.kind !== 'sub-workflow') {
+          continue;
+        }
+
+        const { inlineWorkflow, workflowId: referencedWorkflowId } = node.config;
+        if (referencedWorkflowId === workflowId) {
+          references.push({
+            referencingWorkflowId: referencingWorkflow.id,
+            referencingWorkflowName: referencingWorkflow.name,
+            nodeId: node.id,
+            nodeLabel: node.label || node.id,
+          });
+        }
+
+        if (inlineWorkflow && !visitedInlineWorkflows.has(inlineWorkflow)) {
+          visitedInlineWorkflows.add(inlineWorkflow);
+          visitWorkflow(referencingWorkflow, inlineWorkflow, visitedInlineWorkflows);
+        }
+      }
+    };
+
+    for (const referencingWorkflow of workspace.workflows) {
+      visitWorkflow(referencingWorkflow, referencingWorkflow, new Set<WorkflowDefinition>());
+    }
+
+    return references;
   }
 
   private requireSession(workspace: WorkspaceState, sessionId: string): SessionRecord {

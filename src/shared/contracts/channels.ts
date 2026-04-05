@@ -17,6 +17,7 @@ export const ipcChannels = {
   setPatternFavorite: 'patterns:set-favorite',
   saveWorkflow: 'workflows:save',
   deleteWorkflow: 'workflows:delete',
+  listWorkflowReferences: 'workflows:list-references',
   createWorkflowSession: 'workflows:create-session',
   setTheme: 'settings:set-theme',
   setTerminalHeight: 'settings:set-terminal-height',

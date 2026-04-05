@@ -75,6 +75,7 @@ export interface ValidateWorkflowCommand {
   type: 'validate-workflow';
   requestId: string;
   workflow: WorkflowDefinition;
+  workflowLibrary?: WorkflowDefinition[];
 }
 
 export type InteractionMode = 'interactive' | 'plan';
@@ -97,6 +98,7 @@ export interface RunTurnCommand {
   projectInstructions?: string;
   pattern: PatternDefinition;
   workflow?: WorkflowDefinition;
+  workflowLibrary?: WorkflowDefinition[];
   messages: ChatMessageRecord[];
   attachments?: ChatMessageAttachment[];
   promptInvocation?: ProjectPromptInvocation;

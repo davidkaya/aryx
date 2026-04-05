@@ -311,6 +311,7 @@ public sealed class ValidatePatternCommandDto : SidecarCommandEnvelope
 public sealed class ValidateWorkflowCommandDto : SidecarCommandEnvelope
 {
     public WorkflowDefinitionDto Workflow { get; init; } = new();
+    public IReadOnlyList<WorkflowDefinitionDto> WorkflowLibrary { get; init; } = [];
 }
 
 public sealed class RunTurnCommandDto : SidecarCommandEnvelope
@@ -323,6 +324,7 @@ public sealed class RunTurnCommandDto : SidecarCommandEnvelope
     public string? ProjectInstructions { get; init; }
     public PatternDefinitionDto Pattern { get; init; } = new();
     public WorkflowDefinitionDto? Workflow { get; init; }
+    public IReadOnlyList<WorkflowDefinitionDto> WorkflowLibrary { get; init; } = [];
     public IReadOnlyList<ChatMessageDto> Messages { get; init; } = [];
     public RunTurnPromptInvocationDto? PromptInvocation { get; init; }
     public RunTurnToolingConfigDto? Tooling { get; init; }

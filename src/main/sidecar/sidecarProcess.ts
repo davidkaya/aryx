@@ -134,11 +134,15 @@ export class SidecarClient {
     });
   }
 
-  async validateWorkflow(workflow: ValidateWorkflowCommand['workflow']): Promise<unknown> {
+  async validateWorkflow(
+    workflow: ValidateWorkflowCommand['workflow'],
+    workflowLibrary?: ValidateWorkflowCommand['workflowLibrary'],
+  ): Promise<unknown> {
     return this.dispatch<unknown>({
       type: 'validate-workflow',
       requestId: `validate-workflow-${Date.now()}`,
       workflow,
+      workflowLibrary,
     });
   }
 

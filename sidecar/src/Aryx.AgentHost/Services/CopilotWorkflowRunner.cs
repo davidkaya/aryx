@@ -37,7 +37,7 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
     {
         string? validationError = command.Workflow is null
             ? _patternValidator.Validate(command.Pattern).FirstOrDefault()?.Message
-            : _workflowValidator.Validate(command.Workflow).FirstOrDefault()?.Message;
+            : _workflowValidator.Validate(command.Workflow, command.WorkflowLibrary).FirstOrDefault()?.Message;
         if (validationError is not null)
         {
             throw new InvalidOperationException(validationError);
@@ -86,7 +86,7 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
             ConfigureHookLifecycleEventSuppression(state, bundle);
             Workflow workflow = command.Workflow is null
                 ? bundle.BuildWorkflow(command.Pattern)
-                : _workflowRunner.BuildWorkflow(command.Workflow, command.Pattern, bundle.Agents);
+                : _workflowRunner.BuildWorkflow(command.Workflow, command.Pattern, bundle.Agents, command.WorkflowLibrary);
             List<ChatMessage> inputMessages = command.Messages.Select(WorkflowTranscriptProjector.ToChatMessage).ToList();
             WorkflowTranscriptProjector.AttachMessageMode(inputMessages, command.MessageMode);
 

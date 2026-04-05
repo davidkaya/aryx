@@ -1,3 +1,4 @@
+using System.Linq;
 using Aryx.AgentHost.Contracts;
 
 namespace Aryx.AgentHost.Services;
@@ -9,11 +10,18 @@ public sealed class WorkflowValidator
         "start",
         "end",
         "agent",
+        "sub-workflow",
     };
 
-    public IReadOnlyList<WorkflowValidationIssueDto> Validate(WorkflowDefinitionDto workflow)
+    public IReadOnlyList<WorkflowValidationIssueDto> Validate(
+        WorkflowDefinitionDto workflow,
+        IReadOnlyList<WorkflowDefinitionDto>? workflowLibrary = null)
     {
         List<WorkflowValidationIssueDto> issues = [];
+        Dictionary<string, WorkflowDefinitionDto>? workflowLibraryById = workflowLibrary?
+            .Where(candidate => !string.IsNullOrWhiteSpace(candidate.Id))
+            .GroupBy(candidate => candidate.Id, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.Last(), StringComparer.Ordinal);
 
         if (string.IsNullOrWhiteSpace(workflow.Name))
         {
@@ -94,6 +102,8 @@ public sealed class WorkflowValidator
                     });
                 }
             }
+
+            ValidateSubWorkflowNode(node, workflowLibraryById, issues);
         }
 
         foreach (WorkflowEdgeDto edge in workflow.Graph.Edges)
@@ -145,8 +155,10 @@ public sealed class WorkflowValidator
         List<WorkflowNodeDto> endNodes = workflow.Graph.Nodes
             .Where(node => string.Equals(node.Kind, "end", StringComparison.OrdinalIgnoreCase))
             .ToList();
-        List<WorkflowNodeDto> agentNodes = workflow.Graph.Nodes
-            .Where(node => string.Equals(node.Kind, "agent", StringComparison.OrdinalIgnoreCase))
+        List<WorkflowNodeDto> executableWorkNodes = workflow.Graph.Nodes
+            .Where(node =>
+                string.Equals(node.Kind, "agent", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(node.Kind, "sub-workflow", StringComparison.OrdinalIgnoreCase))
             .ToList();
 
         if (startNodes.Count != 1)
@@ -167,12 +179,12 @@ public sealed class WorkflowValidator
             });
         }
 
-        if (agentNodes.Count == 0)
+        if (executableWorkNodes.Count == 0)
         {
             issues.Add(new WorkflowValidationIssueDto
             {
                 Field = "graph.nodes",
-                Message = "Workflow graphs must contain at least one agent node.",
+                Message = "Workflow graphs must contain at least one agent or sub-workflow node.",
             });
         }
 
@@ -336,6 +348,61 @@ public sealed class WorkflowValidator
         }
 
         return issues;
+    }
+
+    private void ValidateSubWorkflowNode(
+        WorkflowNodeDto node,
+        IReadOnlyDictionary<string, WorkflowDefinitionDto>? workflowLibraryById,
+        List<WorkflowValidationIssueDto> issues)
+    {
+        if (!string.Equals(node.Kind, "sub-workflow", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        bool hasWorkflowId = !string.IsNullOrWhiteSpace(node.Config.WorkflowId);
+        bool hasInlineWorkflow = node.Config.InlineWorkflow is not null;
+        if (hasWorkflowId == hasInlineWorkflow)
+        {
+            issues.Add(new WorkflowValidationIssueDto
+            {
+                Field = "graph.nodes.config",
+                NodeId = node.Id,
+                Message = "Sub-workflow nodes must specify exactly one of workflowId or inlineWorkflow.",
+            });
+            return;
+        }
+
+        if (hasWorkflowId
+            && workflowLibraryById is not null
+            && !workflowLibraryById.ContainsKey(node.Config.WorkflowId!))
+        {
+            issues.Add(new WorkflowValidationIssueDto
+            {
+                Field = "graph.nodes.config.workflowId",
+                NodeId = node.Id,
+                Message = $"Sub-workflow node \"{node.Label}\" references unknown workflow \"{node.Config.WorkflowId}\".",
+            });
+        }
+
+        if (node.Config.InlineWorkflow is null)
+        {
+            return;
+        }
+
+        foreach (WorkflowValidationIssueDto inlineIssue in Validate(node.Config.InlineWorkflow, workflowLibraryById?.Values.ToList()))
+        {
+            issues.Add(new WorkflowValidationIssueDto
+            {
+                Level = inlineIssue.Level,
+                Field = inlineIssue.Field is null
+                    ? "graph.nodes.config.inlineWorkflow"
+                    : $"graph.nodes.config.inlineWorkflow.{inlineIssue.Field}",
+                NodeId = node.Id,
+                EdgeId = inlineIssue.EdgeId,
+                Message = $"Inline workflow for node \"{node.Label}\": {inlineIssue.Message}",
+            });
+        }
     }
 
     private static void ValidateEdgeCondition(WorkflowEdgeDto edge, List<WorkflowValidationIssueDto> issues)

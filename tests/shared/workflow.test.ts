@@ -60,6 +60,57 @@ function createWorkflow(): WorkflowDefinition {
   };
 }
 
+function createReferencedSubWorkflow(): WorkflowDefinition {
+  return {
+    id: 'child-workflow',
+    name: 'Child Workflow',
+    description: 'Nested child workflow.',
+    createdAt: TIMESTAMP,
+    updatedAt: TIMESTAMP,
+    graph: {
+      nodes: [
+        {
+          id: 'start',
+          kind: 'start',
+          label: 'Start',
+          position: { x: 0, y: 0 },
+          config: { kind: 'start' },
+        },
+        {
+          id: 'agent-reviewer',
+          kind: 'agent',
+          label: 'Reviewer Agent',
+          position: { x: 200, y: 0 },
+          order: 0,
+          config: {
+            kind: 'agent',
+            id: 'agent-reviewer',
+            name: 'Reviewer Agent',
+            description: 'Reviews the task.',
+            instructions: 'Review the task.',
+            model: 'gpt-5.4',
+          },
+        },
+        {
+          id: 'end',
+          kind: 'end',
+          label: 'End',
+          position: { x: 400, y: 0 },
+          config: { kind: 'end' },
+        },
+      ],
+      edges: [
+        { id: 'edge-start-reviewer', source: 'start', target: 'agent-reviewer', kind: 'direct' },
+        { id: 'edge-reviewer-end', source: 'agent-reviewer', target: 'end', kind: 'direct' },
+      ],
+    },
+    settings: {
+      checkpointing: { enabled: false },
+      executionMode: 'off-thread',
+    },
+  };
+}
+
 describe('workflow validation', () => {
   test('accepts a simple start-agent-end workflow', () => {
     expect(validateWorkflowDefinition(createWorkflow())).toEqual([]);
@@ -84,6 +135,43 @@ describe('workflow validation', () => {
       issue.message.includes('not executable yet'))).toBe(true);
   });
 
+  test('accepts sub-workflow nodes with inline workflows', () => {
+    const inlineWorkflow = createReferencedSubWorkflow();
+    const workflow = createWorkflow();
+    workflow.graph.nodes[1] = {
+      id: 'sub-workflow',
+      kind: 'sub-workflow',
+      label: 'Nested Workflow',
+      position: { x: 200, y: 0 },
+      config: {
+        kind: 'sub-workflow',
+        inlineWorkflow,
+      },
+    };
+    workflow.graph.edges[0] = { id: 'edge-start-sub', source: 'start', target: 'sub-workflow', kind: 'direct' };
+    workflow.graph.edges[1] = { id: 'edge-sub-end', source: 'sub-workflow', target: 'end', kind: 'direct' };
+
+    expect(validateWorkflowDefinition(workflow)).toEqual([]);
+  });
+
+  test('rejects sub-workflow nodes without exactly one workflow source', () => {
+    const workflow = createWorkflow();
+    workflow.graph.nodes[1] = {
+      id: 'sub-workflow',
+      kind: 'sub-workflow',
+      label: 'Nested Workflow',
+      position: { x: 200, y: 0 },
+      config: {
+        kind: 'sub-workflow',
+      },
+    };
+    workflow.graph.edges[0] = { id: 'edge-start-sub', source: 'start', target: 'sub-workflow', kind: 'direct' };
+    workflow.graph.edges[1] = { id: 'edge-sub-end', source: 'sub-workflow', target: 'end', kind: 'direct' };
+
+    const issues = validateWorkflowDefinition(workflow);
+    expect(issues.some((issue) => issue.message.includes('exactly one of workflowId or inlineWorkflow'))).toBe(true);
+  });
+
   test('builds a synthetic execution pattern from workflow agents', () => {
     const pattern = buildWorkflowExecutionPattern(createWorkflow());
 
@@ -91,6 +179,30 @@ describe('workflow validation', () => {
     expect(pattern.agents).toHaveLength(1);
     expect(pattern.agents[0]?.name).toBe('Primary Agent');
     expect(pattern.graph?.nodes.map((node) => node.kind)).toEqual(['user-input', 'agent', 'user-output']);
+  });
+
+  test('includes referenced sub-workflow agents when building execution patterns', () => {
+    const childWorkflow = createReferencedSubWorkflow();
+    const workflow = createWorkflow();
+    workflow.graph.nodes[1] = {
+      id: 'sub-workflow',
+      kind: 'sub-workflow',
+      label: 'Nested Workflow',
+      position: { x: 200, y: 0 },
+      config: {
+        kind: 'sub-workflow',
+        workflowId: childWorkflow.id,
+      },
+    };
+    workflow.graph.edges[0] = { id: 'edge-start-sub', source: 'start', target: 'sub-workflow', kind: 'direct' };
+    workflow.graph.edges[1] = { id: 'edge-sub-end', source: 'sub-workflow', target: 'end', kind: 'direct' };
+
+    const pattern = buildWorkflowExecutionPattern(workflow, {
+      resolveWorkflow: (workflowId) => workflowId === childWorkflow.id ? childWorkflow : undefined,
+    });
+
+    expect(pattern.mode).toBe('single');
+    expect(pattern.agents.map((agent) => agent.id)).toEqual(['agent-reviewer']);
   });
 
   test('accepts simple property and expression conditions', () => {

@@ -159,7 +159,18 @@ export interface WorkflowValidationIssue {
   edgeId?: string;
 }
 
-const executableNodeKinds = new Set<WorkflowNodeKind>(['start', 'end', 'agent']);
+export interface WorkflowReference {
+  referencingWorkflowId: string;
+  referencingWorkflowName: string;
+  nodeId: string;
+  nodeLabel: string;
+}
+
+export interface WorkflowResolutionOptions {
+  resolveWorkflow?: (workflowId: string) => WorkflowDefinition | undefined;
+}
+
+const executableNodeKinds = new Set<WorkflowNodeKind>(['start', 'end', 'agent', 'sub-workflow']);
 
 function normalizeOptionalString(value?: string): string | undefined {
   const trimmed = value?.trim();
@@ -362,9 +373,94 @@ export function resolveWorkflowAgents(workflow: WorkflowDefinition): PatternAgen
   });
 }
 
-function inferWorkflowPatternMode(workflow: WorkflowDefinition): PatternDefinition['mode'] {
-  const hasFanEdges = workflow.graph.edges.some((edge) => edge.kind !== 'direct');
-  const agentCount = resolveWorkflowAgents(workflow).length;
+function hasWorkflowExecutionFanEdges(
+  workflow: WorkflowDefinition,
+  options?: WorkflowResolutionOptions,
+  visitedReferencedWorkflowIds = new Set<string>([workflow.id]),
+  visitedInlineWorkflows = new Set<WorkflowDefinition>(),
+): boolean {
+  if (workflow.graph.edges.some((edge) => edge.kind !== 'direct')) {
+    return true;
+  }
+
+  for (const node of workflow.graph.nodes) {
+    if (node.kind !== 'sub-workflow' || node.config.kind !== 'sub-workflow') {
+      continue;
+    }
+
+    const { inlineWorkflow, workflowId } = node.config;
+    if (inlineWorkflow) {
+      if (!visitedInlineWorkflows.has(inlineWorkflow)) {
+        visitedInlineWorkflows.add(inlineWorkflow);
+        if (hasWorkflowExecutionFanEdges(inlineWorkflow, options, visitedReferencedWorkflowIds, visitedInlineWorkflows)) {
+          return true;
+        }
+      }
+    }
+
+    if (workflowId && options?.resolveWorkflow && !visitedReferencedWorkflowIds.has(workflowId)) {
+      const referencedWorkflow = options.resolveWorkflow(workflowId);
+      if (referencedWorkflow) {
+        visitedReferencedWorkflowIds.add(workflowId);
+        if (hasWorkflowExecutionFanEdges(referencedWorkflow, options, visitedReferencedWorkflowIds, visitedInlineWorkflows)) {
+          return true;
+        }
+      }
+    }
+  }
+
+  return false;
+}
+
+function resolveWorkflowExecutionAgents(
+  workflow: WorkflowDefinition,
+  options?: WorkflowResolutionOptions,
+  visitedReferencedWorkflowIds = new Set<string>([workflow.id]),
+  visitedInlineWorkflows = new Set<WorkflowDefinition>(),
+): PatternAgentDefinition[] {
+  const agents = [...resolveWorkflowAgents(workflow)];
+
+  for (const node of workflow.graph.nodes) {
+    if (node.kind !== 'sub-workflow' || node.config.kind !== 'sub-workflow') {
+      continue;
+    }
+
+    const { inlineWorkflow, workflowId } = node.config;
+    if (inlineWorkflow) {
+      if (!visitedInlineWorkflows.has(inlineWorkflow)) {
+        visitedInlineWorkflows.add(inlineWorkflow);
+        agents.push(...resolveWorkflowExecutionAgents(
+          inlineWorkflow,
+          options,
+          visitedReferencedWorkflowIds,
+          visitedInlineWorkflows,
+        ));
+      }
+    }
+
+    if (workflowId && options?.resolveWorkflow && !visitedReferencedWorkflowIds.has(workflowId)) {
+      const referencedWorkflow = options.resolveWorkflow(workflowId);
+      if (referencedWorkflow) {
+        visitedReferencedWorkflowIds.add(workflowId);
+        agents.push(...resolveWorkflowExecutionAgents(
+          referencedWorkflow,
+          options,
+          visitedReferencedWorkflowIds,
+          visitedInlineWorkflows,
+        ));
+      }
+    }
+  }
+
+  return agents;
+}
+
+function inferWorkflowPatternMode(
+  workflow: WorkflowDefinition,
+  options?: WorkflowResolutionOptions,
+): PatternDefinition['mode'] {
+  const hasFanEdges = hasWorkflowExecutionFanEdges(workflow, options);
+  const agentCount = resolveWorkflowExecutionAgents(workflow, options).length;
   if (hasFanEdges) {
     return 'concurrent';
   }
@@ -372,13 +468,16 @@ function inferWorkflowPatternMode(workflow: WorkflowDefinition): PatternDefiniti
   return agentCount <= 1 ? 'single' : 'sequential';
 }
 
-export function buildWorkflowExecutionPattern(workflow: WorkflowDefinition): PatternDefinition {
-  const agents = resolveWorkflowAgents(workflow);
+export function buildWorkflowExecutionPattern(
+  workflow: WorkflowDefinition,
+  options?: WorkflowResolutionOptions,
+): PatternDefinition {
+  const agents = resolveWorkflowExecutionAgents(workflow, options);
   const pattern: PatternDefinition = {
     id: workflow.id,
     name: workflow.name,
     description: workflow.description,
-    mode: inferWorkflowPatternMode(workflow),
+    mode: inferWorkflowPatternMode(workflow, options),
     availability: 'available',
     maxIterations: workflow.settings.maxIterations ?? 5,
     approvalPolicy: workflow.settings.approvalPolicy,
@@ -608,6 +707,39 @@ function validateEdgeCondition(edge: WorkflowEdge, issues: WorkflowValidationIss
   }
 }
 
+function validateSubWorkflowNode(node: WorkflowNode, issues: WorkflowValidationIssue[]): void {
+  if (node.kind !== 'sub-workflow' || node.config.kind !== 'sub-workflow') {
+    return;
+  }
+
+  const hasWorkflowId = Boolean(node.config.workflowId);
+  const hasInlineWorkflow = Boolean(node.config.inlineWorkflow);
+  if (hasWorkflowId === hasInlineWorkflow) {
+    addIssue(issues, {
+      level: 'error',
+      field: 'graph.nodes.config',
+      nodeId: node.id,
+      message: 'Sub-workflow nodes must specify exactly one of workflowId or inlineWorkflow.',
+    });
+    return;
+  }
+
+  if (!node.config.inlineWorkflow) {
+    return;
+  }
+
+  for (const inlineIssue of validateWorkflowDefinition(node.config.inlineWorkflow)) {
+    addIssue(issues, {
+      ...inlineIssue,
+      field: inlineIssue.field
+        ? `graph.nodes.config.inlineWorkflow.${inlineIssue.field}`
+        : 'graph.nodes.config.inlineWorkflow',
+      nodeId: node.id,
+      message: `Inline workflow for node "${node.label || node.id}": ${inlineIssue.message}`,
+    });
+  }
+}
+
 export function validateWorkflowDefinition(workflow: WorkflowDefinition): WorkflowValidationIssue[] {
   const normalized = normalizeWorkflowDefinition(workflow);
   const issues: WorkflowValidationIssue[] = [];
@@ -685,6 +817,8 @@ export function validateWorkflowDefinition(workflow: WorkflowDefinition): Workfl
         });
       }
     }
+
+    validateSubWorkflowNode(node, issues);
   }
   for (const edge of normalized.graph.edges) {
     if (!edge.id) {
@@ -725,7 +859,8 @@ export function validateWorkflowDefinition(workflow: WorkflowDefinition): Workfl
   }
   const startNodes = normalized.graph.nodes.filter((node) => node.kind === 'start');
   const endNodes = normalized.graph.nodes.filter((node) => node.kind === 'end');
-  const agentNodes = normalized.graph.nodes.filter((node) => node.kind === 'agent');
+  const executableWorkNodes = normalized.graph.nodes.filter((node) =>
+    node.kind === 'agent' || node.kind === 'sub-workflow');
 
   if (startNodes.length !== 1) {
     addIssue(issues, {
@@ -743,11 +878,11 @@ export function validateWorkflowDefinition(workflow: WorkflowDefinition): Workfl
     });
   }
 
-  if (agentNodes.length === 0) {
+  if (executableWorkNodes.length === 0) {
     addIssue(issues, {
       level: 'error',
       field: 'graph.nodes',
-      message: 'Workflow graphs must contain at least one agent node.',
+      message: 'Workflow graphs must contain at least one agent or sub-workflow node.',
     });
   }
 

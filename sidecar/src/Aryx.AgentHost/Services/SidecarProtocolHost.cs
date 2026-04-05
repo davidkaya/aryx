@@ -202,7 +202,7 @@ public sealed class SidecarProtocolHost
         {
             Type = "workflow-validation",
             RequestId = context.Envelope.RequestId,
-            Issues = _workflowValidator.Validate(command.Workflow),
+            Issues = _workflowValidator.Validate(command.Workflow, command.WorkflowLibrary),
         }, context.CancellationToken).ConfigureAwait(false);
     }
 

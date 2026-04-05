@@ -28,6 +28,7 @@ const api: ElectronApi = {
   setPatternFavorite: (input) => ipcRenderer.invoke(ipcChannels.setPatternFavorite, input),
   saveWorkflow: (input) => ipcRenderer.invoke(ipcChannels.saveWorkflow, input),
   deleteWorkflow: (workflowId) => ipcRenderer.invoke(ipcChannels.deleteWorkflow, workflowId),
+  listWorkflowReferences: (workflowId) => ipcRenderer.invoke(ipcChannels.listWorkflowReferences, workflowId),
   createWorkflowSession: (input) => ipcRenderer.invoke(ipcChannels.createWorkflowSession, input),
   setTheme: (theme) => ipcRenderer.invoke(ipcChannels.setTheme, theme),
   setTerminalHeight: (input) => ipcRenderer.invoke(ipcChannels.setTerminalHeight, input),

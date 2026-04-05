@@ -1,7 +1,6 @@
 using Aryx.AgentHost.Contracts;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
-using Microsoft.Agents.AI.Workflows.Specialized;
 
 namespace Aryx.AgentHost.Services;
 
@@ -10,11 +9,18 @@ internal sealed class WorkflowRunner
     public Workflow BuildWorkflow(
         WorkflowDefinitionDto workflowDefinition,
         PatternDefinitionDto patternDefinition,
-        IReadOnlyList<AIAgent> agents)
+        IReadOnlyList<AIAgent> agents,
+        IReadOnlyList<WorkflowDefinitionDto>? workflowLibrary = null)
     {
         ArgumentNullException.ThrowIfNull(workflowDefinition);
         ArgumentNullException.ThrowIfNull(patternDefinition);
         ArgumentNullException.ThrowIfNull(agents);
+
+        Dictionary<string, WorkflowDefinitionDto> workflowLibraryMap = workflowLibrary?
+            .Where(candidate => !string.IsNullOrWhiteSpace(candidate.Id))
+            .GroupBy(candidate => candidate.Id, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.Last(), StringComparer.Ordinal)
+            ?? new Dictionary<string, WorkflowDefinitionDto>(StringComparer.Ordinal);
 
         WorkflowNodeDto startNode = workflowDefinition.Graph.Nodes.Single(node =>
             string.Equals(node.Kind, "start", StringComparison.OrdinalIgnoreCase));
@@ -25,10 +31,23 @@ internal sealed class WorkflowRunner
             .Zip(agents, (definition, agent) => (definition.Id, agent))
             .ToDictionary(pair => pair.Id, pair => pair.agent, StringComparer.Ordinal);
 
+        return BuildWorkflow(workflowDefinition, agentMap, workflowLibraryMap);
+    }
+
+    private Workflow BuildWorkflow(
+        WorkflowDefinitionDto workflowDefinition,
+        IReadOnlyDictionary<string, AIAgent> agentMap,
+        IReadOnlyDictionary<string, WorkflowDefinitionDto> workflowLibrary)
+    {
+        WorkflowNodeDto startNode = workflowDefinition.Graph.Nodes.Single(node =>
+            string.Equals(node.Kind, "start", StringComparison.OrdinalIgnoreCase));
+        WorkflowNodeDto endNode = workflowDefinition.Graph.Nodes.Single(node =>
+            string.Equals(node.Kind, "end", StringComparison.OrdinalIgnoreCase));
+
         Dictionary<string, ExecutorBinding> bindings = new(StringComparer.Ordinal);
         foreach (WorkflowNodeDto node in workflowDefinition.Graph.Nodes)
         {
-            bindings[node.Id] = CreateExecutorBinding(node, agentMap);
+            bindings[node.Id] = CreateExecutorBinding(node, agentMap, workflowLibrary);
         }
 
         WorkflowBuilder builder = new(bindings[startNode.Id]);
@@ -92,7 +111,8 @@ internal sealed class WorkflowRunner
 
     private static ExecutorBinding CreateExecutorBinding(
         WorkflowNodeDto node,
-        IReadOnlyDictionary<string, AIAgent> agentMap)
+        IReadOnlyDictionary<string, AIAgent> agentMap,
+        IReadOnlyDictionary<string, WorkflowDefinitionDto> workflowLibrary)
     {
         if (string.Equals(node.Kind, "start", StringComparison.OrdinalIgnoreCase))
         {
@@ -115,6 +135,32 @@ internal sealed class WorkflowRunner
             return agent.BindAsExecutor(CopilotAgentBundle.CreateAgentHostOptions());
         }
 
+        if (string.Equals(node.Kind, "sub-workflow", StringComparison.OrdinalIgnoreCase))
+        {
+            WorkflowDefinitionDto subWorkflowDefinition = ResolveSubWorkflowDefinition(node, workflowLibrary);
+            Workflow subWorkflow = new WorkflowRunner().BuildWorkflow(subWorkflowDefinition, agentMap, workflowLibrary);
+            return subWorkflow.BindAsExecutor(node.Id);
+        }
+
         throw new NotSupportedException($"Workflow node kind \"{node.Kind}\" is not executable yet.");
+    }
+
+    private static WorkflowDefinitionDto ResolveSubWorkflowDefinition(
+        WorkflowNodeDto node,
+        IReadOnlyDictionary<string, WorkflowDefinitionDto> workflowLibrary)
+    {
+        if (node.Config.InlineWorkflow is not null)
+        {
+            return node.Config.InlineWorkflow;
+        }
+
+        if (!string.IsNullOrWhiteSpace(node.Config.WorkflowId)
+            && workflowLibrary.TryGetValue(node.Config.WorkflowId, out WorkflowDefinitionDto? workflow))
+        {
+            return workflow;
+        }
+
+        throw new InvalidOperationException(
+            $"Sub-workflow node \"{node.Id}\" references unknown workflow \"{node.Config.WorkflowId}\".");
     }
 }

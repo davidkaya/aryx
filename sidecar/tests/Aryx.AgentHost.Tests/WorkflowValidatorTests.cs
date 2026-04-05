@@ -8,6 +8,36 @@ public sealed class WorkflowValidatorTests
     private readonly WorkflowValidator _validator = new();
 
     [Fact]
+    public void Validate_AcceptsInlineSubworkflowNodes()
+    {
+        WorkflowDefinitionDto workflow = CreateSubworkflowParent(inlineWorkflow: CreateWorkflow(id: "child"));
+
+        IReadOnlyList<WorkflowValidationIssueDto> issues = _validator.Validate(workflow);
+
+        Assert.DoesNotContain(issues, issue => issue.Level == "error");
+    }
+
+    [Fact]
+    public void Validate_RejectsSubworkflowNodesWithoutSingleSource()
+    {
+        WorkflowDefinitionDto workflow = CreateSubworkflowParent();
+
+        IReadOnlyList<WorkflowValidationIssueDto> issues = _validator.Validate(workflow);
+
+        Assert.Contains(issues, issue => issue.Field == "graph.nodes.config");
+    }
+
+    [Fact]
+    public void Validate_RejectsUnknownReferencedWorkflowIdsWhenLibraryProvided()
+    {
+        WorkflowDefinitionDto workflow = CreateSubworkflowParent(workflowId: "missing-child");
+
+        IReadOnlyList<WorkflowValidationIssueDto> issues = _validator.Validate(workflow, []);
+
+        Assert.Contains(issues, issue => issue.Field == "graph.nodes.config.workflowId");
+    }
+
+    [Fact]
     public void Validate_RejectsInvalidConditionOperator()
     {
         WorkflowDefinitionDto workflow = CreateWorkflow();
@@ -122,11 +152,11 @@ public sealed class WorkflowValidatorTests
         Assert.DoesNotContain(issues, issue => issue.Level == "error");
     }
 
-    private static WorkflowDefinitionDto CreateWorkflow()
+    private static WorkflowDefinitionDto CreateWorkflow(string id = "workflow-1")
     {
         return new WorkflowDefinitionDto
         {
-            Id = "workflow-1",
+            Id = id,
             Name = "Loop Workflow",
             Graph = new WorkflowGraphDto
             {
@@ -173,6 +203,70 @@ public sealed class WorkflowValidatorTests
                     {
                         Id = "edge-agent-end",
                         Source = "agent",
+                        Target = "end",
+                        Kind = "direct",
+                    },
+                ],
+            },
+            Settings = new WorkflowSettingsDto
+            {
+                Checkpointing = new WorkflowCheckpointSettingsDto(),
+            },
+        };
+    }
+
+    private static WorkflowDefinitionDto CreateSubworkflowParent(
+        string? workflowId = null,
+        WorkflowDefinitionDto? inlineWorkflow = null)
+    {
+        return new WorkflowDefinitionDto
+        {
+            Id = "workflow-parent",
+            Name = "Parent Workflow",
+            Graph = new WorkflowGraphDto
+            {
+                Nodes =
+                [
+                    new WorkflowNodeDto
+                    {
+                        Id = "start",
+                        Kind = "start",
+                        Label = "Start",
+                        Config = new WorkflowNodeConfigDto { Kind = "start" },
+                    },
+                    new WorkflowNodeDto
+                    {
+                        Id = "sub-workflow",
+                        Kind = "sub-workflow",
+                        Label = "Nested Workflow",
+                        Config = new WorkflowNodeConfigDto
+                        {
+                            Kind = "sub-workflow",
+                            WorkflowId = workflowId,
+                            InlineWorkflow = inlineWorkflow,
+                        },
+                    },
+                    new WorkflowNodeDto
+                    {
+                        Id = "end",
+                        Kind = "end",
+                        Label = "End",
+                        Config = new WorkflowNodeConfigDto { Kind = "end" },
+                    },
+                ],
+                Edges =
+                [
+                    new WorkflowEdgeDto
+                    {
+                        Id = "edge-start-sub",
+                        Source = "start",
+                        Target = "sub-workflow",
+                        Kind = "direct",
+                    },
+                    new WorkflowEdgeDto
+                    {
+                        Id = "edge-sub-end",
+                        Source = "sub-workflow",
                         Target = "end",
                         Kind = "direct",
                     },

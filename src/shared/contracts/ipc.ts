@@ -1,7 +1,7 @@
 import type { ApprovalDecision } from '@shared/domain/approval';
 import type { SidecarCapabilities, InteractionMode, MessageMode, QuotaSnapshot } from '@shared/contracts/sidecar';
 import type { PatternDefinition, ReasoningEffort } from '@shared/domain/pattern';
-import type { WorkflowDefinition } from '@shared/domain/workflow';
+import type { WorkflowDefinition, WorkflowReference } from '@shared/domain/workflow';
 import type {
   ProjectGitBranchSummary,
   ProjectGitCommitMessageSuggestion,
@@ -286,6 +286,7 @@ export interface ElectronApi {
   deletePattern(patternId: string): Promise<WorkspaceState>;
   saveWorkflow(input: SaveWorkflowInput): Promise<WorkspaceState>;
   deleteWorkflow(workflowId: string): Promise<WorkspaceState>;
+  listWorkflowReferences(workflowId: string): Promise<WorkflowReference[]>;
   saveMcpServer(input: SaveMcpServerInput): Promise<WorkspaceState>;
   deleteMcpServer(serverId: string): Promise<WorkspaceState>;
   saveLspProfile(input: SaveLspProfileInput): Promise<WorkspaceState>;

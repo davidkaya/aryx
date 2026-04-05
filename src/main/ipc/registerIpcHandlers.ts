@@ -116,6 +116,9 @@ export function registerIpcHandlers(
   );
   ipcMain.handle(ipcChannels.saveWorkflow, (_event, input: SaveWorkflowInput) => service.saveWorkflow(input.workflow));
   ipcMain.handle(ipcChannels.deleteWorkflow, (_event, workflowId: string) => service.deleteWorkflow(workflowId));
+  ipcMain.handle(ipcChannels.listWorkflowReferences, (_event, workflowId: string) =>
+    service.listWorkflowReferences(workflowId),
+  );
   ipcMain.handle(ipcChannels.setTheme, async (_event, theme: AppearanceTheme) => {
     const result = await service.setTheme(theme);
     applyTitleBarTheme(window, theme);

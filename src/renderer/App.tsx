@@ -49,6 +49,7 @@ import { isScratchpadProject, SCRATCHPAD_PROJECT_ID } from '@shared/domain/proje
 import type { ProjectGitFileReference } from '@shared/domain/project';
 import { applySessionModelConfig } from '@shared/domain/session';
 import type { AppearanceTheme, LspProfileDefinition, McpServerDefinition } from '@shared/domain/tooling';
+import type { WorkflowDefinition } from '@shared/domain/workflow';
 import type { WorkspaceAgentDefinition } from '@shared/domain/workspaceAgent';
 import type { WorkspaceState } from '@shared/domain/workspace';
 import type { UpdateStatus } from '@shared/contracts/ipc';
@@ -116,6 +117,50 @@ function createDraftWorkspaceAgent(defaultModelId: string): WorkspaceAgentDefini
     instructions: '',
     model: defaultModelId,
     reasoningEffort: 'high',
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+}
+
+function createDraftWorkflow(defaultModelId: string, defaultReasoningEffort: PatternDefinition['agents'][0]['reasoningEffort']): WorkflowDefinition {
+  const timestamp = nowIso();
+  const startId = createId('wf-start');
+  const agentId = createId('wf-agent');
+  const endId = createId('wf-end');
+  return {
+    id: createId('workflow'),
+    name: 'New Workflow',
+    description: '',
+    graph: {
+      nodes: [
+        { id: startId, kind: 'start', label: 'Start', position: { x: 0, y: 100 }, config: { kind: 'start' } },
+        {
+          id: agentId,
+          kind: 'agent',
+          label: 'Primary Agent',
+          position: { x: 250, y: 100 },
+          config: {
+            kind: 'agent',
+            id: createId('agent'),
+            name: 'Primary Agent',
+            description: 'General-purpose assistant.',
+            instructions: 'You are a helpful coding assistant working inside the selected project.',
+            model: defaultModelId,
+            reasoningEffort: defaultReasoningEffort,
+          },
+        },
+        { id: endId, kind: 'end', label: 'End', position: { x: 500, y: 100 }, config: { kind: 'end' } },
+      ],
+      edges: [
+        { id: `edge-${startId}-to-${agentId}`, source: startId, target: agentId, kind: 'direct' },
+        { id: `edge-${agentId}-to-${endId}`, source: agentId, target: endId, kind: 'direct' },
+      ],
+    },
+    settings: {
+      checkpointing: { enabled: false },
+      executionMode: 'off-thread',
+      maxIterations: 5,
+    },
     createdAt: timestamp,
     updatedAt: timestamp,
   };
@@ -723,12 +768,22 @@ export default function App() {
         onDeletePattern={async (id) => {
           await api.deletePattern(id);
         }}
+        onDeleteWorkflow={async (id) => {
+          await api.deleteWorkflow(id);
+        }}
         onNewLspProfile={createDraftLspProfile}
         onNewMcpServer={createDraftMcpServer}
         onNewPattern={() => {
           const defaultModel = availableModels[0] ?? findModel('gpt-5.4', availableModels) ?? findModel('gpt-5.4');
 
           return createDraftPattern(
+            defaultModel?.id ?? 'gpt-5.4',
+            resolveReasoningEffort(defaultModel, 'high'),
+          );
+        }}
+        onNewWorkflow={() => {
+          const defaultModel = availableModels[0] ?? findModel('gpt-5.4', availableModels) ?? findModel('gpt-5.4');
+          return createDraftWorkflow(
             defaultModel?.id ?? 'gpt-5.4',
             resolveReasoningEffort(defaultModel, 'high'),
           );
@@ -742,6 +797,9 @@ export default function App() {
         }}
         onSavePattern={async (pattern) => {
           await api.savePattern({ pattern });
+        }}
+        onSaveWorkflow={async (workflow) => {
+          await api.saveWorkflow({ workflow });
         }}
         onSaveWorkspaceAgent={async (agent) => {
           await api.saveWorkspaceAgent({ agent });
@@ -769,6 +827,7 @@ export default function App() {
           setShowSettings(false);
         }}
         patterns={workspace.patterns}
+        workflows={workspace.workflows}
         sidecarCapabilities={sidecarCapabilities}
         theme={workspace.settings.theme}
         toolingSettings={workspace.settings.tooling}

@@ -1,8 +1,9 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { ChevronLeft, ChevronRight, CircleCheck, Code, Cpu, FolderOpen, Palette, Plus, RefreshCw, Server, TriangleAlert, UserCircle, Workflow, Wrench } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CircleCheck, Code, Cpu, FolderOpen, GitBranch, Palette, Plus, RefreshCw, Server, TriangleAlert, UserCircle, Workflow, Wrench } from 'lucide-react';
 
 import { CopilotStatusCard } from '@renderer/components/CopilotStatusCard';
 import { PatternEditor } from '@renderer/components/PatternEditor';
+import { WorkflowEditor } from '@renderer/components/WorkflowEditor';
 import { ToggleSwitch } from '@renderer/components/ui';
 import { LspProfileEditor } from '@renderer/components/settings/LspProfileEditor';
 import { McpServerEditor } from '@renderer/components/settings/McpServerEditor';
@@ -13,6 +14,7 @@ import { listAcceptedDiscoveredMcpServers, listPendingDiscoveredMcpServers } fro
 import type { ModelDefinition } from '@shared/domain/models';
 import type { PatternDefinition } from '@shared/domain/pattern';
 import type { UpdateStatus, UpdateStatusState } from '@shared/contracts/ipc';
+import { normalizeWorkflowDefinition, type WorkflowDefinition } from '@shared/domain/workflow';
 import {
   normalizeLspProfileDefinition,
   normalizeMcpServerDefinition,
@@ -26,6 +28,7 @@ import { normalizeWorkspaceAgentDefinition, findWorkspaceAgentUsages, type Works
 interface SettingsPanelProps {
   availableModels: ReadonlyArray<ModelDefinition>;
   patterns: PatternDefinition[];
+  workflows: WorkflowDefinition[];
   sidecarCapabilities?: SidecarCapabilities;
   theme: AppearanceTheme;
   toolingSettings: WorkspaceToolingSettings;
@@ -37,6 +40,9 @@ interface SettingsPanelProps {
   onSavePattern: (pattern: PatternDefinition) => Promise<void>;
   onDeletePattern: (patternId: string) => Promise<void>;
   onNewPattern: () => PatternDefinition;
+  onSaveWorkflow: (workflow: WorkflowDefinition) => Promise<void>;
+  onDeleteWorkflow: (workflowId: string) => Promise<void>;
+  onNewWorkflow: () => WorkflowDefinition;
   onSaveMcpServer: (server: McpServerDefinition) => Promise<void>;
   onDeleteMcpServer: (serverId: string) => Promise<void>;
   onNewMcpServer: () => McpServerDefinition;
@@ -60,7 +66,7 @@ interface SettingsPanelProps {
   onGetQuota?: () => Promise<Record<string, QuotaSnapshot>>;
 }
 
-export type SettingsSection = 'appearance' | 'connection' | 'patterns' | 'agents' | 'mcp-servers' | 'lsp-profiles' | 'troubleshooting';
+export type SettingsSection = 'appearance' | 'connection' | 'patterns' | 'workflows' | 'agents' | 'mcp-servers' | 'lsp-profiles' | 'troubleshooting';
 
 interface NavItem {
   id: SettingsSection;
@@ -90,6 +96,7 @@ const navGroups: NavGroup[] = [
     label: 'Workflows',
     items: [
       { id: 'patterns', label: 'Patterns', icon: <Workflow className="size-3.5" /> },
+      { id: 'workflows', label: 'Workflows', icon: <GitBranch className="size-3.5" /> },
       { id: 'agents', label: 'Agents', icon: <UserCircle className="size-3.5" /> },
     ],
   },
@@ -116,6 +123,7 @@ function modeBadgeClasses(pattern: PatternDefinition) {
 export function SettingsPanel({
   availableModels,
   patterns,
+  workflows,
   sidecarCapabilities,
   theme,
   toolingSettings,
@@ -127,6 +135,9 @@ export function SettingsPanel({
   onSavePattern,
   onDeletePattern,
   onNewPattern,
+  onSaveWorkflow,
+  onDeleteWorkflow,
+  onNewWorkflow,
   onSaveMcpServer,
   onDeleteMcpServer,
   onNewMcpServer,
@@ -151,6 +162,7 @@ export function SettingsPanel({
 }: SettingsPanelProps) {
   const [activeSection, setActiveSection] = useState<SettingsSection>(initialSection ?? 'appearance');
   const [editingPattern, setEditingPattern] = useState<PatternDefinition | null>(null);
+  const [editingWorkflow, setEditingWorkflow] = useState<WorkflowDefinition | null>(null);
   const [editingMcpServer, setEditingMcpServer] = useState<McpServerDefinition | null>(null);
   const [editingLspProfile, setEditingLspProfile] = useState<LspProfileDefinition | null>(null);
   const [editingWorkspaceAgent, setEditingWorkspaceAgent] = useState<WorkspaceAgentDefinition | null>(null);
@@ -179,6 +191,29 @@ export function SettingsPanel({
           toolingSettings={toolingSettings}
           workspaceAgents={workspaceAgents}
           onSaveWorkspaceAgent={onSaveWorkspaceAgent}
+        />
+      </div>
+    );
+  }
+
+  if (editingWorkflow) {
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col bg-[var(--color-surface-0)]">
+        <WorkflowEditor
+          availableModels={availableModels}
+          onBack={() => setEditingWorkflow(null)}
+          onChange={setEditingWorkflow}
+          onDelete={
+            async () => {
+              await onDeleteWorkflow(editingWorkflow.id);
+              setEditingWorkflow(null);
+            }
+          }
+          onSave={async () => {
+            await onSaveWorkflow(normalizeWorkflowDefinition(editingWorkflow));
+            setEditingWorkflow(null);
+          }}
+          workflow={editingWorkflow}
         />
       </div>
     );
@@ -335,6 +370,13 @@ export function SettingsPanel({
                 onEditPattern={(pattern) => setEditingPattern(structuredClone(pattern))}
                 onNewPattern={() => setEditingPattern(onNewPattern())}
                 patterns={patterns}
+              />
+            )}
+            {activeSection === 'workflows' && (
+              <WorkflowsSection
+                onEditWorkflow={(wf) => setEditingWorkflow(structuredClone(wf))}
+                onNewWorkflow={() => setEditingWorkflow(onNewWorkflow())}
+                workflows={workflows}
               />
             )}
             {activeSection === 'agents' && (
@@ -596,6 +638,62 @@ function PatternsSection({
             </div>
           </button>
         ))}
+      </div>
+    </div>
+  );
+}
+
+function WorkflowsSection({
+  workflows,
+  onEditWorkflow,
+  onNewWorkflow,
+}: {
+  workflows: WorkflowDefinition[];
+  onEditWorkflow: (workflow: WorkflowDefinition) => void;
+  onNewWorkflow: () => void;
+}) {
+  return (
+    <div>
+      <SectionHeader
+        description="Design multi-step agent workflows with visual graphs"
+        title="Workflows"
+      >
+        <SectionAction label="New Workflow" onClick={onNewWorkflow} />
+      </SectionHeader>
+
+      <div className="space-y-1">
+        {workflows.map((wf) => {
+          const agentCount = wf.graph.nodes.filter((n) => n.kind === 'agent').length;
+          return (
+            <button
+              className="group flex w-full items-center gap-3 rounded-xl border border-transparent px-4 py-3 text-left transition-all duration-200 hover:border-[var(--color-border)] hover:bg-[var(--color-surface-1)]"
+              key={wf.id}
+              onClick={() => onEditWorkflow(wf)}
+              type="button"
+            >
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-[13px] font-medium text-[var(--color-text-primary)]">{wf.name}</span>
+                  <span className="rounded-full bg-[var(--color-surface-3)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[var(--color-text-secondary)]">
+                    {wf.settings.executionMode}
+                  </span>
+                </div>
+                <p className="mt-0.5 truncate text-[12px] text-[var(--color-text-muted)]">{wf.description}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[12px] text-[var(--color-text-muted)]">
+                  {agentCount} agent{agentCount === 1 ? '' : 's'}
+                </span>
+                <ChevronRight className="size-4 text-[var(--color-text-muted)] transition-all duration-200 group-hover:text-[var(--color-text-muted)]" />
+              </div>
+            </button>
+          );
+        })}
+        {workflows.length === 0 && (
+          <p className="px-4 py-6 text-center text-[12px] text-[var(--color-text-muted)]">
+            No workflows yet. Create one to get started.
+          </p>
+        )}
       </div>
     </div>
   );

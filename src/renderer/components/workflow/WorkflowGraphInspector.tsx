@@ -18,10 +18,12 @@ import type {
 } from '@shared/domain/workflow';
 import { ModelSelect, ReasoningEffortSelect } from '@renderer/components/AgentConfigFields';
 import { ConditionEditor } from '@renderer/components/workflow/ConditionEditor';
+import { SubWorkflowInspector } from '@renderer/components/workflow/SubWorkflowInspector';
 
 interface WorkflowGraphInspectorProps {
   availableModels: ReadonlyArray<ModelDefinition>;
   workflow: WorkflowDefinition;
+  workflows: ReadonlyArray<WorkflowDefinition>;
   selectedNodeId: string | null;
   selectedEdgeId: string | null;
   validationIssues?: WorkflowValidationIssue[];
@@ -30,6 +32,7 @@ interface WorkflowGraphInspectorProps {
   onNodeRemove: (nodeId: string) => void;
   onEdgeChange: (edgeId: string, patch: Partial<WorkflowEdge>) => void;
   onEdgeRemove: (edgeId: string) => void;
+  onDrillIntoSubWorkflow: (node: WorkflowNode) => void;
 }
 
 function InputField({
@@ -375,6 +378,7 @@ function EdgeInspector({
 export function WorkflowGraphInspector({
   availableModels,
   workflow,
+  workflows,
   selectedNodeId,
   selectedEdgeId,
   validationIssues,
@@ -383,6 +387,7 @@ export function WorkflowGraphInspector({
   onNodeRemove,
   onEdgeChange,
   onEdgeRemove,
+  onDrillIntoSubWorkflow,
 }: WorkflowGraphInspectorProps) {
   const selectedNode = selectedNodeId
     ? workflow.graph.nodes.find((n) => n.id === selectedNodeId)
@@ -431,6 +436,22 @@ export function WorkflowGraphInspector({
           onNodeChange={onNodeChange}
           onNodeConfigChange={onNodeConfigChange}
           onNodeRemove={onNodeRemove}
+        />
+      </div>
+    );
+  }
+
+  if (selectedNode.kind === 'sub-workflow') {
+    return (
+      <div className="p-4">
+        <SubWorkflowInspector
+          currentWorkflowId={workflow.id}
+          node={selectedNode}
+          onDrillIntoSubWorkflow={onDrillIntoSubWorkflow}
+          onNodeChange={onNodeChange}
+          onNodeConfigChange={onNodeConfigChange}
+          onNodeRemove={onNodeRemove}
+          workflows={workflows}
         />
       </div>
     );

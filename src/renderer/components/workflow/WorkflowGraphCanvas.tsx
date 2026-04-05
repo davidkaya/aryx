@@ -38,6 +38,7 @@ import { workflowEdgeTypes } from './WorkflowGraphEdges';
 interface WorkflowGraphCanvasProps {
   workflow: WorkflowDefinition;
   availableModels?: ReadonlyArray<ModelDefinition>;
+  workflows?: ReadonlyArray<WorkflowDefinition>;
   onGraphChange: (graph: WorkflowGraph) => void;
   onNodeSelect: (nodeId: string | null) => void;
   onEdgeSelect: (edgeId: string | null) => void;
@@ -47,6 +48,7 @@ interface WorkflowGraphCanvasProps {
 function WorkflowGraphCanvasInner({
   workflow,
   availableModels,
+  workflows,
   onGraphChange,
   onNodeSelect,
   onEdgeSelect,
@@ -57,16 +59,16 @@ function WorkflowGraphCanvasInner({
   const draggingRef = useRef(false);
 
   const [nodes, setNodes, onNodesChangeBase] = useNodesState(
-    toCanvasNodes(graph, availableModels),
+    toCanvasNodes(graph, availableModels, workflows),
   );
   const [edges, setEdges, onEdgesChangeBase] = useEdgesState(
     toCanvasEdges(graph),
   );
 
   useEffect(() => {
-    setNodes(toCanvasNodes(graph, availableModels));
+    setNodes(toCanvasNodes(graph, availableModels, workflows));
     setEdges(toCanvasEdges(graph));
-  }, [graph, availableModels, setNodes, setEdges]);
+  }, [graph, availableModels, workflows, setNodes, setEdges]);
 
   const handleNodesChange: OnNodesChange<Node<WorkflowGraphNodeData>> = useCallback(
     (changes) => {

@@ -205,8 +205,16 @@ export function SettingsPanel({
           onChange={setEditingWorkflow}
           onDelete={
             async () => {
-              await onDeleteWorkflow(editingWorkflow.id);
-              setEditingWorkflow(null);
+              try {
+                await onDeleteWorkflow(editingWorkflow.id);
+                setEditingWorkflow(null);
+              } catch (err) {
+                window.alert(
+                  err instanceof Error
+                    ? err.message
+                    : 'Cannot delete this workflow. It may be referenced by other workflows.',
+                );
+              }
             }
           }
           onSave={async () => {
@@ -214,6 +222,7 @@ export function SettingsPanel({
             setEditingWorkflow(null);
           }}
           workflow={editingWorkflow}
+          workflows={workflows}
         />
       </div>
     );

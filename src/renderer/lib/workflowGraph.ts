@@ -8,6 +8,7 @@ import type {
   WorkflowGraph,
   WorkflowNode,
   WorkflowNodeKind,
+  SubWorkflowConfig,
 } from '@shared/domain/workflow';
 import type { ModelProvider } from '@shared/domain/models';
 import { inferProvider, findModel, type ModelDefinition } from '@shared/domain/models';
@@ -21,6 +22,8 @@ export interface WorkflowGraphNodeData extends Record<string, unknown> {
   provider?: ModelProvider;
   /** Short display name for the agent's model (agent nodes only). */
   modelLabel?: string;
+  /** Sub-workflow label: referenced workflow name or "Inline" (sub-workflow nodes only). */
+  subWorkflowLabel?: string;
 }
 
 /* ── View-model projection ─────────────────────────────────── */
@@ -47,10 +50,12 @@ function resolveNodeType(kind: WorkflowNodeKind): string {
 export function toCanvasNodes(
   graph: WorkflowGraph,
   models?: ReadonlyArray<ModelDefinition>,
+  workflows?: ReadonlyArray<WorkflowDefinition>,
 ): Node<WorkflowGraphNodeData>[] {
   return graph.nodes.map((node) => {
     let provider: ModelProvider | undefined;
     let modelLabel: string | undefined;
+    let subWorkflowLabel: string | undefined;
 
     if (node.kind === 'agent' && node.config.kind === 'agent') {
       const modelId = node.config.model;
@@ -58,6 +63,16 @@ export function toCanvasNodes(
         provider = inferProvider(modelId);
         const modelDef = models ? findModel(modelId, models) : undefined;
         modelLabel = modelDef?.name ?? modelId;
+      }
+    }
+
+    if (node.kind === 'sub-workflow' && node.config.kind === 'sub-workflow') {
+      const swConfig = node.config as SubWorkflowConfig;
+      if (swConfig.workflowId && workflows) {
+        const ref = workflows.find((wf) => wf.id === swConfig.workflowId);
+        subWorkflowLabel = ref?.name ?? swConfig.workflowId;
+      } else if (swConfig.inlineWorkflow) {
+        subWorkflowLabel = 'Inline';
       }
     }
 
@@ -72,6 +87,7 @@ export function toCanvasNodes(
         kind: node.kind,
         provider,
         modelLabel,
+        subWorkflowLabel,
       },
       draggable: true,
       selectable: true,

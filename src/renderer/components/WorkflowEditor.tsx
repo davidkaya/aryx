@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { AlertCircle, CheckCircle, ChevronLeft, Trash2 } from 'lucide-react';
+import { Fragment, useCallback, useMemo, useState } from 'react';
+import { AlertCircle, CheckCircle, ChevronLeft, ChevronRight, Info, Trash2 } from 'lucide-react';
 
 import type { ModelDefinition } from '@shared/domain/models';
 import type {
@@ -10,6 +10,7 @@ import type {
   WorkflowNodeKind,
   WorkflowEdge,
   AgentNodeConfig,
+  SubWorkflowConfig,
 } from '@shared/domain/workflow';
 import { validateWorkflowDefinition } from '@shared/domain/workflow';
 import { createId } from '@shared/utils/ids';
@@ -22,10 +23,19 @@ import { WorkflowNodePalette } from './workflow/WorkflowNodePalette';
 interface WorkflowEditorProps {
   availableModels: ReadonlyArray<ModelDefinition>;
   workflow: WorkflowDefinition;
+  workflows: ReadonlyArray<WorkflowDefinition>;
   onChange: (workflow: WorkflowDefinition) => void;
   onDelete?: () => void;
   onSave: () => void;
   onBack: () => void;
+}
+
+interface WorkflowBreadcrumb {
+  workflow: WorkflowDefinition;
+  nodeId: string;
+  nodeLabel: string;
+  /** true when drilling into a referenced (not inline) workflow — view-only */
+  readOnly: boolean;
 }
 
 function InputField({
@@ -113,11 +123,36 @@ function defaultLabelForKind(kind: WorkflowNodeKind): string {
   }
 }
 
+/* ── Minimal inline workflow factory ────────────────────────── */
+
+function createMinimalInlineWorkflow(): WorkflowDefinition {
+  const now = new Date().toISOString();
+  return {
+    id: createId('inline-wf'),
+    name: 'Inline Workflow',
+    description: '',
+    graph: {
+      nodes: [
+        { id: createId('wf-start'), kind: 'start', label: 'Start', position: { x: 0, y: 0 }, config: { kind: 'start' } },
+        { id: createId('wf-end'), kind: 'end', label: 'End', position: { x: 300, y: 0 }, config: { kind: 'end' } },
+      ],
+      edges: [],
+    },
+    settings: {
+      checkpointing: { enabled: false },
+      executionMode: 'off-thread',
+    },
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
 /* ── Main editor ───────────────────────────────────────────── */
 
 export function WorkflowEditor({
   availableModels,
   workflow,
+  workflows,
   onChange,
   onDelete,
   onSave,
@@ -125,14 +160,65 @@ export function WorkflowEditor({
 }: WorkflowEditorProps) {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
-  const issues = validateWorkflowDefinition(workflow);
+  const [breadcrumbs, setBreadcrumbs] = useState<WorkflowBreadcrumb[]>([]);
+
+  /* ── Active workflow resolution ──────────────────────────── */
+
+  const activeWorkflow = useMemo(() => {
+    if (breadcrumbs.length === 0) return workflow;
+    return breadcrumbs[breadcrumbs.length - 1].workflow;
+  }, [workflow, breadcrumbs]);
+
+  const isReadOnly = breadcrumbs.length > 0 && breadcrumbs[breadcrumbs.length - 1].readOnly;
+
+  const issues = validateWorkflowDefinition(activeWorkflow);
+
+  /* ── Change propagation ─────────────────────────────────── */
+
+  function propagateActiveChange(updatedActive: WorkflowDefinition) {
+    if (breadcrumbs.length === 0) {
+      onChange(updatedActive);
+      return;
+    }
+
+    // Walk back up the breadcrumb stack, embedding each level's workflow
+    // into the parent's sub-workflow node config.
+    let child = updatedActive;
+    const newCrumbs = [...breadcrumbs];
+    newCrumbs[newCrumbs.length - 1] = { ...newCrumbs[newCrumbs.length - 1], workflow: child };
+
+    for (let i = newCrumbs.length - 1; i >= 0; i--) {
+      const crumb = newCrumbs[i];
+      const parent = i === 0 ? workflow : newCrumbs[i - 1].workflow;
+      const updatedParent: WorkflowDefinition = {
+        ...parent,
+        graph: {
+          ...parent.graph,
+          nodes: parent.graph.nodes.map((n) => {
+            if (n.id !== crumb.nodeId) return n;
+            return {
+              ...n,
+              config: { kind: 'sub-workflow' as const, inlineWorkflow: child } satisfies SubWorkflowConfig,
+            };
+          }),
+        },
+      };
+      child = updatedParent;
+      if (i > 0) {
+        newCrumbs[i - 1] = { ...newCrumbs[i - 1], workflow: updatedParent };
+      }
+    }
+
+    setBreadcrumbs(newCrumbs);
+    onChange(child);
+  }
 
   function emitChange(next: WorkflowDefinition) {
-    onChange(next);
+    propagateActiveChange(next);
   }
 
   function emitGraphChange(graph: WorkflowGraph) {
-    onChange({ ...workflow, graph });
+    propagateActiveChange({ ...activeWorkflow, graph });
   }
 
   function handleAddNode(kind: WorkflowNodeKind) {
@@ -145,8 +231,8 @@ export function WorkflowEditor({
       config: defaultConfigForKind(kind),
     };
     emitGraphChange({
-      ...workflow.graph,
-      nodes: [...workflow.graph.nodes, newNode],
+      ...activeWorkflow.graph,
+      nodes: [...activeWorkflow.graph.nodes, newNode],
     });
     setSelectedNodeId(nodeId);
     setSelectedEdgeId(null);
@@ -154,45 +240,115 @@ export function WorkflowEditor({
 
   function handleNodeChange(nodeId: string, patch: Partial<WorkflowNode>) {
     emitGraphChange({
-      ...workflow.graph,
-      nodes: workflow.graph.nodes.map((n) => (n.id === nodeId ? { ...n, ...patch } : n)),
+      ...activeWorkflow.graph,
+      nodes: activeWorkflow.graph.nodes.map((n) => (n.id === nodeId ? { ...n, ...patch } : n)),
     });
   }
 
   function handleNodeConfigChange(nodeId: string, config: WorkflowNodeConfig) {
     emitGraphChange({
-      ...workflow.graph,
-      nodes: workflow.graph.nodes.map((n) => (n.id === nodeId ? { ...n, config } : n)),
+      ...activeWorkflow.graph,
+      nodes: activeWorkflow.graph.nodes.map((n) => (n.id === nodeId ? { ...n, config } : n)),
     });
   }
 
   function handleNodeRemove(nodeId: string) {
-    const node = workflow.graph.nodes.find((n) => n.id === nodeId);
+    const node = activeWorkflow.graph.nodes.find((n) => n.id === nodeId);
     if (!node || node.kind === 'start' || node.kind === 'end') {
       return;
     }
 
     emitGraphChange({
-      nodes: workflow.graph.nodes.filter((n) => n.id !== nodeId),
-      edges: workflow.graph.edges.filter((e) => e.source !== nodeId && e.target !== nodeId),
+      nodes: activeWorkflow.graph.nodes.filter((n) => n.id !== nodeId),
+      edges: activeWorkflow.graph.edges.filter((e) => e.source !== nodeId && e.target !== nodeId),
     });
     setSelectedNodeId(null);
   }
 
   function handleEdgeChange(edgeId: string, patch: Partial<WorkflowEdge>) {
     emitGraphChange({
-      ...workflow.graph,
-      edges: workflow.graph.edges.map((e) => (e.id === edgeId ? { ...e, ...patch } : e)),
+      ...activeWorkflow.graph,
+      edges: activeWorkflow.graph.edges.map((e) => (e.id === edgeId ? { ...e, ...patch } : e)),
     });
   }
 
   function handleEdgeRemove(edgeId: string) {
     emitGraphChange({
-      ...workflow.graph,
-      edges: workflow.graph.edges.filter((e) => e.id !== edgeId),
+      ...activeWorkflow.graph,
+      edges: activeWorkflow.graph.edges.filter((e) => e.id !== edgeId),
     });
     setSelectedEdgeId(null);
   }
+
+  /* ── Drill-down ─────────────────────────────────────────── */
+
+  const handleDrillIntoSubWorkflow = useCallback(
+    (node: WorkflowNode) => {
+      if (node.config.kind !== 'sub-workflow') return;
+
+      const config = node.config as SubWorkflowConfig;
+
+      if (config.workflowId) {
+        // Reference mode — find the referenced workflow and show it read-only
+        const ref = workflows.find((wf) => wf.id === config.workflowId);
+        if (!ref) return;
+        setBreadcrumbs((prev) => [
+          ...prev,
+          { workflow: ref, nodeId: node.id, nodeLabel: node.label || 'Sub-Workflow', readOnly: true },
+        ]);
+      } else {
+        // Inline mode — create a minimal workflow if needed, then drill in
+        let inlineWf = config.inlineWorkflow;
+        if (!inlineWf) {
+          inlineWf = createMinimalInlineWorkflow();
+          // Persist the new inline workflow into the node
+          handleNodeConfigChange(node.id, { kind: 'sub-workflow', inlineWorkflow: inlineWf });
+        }
+        setBreadcrumbs((prev) => [
+          ...prev,
+          { workflow: inlineWf, nodeId: node.id, nodeLabel: node.label || 'Sub-Workflow', readOnly: false },
+        ]);
+      }
+      setSelectedNodeId(null);
+      setSelectedEdgeId(null);
+    },
+    [workflows, handleNodeConfigChange],
+  );
+
+  /* ── Breadcrumb sync: when the top-level workflow changes externally,
+       re-resolve the breadcrumb stack from the current workflow to keep
+       inline sub-workflows in sync. ──────────────────────────────────── */
+
+  // Kept simple: if breadcrumbs exist and the innermost is inline,
+  // re-resolve the active workflow from the current top-level workflow
+  // so external saves don't desync. Referenced (read-only) crumbs
+  // already point to a stable workflow object.
+  useMemo(() => {
+    if (breadcrumbs.length === 0) return;
+    let current: WorkflowDefinition = workflow;
+    const synced: WorkflowBreadcrumb[] = [];
+    for (const crumb of breadcrumbs) {
+      if (crumb.readOnly) {
+        synced.push(crumb);
+        continue;
+      }
+      const parentNode = current.graph.nodes.find((n) => n.id === crumb.nodeId);
+      if (
+        !parentNode ||
+        parentNode.config.kind !== 'sub-workflow' ||
+        !(parentNode.config as SubWorkflowConfig).inlineWorkflow
+      ) {
+        // Breadcrumb target no longer exists — pop remaining crumbs
+        break;
+      }
+      const resolved = (parentNode.config as SubWorkflowConfig).inlineWorkflow!;
+      synced.push({ ...crumb, workflow: resolved });
+      current = resolved;
+    }
+    if (synced.length !== breadcrumbs.length || synced.some((s, i) => s.workflow !== breadcrumbs[i].workflow)) {
+      setBreadcrumbs(synced);
+    }
+  }, [workflow]); // intentionally excluding breadcrumbs to avoid loops
 
   return (
     <div className="flex h-full flex-col">
@@ -233,6 +389,52 @@ export function WorkflowEditor({
           </button>
         </div>
       </div>
+
+      {/* Breadcrumb bar */}
+      {breadcrumbs.length > 0 && (
+        <div className="flex items-center gap-1 border-b border-[var(--color-border)] bg-[var(--color-surface-1)] px-4 py-2">
+          <button
+            className="text-[12px] text-[var(--color-accent)] hover:underline"
+            onClick={() => { setBreadcrumbs([]); setSelectedNodeId(null); setSelectedEdgeId(null); }}
+            type="button"
+          >
+            {workflow.name || 'Untitled'}
+          </button>
+          {breadcrumbs.map((crumb, index) => (
+            <Fragment key={`${crumb.nodeId}-${index}`}>
+              <ChevronRight className="size-3 text-[var(--color-text-muted)]" />
+              <button
+                className={`text-[12px] ${
+                  index === breadcrumbs.length - 1
+                    ? 'font-medium text-[var(--color-text-primary)]'
+                    : 'text-[var(--color-accent)] hover:underline'
+                }`}
+                onClick={() => { setBreadcrumbs(breadcrumbs.slice(0, index + 1)); setSelectedNodeId(null); setSelectedEdgeId(null); }}
+                type="button"
+              >
+                {crumb.nodeLabel}
+              </button>
+            </Fragment>
+          ))}
+        </div>
+      )}
+
+      {/* Read-only banner for referenced sub-workflows */}
+      {isReadOnly && (
+        <div className="flex items-center gap-2 border-b border-[var(--color-border)] bg-[var(--color-surface-1)] px-4 py-2">
+          <Info className="size-3.5 shrink-0 text-[var(--color-text-muted)]" />
+          <span className="text-[12px] text-[var(--color-text-muted)]">
+            This is a referenced workflow. Open it separately to edit.
+          </span>
+          <button
+            className="ml-auto text-[12px] text-[var(--color-accent)] hover:underline"
+            onClick={() => { setBreadcrumbs(breadcrumbs.slice(0, -1)); setSelectedNodeId(null); setSelectedEdgeId(null); }}
+            type="button"
+          >
+            Go back
+          </button>
+        </div>
+      )}
 
       {/* Body — palette + canvas + inspector */}
       <div className="flex min-h-0 flex-1">
@@ -277,18 +479,22 @@ export function WorkflowEditor({
               onGraphChange={emitGraphChange}
               onNodeSelect={setSelectedNodeId}
               selectedNodeId={selectedNodeId}
-              workflow={workflow}
+              workflow={activeWorkflow}
+              workflows={workflows}
             />
           </div>
 
           {/* Settings below canvas */}
-          <WorkflowSettingsPanel workflow={workflow} onChange={emitChange} />
+          {breadcrumbs.length === 0 && (
+            <WorkflowSettingsPanel workflow={workflow} onChange={emitChange} />
+          )}
         </div>
 
         {/* Right inspector */}
         <div className="w-80 shrink-0 overflow-y-auto border-l border-[var(--color-border)] bg-[var(--color-surface-1)]">
           <WorkflowGraphInspector
             availableModels={availableModels}
+            onDrillIntoSubWorkflow={handleDrillIntoSubWorkflow}
             onEdgeChange={handleEdgeChange}
             onEdgeRemove={handleEdgeRemove}
             onNodeChange={handleNodeChange}
@@ -297,7 +503,8 @@ export function WorkflowEditor({
             selectedEdgeId={selectedEdgeId}
             selectedNodeId={selectedNodeId}
             validationIssues={issues}
-            workflow={workflow}
+            workflow={activeWorkflow}
+            workflows={workflows}
           />
         </div>
       </div>

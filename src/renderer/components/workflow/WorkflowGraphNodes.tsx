@@ -1,6 +1,6 @@
 import { memo } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
-import { Bot, Circle, Code, FunctionSquare, GitBranch, Radio, Play, Square } from 'lucide-react';
+import { Bot, Circle, Code, FunctionSquare, GitBranch, Link2, Radio, Play, Square } from 'lucide-react';
 
 import type { WorkflowGraphNodeData } from '@renderer/lib/workflowGraph';
 import type { WorkflowNodeKind } from '@shared/domain/workflow';
@@ -39,6 +39,7 @@ const handleStyles = {
 function WorkflowNodeContent({ data, selected }: { data: WorkflowGraphNodeData; selected: boolean }) {
   const colors = kindColors[data.kind] ?? kindColors.agent;
   const isAgent = data.kind === 'agent';
+  const isSubWorkflow = data.kind === 'sub-workflow';
 
   const renderIcon = () => {
     if (isAgent && data.provider) {
@@ -61,6 +62,18 @@ function WorkflowNodeContent({ data, selected }: { data: WorkflowGraphNodeData; 
         </div>
         {isAgent && data.modelLabel && (
           <div className="truncate text-[10px] text-[var(--color-text-muted)]">{data.modelLabel}</div>
+        )}
+        {isSubWorkflow && data.subWorkflowLabel && (
+          <div className="truncate text-[10px] text-[var(--color-text-muted)]">
+            {data.subWorkflowLabel === 'Inline' ? (
+              <span className="rounded bg-amber-500/15 px-1 py-0.5 text-amber-400">Inline</span>
+            ) : (
+              <span className="flex items-center gap-0.5">
+                <Link2 className="inline size-2.5" />
+                {data.subWorkflowLabel}
+              </span>
+            )}
+          </div>
         )}
       </div>
     </div>

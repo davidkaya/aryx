@@ -15,6 +15,11 @@ import {
   normalizeSessionToolingSelection,
   normalizeWorkspaceSettings,
 } from '@shared/domain/tooling';
+import {
+  createBuiltinWorkflowTemplates,
+  normalizeWorkflowTemplateDefinition,
+  type WorkflowTemplateDefinition,
+} from '@shared/domain/workflowTemplate';
 import { normalizeWorkflowDefinition } from '@shared/domain/workflow';
 import {
   applyDefaultToolApprovalPolicy,
@@ -56,6 +61,16 @@ function mergePatterns(existingPatterns: PatternDefinition[], deletedBuiltinIds:
 
   const customPatterns = existingPatterns.filter((pattern) => !builtinIds.has(pattern.id));
   return [...mergedBuiltins, ...customPatterns];
+}
+
+function mergeWorkflowTemplates(existingTemplates: WorkflowTemplateDefinition[]): WorkflowTemplateDefinition[] {
+  const builtinTemplates = createBuiltinWorkflowTemplates(nowIso());
+  const builtinIds = new Set(builtinTemplates.map((template) => template.id));
+  const customTemplates = existingTemplates
+    .map(normalizeWorkflowTemplateDefinition)
+    .filter((template) => template.source !== 'builtin' && !builtinIds.has(template.id));
+
+  return [...builtinTemplates, ...customTemplates];
 }
 
 export class WorkspaceRepository {
@@ -122,6 +137,7 @@ export class WorkspaceRepository {
         graph: resolvePatternGraph(pattern),
       })),
       workflows: (stored.workflows ?? []).map(normalizeWorkflowDefinition),
+      workflowTemplates: mergeWorkflowTemplates(stored.workflowTemplates ?? []),
       projects,
       sessions,
       settings,

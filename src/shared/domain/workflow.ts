@@ -1084,12 +1084,12 @@ export function validateWorkflowDefinition(workflow: WorkflowDefinition): Workfl
       continue;
     }
 
-    if (!edge.condition || edge.condition.type === 'always') {
+    if (!edge.condition) {
       addIssue(issues, {
         level: 'error',
         field: 'graph.edges.condition',
         edgeId: edge.id,
-        message: 'Loop edges require a non-default condition so the loop can terminate.',
+        message: 'Loop edges require a condition so the loop can terminate.',
       });
     }
 

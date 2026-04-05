@@ -1,6 +1,7 @@
 import { describe, expect, mock, test } from 'bun:test';
 
 import { buildAvailableModelCatalog } from '@shared/domain/models';
+import { exportWorkflowDefinition } from '@shared/domain/workflowSerialization';
 import type { WorkflowDefinition } from '@shared/domain/workflow';
 import { createWorkspaceSeed, type WorkspaceState } from '@shared/domain/workspace';
 
@@ -92,6 +93,64 @@ describe('AryxAppService workflow operations', () => {
 
     expect(result.workflows).toHaveLength(1);
     expect(result.selectedWorkflowId).toBe('workflow-test');
+  });
+
+  test('persists a custom workflow template from a saved workflow', async () => {
+    const workspace = createWorkspaceSeed();
+    workspace.workflows.push(createWorkflow());
+    const service = createService(workspace);
+
+    const result = await service.saveWorkflowTemplate('workflow-test', {
+      name: 'Saved Template',
+      description: 'From workflow',
+      category: 'human-in-loop',
+    });
+
+    const template = result.workflowTemplates.find((candidate) => candidate.source === 'custom');
+    expect(template).toBeDefined();
+    expect(template?.name).toBe('Saved Template');
+    expect(template?.category).toBe('human-in-loop');
+    expect(template?.workflow.id).toBe('workflow-test');
+  });
+
+  test('creates workflows from templates and selects the new workflow', async () => {
+    const workspace = createWorkspaceSeed();
+    const service = createService(workspace);
+
+    const result = await service.createWorkflowFromTemplate('workflow-template-sequential', {
+      name: 'Template Copy',
+    });
+
+    expect(result.workflows).toHaveLength(1);
+    expect(result.workflows[0]?.name).toBe('Template Copy');
+    expect(result.selectedWorkflowId).toBe(result.workflows[0]?.id);
+  });
+
+  test('upgrades a pattern to a saved workflow without removing the pattern', async () => {
+    const workspace = createWorkspaceSeed();
+    const pattern = workspace.patterns.find((candidate) => candidate.mode === 'handoff');
+    if (!pattern) {
+      throw new Error('Expected a handoff pattern.');
+    }
+
+    const service = createService(workspace);
+    const result = await service.upgradePatternToWorkflow(pattern.id, { save: true });
+
+    expect(result.workspace?.workflows).toHaveLength(1);
+    expect(result.workspace?.patterns.some((candidate) => candidate.id === pattern.id)).toBe(true);
+    expect(result.workflow.id).toBe('workflow-handoff-support');
+  });
+
+  test('imports and saves workflows from yaml', async () => {
+    const workspace = createWorkspaceSeed();
+    const service = createService(workspace);
+    const yaml = exportWorkflowDefinition(createWorkflow(), 'yaml').content;
+
+    const result = await service.importWorkflow(yaml, 'yaml', { save: true });
+
+    expect(result.workspace?.workflows).toHaveLength(1);
+    expect(result.workspace?.selectedWorkflowId).toBe('workflow-test');
+    expect(result.workflow.id).toBe('workflow-test');
   });
 
   test('creates workflow-backed sessions', async () => {

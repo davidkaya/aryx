@@ -109,6 +109,8 @@ The durable state of the app is a **workspace**. The workspace contains:
 
 - connected projects
 - orchestration patterns
+- workflow templates
+- workflows
 - sessions
 - settings
 - run history
@@ -150,6 +152,8 @@ That graph is now the execution contract for the sidecar: sequential order comes
 
 The pattern editor renders an interactive graph canvas powered by React Flow (`@xyflow/react`). The canvas projects the authoritative `PatternGraph` into React Flow nodes and edges via a view-model layer (`src/renderer/lib/patternGraph.ts`). Users can drag nodes to reposition them, and in handoff mode can draw new agent-to-agent edges directly on the canvas. A right-side inspector panel shows the details of the selected node — system node metadata for system nodes, or the full agent configuration form (model, reasoning, instructions) for agent nodes. The mode selector, pattern metadata, approval checkpoints, and tool auto-approval settings remain below the graph as scrollable settings sections. The `syncPatternGraph()` adapter is still called when agents are added/removed or the mode changes, rebuilding the graph from the current state; direct graph edits (drag positions, handoff edges) are persisted without the adapter.
 
+Workflows now sit alongside patterns as a first-class shared-domain contract. The shared layer owns workflow definitions, workflow template definitions, and workflow import/export helpers (YAML import/export plus Mermaid and DOT export). Built-in workflow templates are derived from built-in patterns, while custom templates are persisted in workspace state and used by the main process to create new saved workflows without expanding the sidecar protocol.
+
 ### Sessions
 
 A session is the working unit of the product. It binds together:
@@ -190,6 +194,8 @@ Typical examples:
 
 - load workspace
 - create session
+- create a workflow from a template
+- export or import a workflow definition
 - send message
 - update theme
 - create or restart the integrated terminal

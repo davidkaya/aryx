@@ -1,6 +1,8 @@
 import type { ApprovalDecision } from '@shared/domain/approval';
 import type { SidecarCapabilities, InteractionMode, MessageMode, QuotaSnapshot } from '@shared/contracts/sidecar';
 import type { PatternDefinition, ReasoningEffort } from '@shared/domain/pattern';
+import type { WorkflowExportFormat, WorkflowExportResult } from '@shared/domain/workflowSerialization';
+import type { WorkflowTemplateCategory } from '@shared/domain/workflowTemplate';
 import type { WorkflowDefinition, WorkflowReference } from '@shared/domain/workflow';
 import type {
   ProjectGitBranchSummary,
@@ -40,6 +42,53 @@ export interface SavePatternInput {
 
 export interface SaveWorkflowInput {
   workflow: WorkflowDefinition;
+}
+
+export interface SaveWorkflowTemplateInput {
+  workflowId: string;
+  options?: {
+    templateId?: string;
+    name?: string;
+    description?: string;
+    category?: WorkflowTemplateCategory;
+  };
+}
+
+export interface CreateWorkflowFromTemplateInput {
+  templateId: string;
+  options?: {
+    workflowId?: string;
+    name?: string;
+    description?: string;
+  };
+}
+
+export interface ExportWorkflowInput {
+  workflowId: string;
+  format: WorkflowExportFormat;
+}
+
+export interface ImportWorkflowInput {
+  content: string;
+  format: 'yaml' | 'json';
+  options?: {
+    save?: boolean;
+  };
+}
+
+export interface UpgradePatternToWorkflowInput {
+  patternId: string;
+  options?: {
+    workflowId?: string;
+    name?: string;
+    description?: string;
+    save?: boolean;
+  };
+}
+
+export interface ImportWorkflowResult {
+  workflow: WorkflowDefinition;
+  workspace?: WorkspaceState;
 }
 
 export interface SendSessionMessageInput {
@@ -285,8 +334,13 @@ export interface ElectronApi {
   savePattern(input: SavePatternInput): Promise<WorkspaceState>;
   deletePattern(patternId: string): Promise<WorkspaceState>;
   saveWorkflow(input: SaveWorkflowInput): Promise<WorkspaceState>;
+  saveWorkflowTemplate(input: SaveWorkflowTemplateInput): Promise<WorkspaceState>;
   deleteWorkflow(workflowId: string): Promise<WorkspaceState>;
   listWorkflowReferences(workflowId: string): Promise<WorkflowReference[]>;
+  createWorkflowFromTemplate(input: CreateWorkflowFromTemplateInput): Promise<WorkspaceState>;
+  exportWorkflow(input: ExportWorkflowInput): Promise<WorkflowExportResult>;
+  importWorkflow(input: ImportWorkflowInput): Promise<ImportWorkflowResult>;
+  upgradePatternToWorkflow(input: UpgradePatternToWorkflowInput): Promise<ImportWorkflowResult>;
   saveMcpServer(input: SaveMcpServerInput): Promise<WorkspaceState>;
   deleteMcpServer(serverId: string): Promise<WorkspaceState>;
   saveLspProfile(input: SaveLspProfileInput): Promise<WorkspaceState>;

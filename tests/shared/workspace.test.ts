@@ -3,7 +3,7 @@ import { describe, expect, test } from 'bun:test';
 import { createWorkspaceSeed } from '@shared/domain/workspace';
 
 describe('workspace seed', () => {
-  test('starts empty and seeds the built-in orchestration patterns with a shared timestamp', () => {
+  test('starts empty and seeds built-in patterns and workflow templates with a shared timestamp', () => {
     const workspace = createWorkspaceSeed();
 
     expect(workspace.projects).toEqual([]);
@@ -30,6 +30,13 @@ describe('workspace seed', () => {
       'group-chat',
       'magentic',
     ]);
+    expect(workspace.workflowTemplates.map((template) => template.id)).toEqual([
+      'workflow-template-single',
+      'workflow-template-sequential',
+      'workflow-template-concurrent',
+      'workflow-template-handoff',
+      'workflow-template-group-chat',
+    ]);
 
     for (const pattern of workspace.patterns) {
       expect(pattern.createdAt).toBe(workspace.lastUpdatedAt);
@@ -41,5 +48,9 @@ describe('workspace seed', () => {
 
     expect(magentic?.availability).toBe('unavailable');
     expect(magentic?.unavailabilityReason).toContain('unsupported');
+    for (const template of workspace.workflowTemplates) {
+      expect(template.createdAt).toBe(workspace.lastUpdatedAt);
+      expect(template.updatedAt).toBe(workspace.lastUpdatedAt);
+    }
   });
 });

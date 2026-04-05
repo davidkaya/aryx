@@ -77,6 +77,7 @@ function createWorkspace(overrides?: Partial<WorkspaceState>): WorkspaceState {
     projects: [createProject(), createProject({ id: 'project-scratchpad', name: 'Scratchpad', path: 'C:\\scratchpad' })],
     patterns: [createPattern(), createPattern({ id: 'pattern-single-chat', name: '1-on-1 Copilot Chat', mode: 'single' })],
     workflows: [],
+    workflowTemplates: [],
     settings: createWorkspaceSettings(),
     sessions: [
       createSession(),
@@ -117,6 +118,7 @@ function createWorkspace(overrides?: Partial<WorkspaceState>): WorkspaceState {
   return {
     ...workspace,
     workflows: overrides?.workflows ?? workspace.workflows,
+    workflowTemplates: overrides?.workflowTemplates ?? workspace.workflowTemplates,
   };
 }
 

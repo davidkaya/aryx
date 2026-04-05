@@ -18,7 +18,7 @@ Aryx is a desktop app that turns GitHub Copilot into a full workspace. Connect r
 
 ## Highlights
 
-- **Multi-agent orchestration** — single, sequential, concurrent, handoff, and group-chat patterns with a visual graph editor.
+- **Multi-agent orchestration** — single, sequential, concurrent, handoff, and group-chat patterns with a visual graph editor, reusable workflow templates, and workflow import/export.
 - **Project-grounded** — attach local folders and repos so every conversation has real codebase context.
 - **Live execution visibility** — watch agents think, delegate, call tools, and consume context in real time.
 - **Persistent workspace** — sessions survive restarts. Search, pin, archive, branch, and return to past work.
@@ -53,6 +53,8 @@ Aryx is a desktop app that turns GitHub Copilot into a full workspace. Connect r
 | Feature | Description |
 |---------|-------------|
 | Orchestration patterns | Single, sequential, concurrent, handoff, and group-chat agent flows |
+| Workflow templates | Save workflows as reusable templates, bootstrap from built-ins, and upgrade patterns into workflows |
+| Workflow import/export | Export workflows as YAML, Mermaid, or DOT and import normalized definitions from YAML or JSON |
 | Visual pattern editor | Drag nodes, draw connections, and inspect each step in a graph view |
 | Mid-turn steering | Send follow-up messages while an agent is running — input is injected immediately |
 | Plan review & questions | Agents propose plans and ask clarifying questions before acting |

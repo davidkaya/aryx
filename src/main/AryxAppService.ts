@@ -44,6 +44,20 @@ import {
   type WorkflowReference,
 } from '@shared/domain/workflow';
 import {
+  exportWorkflowDefinition,
+  importWorkflowDefinition,
+  type WorkflowExportFormat,
+  type WorkflowExportResult,
+} from '@shared/domain/workflowSerialization';
+import {
+  applyWorkflowTemplate,
+  buildWorkflowFromPattern,
+  createWorkflowTemplateFromWorkflow,
+  normalizeWorkflowTemplateDefinition,
+  type WorkflowTemplateCategory,
+  type WorkflowTemplateDefinition,
+} from '@shared/domain/workflowTemplate';
+import {
   normalizeWorkspaceAgentDefinition,
   resolvePatternAgents,
   type WorkspaceAgentDefinition,
@@ -655,6 +669,116 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
 
     workspace.selectedWorkflowId = candidate.id;
     return this.persistAndBroadcast(workspace);
+  }
+
+  async saveWorkflowTemplate(
+    workflowId: string,
+    options?: {
+      templateId?: string;
+      name?: string;
+      description?: string;
+      category?: WorkflowTemplateCategory;
+    },
+  ): Promise<WorkspaceState> {
+    const workspace = await this.loadWorkspace();
+    const workflow = this.requireWorkflow(workspace, workflowId);
+    const candidate = createWorkflowTemplateFromWorkflow(workflow, options);
+    const existingIndex = workspace.workflowTemplates.findIndex((template) => template.id === candidate.id);
+    const existingTemplate = existingIndex >= 0 ? workspace.workflowTemplates[existingIndex] : undefined;
+    if (existingTemplate?.source === 'builtin') {
+      throw new Error(`Workflow template "${candidate.id}" is reserved by a built-in template.`);
+    }
+
+    const normalizedCandidate: WorkflowTemplateDefinition = normalizeWorkflowTemplateDefinition({
+      ...candidate,
+      createdAt: existingTemplate?.createdAt ?? candidate.createdAt,
+      updatedAt: nowIso(),
+    });
+
+    if (existingIndex >= 0) {
+      workspace.workflowTemplates[existingIndex] = normalizedCandidate;
+    } else {
+      workspace.workflowTemplates.push(normalizedCandidate);
+    }
+
+    return this.persistAndBroadcast(workspace);
+  }
+
+  async createWorkflowFromTemplate(
+    templateId: string,
+    options?: {
+      workflowId?: string;
+      name?: string;
+      description?: string;
+    },
+  ): Promise<WorkspaceState> {
+    const workspace = await this.loadWorkspace();
+    const template = this.requireWorkflowTemplate(workspace, templateId);
+    const workflowId = options?.workflowId?.trim()
+      || this.createUniqueWorkflowId(workspace, template.workflow.id);
+    const workflow = applyWorkflowTemplate(template, {
+      ...options,
+      workflowId,
+    });
+
+    return this.saveWorkflow(workflow);
+  }
+
+  async exportWorkflow(workflowId: string, format: WorkflowExportFormat): Promise<WorkflowExportResult> {
+    const workspace = await this.loadWorkspace();
+    const workflow = this.requireWorkflow(workspace, workflowId);
+    return exportWorkflowDefinition(workflow, format);
+  }
+
+  async importWorkflow(
+    content: string,
+    format: 'yaml' | 'json',
+    options?: { save?: boolean },
+  ): Promise<{ workflow: WorkflowDefinition; workspace?: WorkspaceState }> {
+    const workflow = importWorkflowDefinition(content, format);
+    if (!options?.save) {
+      return { workflow };
+    }
+
+    const workspace = await this.saveWorkflow(workflow);
+    return {
+      workflow,
+      workspace,
+    };
+  }
+
+  async upgradePatternToWorkflow(
+    patternId: string,
+    options?: {
+      workflowId?: string;
+      name?: string;
+      description?: string;
+      save?: boolean;
+    },
+  ): Promise<{ workflow: WorkflowDefinition; workspace?: WorkspaceState }> {
+    const workspace = await this.loadWorkspace();
+    const pattern = this.requirePattern(workspace, patternId);
+    const baseWorkflow = buildWorkflowFromPattern(pattern);
+    const workflowId = options?.workflowId?.trim()
+      || this.createUniqueWorkflowId(workspace, baseWorkflow.id);
+    const workflow = normalizeWorkflowDefinition({
+      ...baseWorkflow,
+      id: workflowId,
+      name: options?.name?.trim() || baseWorkflow.name,
+      description: options?.description?.trim() ?? baseWorkflow.description,
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+    });
+
+    if (!options?.save) {
+      return { workflow };
+    }
+
+    const savedWorkspace = await this.saveWorkflow(workflow);
+    return {
+      workflow,
+      workspace: savedWorkspace,
+    };
   }
 
   async setPatternFavorite(patternId: string, isFavorite: boolean): Promise<WorkspaceState> {
@@ -2250,6 +2374,15 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     return pattern;
   }
 
+  private requireWorkflowTemplate(workspace: WorkspaceState, templateId: string): WorkflowTemplateDefinition {
+    const template = workspace.workflowTemplates.find((current) => current.id === templateId);
+    if (!template) {
+      throw new Error(`Workflow template "${templateId}" was not found.`);
+    }
+
+    return template;
+  }
+
   private requireWorkflow(workspace: WorkspaceState, workflowId: string): WorkflowDefinition {
     const workflow = workspace.workflows.find((current) => current.id === workflowId);
     if (!workflow) {
@@ -2257,6 +2390,31 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     }
 
     return workflow;
+  }
+
+  private createUniqueWorkflowId(workspace: WorkspaceState, sourceId: string): string {
+    const normalizedSourceId = this.normalizeIdentifier(sourceId, 'workflow');
+    const existingIds = new Set(workspace.workflows.map((workflow) => workflow.id));
+    if (!existingIds.has(normalizedSourceId)) {
+      return normalizedSourceId;
+    }
+
+    let suffix = 2;
+    while (existingIds.has(`${normalizedSourceId}-${suffix}`)) {
+      suffix += 1;
+    }
+
+    return `${normalizedSourceId}-${suffix}`;
+  }
+
+  private normalizeIdentifier(value: string, fallbackPrefix: string): string {
+    const normalized = value
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+
+    return normalized || createId(fallbackPrefix);
   }
 
   private resolveSessionExecutionDefinition(

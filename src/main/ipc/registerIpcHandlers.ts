@@ -5,7 +5,9 @@ import { ipcChannels } from '@shared/contracts/channels';
 import type {
   BranchSessionInput,
   CancelSessionTurnInput,
+  CommitProjectGitChangesInput,
   CreateSessionInput,
+  CreateWorkflowFromTemplateInput,
   CreateWorkflowSessionInput,
   CreateProjectGitBranchInput,
   DismissSessionMcpAuthInput,
@@ -14,13 +16,15 @@ import type {
   DeleteSessionInput,
   DiscardSessionRunGitChangesInput,
   EditAndResendSessionMessageInput,
-  CommitProjectGitChangesInput,
+  ExportWorkflowInput,
+  ImportWorkflowInput,
   ProjectGitDetailsInput,
   ProjectGitFilePreviewInput,
   ProjectGitFileSelectionInput,
   ProjectGitInput,
   PullProjectGitInput,
   RegenerateSessionMessageInput,
+  ResolveWorkspaceDiscoveredToolingInput,
   StartSessionMcpAuthInput,
   SuggestProjectGitCommitMessageInput,
   SwitchProjectGitBranchInput,
@@ -31,11 +35,11 @@ import type {
   ResolveProjectDiscoveredToolingInput,
   ResolveSessionApprovalInput,
   ResolveSessionUserInputInput,
-  ResolveWorkspaceDiscoveredToolingInput,
   SaveLspProfileInput,
   SaveMcpServerInput,
   SavePatternInput,
   SaveWorkflowInput,
+  SaveWorkflowTemplateInput,
   SaveWorkspaceAgentInput,
   SendSessionMessageInput,
   SetPatternFavoriteInput,
@@ -49,6 +53,7 @@ import type {
   UpdateSessionModelConfigInput,
   UpdateSessionApprovalSettingsInput,
   UpdateSessionToolingInput,
+  UpgradePatternToWorkflowInput,
 } from '@shared/contracts/ipc';
 import type { QuerySessionsInput } from '@shared/domain/sessionLibrary';
 import type { AppearanceTheme } from '@shared/domain/tooling';
@@ -115,9 +120,24 @@ export function registerIpcHandlers(
     service.setPatternFavorite(input.patternId, input.isFavorite),
   );
   ipcMain.handle(ipcChannels.saveWorkflow, (_event, input: SaveWorkflowInput) => service.saveWorkflow(input.workflow));
+  ipcMain.handle(ipcChannels.saveWorkflowTemplate, (_event, input: SaveWorkflowTemplateInput) =>
+    service.saveWorkflowTemplate(input.workflowId, input.options),
+  );
   ipcMain.handle(ipcChannels.deleteWorkflow, (_event, workflowId: string) => service.deleteWorkflow(workflowId));
   ipcMain.handle(ipcChannels.listWorkflowReferences, (_event, workflowId: string) =>
     service.listWorkflowReferences(workflowId),
+  );
+  ipcMain.handle(ipcChannels.createWorkflowFromTemplate, (_event, input: CreateWorkflowFromTemplateInput) =>
+    service.createWorkflowFromTemplate(input.templateId, input.options),
+  );
+  ipcMain.handle(ipcChannels.exportWorkflow, (_event, input: ExportWorkflowInput) =>
+    service.exportWorkflow(input.workflowId, input.format),
+  );
+  ipcMain.handle(ipcChannels.importWorkflow, (_event, input: ImportWorkflowInput) =>
+    service.importWorkflow(input.content, input.format, input.options),
+  );
+  ipcMain.handle(ipcChannels.upgradePatternToWorkflow, (_event, input: UpgradePatternToWorkflowInput) =>
+    service.upgradePatternToWorkflow(input.patternId, input.options),
   );
   ipcMain.handle(ipcChannels.setTheme, async (_event, theme: AppearanceTheme) => {
     const result = await service.setTheme(theme);

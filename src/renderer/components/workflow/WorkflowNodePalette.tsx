@@ -4,6 +4,7 @@ import type { WorkflowNodeKind } from '@shared/domain/workflow';
 
 interface WorkflowNodePaletteProps {
   onAddNode: (kind: WorkflowNodeKind) => void;
+  disabledKinds?: ReadonlySet<WorkflowNodeKind>;
 }
 
 interface PaletteItem {
@@ -48,7 +49,7 @@ const paletteGroups: PaletteGroup[] = [
   },
 ];
 
-export function WorkflowNodePalette({ onAddNode }: WorkflowNodePaletteProps) {
+export function WorkflowNodePalette({ onAddNode, disabledKinds }: WorkflowNodePaletteProps) {
   return (
     <div className="space-y-4 p-3">
       <h4 className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
@@ -62,11 +63,18 @@ export function WorkflowNodePalette({ onAddNode }: WorkflowNodePaletteProps) {
           <div className="space-y-0.5">
             {group.items.map((item) => {
               const Icon = item.icon;
+              const disabled = disabledKinds?.has(item.kind) ?? false;
               return (
                 <button
-                  className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[12px] text-[var(--color-text-secondary)] transition-all duration-200 hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-primary)]"
+                  className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[12px] transition-all duration-200 ${
+                    disabled
+                      ? 'cursor-not-allowed text-[var(--color-text-muted)] opacity-40'
+                      : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-primary)]'
+                  }`}
+                  disabled={disabled}
                   key={item.kind}
                   onClick={() => onAddNode(item.kind)}
+                  title={disabled ? `${item.label} node already exists` : undefined}
                   type="button"
                 >
                   <Icon className={`size-3.5 ${item.color}`} />

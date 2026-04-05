@@ -182,6 +182,13 @@ export function WorkflowEditor({
 
   const issues = validateWorkflowDefinition(activeWorkflow);
 
+  const disabledPaletteKinds = useMemo(() => {
+    const disabled = new Set<WorkflowNodeKind>();
+    if (activeWorkflow.graph.nodes.some((n) => n.kind === 'start')) disabled.add('start');
+    if (activeWorkflow.graph.nodes.some((n) => n.kind === 'end')) disabled.add('end');
+    return disabled;
+  }, [activeWorkflow.graph.nodes]);
+
   /* ── Change propagation ─────────────────────────────────── */
 
   function propagateActiveChange(updatedActive: WorkflowDefinition) {
@@ -482,7 +489,7 @@ export function WorkflowEditor({
       <div className="flex min-h-0 flex-1">
         {/* Left palette */}
         <div className="w-40 shrink-0 overflow-y-auto border-r border-[var(--color-border)] bg-[var(--color-surface-1)]">
-          <WorkflowNodePalette onAddNode={handleAddNode} />
+          <WorkflowNodePalette disabledKinds={disabledPaletteKinds} onAddNode={handleAddNode} />
         </div>
 
         {/* Center column: validation + canvas + settings */}

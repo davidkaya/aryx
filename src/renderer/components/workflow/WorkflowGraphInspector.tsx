@@ -236,7 +236,7 @@ function PlaceholderNodeInspector({
         value={node.label}
       />
       <div className="rounded-lg border border-[var(--color-status-warning)]/20 bg-[var(--color-status-warning)]/5 px-3 py-2 text-[12px] text-[var(--color-status-warning)]">
-        Full configuration coming in Phase 2.
+        Full configuration for this node type is not yet available.
       </div>
     </div>
   );

@@ -1,9 +1,12 @@
 using System.IO;
 using System.Linq;
+using System.Globalization;
+using System.Text.Json;
 using Aryx.AgentHost.Contracts;
 using GitHub.Copilot.SDK;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Agents.AI.Workflows.Checkpointing;
+using Microsoft.Agents.AI.Workflows.InProc;
 using Microsoft.Extensions.AI;
 
 namespace Aryx.AgentHost.Services;
@@ -104,6 +107,17 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
 
             await foreach (WorkflowEvent evt in run.WatchStreamAsync(runCancellation.Token).ConfigureAwait(false))
             {
+                if (evt is RequestInfoEvent requestInfo
+                    && await TryHandleRequestPortRequestAsync(
+                        command,
+                        requestInfo,
+                        run,
+                        onUserInput,
+                        runCancellation.Token).ConfigureAwait(false))
+                {
+                    continue;
+                }
+
                 bool shouldEndTurn = await HandleWorkflowEventAsync(command, evt, inputMessages, state, onDelta, onEvent)
                     .ConfigureAwait(false);
                 await EmitPendingEventsAsync(state, onEvent).ConfigureAwait(false);
@@ -179,24 +193,32 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
         IReadOnlyList<ChatMessage> inputMessages,
         CheckpointManager? checkpointManager)
     {
+        InProcessExecutionEnvironment environment = CreateExecutionEnvironment(command, checkpointManager);
         if (checkpointManager is not null && command.ResumeFromCheckpoint is { } resumeFromCheckpoint)
         {
-            return InProcessExecution.ResumeStreamingAsync(
+            return environment.ResumeStreamingAsync(
                 workflow,
-                new CheckpointInfo(resumeFromCheckpoint.WorkflowSessionId, resumeFromCheckpoint.CheckpointId),
-                checkpointManager);
+                new CheckpointInfo(resumeFromCheckpoint.WorkflowSessionId, resumeFromCheckpoint.CheckpointId));
         }
 
-        if (checkpointManager is not null)
-        {
-            return InProcessExecution.RunStreamingAsync(
-                workflow,
-                inputMessages.ToList(),
-                checkpointManager,
-                sessionId: command.RequestId);
-        }
+        return environment.RunStreamingAsync(workflow, inputMessages.ToList(), command.RequestId);
+    }
 
-        return InProcessExecution.RunStreamingAsync(workflow, inputMessages.ToList());
+    internal static InProcessExecutionEnvironment CreateExecutionEnvironment(
+        RunTurnCommandDto command,
+        CheckpointManager? checkpointManager)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+
+        string executionMode = command.Workflow?.Settings.ExecutionMode?.Trim() ?? "off-thread";
+        InProcessExecutionEnvironment environment = string.Equals(
+            executionMode,
+            "lockstep",
+            StringComparison.OrdinalIgnoreCase)
+            ? InProcessExecution.Lockstep
+            : InProcessExecution.OffThread;
+
+        return checkpointManager is null ? environment : environment.WithCheckpointing(checkpointManager);
     }
 
     internal static void ConfigureHookLifecycleEventSuppression(
@@ -241,6 +263,30 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
         CancellationToken cancellationToken)
     {
         return _userInputCoordinator.ResolveUserInputAsync(command, cancellationToken);
+    }
+
+    private async Task<bool> TryHandleRequestPortRequestAsync(
+        RunTurnCommandDto command,
+        RequestInfoEvent requestInfo,
+        StreamingRun run,
+        Func<UserInputRequestedEventDto, Task> onUserInput,
+        CancellationToken cancellationToken)
+    {
+        if (!TryResolveRequestPortMetadata(command.Workflow, requestInfo, out WorkflowRequestPortMetadata? metadata))
+        {
+            return false;
+        }
+
+        UserInputRequest userInputRequest = CreateRequestPortUserInputRequest(metadata!, requestInfo);
+        UserInputResponse response = await _userInputCoordinator.RequestUserInputAsync(
+            command,
+            userInputRequest,
+            onUserInput,
+            cancellationToken).ConfigureAwait(false);
+
+        object coercedResponse = CoerceRequestPortResponse(metadata!.ResponseType, response.Answer);
+        await run.SendResponseAsync(requestInfo.Request.CreateResponse(coercedResponse)).ConfigureAwait(false);
+        return true;
     }
 
     private static async Task<bool> HandleWorkflowEventAsync(
@@ -334,6 +380,74 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
         }
 
         return false;
+    }
+
+    internal static UserInputRequest CreateRequestPortUserInputRequest(
+        WorkflowRequestPortMetadata metadata,
+        RequestInfoEvent requestInfo)
+    {
+        ArgumentNullException.ThrowIfNull(metadata);
+        ArgumentNullException.ThrowIfNull(requestInfo);
+
+        string question = metadata.Prompt
+            ?? BuildRequestPortFallbackQuestion(metadata, requestInfo);
+
+        bool expectsBoolean = IsBooleanResponseType(metadata.ResponseType);
+        return new UserInputRequest
+        {
+            Question = question,
+            Choices = expectsBoolean ? ["true", "false"] : null,
+            AllowFreeform = true,
+        };
+    }
+
+    internal static object CoerceRequestPortResponse(string responseType, string? answer)
+    {
+        string normalizedResponseType = responseType.Trim();
+        string trimmedAnswer = answer?.Trim() ?? string.Empty;
+
+        if (IsStringResponseType(normalizedResponseType))
+        {
+            return trimmedAnswer;
+        }
+
+        if (IsBooleanResponseType(normalizedResponseType))
+        {
+            return trimmedAnswer.ToLowerInvariant() switch
+            {
+                "true" or "t" or "yes" or "y" or "1" => true,
+                "false" or "f" or "no" or "n" or "0" => false,
+                _ => throw new InvalidOperationException(
+                    $"Request port response type \"{responseType}\" requires a boolean answer."),
+            };
+        }
+
+        if (IsNumericResponseType(normalizedResponseType))
+        {
+            if (double.TryParse(trimmedAnswer, NumberStyles.Float, CultureInfo.InvariantCulture, out double numeric))
+            {
+                return numeric;
+            }
+
+            throw new InvalidOperationException(
+                $"Request port response type \"{responseType}\" requires a numeric answer.");
+        }
+
+        if (IsJsonResponseType(normalizedResponseType))
+        {
+            try
+            {
+                return JsonDocument.Parse(trimmedAnswer).RootElement.Clone();
+            }
+            catch (JsonException ex)
+            {
+                throw new InvalidOperationException(
+                    $"Request port response type \"{responseType}\" requires a valid JSON answer.",
+                    ex);
+            }
+        }
+
+        return trimmedAnswer;
     }
 
     private static async Task HandleAgentResponseUpdateAsync(
@@ -542,6 +656,83 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
                 return false;
         }
     }
+
+    private static bool TryResolveRequestPortMetadata(
+        WorkflowDefinitionDto? workflow,
+        RequestInfoEvent requestInfo,
+        out WorkflowRequestPortMetadata? metadata)
+    {
+        metadata = null;
+        if (workflow is null)
+        {
+            return false;
+        }
+
+        string portId = requestInfo.Request.PortInfo.PortId;
+        WorkflowNodeDto? node = workflow.Graph.Nodes.FirstOrDefault(candidate =>
+            string.Equals(candidate.Kind, "request-port", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(candidate.Config.PortId, portId, StringComparison.OrdinalIgnoreCase));
+
+        if (node is null)
+        {
+            return false;
+        }
+
+        metadata = new WorkflowRequestPortMetadata(
+            node.Id,
+            string.IsNullOrWhiteSpace(node.Label) ? node.Id : node.Label,
+            node.Config.PortId ?? portId,
+            node.Config.RequestType ?? string.Empty,
+            node.Config.ResponseType ?? string.Empty,
+            string.IsNullOrWhiteSpace(node.Config.Prompt) ? null : node.Config.Prompt.Trim());
+        return true;
+    }
+
+    private static string BuildRequestPortFallbackQuestion(
+        WorkflowRequestPortMetadata metadata,
+        RequestInfoEvent requestInfo)
+    {
+        if (requestInfo.Request.Data.Is<WorkflowRequestPortPromptRequest>(out WorkflowRequestPortPromptRequest? promptRequest))
+        {
+            string baseQuestion = $"Provide a {metadata.ResponseType} response for \"{promptRequest.NodeLabel}\".";
+            if (!string.IsNullOrWhiteSpace(promptRequest.InputSummary))
+            {
+                return $"{baseQuestion} Current input: {promptRequest.InputSummary}";
+            }
+
+            return baseQuestion;
+        }
+
+        return $"Provide a {metadata.ResponseType} response for request port \"{metadata.NodeLabel}\" ({metadata.PortId}).";
+    }
+
+    private static bool IsStringResponseType(string responseType)
+        => string.Equals(responseType, "string", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(responseType, "text", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsBooleanResponseType(string responseType)
+        => string.Equals(responseType, "bool", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(responseType, "boolean", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsNumericResponseType(string responseType)
+        => string.Equals(responseType, "number", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(responseType, "int", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(responseType, "float", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(responseType, "double", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(responseType, "decimal", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsJsonResponseType(string responseType)
+        => string.Equals(responseType, "json", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(responseType, "object", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(responseType, "array", StringComparison.OrdinalIgnoreCase);
+
+    internal sealed record WorkflowRequestPortMetadata(
+        string NodeId,
+        string NodeLabel,
+        string PortId,
+        string RequestType,
+        string ResponseType,
+        string? Prompt);
 
     private static string ResolveDiagnosticMessage(Exception? exception, string fallback)
     {

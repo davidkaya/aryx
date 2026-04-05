@@ -10,7 +10,10 @@ public sealed class WorkflowValidator
         "start",
         "end",
         "agent",
+        "code-executor",
+        "function-executor",
         "sub-workflow",
+        "request-port",
     };
 
     public IReadOnlyList<WorkflowValidationIssueDto> Validate(
@@ -103,6 +106,7 @@ public sealed class WorkflowValidator
                 }
             }
 
+            ValidateExecutableNode(node, issues);
             ValidateSubWorkflowNode(node, workflowLibraryById, issues);
         }
 
@@ -158,6 +162,9 @@ public sealed class WorkflowValidator
         List<WorkflowNodeDto> executableWorkNodes = workflow.Graph.Nodes
             .Where(node =>
                 string.Equals(node.Kind, "agent", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(node.Kind, "code-executor", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(node.Kind, "function-executor", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(node.Kind, "request-port", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(node.Kind, "sub-workflow", StringComparison.OrdinalIgnoreCase))
             .ToList();
 
@@ -184,7 +191,7 @@ public sealed class WorkflowValidator
             issues.Add(new WorkflowValidationIssueDto
             {
                 Field = "graph.nodes",
-                Message = "Workflow graphs must contain at least one agent or sub-workflow node.",
+                Message = "Workflow graphs must contain at least one executable work node.",
             });
         }
 
@@ -401,6 +408,76 @@ public sealed class WorkflowValidator
                 NodeId = node.Id,
                 EdgeId = inlineIssue.EdgeId,
                 Message = $"Inline workflow for node \"{node.Label}\": {inlineIssue.Message}",
+            });
+        }
+    }
+
+    private static void ValidateExecutableNode(
+        WorkflowNodeDto node,
+        List<WorkflowValidationIssueDto> issues)
+    {
+        if (string.Equals(node.Kind, "code-executor", StringComparison.OrdinalIgnoreCase))
+        {
+            if (string.IsNullOrWhiteSpace(node.Config.Implementation))
+            {
+                issues.Add(new WorkflowValidationIssueDto
+                {
+                    Field = "graph.nodes.config.implementation",
+                    NodeId = node.Id,
+                    Message = "Code executor nodes require a non-empty implementation.",
+                });
+            }
+
+            return;
+        }
+
+        if (string.Equals(node.Kind, "function-executor", StringComparison.OrdinalIgnoreCase))
+        {
+            if (string.IsNullOrWhiteSpace(node.Config.FunctionRef))
+            {
+                issues.Add(new WorkflowValidationIssueDto
+                {
+                    Field = "graph.nodes.config.functionRef",
+                    NodeId = node.Id,
+                    Message = "Function executor nodes require a non-empty functionRef.",
+                });
+            }
+
+            return;
+        }
+
+        if (!string.Equals(node.Kind, "request-port", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(node.Config.PortId))
+        {
+            issues.Add(new WorkflowValidationIssueDto
+            {
+                Field = "graph.nodes.config.portId",
+                NodeId = node.Id,
+                Message = "Request port nodes require a non-empty portId.",
+            });
+        }
+
+        if (string.IsNullOrWhiteSpace(node.Config.RequestType))
+        {
+            issues.Add(new WorkflowValidationIssueDto
+            {
+                Field = "graph.nodes.config.requestType",
+                NodeId = node.Id,
+                Message = "Request port nodes require a non-empty requestType.",
+            });
+        }
+
+        if (string.IsNullOrWhiteSpace(node.Config.ResponseType))
+        {
+            issues.Add(new WorkflowValidationIssueDto
+            {
+                Field = "graph.nodes.config.responseType",
+                NodeId = node.Id,
+                Message = "Request port nodes require a non-empty responseType.",
             });
         }
     }

@@ -44,31 +44,32 @@ internal sealed class CopilotUserInputCoordinator
         ArgumentNullException.ThrowIfNull(invocation);
         ArgumentNullException.ThrowIfNull(onUserInput);
 
-        PendingUserInputRequest pending = CreatePendingUserInput(command);
-        if (!_pendingUserInputs.TryAdd(pending.UserInputId, pending))
-        {
-            throw new InvalidOperationException($"User input request \"{pending.UserInputId}\" is already pending.");
-        }
+        return await RequestUserInputCoreAsync(
+            command,
+            agent.Id,
+            agent.Name,
+            request,
+            onUserInput,
+            cancellationToken).ConfigureAwait(false);
+    }
 
-        try
-        {
-            await onUserInput(BuildUserInputRequestedEvent(command, agent, request, pending.UserInputId))
-                .ConfigureAwait(false);
+    public Task<UserInputResponse> RequestUserInputAsync(
+        RunTurnCommandDto command,
+        UserInputRequest request,
+        Func<UserInputRequestedEventDto, Task> onUserInput,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(onUserInput);
 
-            using CancellationTokenRegistration registration = cancellationToken.Register(
-                static state =>
-                {
-                    ((TaskCompletionSource<UserInputResponse>)state!)
-                        .TrySetCanceled();
-                },
-                pending.Response);
-
-            return await pending.Response.Task.ConfigureAwait(false);
-        }
-        finally
-        {
-            _pendingUserInputs.TryRemove(pending.UserInputId, out _);
-        }
+        return RequestUserInputCoreAsync(
+            command,
+            agentId: null,
+            agentName: null,
+            request,
+            onUserInput,
+            cancellationToken);
     }
 
     internal static UserInputRequestedEventDto BuildUserInputRequestedEvent(
@@ -96,6 +97,65 @@ internal sealed class CopilotUserInputCoordinator
             Choices = NormalizeOptionalStringList(request.Choices ?? []),
             AllowFreeform = request.AllowFreeform,
         };
+    }
+
+    internal static UserInputRequestedEventDto BuildUserInputRequestedEvent(
+        RunTurnCommandDto command,
+        string? agentId,
+        string? agentName,
+        UserInputRequest request,
+        string userInputId)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        ArgumentNullException.ThrowIfNull(request);
+
+        return new UserInputRequestedEventDto
+        {
+            Type = "user-input-requested",
+            RequestId = command.RequestId,
+            SessionId = command.SessionId,
+            UserInputId = userInputId,
+            AgentId = NormalizeOptionalString(agentId),
+            AgentName = NormalizeOptionalString(agentName),
+            Question = NormalizeOptionalString(request.Question) ?? string.Empty,
+            Choices = NormalizeOptionalStringList(request.Choices ?? []),
+            AllowFreeform = request.AllowFreeform,
+        };
+    }
+
+    private async Task<UserInputResponse> RequestUserInputCoreAsync(
+        RunTurnCommandDto command,
+        string? agentId,
+        string? agentName,
+        UserInputRequest request,
+        Func<UserInputRequestedEventDto, Task> onUserInput,
+        CancellationToken cancellationToken)
+    {
+        PendingUserInputRequest pending = CreatePendingUserInput(command);
+        if (!_pendingUserInputs.TryAdd(pending.UserInputId, pending))
+        {
+            throw new InvalidOperationException($"User input request \"{pending.UserInputId}\" is already pending.");
+        }
+
+        try
+        {
+            await onUserInput(BuildUserInputRequestedEvent(command, agentId, agentName, request, pending.UserInputId))
+                .ConfigureAwait(false);
+
+            using CancellationTokenRegistration registration = cancellationToken.Register(
+                static state =>
+                {
+                    ((TaskCompletionSource<UserInputResponse>)state!)
+                        .TrySetCanceled();
+                },
+                pending.Response);
+
+            return await pending.Response.Task.ConfigureAwait(false);
+        }
+        finally
+        {
+            _pendingUserInputs.TryRemove(pending.UserInputId, out _);
+        }
     }
 
     private static PendingUserInputRequest CreatePendingUserInput(RunTurnCommandDto command)

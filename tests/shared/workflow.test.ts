@@ -116,23 +116,111 @@ describe('workflow validation', () => {
     expect(validateWorkflowDefinition(createWorkflow())).toEqual([]);
   });
 
-  test('rejects unsupported node kinds in phase 1 backend', () => {
+  test('accepts phase 4 executor node kinds as executable work', () => {
     const workflow = createWorkflow();
-    workflow.graph.nodes.splice(1, 0, {
+    workflow.graph.nodes[1] = {
+      id: 'code-executor',
+      kind: 'code-executor',
+      label: 'Transform',
+      position: { x: 100, y: 0 },
+      config: {
+        kind: 'code-executor',
+        implementation: 'return-text:done',
+      },
+    };
+    workflow.graph.edges[0] = { id: 'edge-start-code', source: 'start', target: 'code-executor', kind: 'direct' };
+    workflow.graph.edges[1] = { id: 'edge-code-end', source: 'code-executor', target: 'end', kind: 'direct' };
+
+    expect(validateWorkflowDefinition(workflow)).toEqual([]);
+  });
+
+  test('counts function and request port nodes as executable work', () => {
+    const functionWorkflow = createWorkflow();
+    functionWorkflow.graph.nodes[1] = {
+      id: 'function-executor',
+      kind: 'function-executor',
+      label: 'Function',
+      position: { x: 200, y: 0 },
+      config: {
+        kind: 'function-executor',
+        functionRef: 'identity',
+      },
+    };
+    functionWorkflow.graph.edges[0] = { id: 'edge-start-function', source: 'start', target: 'function-executor', kind: 'direct' };
+    functionWorkflow.graph.edges[1] = { id: 'edge-function-end', source: 'function-executor', target: 'end', kind: 'direct' };
+
+    const requestPortWorkflow = createWorkflow();
+    requestPortWorkflow.graph.nodes[1] = {
       id: 'request-port',
       kind: 'request-port',
       label: 'Approval',
-      position: { x: 100, y: 0 },
+      position: { x: 200, y: 0 },
       config: {
         kind: 'request-port',
         portId: 'approval',
         requestType: 'Question',
-        responseType: 'Answer',
+        responseType: 'string',
       },
-    });
+    };
+    requestPortWorkflow.graph.edges[0] = { id: 'edge-start-port', source: 'start', target: 'request-port', kind: 'direct' };
+    requestPortWorkflow.graph.edges[1] = { id: 'edge-port-end', source: 'request-port', target: 'end', kind: 'direct' };
 
-    expect(validateWorkflowDefinition(workflow).some((issue) =>
-      issue.message.includes('not executable yet'))).toBe(true);
+    expect(validateWorkflowDefinition(functionWorkflow)).toEqual([]);
+    expect(validateWorkflowDefinition(requestPortWorkflow)).toEqual([]);
+  });
+
+  test('rejects invalid phase 4 executor configs', () => {
+    const codeWorkflow = createWorkflow();
+    codeWorkflow.graph.nodes[1] = {
+      id: 'code-executor',
+      kind: 'code-executor',
+      label: 'Code',
+      position: { x: 200, y: 0 },
+      config: {
+        kind: 'code-executor',
+        implementation: '   ',
+      },
+    };
+    codeWorkflow.graph.edges[0] = { id: 'edge-start-code', source: 'start', target: 'code-executor', kind: 'direct' };
+    codeWorkflow.graph.edges[1] = { id: 'edge-code-end', source: 'code-executor', target: 'end', kind: 'direct' };
+
+    const functionWorkflow = createWorkflow();
+    functionWorkflow.graph.nodes[1] = {
+      id: 'function-executor',
+      kind: 'function-executor',
+      label: 'Function',
+      position: { x: 200, y: 0 },
+      config: {
+        kind: 'function-executor',
+        functionRef: '   ',
+      },
+    };
+    functionWorkflow.graph.edges[0] = { id: 'edge-start-function', source: 'start', target: 'function-executor', kind: 'direct' };
+    functionWorkflow.graph.edges[1] = { id: 'edge-function-end', source: 'function-executor', target: 'end', kind: 'direct' };
+
+    const requestPortWorkflow = createWorkflow();
+    requestPortWorkflow.graph.nodes[1] = {
+      id: 'request-port',
+      kind: 'request-port',
+      label: 'Approval',
+      position: { x: 200, y: 0 },
+      config: {
+        kind: 'request-port',
+        portId: ' ',
+        requestType: '',
+        responseType: '   ',
+      },
+    };
+    requestPortWorkflow.graph.edges[0] = { id: 'edge-start-port', source: 'start', target: 'request-port', kind: 'direct' };
+    requestPortWorkflow.graph.edges[1] = { id: 'edge-port-end', source: 'request-port', target: 'end', kind: 'direct' };
+
+    expect(validateWorkflowDefinition(codeWorkflow).some((issue) => issue.field === 'graph.nodes.config.implementation')).toBe(true);
+    expect(validateWorkflowDefinition(functionWorkflow).some((issue) => issue.field === 'graph.nodes.config.functionRef')).toBe(true);
+
+    const requestPortIssues = validateWorkflowDefinition(requestPortWorkflow);
+    expect(requestPortIssues.some((issue) => issue.field === 'graph.nodes.config.portId')).toBe(true);
+    expect(requestPortIssues.some((issue) => issue.field === 'graph.nodes.config.requestType')).toBe(true);
+    expect(requestPortIssues.some((issue) => issue.field === 'graph.nodes.config.responseType')).toBe(true);
   });
 
   test('accepts sub-workflow nodes with inline workflows', () => {

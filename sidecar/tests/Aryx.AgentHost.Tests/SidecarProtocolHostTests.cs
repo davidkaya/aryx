@@ -169,7 +169,7 @@ public sealed class SidecarProtocolHostTests
                     && issue.GetProperty("message").GetString() == "Workflow name is required.");
                 Assert.Contains(issues, issue =>
                     issue.GetProperty("field").GetString() == "graph.nodes"
-                    && issue.GetProperty("message").GetString() == "Workflow graphs must contain at least one agent or sub-workflow node.");
+                    && issue.GetProperty("message").GetString() == "Workflow graphs must contain at least one executable work node.");
             },
             completionEvent =>
             {

@@ -22,11 +22,6 @@ internal sealed class WorkflowRunner
             .ToDictionary(group => group.Key, group => group.Last(), StringComparer.Ordinal)
             ?? new Dictionary<string, WorkflowDefinitionDto>(StringComparer.Ordinal);
 
-        WorkflowNodeDto startNode = workflowDefinition.Graph.Nodes.Single(node =>
-            string.Equals(node.Kind, "start", StringComparison.OrdinalIgnoreCase));
-        WorkflowNodeDto endNode = workflowDefinition.Graph.Nodes.Single(node =>
-            string.Equals(node.Kind, "end", StringComparison.OrdinalIgnoreCase));
-
         Dictionary<string, AIAgent> agentMap = patternDefinition.Agents
             .Zip(agents, (definition, agent) => (definition.Id, agent))
             .ToDictionary(pair => pair.Id, pair => pair.agent, StringComparer.Ordinal);
@@ -43,26 +38,37 @@ internal sealed class WorkflowRunner
             string.Equals(node.Kind, "start", StringComparison.OrdinalIgnoreCase));
         WorkflowNodeDto endNode = workflowDefinition.Graph.Nodes.Single(node =>
             string.Equals(node.Kind, "end", StringComparison.OrdinalIgnoreCase));
+        WorkflowStateScopeCatalog stateCatalog = new(workflowDefinition.Settings.StateScopes);
 
-        Dictionary<string, ExecutorBinding> bindings = new(StringComparer.Ordinal);
+        Dictionary<string, WorkflowNodeRoute> routes = new(StringComparer.Ordinal);
         foreach (WorkflowNodeDto node in workflowDefinition.Graph.Nodes)
         {
-            bindings[node.Id] = CreateExecutorBinding(node, agentMap, workflowLibrary);
+            routes[node.Id] = CreateNodeRoute(node, agentMap, workflowLibrary, stateCatalog);
         }
 
-        WorkflowBuilder builder = new(bindings[startNode.Id]);
+        WorkflowBuilder builder = new(routes[startNode.Id].Entry);
+
+        foreach (WorkflowNodeRoute route in routes.Values)
+        {
+            foreach ((ExecutorBinding source, ExecutorBinding target) in route.InternalEdges)
+            {
+                builder.AddEdge(source, target);
+            }
+        }
 
         foreach (WorkflowEdgeDto edge in workflowDefinition.Graph.Edges.Where(edge =>
                      string.Equals(edge.Kind, "direct", StringComparison.OrdinalIgnoreCase)))
         {
             Func<object?, bool>? condition = WorkflowConditionEvaluator.Compile(edge);
+            ExecutorBinding source = routes[edge.Source].Exit;
+            ExecutorBinding target = routes[edge.Target].Entry;
             if (condition is null)
             {
-                builder.AddEdge(bindings[edge.Source], bindings[edge.Target]);
+                builder.AddEdge(source, target);
             }
             else
             {
-                builder.AddEdge<object>(bindings[edge.Source], bindings[edge.Target], condition);
+                builder.AddEdge<object>(source, target, condition);
             }
         }
 
@@ -71,19 +77,20 @@ internal sealed class WorkflowRunner
                      .GroupBy(edge => edge.Source, StringComparer.Ordinal))
         {
             WorkflowEdgeDto[] fanOutEdges = fanOutGroup.ToArray();
-            ExecutorBinding[] targets = fanOutEdges.Select(edge => bindings[edge.Target]).ToArray();
+            ExecutorBinding source = routes[fanOutGroup.Key].Exit;
+            ExecutorBinding[] targets = fanOutEdges.Select(edge => routes[edge.Target].Entry).ToArray();
             Func<object?, bool>?[] compiledConditions = fanOutEdges
                 .Select(WorkflowConditionEvaluator.Compile)
                 .ToArray();
             bool hasConditionalRouting = fanOutEdges.Any(edge => edge.Condition is not null);
             if (!hasConditionalRouting)
             {
-                builder.AddFanOutEdge(bindings[fanOutGroup.Key], targets);
+                builder.AddFanOutEdge(source, targets);
                 continue;
             }
 
             builder.AddFanOutEdge<object>(
-                bindings[fanOutGroup.Key],
+                source,
                 targets,
                 (payload, _) => fanOutEdges
                     .Select((edge, index) => (edge, index))
@@ -97,8 +104,8 @@ internal sealed class WorkflowRunner
                      .GroupBy(edge => edge.Target, StringComparer.Ordinal))
         {
             builder.AddFanInBarrierEdge(
-                fanInGroup.Select(edge => bindings[edge.Source]).ToArray(),
-                bindings[fanInGroup.Key]);
+                fanInGroup.Select(edge => routes[edge.Source].Exit).ToArray(),
+                routes[fanInGroup.Key].Entry);
         }
 
         if (!string.IsNullOrWhiteSpace(workflowDefinition.Name))
@@ -106,22 +113,25 @@ internal sealed class WorkflowRunner
             builder = builder.WithName(workflowDefinition.Name);
         }
 
-        return builder.WithOutputFrom(bindings[endNode.Id]).Build();
+        return builder.WithOutputFrom(routes[endNode.Id].Exit).Build();
     }
 
-    private static ExecutorBinding CreateExecutorBinding(
+    private WorkflowNodeRoute CreateNodeRoute(
         WorkflowNodeDto node,
         IReadOnlyDictionary<string, AIAgent> agentMap,
-        IReadOnlyDictionary<string, WorkflowDefinitionDto> workflowLibrary)
+        IReadOnlyDictionary<string, WorkflowDefinitionDto> workflowLibrary,
+        WorkflowStateScopeCatalog stateCatalog)
     {
         if (string.Equals(node.Kind, "start", StringComparison.OrdinalIgnoreCase))
         {
-            return new ChatForwardingExecutor(node.Id);
+            ExecutorBinding binding = new ChatForwardingExecutor(node.Id).BindExecutor();
+            return new WorkflowNodeRoute(binding);
         }
 
         if (string.Equals(node.Kind, "end", StringComparison.OrdinalIgnoreCase))
         {
-            return new WorkflowOutputMessagesExecutor();
+            ExecutorBinding binding = new WorkflowOutputMessagesExecutor(node.Id).BindExecutor();
+            return new WorkflowNodeRoute(binding);
         }
 
         if (string.Equals(node.Kind, "agent", StringComparison.OrdinalIgnoreCase))
@@ -132,17 +142,59 @@ internal sealed class WorkflowRunner
                 throw new InvalidOperationException($"Workflow node \"{node.Id}\" references unknown agent \"{agentId}\".");
             }
 
-            return agent.BindAsExecutor(CopilotAgentBundle.CreateAgentHostOptions());
+            return new WorkflowNodeRoute(agent.BindAsExecutor(CopilotAgentBundle.CreateAgentHostOptions()));
+        }
+
+        if (string.Equals(node.Kind, "code-executor", StringComparison.OrdinalIgnoreCase))
+        {
+            string implementation = NormalizeRequired(node.Config.Implementation, $"Workflow code executor \"{node.Id}\" requires an implementation.");
+            ExecutorBinding binding = new WorkflowCodeExecutor(node.Id, implementation, stateCatalog).BindExecutor();
+            return new WorkflowNodeRoute(binding);
+        }
+
+        if (string.Equals(node.Kind, "function-executor", StringComparison.OrdinalIgnoreCase))
+        {
+            string functionRef = NormalizeRequired(node.Config.FunctionRef, $"Workflow function executor \"{node.Id}\" requires a functionRef.");
+            if (!WorkflowFunctionRegistry.IsSupported(functionRef))
+            {
+                throw new InvalidOperationException(
+                    $"Workflow function executor \"{node.Id}\" references unsupported functionRef \"{functionRef}\".");
+            }
+
+            ExecutorBinding binding = new WorkflowFunctionExecutor(node.Id, functionRef, node.Config.Parameters, stateCatalog).BindExecutor();
+            return new WorkflowNodeRoute(binding);
+        }
+
+        if (string.Equals(node.Kind, "request-port", StringComparison.OrdinalIgnoreCase))
+        {
+            return CreateRequestPortRoute(node);
         }
 
         if (string.Equals(node.Kind, "sub-workflow", StringComparison.OrdinalIgnoreCase))
         {
             WorkflowDefinitionDto subWorkflowDefinition = ResolveSubWorkflowDefinition(node, workflowLibrary);
-            Workflow subWorkflow = new WorkflowRunner().BuildWorkflow(subWorkflowDefinition, agentMap, workflowLibrary);
-            return subWorkflow.BindAsExecutor(node.Id);
+            Workflow subWorkflow = BuildWorkflow(subWorkflowDefinition, agentMap, workflowLibrary);
+            return new WorkflowNodeRoute(subWorkflow.BindAsExecutor(node.Id));
         }
 
         throw new NotSupportedException($"Workflow node kind \"{node.Kind}\" is not executable yet.");
+    }
+
+    private static WorkflowNodeRoute CreateRequestPortRoute(WorkflowNodeDto node)
+    {
+        WorkflowRequestPortNodeDefinition definition = new(
+            node.Id,
+            NormalizeOptionalString(node.Label) ?? node.Id,
+            NormalizeRequired(node.Config.PortId, $"Workflow request port \"{node.Id}\" requires a portId."),
+            NormalizeRequired(node.Config.RequestType, $"Workflow request port \"{node.Id}\" requires a requestType."),
+            NormalizeRequired(node.Config.ResponseType, $"Workflow request port \"{node.Id}\" requires a responseType."),
+            NormalizeOptionalString(node.Config.Prompt));
+
+        RequestPort port = new(definition.PortId, typeof(WorkflowRequestPortPromptRequest), typeof(object));
+        ExecutorBinding entry = new WorkflowRequestPortIngressExecutor(definition, port).BindExecutor();
+        ExecutorBinding portBinding = new RequestPortBinding(port, false);
+        ExecutorBinding exit = new WorkflowRequestPortResponseExecutor(node.Id).BindExecutor();
+        return new WorkflowNodeRoute(entry, exit, [(entry, portBinding), (portBinding, exit)]);
     }
 
     private static WorkflowDefinitionDto ResolveSubWorkflowDefinition(
@@ -162,5 +214,22 @@ internal sealed class WorkflowRunner
 
         throw new InvalidOperationException(
             $"Sub-workflow node \"{node.Id}\" references unknown workflow \"{node.Config.WorkflowId}\".");
+    }
+
+    private static string NormalizeRequired(string? value, string errorMessage)
+        => NormalizeOptionalString(value) ?? throw new InvalidOperationException(errorMessage);
+
+    private static string? NormalizeOptionalString(string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private sealed record WorkflowNodeRoute(
+        ExecutorBinding Entry,
+        ExecutorBinding Exit,
+        IReadOnlyList<(ExecutorBinding Source, ExecutorBinding Target)> InternalEdges)
+    {
+        public WorkflowNodeRoute(ExecutorBinding binding)
+            : this(binding, binding, [])
+        {
+        }
     }
 }

@@ -1,11 +1,13 @@
 using System.IO;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Text.Json;
 using Aryx.AgentHost.Contracts;
 using Aryx.AgentHost.Services;
 using GitHub.Copilot.SDK;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
+using Microsoft.Agents.AI.Workflows.InProc;
 using Microsoft.Extensions.AI;
 
 namespace Aryx.AgentHost.Tests;
@@ -797,6 +799,73 @@ public sealed class CopilotWorkflowRunnerTests
                 Assert.Equal("agent-handoff-ux", thinking.AgentId);
                 Assert.Equal("UX Specialist", thinking.AgentName);
             });
+    }
+
+    [Fact]
+    public void CreateExecutionEnvironment_UsesLockstepWhenRequested()
+    {
+        RunTurnCommandDto command = new()
+        {
+            Workflow = new WorkflowDefinitionDto
+            {
+                Settings = new WorkflowSettingsDto
+                {
+                    ExecutionMode = "lockstep",
+                    Checkpointing = new WorkflowCheckpointSettingsDto(),
+                },
+            },
+        };
+
+        InProcessExecutionEnvironment environment = CopilotWorkflowRunner.CreateExecutionEnvironment(command, checkpointManager: null);
+
+        Assert.Same(InProcessExecution.Lockstep, environment);
+    }
+
+    [Fact]
+    public void CoerceRequestPortResponse_ParsesSupportedResponseTypes()
+    {
+        Assert.Equal("hello", CopilotWorkflowRunner.CoerceRequestPortResponse("string", "hello"));
+        Assert.Equal(true, CopilotWorkflowRunner.CoerceRequestPortResponse("bool", "yes"));
+        Assert.Equal(12.5d, CopilotWorkflowRunner.CoerceRequestPortResponse("number", "12.5"));
+
+        JsonElement json = Assert.IsType<JsonElement>(CopilotWorkflowRunner.CoerceRequestPortResponse("json", "{\"ok\":true}"));
+        Assert.True(json.GetProperty("ok").GetBoolean());
+    }
+
+    [Fact]
+    public async Task RunTurnAsync_RequestPortWorkflowUsesUserInputBridge()
+    {
+        CopilotWorkflowRunner runner = new(new PatternValidator());
+        List<UserInputRequestedEventDto> requests = [];
+
+        IReadOnlyList<ChatMessageDto> messages = await runner.RunTurnAsync(
+            CreateRequestPortCommand(),
+            _ => Task.CompletedTask,
+            _ => Task.CompletedTask,
+            _ => Task.CompletedTask,
+            async request =>
+            {
+                requests.Add(request);
+                await runner.ResolveUserInputAsync(
+                    new ResolveUserInputCommandDto
+                    {
+                        UserInputId = request.UserInputId,
+                        Answer = "approved",
+                        WasFreeform = true,
+                    },
+                    CancellationToken.None);
+            },
+            _ => Task.CompletedTask,
+            _ => Task.CompletedTask,
+            CancellationToken.None);
+
+        UserInputRequestedEventDto requestEvent = Assert.Single(requests);
+        Assert.Equal("Needs approval?", requestEvent.Question);
+        Assert.Null(requestEvent.AgentId);
+
+        ChatMessageDto message = Assert.Single(messages);
+        Assert.Equal("Workflow", message.AuthorName);
+        Assert.Equal("approved", message.Content);
     }
 
     [Fact]
@@ -2208,6 +2277,96 @@ public sealed class CopilotWorkflowRunnerTests
                 [
                     CreateAgent("agent-1", "Primary"),
                 ],
+            },
+        };
+    }
+
+    private static RunTurnCommandDto CreateRequestPortCommand()
+    {
+        return new RunTurnCommandDto
+        {
+            RequestId = "turn-request-port",
+            SessionId = "session-request-port",
+            ProjectPath = "c:\\workspace\\personal\\projects\\aryx.worktrees\\copilot-powerful-vulture",
+            Pattern = new PatternDefinitionDto
+            {
+                Id = "pattern-request-port",
+                Name = "Request Port Pattern",
+                Mode = "single",
+                Availability = "available",
+                Agents = [],
+            },
+            Messages =
+            [
+                new ChatMessageDto
+                {
+                    Id = "message-1",
+                    Role = "user",
+                    AuthorName = "User",
+                    Content = "Please continue.",
+                    CreatedAt = "2026-04-05T00:00:00.000Z",
+                },
+            ],
+            Workflow = new WorkflowDefinitionDto
+            {
+                Id = "workflow-request-port",
+                Name = "Request Port Workflow",
+                Graph = new WorkflowGraphDto
+                {
+                    Nodes =
+                    [
+                        new WorkflowNodeDto
+                        {
+                            Id = "start",
+                            Kind = "start",
+                            Label = "Start",
+                            Config = new WorkflowNodeConfigDto { Kind = "start" },
+                        },
+                        new WorkflowNodeDto
+                        {
+                            Id = "approval-port",
+                            Kind = "request-port",
+                            Label = "Approval",
+                            Config = new WorkflowNodeConfigDto
+                            {
+                                Kind = "request-port",
+                                PortId = "approval",
+                                RequestType = "Question",
+                                ResponseType = "string",
+                                Prompt = "Needs approval?",
+                            },
+                        },
+                        new WorkflowNodeDto
+                        {
+                            Id = "end",
+                            Kind = "end",
+                            Label = "End",
+                            Config = new WorkflowNodeConfigDto { Kind = "end" },
+                        },
+                    ],
+                    Edges =
+                    [
+                        new WorkflowEdgeDto
+                        {
+                            Id = "edge-start-port",
+                            Source = "start",
+                            Target = "approval-port",
+                            Kind = "direct",
+                        },
+                        new WorkflowEdgeDto
+                        {
+                            Id = "edge-port-end",
+                            Source = "approval-port",
+                            Target = "end",
+                            Kind = "direct",
+                        },
+                    ],
+                },
+                Settings = new WorkflowSettingsDto
+                {
+                    Checkpointing = new WorkflowCheckpointSettingsDto(),
+                    ExecutionMode = "lockstep",
+                },
             },
         };
     }

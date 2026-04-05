@@ -170,7 +170,15 @@ export interface WorkflowResolutionOptions {
   resolveWorkflow?: (workflowId: string) => WorkflowDefinition | undefined;
 }
 
-const executableNodeKinds = new Set<WorkflowNodeKind>(['start', 'end', 'agent', 'sub-workflow']);
+const executableNodeKinds = new Set<WorkflowNodeKind>([
+  'start',
+  'end',
+  'agent',
+  'code-executor',
+  'function-executor',
+  'sub-workflow',
+  'request-port',
+]);
 
 function normalizeOptionalString(value?: string): string | undefined {
   const trimmed = value?.trim();
@@ -740,6 +748,66 @@ function validateSubWorkflowNode(node: WorkflowNode, issues: WorkflowValidationI
   }
 }
 
+function validateExecutableNodeConfig(node: WorkflowNode, issues: WorkflowValidationIssue[]): void {
+  switch (node.kind) {
+    case 'code-executor':
+      if (node.config.kind === 'code-executor' && !node.config.implementation?.trim()) {
+        addIssue(issues, {
+          level: 'error',
+          field: 'graph.nodes.config.implementation',
+          nodeId: node.id,
+          message: 'Code executor nodes require a non-empty implementation.',
+        });
+      }
+      return;
+    case 'function-executor':
+      if (node.config.kind === 'function-executor' && !node.config.functionRef.trim()) {
+        addIssue(issues, {
+          level: 'error',
+          field: 'graph.nodes.config.functionRef',
+          nodeId: node.id,
+          message: 'Function executor nodes require a non-empty functionRef.',
+        });
+      }
+      return;
+    case 'request-port':
+      if (node.config.kind !== 'request-port') {
+        return;
+      }
+
+      if (!node.config.portId.trim()) {
+        addIssue(issues, {
+          level: 'error',
+          field: 'graph.nodes.config.portId',
+          nodeId: node.id,
+          message: 'Request port nodes require a non-empty portId.',
+        });
+      }
+
+      if (!node.config.requestType.trim()) {
+        addIssue(issues, {
+          level: 'error',
+          field: 'graph.nodes.config.requestType',
+          nodeId: node.id,
+          message: 'Request port nodes require a non-empty requestType.',
+        });
+      }
+
+      if (!node.config.responseType.trim()) {
+        addIssue(issues, {
+          level: 'error',
+          field: 'graph.nodes.config.responseType',
+          nodeId: node.id,
+          message: 'Request port nodes require a non-empty responseType.',
+        });
+      }
+
+      return;
+    default:
+      return;
+  }
+}
+
 export function validateWorkflowDefinition(workflow: WorkflowDefinition): WorkflowValidationIssue[] {
   const normalized = normalizeWorkflowDefinition(workflow);
   const issues: WorkflowValidationIssue[] = [];
@@ -818,6 +886,7 @@ export function validateWorkflowDefinition(workflow: WorkflowDefinition): Workfl
       }
     }
 
+    validateExecutableNodeConfig(node, issues);
     validateSubWorkflowNode(node, issues);
   }
   for (const edge of normalized.graph.edges) {
@@ -860,7 +929,11 @@ export function validateWorkflowDefinition(workflow: WorkflowDefinition): Workfl
   const startNodes = normalized.graph.nodes.filter((node) => node.kind === 'start');
   const endNodes = normalized.graph.nodes.filter((node) => node.kind === 'end');
   const executableWorkNodes = normalized.graph.nodes.filter((node) =>
-    node.kind === 'agent' || node.kind === 'sub-workflow');
+    node.kind === 'agent'
+    || node.kind === 'code-executor'
+    || node.kind === 'function-executor'
+    || node.kind === 'sub-workflow'
+    || node.kind === 'request-port');
 
   if (startNodes.length !== 1) {
     addIssue(issues, {
@@ -882,7 +955,7 @@ export function validateWorkflowDefinition(workflow: WorkflowDefinition): Workfl
     addIssue(issues, {
       level: 'error',
       field: 'graph.nodes',
-      message: 'Workflow graphs must contain at least one agent or sub-workflow node.',
+      message: 'Workflow graphs must contain at least one executable work node.',
     });
   }
 

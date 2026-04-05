@@ -152,6 +152,74 @@ public sealed class WorkflowValidatorTests
         Assert.DoesNotContain(issues, issue => issue.Level == "error");
     }
 
+    [Fact]
+    public void Validate_AcceptsPhase4ExecutableNodeKinds()
+    {
+        WorkflowDefinitionDto codeWorkflow = CreateSingleNodeWorkflow(
+            "code-executor",
+            new WorkflowNodeConfigDto
+            {
+                Kind = "code-executor",
+                Implementation = "return-text:done",
+            });
+        WorkflowDefinitionDto functionWorkflow = CreateSingleNodeWorkflow(
+            "function-executor",
+            new WorkflowNodeConfigDto
+            {
+                Kind = "function-executor",
+                FunctionRef = "identity",
+            });
+        WorkflowDefinitionDto requestPortWorkflow = CreateSingleNodeWorkflow(
+            "request-port",
+            new WorkflowNodeConfigDto
+            {
+                Kind = "request-port",
+                PortId = "approval",
+                RequestType = "Question",
+                ResponseType = "string",
+            });
+
+        Assert.DoesNotContain(_validator.Validate(codeWorkflow), issue => issue.Level == "error");
+        Assert.DoesNotContain(_validator.Validate(functionWorkflow), issue => issue.Level == "error");
+        Assert.DoesNotContain(_validator.Validate(requestPortWorkflow), issue => issue.Level == "error");
+    }
+
+    [Fact]
+    public void Validate_RejectsInvalidPhase4ExecutorConfigs()
+    {
+        WorkflowDefinitionDto codeWorkflow = CreateSingleNodeWorkflow(
+            "code-executor",
+            new WorkflowNodeConfigDto
+            {
+                Kind = "code-executor",
+                Implementation = "   ",
+            });
+        WorkflowDefinitionDto functionWorkflow = CreateSingleNodeWorkflow(
+            "function-executor",
+            new WorkflowNodeConfigDto
+            {
+                Kind = "function-executor",
+                FunctionRef = string.Empty,
+            });
+        WorkflowDefinitionDto requestPortWorkflow = CreateSingleNodeWorkflow(
+            "request-port",
+            new WorkflowNodeConfigDto
+            {
+                Kind = "request-port",
+                PortId = " ",
+                RequestType = "",
+                ResponseType = null,
+            });
+
+        Assert.Contains(_validator.Validate(codeWorkflow), issue => issue.Field == "graph.nodes.config.implementation");
+        Assert.Contains(_validator.Validate(functionWorkflow), issue => issue.Field == "graph.nodes.config.functionRef");
+
+        IReadOnlyList<WorkflowValidationIssueDto> requestPortIssues = _validator.Validate(requestPortWorkflow);
+        Assert.Contains(requestPortIssues, issue => issue.Field == "graph.nodes.config.portId");
+        Assert.Contains(requestPortIssues, issue => issue.Field == "graph.nodes.config.requestType");
+        Assert.Contains(requestPortIssues, issue => issue.Field == "graph.nodes.config.responseType");
+    }
+
     private static WorkflowDefinitionDto CreateWorkflow(string id = "workflow-1")
     {
         return new WorkflowDefinitionDto
@@ -267,6 +335,63 @@ public sealed class WorkflowValidatorTests
                     {
                         Id = "edge-sub-end",
                         Source = "sub-workflow",
+                        Target = "end",
+                        Kind = "direct",
+                    },
+                ],
+            },
+            Settings = new WorkflowSettingsDto
+            {
+                Checkpointing = new WorkflowCheckpointSettingsDto(),
+            },
+        };
+    }
+
+    private static WorkflowDefinitionDto CreateSingleNodeWorkflow(string nodeKind, WorkflowNodeConfigDto config)
+    {
+        return new WorkflowDefinitionDto
+        {
+            Id = $"workflow-{nodeKind}",
+            Name = $"{nodeKind} Workflow",
+            Graph = new WorkflowGraphDto
+            {
+                Nodes =
+                [
+                    new WorkflowNodeDto
+                    {
+                        Id = "start",
+                        Kind = "start",
+                        Label = "Start",
+                        Config = new WorkflowNodeConfigDto { Kind = "start" },
+                    },
+                    new WorkflowNodeDto
+                    {
+                        Id = nodeKind,
+                        Kind = nodeKind,
+                        Label = nodeKind,
+                        Config = config,
+                    },
+                    new WorkflowNodeDto
+                    {
+                        Id = "end",
+                        Kind = "end",
+                        Label = "End",
+                        Config = new WorkflowNodeConfigDto { Kind = "end" },
+                    },
+                ],
+                Edges =
+                [
+                    new WorkflowEdgeDto
+                    {
+                        Id = "edge-start-node",
+                        Source = "start",
+                        Target = nodeKind,
+                        Kind = "direct",
+                    },
+                    new WorkflowEdgeDto
+                    {
+                        Id = "edge-node-end",
+                        Source = nodeKind,
                         Target = "end",
                         Kind = "direct",
                     },

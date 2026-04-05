@@ -33,6 +33,7 @@ import {
 } from '@renderer/lib/workflowGraph';
 
 import { workflowNodeTypes } from './WorkflowGraphNodes';
+import { workflowEdgeTypes } from './WorkflowGraphEdges';
 
 interface WorkflowGraphCanvasProps {
   workflow: WorkflowDefinition;
@@ -197,6 +198,7 @@ function WorkflowGraphCanvasInner({
         onEdgeClick={handleEdgeClick}
         onPaneClick={handlePaneClick}
         nodeTypes={workflowNodeTypes}
+        edgeTypes={workflowEdgeTypes}
         fitView
         fitViewOptions={{ padding: 0.3 }}
         minZoom={0.3}

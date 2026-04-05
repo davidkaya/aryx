@@ -94,19 +94,42 @@ const EDGE_DASH: Record<WorkflowEdgeKind, string | undefined> = {
   'fan-in': '2 2',
 };
 
+const LOOP_EDGE_COLOR = { stroke: '#c084fc', markerColor: '#c084fc' };
+const LOOP_EDGE_DASH = '8 4';
+
+function buildEdgeLabel(edge: WfEdge): string | undefined {
+  const parts: string[] = [];
+
+  if (edge.condition && edge.condition.type !== 'always') {
+    parts.push('⚡');
+  }
+
+  if (edge.label) {
+    parts.push(edge.label);
+  }
+
+  if (edge.isLoop && edge.maxIterations) {
+    parts.push(`🔁 ×${edge.maxIterations}`);
+  }
+
+  return parts.length > 0 ? parts.join(' ') : undefined;
+}
+
 export function toCanvasEdges(graph: WorkflowGraph): Edge[] {
   return graph.edges.map((edge) => {
-    const color = EDGE_COLORS[edge.kind] ?? EDGE_COLORS.direct;
-    const dashArray = EDGE_DASH[edge.kind];
+    const isLoop = edge.isLoop === true;
+    const isSelfLoop = edge.source === edge.target;
+    const color = isLoop ? LOOP_EDGE_COLOR : (EDGE_COLORS[edge.kind] ?? EDGE_COLORS.direct);
+    const dashArray = isLoop ? LOOP_EDGE_DASH : EDGE_DASH[edge.kind];
 
     return {
       id: edge.id,
       source: edge.source,
       target: edge.target,
-      type: 'default',
-      animated: edge.kind === 'fan-out',
+      type: isSelfLoop ? 'selfLoop' : 'default',
+      animated: isLoop || edge.kind === 'fan-out',
       deletable: true,
-      label: edge.label,
+      label: buildEdgeLabel(edge),
       markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16, color: color.markerColor },
       style: {
         stroke: color.stroke,
@@ -141,10 +164,6 @@ export function isWorkflowConnectionAllowed(
   graph: WorkflowGraph,
 ): boolean {
   if (!connection.source || !connection.target) {
-    return false;
-  }
-
-  if (connection.source === connection.target) {
     return false;
   }
 

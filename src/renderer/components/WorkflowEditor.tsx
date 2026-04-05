@@ -296,6 +296,7 @@ export function WorkflowEditor({
             onNodeRemove={handleNodeRemove}
             selectedEdgeId={selectedEdgeId}
             selectedNodeId={selectedNodeId}
+            validationIssues={issues}
             workflow={workflow}
           />
         </div>

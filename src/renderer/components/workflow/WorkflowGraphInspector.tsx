@@ -1,4 +1,5 @@
-import { Bot, Code, FunctionSquare, GitBranch, Info, Radio, Trash2 } from 'lucide-react';
+import { useCallback } from 'react';
+import { AlertCircle, Bot, Code, FunctionSquare, GitBranch, Info, Radio, Trash2 } from 'lucide-react';
 
 import {
   findModel,
@@ -7,19 +8,23 @@ import {
   type ModelDefinition,
 } from '@shared/domain/models';
 import type {
+  EdgeCondition,
   WorkflowDefinition,
   WorkflowEdge,
   WorkflowNode,
   WorkflowNodeConfig,
+  WorkflowValidationIssue,
   AgentNodeConfig,
 } from '@shared/domain/workflow';
 import { ModelSelect, ReasoningEffortSelect } from '@renderer/components/AgentConfigFields';
+import { ConditionEditor } from '@renderer/components/workflow/ConditionEditor';
 
 interface WorkflowGraphInspectorProps {
   availableModels: ReadonlyArray<ModelDefinition>;
   workflow: WorkflowDefinition;
   selectedNodeId: string | null;
   selectedEdgeId: string | null;
+  validationIssues?: WorkflowValidationIssue[];
   onNodeChange: (nodeId: string, patch: Partial<WorkflowNode>) => void;
   onNodeConfigChange: (nodeId: string, config: WorkflowNodeConfig) => void;
   onNodeRemove: (nodeId: string) => void;
@@ -238,13 +243,25 @@ function PlaceholderNodeInspector({
 
 function EdgeInspector({
   edge,
+  validationIssues,
   onEdgeChange,
   onEdgeRemove,
 }: {
   edge: WorkflowEdge;
+  validationIssues?: WorkflowValidationIssue[];
   onEdgeChange: (edgeId: string, patch: Partial<WorkflowEdge>) => void;
   onEdgeRemove: (edgeId: string) => void;
 }) {
+  const isFanIn = edge.kind === 'fan-in';
+  const edgeIssues = validationIssues?.filter((i) => i.edgeId === edge.id) ?? [];
+
+  const handleConditionChange = useCallback(
+    (condition: EdgeCondition | undefined) => {
+      onEdgeChange(edge.id, { condition });
+    },
+    [edge.id, onEdgeChange],
+  );
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -272,12 +289,83 @@ function EdgeInspector({
         </select>
       </label>
 
+      {/* Loop controls */}
+      <div className="space-y-2.5">
+        <label className="flex items-center justify-between">
+          <span className="text-[12px] font-medium text-[var(--color-text-secondary)]">
+            Loop Edge
+          </span>
+          <input
+            checked={edge.isLoop === true}
+            className="size-4 accent-[var(--color-accent)]"
+            onChange={(e) => {
+              if (e.target.checked) {
+                onEdgeChange(edge.id, { isLoop: true, maxIterations: edge.maxIterations ?? 10 });
+              } else {
+                onEdgeChange(edge.id, { isLoop: undefined, maxIterations: undefined });
+              }
+            }}
+            type="checkbox"
+          />
+        </label>
+        {edge.isLoop && (
+          <label className="block space-y-1.5">
+            <span className="text-[11px] text-[var(--color-text-muted)]">Max Iterations</span>
+            <input
+              className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-1)] px-3 py-1.5 text-[12px] text-[var(--color-text-primary)] outline-none transition focus:border-[var(--color-accent)]/50"
+              min={1}
+              onChange={(e) => {
+                const raw = parseInt(e.target.value, 10);
+                onEdgeChange(edge.id, {
+                  maxIterations: Number.isNaN(raw) ? undefined : Math.max(1, raw),
+                });
+              }}
+              type="number"
+              value={edge.maxIterations ?? 10}
+            />
+          </label>
+        )}
+      </div>
+
+      {/* Condition editor */}
+      <div className="space-y-1.5">
+        <ConditionEditor
+          condition={edge.condition}
+          disabled={isFanIn}
+          onChange={handleConditionChange}
+        />
+        {isFanIn && (
+          <p className="text-[11px] text-[var(--color-text-muted)]">
+            Fan-in edges cannot have conditions
+          </p>
+        )}
+      </div>
+
       <InputField
         label="Label"
         onChange={(v) => onEdgeChange(edge.id, { label: v || undefined })}
         placeholder="Optional edge label"
         value={edge.label ?? ''}
       />
+
+      {/* Validation issues for this edge */}
+      {edgeIssues.length > 0 && (
+        <div className="space-y-1">
+          {edgeIssues.map((issue, i) => (
+            <div
+              className={`flex items-start gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] ${
+                issue.level === 'error'
+                  ? 'bg-[var(--color-status-error)]/10 text-[var(--color-status-error)]'
+                  : 'bg-[var(--color-status-warning)]/10 text-[var(--color-status-warning)]'
+              }`}
+              key={`${issue.field ?? 'v'}-${i}`}
+            >
+              <AlertCircle className="mt-0.5 size-3 shrink-0" />
+              <span>{issue.message}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -289,6 +377,7 @@ export function WorkflowGraphInspector({
   workflow,
   selectedNodeId,
   selectedEdgeId,
+  validationIssues,
   onNodeChange,
   onNodeConfigChange,
   onNodeRemove,
@@ -305,7 +394,12 @@ export function WorkflowGraphInspector({
   if (selectedEdge) {
     return (
       <div className="p-4">
-        <EdgeInspector edge={selectedEdge} onEdgeChange={onEdgeChange} onEdgeRemove={onEdgeRemove} />
+        <EdgeInspector
+          edge={selectedEdge}
+          onEdgeChange={onEdgeChange}
+          onEdgeRemove={onEdgeRemove}
+          validationIssues={validationIssues}
+        />
       </div>
     );
   }

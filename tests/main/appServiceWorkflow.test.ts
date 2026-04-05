@@ -117,7 +117,7 @@ describe('AryxAppService workflow operations', () => {
     const workspace = createWorkspaceSeed();
     const service = createService(workspace);
 
-    const result = await service.createWorkflowFromTemplate('workflow-template-sequential', {
+    const result = await service.createWorkflowFromTemplate('workflow-template-code-review', {
       name: 'Template Copy',
     });
 

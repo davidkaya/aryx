@@ -79,18 +79,98 @@ describe('workflow templates', () => {
     expect(validateWorkflowDefinition(workflow)).toEqual([]);
   });
 
-  test('generates built-in workflow templates for available patterns only', () => {
+  test('creates 8 hand-crafted builtin workflow templates', () => {
     const templates = createBuiltinWorkflowTemplates(TIMESTAMP);
 
+    expect(templates).toHaveLength(8);
     expect(templates.map((template) => template.id)).toEqual([
-      'workflow-template-single',
-      'workflow-template-sequential',
-      'workflow-template-concurrent',
-      'workflow-template-handoff',
-      'workflow-template-group-chat',
+      'workflow-template-code-review',
+      'workflow-template-research-summarize',
+      'workflow-template-customer-support',
+      'workflow-template-content-creation',
+      'workflow-template-multi-agent-debate',
+      'workflow-template-data-processing',
+      'workflow-template-approval',
+      'workflow-template-nested-orchestrator',
     ]);
     expect(templates.every((template) => template.source === 'builtin')).toBe(true);
-    expect(templates.every((template) => template.category === 'orchestration')).toBe(true);
+  });
+
+  test('builtin templates span all categories', () => {
+    const templates = createBuiltinWorkflowTemplates(TIMESTAMP);
+    const categories = new Set(templates.map((template) => template.category));
+
+    expect(categories).toContain('orchestration');
+    expect(categories).toContain('data-pipeline');
+    expect(categories).toContain('human-in-loop');
+  });
+
+  test('builtin templates produce valid workflows', () => {
+    const templates = createBuiltinWorkflowTemplates(TIMESTAMP);
+
+    for (const template of templates) {
+      const issues = validateWorkflowDefinition(template.workflow);
+      expect(issues.filter((issue) => issue.level === 'error')).toEqual([]);
+    }
+  });
+
+  test('builtin templates use the provided timestamp', () => {
+    const templates = createBuiltinWorkflowTemplates(TIMESTAMP);
+
+    for (const template of templates) {
+      expect(template.createdAt).toBe(TIMESTAMP);
+      expect(template.updatedAt).toBe(TIMESTAMP);
+    }
+  });
+
+  test('research-summarize template uses fan-out and fan-in edges', () => {
+    const templates = createBuiltinWorkflowTemplates(TIMESTAMP);
+    const research = templates.find((t) => t.id === 'workflow-template-research-summarize')!;
+
+    expect(research.workflow.graph.edges.filter((e) => e.kind === 'fan-out')).toHaveLength(3);
+    expect(research.workflow.graph.edges.filter((e) => e.kind === 'fan-in')).toHaveLength(3);
+  });
+
+  test('content-creation template has a loop edge with maxIterations', () => {
+    const templates = createBuiltinWorkflowTemplates(TIMESTAMP);
+    const content = templates.find((t) => t.id === 'workflow-template-content-creation')!;
+    const loopEdge = content.workflow.graph.edges.find((e) => e.isLoop && e.source === 'editor' && e.target === 'writer');
+
+    expect(loopEdge).toBeDefined();
+    expect(loopEdge!.maxIterations).toBe(3);
+    expect(loopEdge!.source).toBe('editor');
+    expect(loopEdge!.target).toBe('writer');
+  });
+
+  test('data-processing template includes invoke-function nodes', () => {
+    const templates = createBuiltinWorkflowTemplates(TIMESTAMP);
+    const dataProc = templates.find((t) => t.id === 'workflow-template-data-processing')!;
+    const funcNodes = dataProc.workflow.graph.nodes.filter((n) => n.kind === 'invoke-function');
+
+    expect(funcNodes).toHaveLength(2);
+  });
+
+  test('approval template includes a request-port node', () => {
+    const templates = createBuiltinWorkflowTemplates(TIMESTAMP);
+    const approval = templates.find((t) => t.id === 'workflow-template-approval')!;
+    const portNode = approval.workflow.graph.nodes.find((n) => n.kind === 'request-port');
+
+    expect(portNode).toBeDefined();
+    expect(portNode!.config).toEqual(expect.objectContaining({
+      kind: 'request-port',
+      portId: 'review',
+      requestType: 'ReviewRequest',
+      responseType: 'ReviewDecision',
+    }));
+  });
+
+  test('nested-orchestrator template includes a sub-workflow node', () => {
+    const templates = createBuiltinWorkflowTemplates(TIMESTAMP);
+    const nested = templates.find((t) => t.id === 'workflow-template-nested-orchestrator')!;
+    const subNode = nested.workflow.graph.nodes.find((n) => n.kind === 'sub-workflow');
+
+    expect(subNode).toBeDefined();
+    expect(subNode!.config).toEqual(expect.objectContaining({ kind: 'sub-workflow' }));
   });
 
   test('round trips workflow yaml import and export', () => {

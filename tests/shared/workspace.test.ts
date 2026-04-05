@@ -31,11 +31,14 @@ describe('workspace seed', () => {
       'magentic',
     ]);
     expect(workspace.workflowTemplates.map((template) => template.id)).toEqual([
-      'workflow-template-single',
-      'workflow-template-sequential',
-      'workflow-template-concurrent',
-      'workflow-template-handoff',
-      'workflow-template-group-chat',
+      'workflow-template-code-review',
+      'workflow-template-research-summarize',
+      'workflow-template-customer-support',
+      'workflow-template-content-creation',
+      'workflow-template-multi-agent-debate',
+      'workflow-template-data-processing',
+      'workflow-template-approval',
+      'workflow-template-nested-orchestrator',
     ]);
 
     for (const pattern of workspace.patterns) {

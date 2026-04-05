@@ -17,7 +17,10 @@ import type {
   AgentNodeConfig,
 } from '@shared/domain/workflow';
 import { ModelSelect, ReasoningEffortSelect } from '@renderer/components/AgentConfigFields';
+import { CodeExecutorInspector } from '@renderer/components/workflow/CodeExecutorInspector';
 import { ConditionEditor } from '@renderer/components/workflow/ConditionEditor';
+import { FunctionExecutorInspector } from '@renderer/components/workflow/FunctionExecutorInspector';
+import { RequestPortInspector } from '@renderer/components/workflow/RequestPortInspector';
 import { SubWorkflowInspector } from '@renderer/components/workflow/SubWorkflowInspector';
 
 interface WorkflowGraphInspectorProps {
@@ -457,6 +460,49 @@ export function WorkflowGraphInspector({
     );
   }
 
+  if (selectedNode.kind === 'code-executor') {
+    return (
+      <div className="p-4">
+        <CodeExecutorInspector
+          node={selectedNode}
+          validationIssues={validationIssues}
+          onNodeChange={onNodeChange}
+          onNodeConfigChange={onNodeConfigChange}
+          onNodeRemove={onNodeRemove}
+        />
+      </div>
+    );
+  }
+
+  if (selectedNode.kind === 'function-executor') {
+    return (
+      <div className="p-4">
+        <FunctionExecutorInspector
+          node={selectedNode}
+          validationIssues={validationIssues}
+          onNodeChange={onNodeChange}
+          onNodeConfigChange={onNodeConfigChange}
+          onNodeRemove={onNodeRemove}
+        />
+      </div>
+    );
+  }
+
+  if (selectedNode.kind === 'request-port') {
+    return (
+      <div className="p-4">
+        <RequestPortInspector
+          node={selectedNode}
+          validationIssues={validationIssues}
+          onNodeChange={onNodeChange}
+          onNodeConfigChange={onNodeConfigChange}
+          onNodeRemove={onNodeRemove}
+        />
+      </div>
+    );
+  }
+
+  // Fallback for any future unknown node kinds
   return (
     <div className="p-4">
       <PlaceholderNodeInspector

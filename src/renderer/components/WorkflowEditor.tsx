@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useMemo, useState } from 'react';
-import { AlertCircle, CheckCircle, ChevronLeft, ChevronRight, Info, Trash2 } from 'lucide-react';
+import { AlertCircle, CheckCircle, ChevronLeft, ChevronRight, Info, Plus, Trash2, X } from 'lucide-react';
 
 import type { ModelDefinition } from '@shared/domain/models';
 import type {
@@ -11,6 +11,7 @@ import type {
   WorkflowEdge,
   AgentNodeConfig,
   SubWorkflowConfig,
+  WorkflowStateScope,
 } from '@shared/domain/workflow';
 import { validateWorkflowDefinition } from '@shared/domain/workflow';
 import { createId } from '@shared/utils/ids';
@@ -514,6 +515,71 @@ export function WorkflowEditor({
 
 /* ── Settings panel below canvas ───────────────────────────── */
 
+function StateScopeInitialValues({
+  initialValues,
+  onChange,
+}: {
+  initialValues: Record<string, unknown>;
+  onChange: (values: Record<string, unknown>) => void;
+}) {
+  const entries = Object.entries(initialValues);
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] text-[var(--color-text-muted)]">Initial Values</span>
+        <button
+          className="flex size-5 items-center justify-center rounded-md text-[var(--color-text-muted)] transition-all duration-200 hover:bg-[var(--color-accent)]/10 hover:text-[var(--color-accent)]"
+          onClick={() => {
+            const key = `key${entries.length + 1}`;
+            onChange({ ...initialValues, [key]: '' });
+          }}
+          title="Add initial value"
+          type="button"
+        >
+          <Plus className="size-3" />
+        </button>
+      </div>
+      {entries.map(([key, value]) => (
+        <div className="flex items-center gap-1.5" key={key}>
+          <input
+            className="w-1/3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-1)] px-2 py-1 text-[11px] text-[var(--color-text-primary)] placeholder-[var(--color-text-muted)] outline-none transition focus:border-[var(--color-accent)]/50"
+            onChange={(e) => {
+              const next = { ...initialValues };
+              const val = next[key];
+              delete next[key];
+              next[e.target.value] = val;
+              onChange(next);
+            }}
+            placeholder="key"
+            value={key}
+          />
+          <input
+            className="flex-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-1)] px-2 py-1 text-[11px] text-[var(--color-text-primary)] placeholder-[var(--color-text-muted)] outline-none transition focus:border-[var(--color-accent)]/50"
+            onChange={(e) => {
+              onChange({ ...initialValues, [key]: e.target.value });
+            }}
+            placeholder="value"
+            value={typeof value === 'string' ? value : JSON.stringify(value) ?? ''}
+          />
+          <button
+            className="flex size-5 shrink-0 items-center justify-center rounded-md text-[var(--color-text-muted)] transition-all duration-200 hover:bg-[var(--color-status-error)]/10 hover:text-[var(--color-status-error)]"
+            onClick={() => {
+              const next = { ...initialValues };
+              delete next[key];
+              onChange(next);
+            }}
+            title="Remove value"
+            type="button"
+          >
+            <X className="size-2.5" />
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function WorkflowSettingsPanel({
   workflow,
   onChange,
@@ -598,6 +664,126 @@ function WorkflowSettingsPanel({
           >
             <ToggleSwitch enabled={workflow.settings.checkpointing.enabled} />
           </button>
+        </div>
+
+        {/* Telemetry */}
+        <div className="col-span-2 flex items-center justify-between rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-1)] px-4 py-3">
+          <div>
+            <div className="text-[13px] font-medium text-[var(--color-text-primary)]">OpenTelemetry</div>
+            <p className="text-[12px] text-[var(--color-text-muted)]">Export telemetry data via OpenTelemetry</p>
+          </div>
+          <button
+            className="cursor-pointer"
+            onClick={() =>
+              onChange({
+                ...workflow,
+                settings: {
+                  ...workflow.settings,
+                  telemetry: {
+                    ...workflow.settings.telemetry,
+                    openTelemetry: !workflow.settings.telemetry?.openTelemetry,
+                  },
+                },
+              })
+            }
+            type="button"
+          >
+            <ToggleSwitch enabled={workflow.settings.telemetry?.openTelemetry === true} />
+          </button>
+        </div>
+
+        <div className="col-span-2 flex items-center justify-between rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-1)] px-4 py-3">
+          <div>
+            <div className="text-[13px] font-medium text-[var(--color-text-primary)]">Filter Sensitive Data</div>
+            <p className="text-[12px] text-[var(--color-text-muted)]">Redact sensitive information from telemetry</p>
+          </div>
+          <button
+            className="cursor-pointer"
+            onClick={() =>
+              onChange({
+                ...workflow,
+                settings: {
+                  ...workflow.settings,
+                  telemetry: {
+                    ...workflow.settings.telemetry,
+                    sensitiveData: !workflow.settings.telemetry?.sensitiveData,
+                  },
+                },
+              })
+            }
+            type="button"
+          >
+            <ToggleSwitch enabled={workflow.settings.telemetry?.sensitiveData === true} />
+          </button>
+        </div>
+
+        {/* State Scopes */}
+        <div className="col-span-2 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-[12px] font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
+              State Scopes
+            </span>
+            <button
+              className="flex size-6 items-center justify-center rounded-md text-[var(--color-text-muted)] transition-all duration-200 hover:bg-[var(--color-accent)]/10 hover:text-[var(--color-accent)]"
+              onClick={() => {
+                const scopes = [...(workflow.settings.stateScopes ?? []), { name: '', description: '', initialValues: {} }];
+                onChange({ ...workflow, settings: { ...workflow.settings, stateScopes: scopes } });
+              }}
+              title="Add state scope"
+              type="button"
+            >
+              <Plus className="size-3.5" />
+            </button>
+          </div>
+
+          {(workflow.settings.stateScopes ?? []).map((scope, idx) => (
+            <div
+              className="space-y-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-1)] px-3 py-3"
+              key={idx}
+            >
+              <div className="flex items-center gap-2">
+                <input
+                  className="flex-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-1)] px-2 py-1.5 text-[12px] text-[var(--color-text-primary)] placeholder-[var(--color-text-muted)] outline-none transition focus:border-[var(--color-accent)]/50"
+                  onChange={(e) => {
+                    const scopes = [...(workflow.settings.stateScopes ?? [])];
+                    scopes[idx] = { ...scopes[idx], name: e.target.value };
+                    onChange({ ...workflow, settings: { ...workflow.settings, stateScopes: scopes } });
+                  }}
+                  placeholder="Scope name"
+                  value={scope.name}
+                />
+                <button
+                  className="flex size-6 shrink-0 items-center justify-center rounded-md text-[var(--color-text-muted)] transition-all duration-200 hover:bg-[var(--color-status-error)]/10 hover:text-[var(--color-status-error)]"
+                  onClick={() => {
+                    const scopes = (workflow.settings.stateScopes ?? []).filter((_, i) => i !== idx);
+                    onChange({ ...workflow, settings: { ...workflow.settings, stateScopes: scopes } });
+                  }}
+                  title="Remove scope"
+                  type="button"
+                >
+                  <X className="size-3" />
+                </button>
+              </div>
+              <input
+                className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-1)] px-2 py-1.5 text-[12px] text-[var(--color-text-primary)] placeholder-[var(--color-text-muted)] outline-none transition focus:border-[var(--color-accent)]/50"
+                onChange={(e) => {
+                  const scopes = [...(workflow.settings.stateScopes ?? [])];
+                  scopes[idx] = { ...scopes[idx], description: e.target.value };
+                  onChange({ ...workflow, settings: { ...workflow.settings, stateScopes: scopes } });
+                }}
+                placeholder="Description (optional)"
+                value={scope.description ?? ''}
+              />
+              <StateScopeInitialValues
+                initialValues={scope.initialValues ?? {}}
+                onChange={(initialValues) => {
+                  const scopes = [...(workflow.settings.stateScopes ?? [])];
+                  scopes[idx] = { ...scopes[idx], initialValues };
+                  onChange({ ...workflow, settings: { ...workflow.settings, stateScopes: scopes } });
+                }}
+              />
+            </div>
+          ))}
         </div>
       </div>
     </div>

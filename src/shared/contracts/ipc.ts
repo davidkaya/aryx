@@ -1,6 +1,7 @@
 import type { ApprovalDecision } from '@shared/domain/approval';
 import type { SidecarCapabilities, InteractionMode, MessageMode, QuotaSnapshot } from '@shared/contracts/sidecar';
 import type { PatternDefinition, ReasoningEffort } from '@shared/domain/pattern';
+import type { WorkflowDefinition } from '@shared/domain/workflow';
 import type {
   ProjectGitBranchSummary,
   ProjectGitCommitMessageSuggestion,
@@ -28,8 +29,17 @@ export interface CreateSessionInput {
   patternId: string;
 }
 
+export interface CreateWorkflowSessionInput {
+  projectId: string;
+  workflowId: string;
+}
+
 export interface SavePatternInput {
   pattern: PatternDefinition;
+}
+
+export interface SaveWorkflowInput {
+  workflow: WorkflowDefinition;
 }
 
 export interface SendSessionMessageInput {
@@ -274,6 +284,8 @@ export interface ElectronApi {
   setProjectAgentProfileEnabled(input: SetProjectAgentProfileEnabledInput): Promise<WorkspaceState>;
   savePattern(input: SavePatternInput): Promise<WorkspaceState>;
   deletePattern(patternId: string): Promise<WorkspaceState>;
+  saveWorkflow(input: SaveWorkflowInput): Promise<WorkspaceState>;
+  deleteWorkflow(workflowId: string): Promise<WorkspaceState>;
   saveMcpServer(input: SaveMcpServerInput): Promise<WorkspaceState>;
   deleteMcpServer(serverId: string): Promise<WorkspaceState>;
   saveLspProfile(input: SaveLspProfileInput): Promise<WorkspaceState>;
@@ -283,6 +295,7 @@ export interface ElectronApi {
   updateSessionTooling(input: UpdateSessionToolingInput): Promise<WorkspaceState>;
   updateSessionApprovalSettings(input: UpdateSessionApprovalSettingsInput): Promise<WorkspaceState>;
   createSession(input: CreateSessionInput): Promise<WorkspaceState>;
+  createWorkflowSession(input: CreateWorkflowSessionInput): Promise<WorkspaceState>;
   duplicateSession(input: DuplicateSessionInput): Promise<WorkspaceState>;
   branchSession(input: BranchSessionInput): Promise<WorkspaceState>;
   setSessionMessagePinned(input: SetSessionMessagePinnedInput): Promise<WorkspaceState>;

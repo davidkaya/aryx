@@ -37,6 +37,12 @@ import {
   validatePatternDefinition,
 } from '@shared/domain/pattern';
 import {
+  buildWorkflowExecutionPattern,
+  normalizeWorkflowDefinition,
+  validateWorkflowDefinition,
+  type WorkflowDefinition,
+} from '@shared/domain/workflow';
+import {
   normalizeWorkspaceAgentDefinition,
   resolvePatternAgents,
   type WorkspaceAgentDefinition,
@@ -623,6 +629,32 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     return this.persistAndBroadcast(workspace);
   }
 
+  async saveWorkflow(workflow: WorkflowDefinition): Promise<WorkspaceState> {
+    const workspace = await this.loadWorkspace();
+    const normalizedWorkflow = normalizeWorkflowDefinition(workflow);
+    const issues = validateWorkflowDefinition(normalizedWorkflow).filter((issue) => issue.level === 'error');
+    if (issues.length > 0) {
+      throw new Error(issues[0].message);
+    }
+
+    const existingIndex = workspace.workflows.findIndex((current) => current.id === workflow.id);
+    const candidate: WorkflowDefinition = {
+      ...normalizedWorkflow,
+      isFavorite: workflow.isFavorite ?? workspace.workflows[existingIndex]?.isFavorite,
+      createdAt: existingIndex >= 0 ? workspace.workflows[existingIndex].createdAt : nowIso(),
+      updatedAt: nowIso(),
+    };
+
+    if (existingIndex >= 0) {
+      workspace.workflows[existingIndex] = candidate;
+    } else {
+      workspace.workflows.push(candidate);
+    }
+
+    workspace.selectedWorkflowId = candidate.id;
+    return this.persistAndBroadcast(workspace);
+  }
+
   async setPatternFavorite(patternId: string, isFavorite: boolean): Promise<WorkspaceState> {
     const workspace = await this.loadWorkspace();
     const pattern = this.requirePattern(workspace, patternId);
@@ -721,6 +753,17 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
 
     if (workspace.selectedPatternId === patternId) {
       workspace.selectedPatternId = workspace.patterns[0]?.id;
+    }
+
+    return this.persistAndBroadcast(workspace);
+  }
+
+  async deleteWorkflow(workflowId: string): Promise<WorkspaceState> {
+    const workspace = await this.loadWorkspace();
+    workspace.workflows = workspace.workflows.filter((workflow) => workflow.id !== workflowId);
+
+    if (workspace.selectedWorkflowId === workflowId) {
+      workspace.selectedWorkflowId = workspace.workflows[0]?.id;
     }
 
     return this.persistAndBroadcast(workspace);
@@ -881,6 +924,41 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     workspace.sessions.unshift(session);
     workspace.selectedProjectId = project.id;
     workspace.selectedPatternId = pattern.id;
+    workspace.selectedWorkflowId = undefined;
+    workspace.selectedSessionId = session.id;
+    return this.persistAndBroadcast(workspace);
+  }
+
+  async createWorkflowSession(projectId: string, workflowId: string): Promise<WorkspaceState> {
+    const workspace = await this.loadWorkspace();
+    const project = this.requireProject(workspace, projectId);
+    const workflow = this.requireWorkflow(workspace, workflowId);
+    const modelCatalog = await this.loadAvailableModelCatalog();
+    const executionPattern = normalizePatternModels(buildWorkflowExecutionPattern(workflow), modelCatalog);
+
+    const session: SessionRecord = {
+      id: createId('session'),
+      projectId: project.id,
+      patternId: workflow.id,
+      workflowId: workflow.id,
+      title: workflow.name,
+      titleSource: 'auto',
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+      status: 'idle',
+      messages: [],
+      sessionModelConfig: executionPattern.agents.length === 1
+        ? createSessionModelConfig(executionPattern)
+        : undefined,
+      tooling: createSessionToolingSelection(),
+      runs: [],
+    };
+
+    await this.ensureScratchpadSessionDirectory(session);
+    workspace.sessions.unshift(session);
+    workspace.selectedProjectId = project.id;
+    workspace.selectedPatternId = undefined;
+    workspace.selectedWorkflowId = workflow.id;
     workspace.selectedSessionId = session.id;
     return this.persistAndBroadcast(workspace);
   }
@@ -993,7 +1071,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     }
 
     const project = this.requireProject(workspace, session.projectId);
-    const pattern = this.requirePattern(workspace, session.patternId);
+    const { pattern, workflow } = this.resolveSessionExecutionDefinition(workspace, session);
     const effectivePattern = this.applyProjectCustomizationToPattern(
       await this.buildEffectivePattern(pattern, session, workspace.settings.agents ?? []),
       project,
@@ -1022,11 +1100,19 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
       throw new Error('Regenerated session is missing the user message needed to replay the turn.');
     }
 
-    await this.runPreparedSessionTurn(workspace, regeneratedSession, project, effectivePattern, projectInstructions, {
-      occurredAt,
-      requestId: createId('turn'),
-      triggerMessageId: triggerMessage.id,
-    });
+    await this.runPreparedSessionTurn(
+      workspace,
+      regeneratedSession,
+      project,
+      effectivePattern,
+      projectInstructions,
+      {
+        occurredAt,
+        requestId: createId('turn'),
+        triggerMessageId: triggerMessage.id,
+      },
+      workflow,
+    );
   }
 
   async editAndResendSessionMessage(
@@ -1052,7 +1138,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     }
 
     const project = this.requireProject(workspace, session.projectId);
-    const pattern = this.requirePattern(workspace, session.patternId);
+    const { pattern, workflow } = this.resolveSessionExecutionDefinition(workspace, session);
     const effectivePattern = this.applyProjectCustomizationToPattern(
       await this.buildEffectivePattern(pattern, session, workspace.settings.agents ?? []),
       project,
@@ -1084,11 +1170,19 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
       throw new Error('Edited session is missing the user message needed to replay the turn.');
     }
 
-    await this.runPreparedSessionTurn(workspace, editedSession, project, effectivePattern, projectInstructions, {
-      occurredAt,
-      requestId: createId('turn'),
-      triggerMessageId: triggerMessage.id,
-    });
+    await this.runPreparedSessionTurn(
+      workspace,
+      editedSession,
+      project,
+      effectivePattern,
+      projectInstructions,
+      {
+        occurredAt,
+        requestId: createId('turn'),
+        triggerMessageId: triggerMessage.id,
+      },
+      workflow,
+    );
   }
 
   async sendSessionMessage(
@@ -1106,7 +1200,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
       throw new Error('Wait for the current response or approval checkpoint to finish before sending another message.');
     }
     const project = this.requireProject(workspace, session.projectId);
-    const pattern = this.requirePattern(workspace, session.patternId);
+    const { pattern, workflow } = this.resolveSessionExecutionDefinition(workspace, session);
     const effectivePattern = this.applyProjectCustomizationToPattern(
       await this.buildEffectivePattern(pattern, session, workspace.settings.agents ?? []),
       project,
@@ -1135,13 +1229,21 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
       attachments: attachments?.length ? attachments : undefined,
       promptInvocation: normalizedPromptInvocation,
     });
-    await this.runPreparedSessionTurn(workspace, session, project, effectivePattern, projectInstructions, {
-      occurredAt,
-      requestId,
-      triggerMessageId: userMessageId,
-      messageMode,
-      attachments,
-    });
+    await this.runPreparedSessionTurn(
+      workspace,
+      session,
+      project,
+      effectivePattern,
+      projectInstructions,
+      {
+        occurredAt,
+        requestId,
+        triggerMessageId: userMessageId,
+        messageMode,
+        attachments,
+      },
+      workflow,
+    );
   }
 
   async cancelSessionTurn(sessionId: string): Promise<void> {
@@ -1328,7 +1430,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     const session = this.requireSession(workspace, sessionId);
     const project = this.requireProject(workspace, session.projectId);
     const modelCatalog = await this.loadAvailableModelCatalog();
-    const pattern = this.requirePattern(workspace, session.patternId);
+    const { pattern } = this.resolveSessionExecutionDefinition(workspace, session);
     const effectivePattern = normalizePatternModels(pattern, modelCatalog);
 
     if (effectivePattern.agents.length !== 1) {
@@ -1497,6 +1599,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
       messageMode?: MessageMode;
       attachments?: ChatMessageAttachment[];
     },
+    effectiveWorkflow?: WorkflowDefinition,
   ): Promise<void> {
     const workspaceKind = isScratchpadProject(project) ? 'scratchpad' : 'project';
     const { occurredAt, requestId, triggerMessageId, messageMode, attachments } = options;
@@ -1529,6 +1632,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
         workingDirectory: runWorkingDirectory,
         workspaceKind,
         pattern: patternForTurn,
+        workflow: effectiveWorkflow ? { id: effectiveWorkflow.id, name: effectiveWorkflow.name } : undefined,
         triggerMessageId,
         startedAt: occurredAt,
         preRunGitSnapshot,
@@ -1558,6 +1662,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
         messageMode,
         projectInstructions,
         pattern: patternForTurn,
+        workflow: effectiveWorkflow,
         messages: session.messages,
         attachments: attachments?.length ? attachments : undefined,
         promptInvocation,
@@ -2126,6 +2231,32 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     return pattern;
   }
 
+  private requireWorkflow(workspace: WorkspaceState, workflowId: string): WorkflowDefinition {
+    const workflow = workspace.workflows.find((current) => current.id === workflowId);
+    if (!workflow) {
+      throw new Error(`Workflow "${workflowId}" was not found.`);
+    }
+
+    return workflow;
+  }
+
+  private resolveSessionExecutionDefinition(
+    workspace: WorkspaceState,
+    session: SessionRecord,
+  ): { pattern: PatternDefinition; workflow?: WorkflowDefinition } {
+    if (session.workflowId) {
+      const workflow = this.requireWorkflow(workspace, session.workflowId);
+      return {
+        workflow,
+        pattern: buildWorkflowExecutionPattern(workflow),
+      };
+    }
+
+    return {
+      pattern: this.requirePattern(workspace, session.patternId),
+    };
+  }
+
   private requireSession(workspace: WorkspaceState, sessionId: string): SessionRecord {
     const session = workspace.sessions.find((current) => current.id === sessionId);
     if (!session) {
@@ -2335,7 +2466,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     messages: ChatMessageRecord[],
   ): void {
     const session = this.requireSession(workspace, sessionId);
-    const pattern = this.requirePattern(workspace, session.patternId);
+    const { pattern } = this.resolveSessionExecutionDefinition(workspace, session);
     const incomingIds = new Set(messages.map((message) => message.id));
 
     // Messages that were streamed during the turn already exist in session.messages

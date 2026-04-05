@@ -109,6 +109,76 @@ public sealed class SidecarProtocolHostTests
     }
 
     [Fact]
+    public async Task ValidateWorkflowCommand_ReturnsIssuesAndCompletion()
+    {
+        IReadOnlyList<JsonElement> events = await RunHostAsync(new ValidateWorkflowCommandDto
+        {
+            Type = "validate-workflow",
+            RequestId = "validate-workflow-1",
+            Workflow = new WorkflowDefinitionDto
+            {
+                Id = "workflow-1",
+                Name = "",
+                Graph = new WorkflowGraphDto
+                {
+                    Nodes =
+                    [
+                        new WorkflowNodeDto
+                        {
+                            Id = "start",
+                            Kind = "start",
+                            Label = "Start",
+                            Config = new WorkflowNodeConfigDto { Kind = "start" },
+                        },
+                        new WorkflowNodeDto
+                        {
+                            Id = "end",
+                            Kind = "end",
+                            Label = "End",
+                            Config = new WorkflowNodeConfigDto { Kind = "end" },
+                        },
+                    ],
+                    Edges =
+                    [
+                        new WorkflowEdgeDto
+                        {
+                            Id = "edge-start-end",
+                            Source = "start",
+                            Target = "end",
+                            Kind = "direct",
+                        },
+                    ],
+                },
+                Settings = new WorkflowSettingsDto
+                {
+                    Checkpointing = new WorkflowCheckpointSettingsDto(),
+                },
+            },
+        });
+
+        Assert.Collection(
+            events,
+            validationEvent =>
+            {
+                Assert.Equal("workflow-validation", validationEvent.GetProperty("type").GetString());
+                Assert.Equal("validate-workflow-1", validationEvent.GetProperty("requestId").GetString());
+
+                JsonElement[] issues = validationEvent.GetProperty("issues").EnumerateArray().ToArray();
+                Assert.Contains(issues, issue =>
+                    issue.GetProperty("field").GetString() == "name"
+                    && issue.GetProperty("message").GetString() == "Workflow name is required.");
+                Assert.Contains(issues, issue =>
+                    issue.GetProperty("field").GetString() == "graph.nodes"
+                    && issue.GetProperty("message").GetString() == "Workflow graphs must contain at least one agent node.");
+            },
+            completionEvent =>
+            {
+                Assert.Equal("command-complete", completionEvent.GetProperty("type").GetString());
+                Assert.Equal("validate-workflow-1", completionEvent.GetProperty("requestId").GetString());
+            });
+    }
+
+    [Fact]
     public async Task RunTurnCommand_ReturnsActivityEventsAndCompletion()
     {
         SidecarProtocolHost host = new(

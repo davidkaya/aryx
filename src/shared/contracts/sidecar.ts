@@ -4,6 +4,7 @@ import type { ChatMessageRecord } from '@shared/domain/session';
 import type { RuntimeToolDefinition } from '@shared/domain/tooling';
 import type { ChatMessageAttachment } from '@shared/domain/attachment';
 import type { ProjectPromptInvocation } from '@shared/domain/projectCustomization';
+import type { WorkflowDefinition, WorkflowValidationIssue } from '@shared/domain/workflow';
 
 export interface SidecarModeCapability {
   available: boolean;
@@ -70,6 +71,12 @@ export interface ValidatePatternCommand {
   pattern: PatternDefinition;
 }
 
+export interface ValidateWorkflowCommand {
+  type: 'validate-workflow';
+  requestId: string;
+  workflow: WorkflowDefinition;
+}
+
 export type InteractionMode = 'interactive' | 'plan';
 export type MessageMode = 'enqueue' | 'immediate';
 
@@ -89,6 +96,7 @@ export interface RunTurnCommand {
   messageMode?: MessageMode;
   projectInstructions?: string;
   pattern: PatternDefinition;
+  workflow?: WorkflowDefinition;
   messages: ChatMessageRecord[];
   attachments?: ChatMessageAttachment[];
   promptInvocation?: ProjectPromptInvocation;
@@ -147,6 +155,7 @@ export interface CopilotSessionListFilter {
 export type SidecarCommand =
   | DescribeCapabilitiesCommand
   | ValidatePatternCommand
+  | ValidateWorkflowCommand
   | RunTurnCommand
   | CancelTurnCommand
   | ResolveApprovalCommand
@@ -228,6 +237,12 @@ export interface PatternValidationEvent {
   type: 'pattern-validation';
   requestId: string;
   issues: PatternValidationIssue[];
+}
+
+export interface WorkflowValidationEvent {
+  type: 'workflow-validation';
+  requestId: string;
+  issues: WorkflowValidationIssue[];
 }
 
 export interface TurnDeltaEvent {
@@ -592,6 +607,7 @@ export interface CommandCompleteEvent {
 export type SidecarEvent =
   | CapabilitiesEvent
   | PatternValidationEvent
+  | WorkflowValidationEvent
   | TurnDeltaEvent
   | TurnCompleteEvent
   | MessageReclassifiedEvent

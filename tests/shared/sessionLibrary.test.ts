@@ -73,9 +73,10 @@ function createSession(overrides?: Partial<SessionRecord>): SessionRecord {
 }
 
 function createWorkspace(overrides?: Partial<WorkspaceState>): WorkspaceState {
-  return {
+  const workspace: WorkspaceState = {
     projects: [createProject(), createProject({ id: 'project-scratchpad', name: 'Scratchpad', path: 'C:\\scratchpad' })],
     patterns: [createPattern(), createPattern({ id: 'pattern-single-chat', name: '1-on-1 Copilot Chat', mode: 'single' })],
+    workflows: [],
     settings: createWorkspaceSettings(),
     sessions: [
       createSession(),
@@ -111,6 +112,11 @@ function createWorkspace(overrides?: Partial<WorkspaceState>): WorkspaceState {
     selectedSessionId: 'session-1',
     lastUpdatedAt: '2026-03-23T00:10:00.000Z',
     ...overrides,
+  };
+
+  return {
+    ...workspace,
+    workflows: overrides?.workflows ?? workspace.workflows,
   };
 }
 

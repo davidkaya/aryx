@@ -14,6 +14,7 @@ import type {
   McpOauthRequiredEvent,
   ExitPlanModeRequestedEvent,
   ValidatePatternCommand,
+  ValidateWorkflowCommand,
   RunTurnCommand,
   CopilotSessionListFilter,
   CopilotSessionInfo,
@@ -44,6 +45,12 @@ type PendingCommand =
       processId: number;
       kind: 'validate-pattern';
       resolve: (issues: ValidatePatternCommand['pattern'] extends never ? never : unknown) => void;
+      reject: (error: Error) => void;
+    })
+  | ({
+      processId: number;
+      kind: 'validate-workflow';
+      resolve: (issues: ValidateWorkflowCommand['workflow'] extends never ? never : unknown) => void;
       reject: (error: Error) => void;
     })
   | ({
@@ -124,6 +131,14 @@ export class SidecarClient {
       type: 'validate-pattern',
       requestId: `validate-${Date.now()}`,
       pattern,
+    });
+  }
+
+  async validateWorkflow(workflow: ValidateWorkflowCommand['workflow']): Promise<unknown> {
+    return this.dispatch<unknown>({
+      type: 'validate-workflow',
+      requestId: `validate-workflow-${Date.now()}`,
+      workflow,
     });
   }
 
@@ -317,6 +332,13 @@ export class SidecarClient {
           resolve: resolve as (issues: unknown) => void,
           reject,
         });
+      } else if (command.type === 'validate-workflow') {
+        this.pending.set(command.requestId, {
+          processId: state.id,
+          kind: 'validate-workflow',
+          resolve: resolve as (issues: unknown) => void,
+          reject,
+        });
       } else if (command.type === 'resolve-approval') {
         this.pending.set(command.requestId, {
           processId: state.id,
@@ -409,6 +431,12 @@ export class SidecarClient {
         return;
       case 'pattern-validation':
         if (pending.kind === 'validate-pattern') {
+          pending.resolve(event.issues);
+          this.pending.delete(event.requestId);
+        }
+        return;
+      case 'workflow-validation':
+        if (pending.kind === 'validate-workflow') {
           pending.resolve(event.issues);
           this.pending.delete(event.requestId);
         }

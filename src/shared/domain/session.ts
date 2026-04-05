@@ -57,6 +57,7 @@ export interface SessionRecord {
   id: string;
   projectId: string;
   patternId: string;
+  workflowId?: string;
   title: string;
   titleSource?: SessionTitleSource;
   createdAt: string;

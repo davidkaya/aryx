@@ -1,0 +1,606 @@
+import type { ApprovalPolicy } from '@shared/domain/approval';
+import {
+  syncPatternGraph,
+  type PatternDefinition,
+  type PatternGraph,
+  type PatternAgentDefinition,
+} from '@shared/domain/pattern';
+
+export type WorkflowNodeKind =
+  | 'start'
+  | 'end'
+  | 'agent'
+  | 'code-executor'
+  | 'function-executor'
+  | 'sub-workflow'
+  | 'request-port';
+
+export type WorkflowEdgeKind = 'direct' | 'fan-out' | 'fan-in';
+export type WorkflowExecutionMode = 'off-thread' | 'lockstep';
+
+export interface WorkflowPosition {
+  x: number;
+  y: number;
+}
+
+export interface WorkflowCheckpointSettings {
+  enabled: boolean;
+}
+
+export interface WorkflowTelemetrySettings {
+  openTelemetry?: boolean;
+  sensitiveData?: boolean;
+}
+
+export interface WorkflowStateScope {
+  name: string;
+  description?: string;
+  initialValues?: Record<string, unknown>;
+}
+
+export interface WorkflowSettings {
+  checkpointing: WorkflowCheckpointSettings;
+  executionMode: WorkflowExecutionMode;
+  maxIterations?: number;
+  approvalPolicy?: ApprovalPolicy;
+  stateScopes?: WorkflowStateScope[];
+  telemetry?: WorkflowTelemetrySettings;
+}
+
+export interface StartNodeConfig {
+  kind: 'start';
+  inputType?: string;
+}
+
+export interface EndNodeConfig {
+  kind: 'end';
+  outputType?: string;
+}
+
+export interface AgentNodeConfig extends PatternAgentDefinition {
+  kind: 'agent';
+}
+
+export interface CodeExecutorConfig {
+  kind: 'code-executor';
+  inputType?: string;
+  outputType?: string;
+  implementation?: string;
+}
+
+export interface FunctionExecutorConfig {
+  kind: 'function-executor';
+  functionRef: string;
+  parameters?: Record<string, unknown>;
+}
+
+export interface SubWorkflowConfig {
+  kind: 'sub-workflow';
+  workflowId?: string;
+  inlineWorkflow?: WorkflowDefinition;
+}
+
+export interface RequestPortConfig {
+  kind: 'request-port';
+  portId: string;
+  requestType: string;
+  responseType: string;
+  prompt?: string;
+}
+
+export type WorkflowNodeConfig =
+  | StartNodeConfig
+  | EndNodeConfig
+  | AgentNodeConfig
+  | CodeExecutorConfig
+  | FunctionExecutorConfig
+  | SubWorkflowConfig
+  | RequestPortConfig;
+
+export interface WorkflowNode {
+  id: string;
+  kind: WorkflowNodeKind;
+  label: string;
+  position: WorkflowPosition;
+  order?: number;
+  config: WorkflowNodeConfig;
+}
+
+export interface WorkflowConditionRule {
+  propertyPath: string;
+  operator: 'equals' | 'not-equals' | 'contains' | 'gt' | 'lt' | 'regex';
+  value: string;
+}
+
+export type EdgeCondition =
+  | { type: 'always' }
+  | { type: 'message-type'; typeName: string }
+  | { type: 'expression'; expression: string }
+  | { type: 'property'; combinator?: 'and' | 'or'; rules: WorkflowConditionRule[] };
+
+export interface FanOutConfig {
+  strategy: 'broadcast' | 'partition';
+  partitionExpression?: string;
+}
+
+export interface WorkflowEdge {
+  id: string;
+  source: string;
+  target: string;
+  kind: WorkflowEdgeKind;
+  condition?: EdgeCondition;
+  label?: string;
+  fanOutConfig?: FanOutConfig;
+}
+
+export interface WorkflowGraph {
+  nodes: WorkflowNode[];
+  edges: WorkflowEdge[];
+}
+
+export interface WorkflowDefinition {
+  id: string;
+  name: string;
+  description: string;
+  isFavorite?: boolean;
+  graph: WorkflowGraph;
+  settings: WorkflowSettings;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WorkflowValidationIssue {
+  level: 'error' | 'warning';
+  field?: string;
+  message: string;
+  nodeId?: string;
+  edgeId?: string;
+}
+
+const executableNodeKinds = new Set<WorkflowNodeKind>(['start', 'end', 'agent']);
+
+function normalizeOptionalString(value?: string): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function normalizePosition(position?: Partial<WorkflowPosition>): WorkflowPosition {
+  return {
+    x: typeof position?.x === 'number' && Number.isFinite(position.x) ? position.x : 0,
+    y: typeof position?.y === 'number' && Number.isFinite(position.y) ? position.y : 0,
+  };
+}
+
+function normalizeNodeConfig(kind: WorkflowNodeKind, config?: Partial<WorkflowNodeConfig>): WorkflowNodeConfig {
+  switch (kind) {
+    case 'start':
+      return {
+        kind,
+        inputType: normalizeOptionalString((config as Partial<StartNodeConfig> | undefined)?.inputType),
+      };
+    case 'end':
+      return {
+        kind,
+        outputType: normalizeOptionalString((config as Partial<EndNodeConfig> | undefined)?.outputType),
+      };
+    case 'agent': {
+      const agent = config as Partial<AgentNodeConfig> | undefined;
+      return {
+        kind,
+        id: normalizeOptionalString(agent?.id) ?? '',
+        name: normalizeOptionalString(agent?.name) ?? '',
+        description: agent?.description?.trim() ?? '',
+        instructions: agent?.instructions?.trim() ?? '',
+        model: normalizeOptionalString(agent?.model) ?? '',
+        reasoningEffort: agent?.reasoningEffort,
+        copilot: agent?.copilot,
+        workspaceAgentId: normalizeOptionalString(agent?.workspaceAgentId),
+        overrides: agent?.overrides,
+      };
+    }
+    case 'code-executor': {
+      const value = config as Partial<CodeExecutorConfig> | undefined;
+      return {
+        kind,
+        inputType: normalizeOptionalString(value?.inputType),
+        outputType: normalizeOptionalString(value?.outputType),
+        implementation: value?.implementation?.trim(),
+      };
+    }
+    case 'function-executor': {
+      const value = config as Partial<FunctionExecutorConfig> | undefined;
+      return {
+        kind,
+        functionRef: normalizeOptionalString(value?.functionRef) ?? '',
+        parameters: value?.parameters,
+      };
+    }
+    case 'sub-workflow': {
+      const value = config as Partial<SubWorkflowConfig> | undefined;
+      return {
+        kind,
+        workflowId: normalizeOptionalString(value?.workflowId),
+        inlineWorkflow: value?.inlineWorkflow ? normalizeWorkflowDefinition(value.inlineWorkflow) : undefined,
+      };
+    }
+    case 'request-port': {
+      const value = config as Partial<RequestPortConfig> | undefined;
+      return {
+        kind,
+        portId: normalizeOptionalString(value?.portId) ?? '',
+        requestType: normalizeOptionalString(value?.requestType) ?? '',
+        responseType: normalizeOptionalString(value?.responseType) ?? '',
+        prompt: value?.prompt?.trim(),
+      };
+    }
+  }
+}
+
+export function normalizeWorkflowDefinition(workflow: WorkflowDefinition): WorkflowDefinition {
+  return {
+    ...workflow,
+    name: workflow.name.trim(),
+    description: workflow.description.trim(),
+    graph: {
+      nodes: (workflow.graph?.nodes ?? []).map((node) => ({
+        ...node,
+        id: node.id.trim(),
+        kind: node.kind,
+        label: node.label.trim(),
+        position: normalizePosition(node.position),
+        config: normalizeNodeConfig(node.kind, node.config),
+      })),
+      edges: (workflow.graph?.edges ?? []).map((edge) => ({
+        ...edge,
+        id: edge.id.trim(),
+        source: edge.source.trim(),
+        target: edge.target.trim(),
+        kind: edge.kind,
+        label: normalizeOptionalString(edge.label),
+      })),
+    },
+    settings: {
+      checkpointing: {
+        enabled: workflow.settings?.checkpointing?.enabled ?? false,
+      },
+      executionMode: workflow.settings?.executionMode === 'lockstep' ? 'lockstep' : 'off-thread',
+      maxIterations:
+        typeof workflow.settings?.maxIterations === 'number' && workflow.settings.maxIterations > 0
+          ? Math.round(workflow.settings.maxIterations)
+          : undefined,
+      approvalPolicy: workflow.settings?.approvalPolicy,
+      stateScopes: workflow.settings?.stateScopes?.map((scope) => ({
+        name: scope.name.trim(),
+        description: normalizeOptionalString(scope.description),
+        initialValues: scope.initialValues,
+      })),
+      telemetry: workflow.settings?.telemetry
+        ? {
+          openTelemetry: workflow.settings.telemetry.openTelemetry ?? false,
+          sensitiveData: workflow.settings.telemetry.sensitiveData ?? false,
+        }
+        : undefined,
+    },
+  };
+}
+
+export function resolveWorkflowAgentNodes(workflow: WorkflowDefinition): WorkflowNode[] {
+  return workflow.graph.nodes
+    .filter((node) => node.kind === 'agent')
+    .slice()
+    .sort((left, right) => {
+      const leftOrder = left.order ?? Number.MAX_SAFE_INTEGER;
+      const rightOrder = right.order ?? Number.MAX_SAFE_INTEGER;
+      if (leftOrder !== rightOrder) {
+        return leftOrder - rightOrder;
+      }
+
+      return left.label.localeCompare(right.label);
+    });
+}
+
+export function resolveWorkflowAgents(workflow: WorkflowDefinition): PatternAgentDefinition[] {
+  return resolveWorkflowAgentNodes(workflow).flatMap((node) => {
+    if (node.config.kind !== 'agent') {
+      return [];
+    }
+
+    return [{
+      id: node.config.id || node.id,
+      name: node.config.name,
+      description: node.config.description,
+      instructions: node.config.instructions,
+      model: node.config.model,
+      reasoningEffort: node.config.reasoningEffort,
+      copilot: node.config.copilot,
+      workspaceAgentId: node.config.workspaceAgentId,
+      overrides: node.config.overrides,
+    }];
+  });
+}
+
+function inferWorkflowPatternMode(workflow: WorkflowDefinition): PatternDefinition['mode'] {
+  const hasFanEdges = workflow.graph.edges.some((edge) => edge.kind !== 'direct');
+  const agentCount = resolveWorkflowAgents(workflow).length;
+  if (hasFanEdges) {
+    return 'concurrent';
+  }
+
+  return agentCount <= 1 ? 'single' : 'sequential';
+}
+
+export function buildWorkflowExecutionPattern(workflow: WorkflowDefinition): PatternDefinition {
+  const agents = resolveWorkflowAgents(workflow);
+  const pattern: PatternDefinition = {
+    id: workflow.id,
+    name: workflow.name,
+    description: workflow.description,
+    mode: inferWorkflowPatternMode(workflow),
+    availability: 'available',
+    maxIterations: workflow.settings.maxIterations ?? 5,
+    approvalPolicy: workflow.settings.approvalPolicy,
+    agents,
+    createdAt: workflow.createdAt,
+    updatedAt: workflow.updatedAt,
+  };
+
+  return {
+    ...pattern,
+    graph: syncPatternGraph(pattern).graph as PatternGraph,
+  };
+}
+
+function addIssue(
+  issues: WorkflowValidationIssue[],
+  issue: WorkflowValidationIssue,
+): void {
+  issues.push(issue);
+}
+
+function hasPathToEnd(startNodeId: string, graph: WorkflowGraph, endNodeIds: Set<string>): boolean {
+  const outgoing = new Map<string, WorkflowEdge[]>();
+  for (const edge of graph.edges) {
+    const current = outgoing.get(edge.source);
+    if (current) {
+      current.push(edge);
+    } else {
+      outgoing.set(edge.source, [edge]);
+    }
+  }
+
+  const queue = [startNodeId];
+  const visited = new Set<string>();
+  while (queue.length > 0) {
+    const nodeId = queue.shift()!;
+    if (!visited.add(nodeId)) {
+      continue;
+    }
+    if (endNodeIds.has(nodeId)) {
+      return true;
+    }
+    for (const edge of outgoing.get(nodeId) ?? []) {
+      queue.push(edge.target);
+    }
+  }
+
+  return false;
+}
+
+export function validateWorkflowDefinition(workflow: WorkflowDefinition): WorkflowValidationIssue[] {
+  const normalized = normalizeWorkflowDefinition(workflow);
+  const issues: WorkflowValidationIssue[] = [];
+
+  if (!normalized.name) {
+    addIssue(issues, { level: 'error', field: 'name', message: 'Workflow name is required.' });
+  }
+
+  if (normalized.graph.nodes.length === 0) {
+    addIssue(issues, { level: 'error', field: 'graph', message: 'Workflow graph must include nodes.' });
+    return issues;
+  }
+
+  const nodesById = new Map<string, WorkflowNode>();
+  const edgeIds = new Set<string>();
+  const incomingCounts = new Map<string, number>();
+  const outgoingCounts = new Map<string, number>();
+
+  for (const node of normalized.graph.nodes) {
+    if (!node.id) {
+      addIssue(issues, {
+        level: 'error',
+        field: 'graph.nodes.id',
+        nodeId: node.id,
+        message: 'Workflow nodes must have an ID.',
+      });
+      continue;
+    }
+
+    if (nodesById.has(node.id)) {
+      addIssue(issues, {
+        level: 'error',
+        field: 'graph.nodes.id',
+        nodeId: node.id,
+        message: `Workflow graph contains duplicate node "${node.id}".`,
+      });
+      continue;
+    }
+
+    nodesById.set(node.id, node);
+
+    if (!node.label) {
+      addIssue(issues, {
+        level: 'warning',
+        field: 'graph.nodes.label',
+        nodeId: node.id,
+        message: 'Workflow nodes should have a label.',
+      });
+    }
+
+    if (!executableNodeKinds.has(node.kind)) {
+      addIssue(issues, {
+        level: 'error',
+        field: 'graph.nodes.kind',
+        nodeId: node.id,
+        message: `Workflow node kind "${node.kind}" is not executable yet.`,
+      });
+    }
+
+    if (node.kind === 'agent' && node.config.kind === 'agent') {
+      if (!node.config.name) {
+        addIssue(issues, {
+          level: 'error',
+          field: 'graph.nodes.config.name',
+          nodeId: node.id,
+          message: 'Agent nodes require a name.',
+        });
+      }
+      if (!node.config.model) {
+        addIssue(issues, {
+          level: 'error',
+          field: 'graph.nodes.config.model',
+          nodeId: node.id,
+          message: `Agent node "${node.label || node.id}" requires a model.`,
+        });
+      }
+    }
+  }
+
+  for (const edge of normalized.graph.edges) {
+    if (!edge.id) {
+      addIssue(issues, { level: 'error', field: 'graph.edges.id', message: 'Workflow edges must have an ID.' });
+      continue;
+    }
+    if (!edgeIds.add(edge.id)) {
+      addIssue(issues, {
+        level: 'error',
+        field: 'graph.edges.id',
+        edgeId: edge.id,
+        message: `Workflow graph contains duplicate edge "${edge.id}".`,
+      });
+    }
+    if (!nodesById.has(edge.source) || !nodesById.has(edge.target)) {
+      addIssue(issues, {
+        level: 'error',
+        field: 'graph.edges',
+        edgeId: edge.id,
+        message: `Workflow edge "${edge.id}" must connect known nodes.`,
+      });
+      continue;
+    }
+
+    outgoingCounts.set(edge.source, (outgoingCounts.get(edge.source) ?? 0) + 1);
+    incomingCounts.set(edge.target, (incomingCounts.get(edge.target) ?? 0) + 1);
+  }
+
+  const startNodes = normalized.graph.nodes.filter((node) => node.kind === 'start');
+  const endNodes = normalized.graph.nodes.filter((node) => node.kind === 'end');
+  const agentNodes = normalized.graph.nodes.filter((node) => node.kind === 'agent');
+
+  if (startNodes.length !== 1) {
+    addIssue(issues, {
+      level: 'error',
+      field: 'graph.nodes',
+      message: 'Workflow graphs must contain exactly one start node.',
+    });
+  }
+
+  if (endNodes.length !== 1) {
+    addIssue(issues, {
+      level: 'error',
+      field: 'graph.nodes',
+      message: 'Workflow graphs must contain exactly one end node.',
+    });
+  }
+
+  if (agentNodes.length === 0) {
+    addIssue(issues, {
+      level: 'error',
+      field: 'graph.nodes',
+      message: 'Workflow graphs must contain at least one agent node.',
+    });
+  }
+
+  for (const startNode of startNodes) {
+    if ((incomingCounts.get(startNode.id) ?? 0) !== 0) {
+      addIssue(issues, {
+        level: 'error',
+        field: 'graph.edges',
+        nodeId: startNode.id,
+        message: 'Start nodes cannot have incoming edges.',
+      });
+    }
+    if ((outgoingCounts.get(startNode.id) ?? 0) === 0) {
+      addIssue(issues, {
+        level: 'error',
+        field: 'graph.edges',
+        nodeId: startNode.id,
+        message: 'Start nodes must connect to at least one downstream node.',
+      });
+    }
+  }
+
+  for (const endNode of endNodes) {
+    if ((outgoingCounts.get(endNode.id) ?? 0) !== 0) {
+      addIssue(issues, {
+        level: 'error',
+        field: 'graph.edges',
+        nodeId: endNode.id,
+        message: 'End nodes cannot have outgoing edges.',
+      });
+    }
+  }
+
+  const fanOutBySource = new Map<string, WorkflowEdge[]>();
+  const fanInByTarget = new Map<string, WorkflowEdge[]>();
+  for (const edge of normalized.graph.edges) {
+    if (edge.kind === 'fan-out') {
+      const current = fanOutBySource.get(edge.source);
+      if (current) {
+        current.push(edge);
+      } else {
+        fanOutBySource.set(edge.source, [edge]);
+      }
+    }
+    if (edge.kind === 'fan-in') {
+      const current = fanInByTarget.get(edge.target);
+      if (current) {
+        current.push(edge);
+      } else {
+        fanInByTarget.set(edge.target, [edge]);
+      }
+    }
+  }
+
+  for (const [source, edges] of fanOutBySource.entries()) {
+    if (edges.length < 2) {
+      addIssue(issues, {
+        level: 'error',
+        field: 'graph.edges.kind',
+        nodeId: source,
+        message: 'Fan-out edges require at least two outgoing fan-out connections from the same source.',
+      });
+    }
+  }
+
+  for (const [target, edges] of fanInByTarget.entries()) {
+    if (edges.length < 2) {
+      addIssue(issues, {
+        level: 'error',
+        field: 'graph.edges.kind',
+        nodeId: target,
+        message: 'Fan-in edges require at least two incoming fan-in connections to the same target.',
+      });
+    }
+  }
+
+  const startNode = startNodes[0];
+  if (startNode && endNodes.length > 0 && !hasPathToEnd(startNode.id, normalized.graph, new Set(endNodes.map((node) => node.id)))) {
+    addIssue(issues, {
+      level: 'error',
+      field: 'graph.edges',
+      message: 'Workflow graph must include a path from the start node to at least one end node.',
+    });
+  }
+
+  return issues;
+}

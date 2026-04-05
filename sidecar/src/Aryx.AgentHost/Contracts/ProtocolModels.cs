@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Aryx.AgentHost.Contracts;
@@ -66,6 +67,125 @@ public sealed class PatternDefinitionDto
     public string UpdatedAt { get; init; } = string.Empty;
 }
 
+public sealed class WorkflowPositionDto
+{
+    public double X { get; init; }
+    public double Y { get; init; }
+}
+
+public sealed class WorkflowNodeConfigDto
+{
+    public string Kind { get; init; } = string.Empty;
+    public string? InputType { get; init; }
+    public string? OutputType { get; init; }
+    public string Id { get; init; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
+    public string Description { get; init; } = string.Empty;
+    public string Instructions { get; init; } = string.Empty;
+    public string Model { get; init; } = string.Empty;
+    public string? ReasoningEffort { get; init; }
+    public PatternAgentCopilotConfigDto? Copilot { get; init; }
+    public string? WorkspaceAgentId { get; init; }
+    public string? Implementation { get; init; }
+    public string? FunctionRef { get; init; }
+    public IReadOnlyDictionary<string, JsonElement>? Parameters { get; init; }
+    public string? WorkflowId { get; init; }
+    public WorkflowDefinitionDto? InlineWorkflow { get; init; }
+    public string? PortId { get; init; }
+    public string? RequestType { get; init; }
+    public string? ResponseType { get; init; }
+    public string? Prompt { get; init; }
+}
+
+public sealed class WorkflowNodeDto
+{
+    public string Id { get; init; } = string.Empty;
+    public string Kind { get; init; } = string.Empty;
+    public string Label { get; init; } = string.Empty;
+    public WorkflowPositionDto Position { get; init; } = new();
+    public int? Order { get; init; }
+    public WorkflowNodeConfigDto Config { get; init; } = new();
+}
+
+public sealed class WorkflowConditionRuleDto
+{
+    public string PropertyPath { get; init; } = string.Empty;
+    public string Operator { get; init; } = string.Empty;
+    public string Value { get; init; } = string.Empty;
+}
+
+public sealed class EdgeConditionDto
+{
+    public string Type { get; init; } = string.Empty;
+    public string? TypeName { get; init; }
+    public string? Expression { get; init; }
+    public string? Combinator { get; init; }
+    public IReadOnlyList<WorkflowConditionRuleDto> Rules { get; init; } = [];
+}
+
+public sealed class FanOutConfigDto
+{
+    public string Strategy { get; init; } = "broadcast";
+    public string? PartitionExpression { get; init; }
+}
+
+public sealed class WorkflowEdgeDto
+{
+    public string Id { get; init; } = string.Empty;
+    public string Source { get; init; } = string.Empty;
+    public string Target { get; init; } = string.Empty;
+    public string Kind { get; init; } = "direct";
+    public EdgeConditionDto? Condition { get; init; }
+    public string? Label { get; init; }
+    public FanOutConfigDto? FanOutConfig { get; init; }
+}
+
+public sealed class WorkflowGraphDto
+{
+    public IReadOnlyList<WorkflowNodeDto> Nodes { get; init; } = [];
+    public IReadOnlyList<WorkflowEdgeDto> Edges { get; init; } = [];
+}
+
+public sealed class WorkflowCheckpointSettingsDto
+{
+    public bool Enabled { get; init; }
+}
+
+public sealed class WorkflowTelemetrySettingsDto
+{
+    public bool? OpenTelemetry { get; init; }
+    public bool? SensitiveData { get; init; }
+}
+
+public sealed class WorkflowStateScopeDto
+{
+    public string Name { get; init; } = string.Empty;
+    public string? Description { get; init; }
+    public IReadOnlyDictionary<string, JsonElement>? InitialValues { get; init; }
+}
+
+public sealed class WorkflowSettingsDto
+{
+    public WorkflowCheckpointSettingsDto Checkpointing { get; init; } = new();
+    public string ExecutionMode { get; init; } = "off-thread";
+    public int? MaxIterations { get; init; }
+    public ApprovalPolicyDto? ApprovalPolicy { get; init; }
+    public IReadOnlyList<WorkflowStateScopeDto> StateScopes { get; init; } = [];
+    public WorkflowTelemetrySettingsDto? Telemetry { get; init; }
+}
+
+public sealed class WorkflowDefinitionDto
+{
+    public string Id { get; init; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
+    public string Description { get; init; } = string.Empty;
+    public bool? IsFavorite { get; init; }
+    public WorkflowGraphDto Graph { get; init; } = new();
+    public WorkflowSettingsDto Settings { get; init; } = new();
+    public string CreatedAt { get; init; } = string.Empty;
+    public string UpdatedAt { get; init; } = string.Empty;
+}
+
 public sealed class ApprovalPolicyDto
 {
     public IReadOnlyList<ApprovalCheckpointRuleDto> Rules { get; init; } = [];
@@ -103,6 +223,15 @@ public sealed class PatternValidationIssueDto
     public string Level { get; init; } = "error";
     public string? Field { get; init; }
     public string Message { get; init; } = string.Empty;
+}
+
+public sealed class WorkflowValidationIssueDto
+{
+    public string Level { get; init; } = "error";
+    public string? Field { get; init; }
+    public string Message { get; init; } = string.Empty;
+    public string? NodeId { get; init; }
+    public string? EdgeId { get; init; }
 }
 
 public sealed class SidecarModeCapabilityDto
@@ -177,6 +306,11 @@ public sealed class ValidatePatternCommandDto : SidecarCommandEnvelope
     public PatternDefinitionDto Pattern { get; init; } = new();
 }
 
+public sealed class ValidateWorkflowCommandDto : SidecarCommandEnvelope
+{
+    public WorkflowDefinitionDto Workflow { get; init; } = new();
+}
+
 public sealed class RunTurnCommandDto : SidecarCommandEnvelope
 {
     public string SessionId { get; init; } = string.Empty;
@@ -186,6 +320,7 @@ public sealed class RunTurnCommandDto : SidecarCommandEnvelope
     public string MessageMode { get; init; } = "enqueue";
     public string? ProjectInstructions { get; init; }
     public PatternDefinitionDto Pattern { get; init; } = new();
+    public WorkflowDefinitionDto? Workflow { get; init; }
     public IReadOnlyList<ChatMessageDto> Messages { get; init; } = [];
     public RunTurnPromptInvocationDto? PromptInvocation { get; init; }
     public RunTurnToolingConfigDto? Tooling { get; init; }
@@ -328,6 +463,11 @@ public sealed class CapabilitiesEventDto : SidecarEventDto
 public sealed class PatternValidationEventDto : SidecarEventDto
 {
     public IReadOnlyList<PatternValidationIssueDto> Issues { get; init; } = [];
+}
+
+public sealed class WorkflowValidationEventDto : SidecarEventDto
+{
+    public IReadOnlyList<WorkflowValidationIssueDto> Issues { get; init; } = [];
 }
 
 public sealed class TurnDeltaEventDto : SidecarEventDto

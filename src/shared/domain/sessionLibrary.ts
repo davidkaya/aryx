@@ -14,6 +14,7 @@ import {
   type SessionStatus,
 } from '@shared/domain/session';
 import type { WorkspaceState } from '@shared/domain/workspace';
+import { buildWorkflowExecutionPattern } from '@shared/domain/workflow';
 
 export type SessionQueryMatchField = 'title' | 'message' | 'project' | 'pattern';
 export type SessionWorkspaceKind = 'project' | 'scratchpad';
@@ -456,6 +457,7 @@ export function listPinnedMessages(workspace: WorkspaceState): PinnedMessageHit[
 export function querySessions(workspace: WorkspaceState, input: QuerySessionsInput): SessionQueryResult[] {
   const projectsById = new Map<string, ProjectRecord>(workspace.projects.map((project) => [project.id, project]));
   const patternsById = new Map<string, PatternDefinition>(workspace.patterns.map((pattern) => [pattern.id, pattern]));
+  const workflowsById = new Map(workspace.workflows.map((workflow) => [workflow.id, workflow]));
   const searchTokens = tokenizeSearchText(input.searchText);
 
   return workspace.sessions
@@ -466,7 +468,17 @@ export function querySessions(workspace: WorkspaceState, input: QuerySessionsInp
       }
 
       const searchMatch = resolveSearchMatch(
-        buildSearchFields(session, projectsById.get(session.projectId), patternsById.get(session.patternId)),
+        buildSearchFields(
+          session,
+          projectsById.get(session.projectId),
+          patternsById.get(session.patternId)
+            ?? (session.workflowId
+              ? (() => {
+                const workflow = workflowsById.get(session.workflowId);
+                return workflow ? buildWorkflowExecutionPattern(workflow) : undefined;
+              })()
+              : undefined),
+        ),
         searchTokens,
       );
       if (!searchMatch) {

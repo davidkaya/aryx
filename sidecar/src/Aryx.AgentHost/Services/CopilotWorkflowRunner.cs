@@ -12,14 +12,17 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
 {
     private const string HandoffFunctionPrefix = "handoff_to_";
     private readonly PatternValidator _patternValidator;
+    private readonly WorkflowValidator _workflowValidator;
+    private readonly WorkflowRunner _workflowRunner = new();
     private readonly CopilotApprovalCoordinator _approvalCoordinator = new();
     private readonly CopilotUserInputCoordinator _userInputCoordinator = new();
     private readonly CopilotMcpOAuthCoordinator _mcpOAuthCoordinator = new();
     private readonly CopilotExitPlanModeCoordinator _exitPlanModeCoordinator = new();
 
-    public CopilotWorkflowRunner(PatternValidator patternValidator)
+    public CopilotWorkflowRunner(PatternValidator patternValidator, WorkflowValidator? workflowValidator = null)
     {
         _patternValidator = patternValidator;
+        _workflowValidator = workflowValidator ?? new WorkflowValidator();
     }
 
     public async Task<IReadOnlyList<ChatMessageDto>> RunTurnAsync(
@@ -32,10 +35,12 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
         Func<ExitPlanModeRequestedEventDto, Task> onExitPlanMode,
         CancellationToken cancellationToken)
     {
-        PatternValidationIssueDto? validationError = _patternValidator.Validate(command.Pattern).FirstOrDefault();
+        string? validationError = command.Workflow is null
+            ? _patternValidator.Validate(command.Pattern).FirstOrDefault()?.Message
+            : _workflowValidator.Validate(command.Workflow).FirstOrDefault()?.Message;
         if (validationError is not null)
         {
-            throw new InvalidOperationException(validationError.Message);
+            throw new InvalidOperationException(validationError);
         }
 
         CopilotTurnExecutionState state = new(command);
@@ -79,7 +84,9 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
                 },
                 runCancellation.Token);
             ConfigureHookLifecycleEventSuppression(state, bundle);
-            Workflow workflow = bundle.BuildWorkflow(command.Pattern);
+            Workflow workflow = command.Workflow is null
+                ? bundle.BuildWorkflow(command.Pattern)
+                : _workflowRunner.BuildWorkflow(command.Workflow, command.Pattern, bundle.Agents);
             List<ChatMessage> inputMessages = command.Messages.Select(WorkflowTranscriptProjector.ToChatMessage).ToList();
             WorkflowTranscriptProjector.AttachMessageMode(inputMessages, command.MessageMode);
 
@@ -145,6 +152,11 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
     internal static bool ShouldEnableWorkflowCheckpointing(RunTurnCommandDto command)
     {
         ArgumentNullException.ThrowIfNull(command);
+        if (command.Workflow is not null)
+        {
+            return command.Workflow.Settings.Checkpointing.Enabled;
+        }
+
         return string.Equals(command.Pattern.Mode, "handoff", StringComparison.OrdinalIgnoreCase);
     }
 

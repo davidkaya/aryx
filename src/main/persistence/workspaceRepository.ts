@@ -15,6 +15,7 @@ import {
   normalizeSessionToolingSelection,
   normalizeWorkspaceSettings,
 } from '@shared/domain/tooling';
+import { normalizeWorkflowDefinition } from '@shared/domain/workflow';
 import {
   applyDefaultToolApprovalPolicy,
   normalizePendingApprovalState,
@@ -120,6 +121,7 @@ export class WorkspaceRepository {
         approvalPolicy: applyDefaultToolApprovalPolicy(pattern.approvalPolicy),
         graph: resolvePatternGraph(pattern),
       })),
+      workflows: (stored.workflows ?? []).map(normalizeWorkflowDefinition),
       projects,
       sessions,
       settings,

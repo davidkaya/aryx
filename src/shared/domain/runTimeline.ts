@@ -17,6 +17,7 @@ import type {
   ProjectGitWorkingTreeSnapshot,
   ProjectRecord,
 } from '@shared/domain/project';
+import type { WorkflowDefinition } from '@shared/domain/workflow';
 import { createId } from '@shared/utils/ids';
 
 export type SessionRunStatus = 'running' | 'completed' | 'cancelled' | 'error';
@@ -76,6 +77,8 @@ export interface SessionRunRecord {
   patternId: string;
   patternName: string;
   patternMode: PatternDefinition['mode'];
+  workflowId?: string;
+  workflowName?: string;
   triggerMessageId: string;
   startedAt: string;
   completedAt?: string;
@@ -93,6 +96,7 @@ export interface CreateSessionRunRecordInput {
   workingDirectory?: string;
   workspaceKind: SessionRunWorkspaceKind;
   pattern: Pick<PatternDefinition, 'id' | 'name' | 'mode' | 'agents'>;
+  workflow?: Pick<WorkflowDefinition, 'id' | 'name'>;
   triggerMessageId: string;
   startedAt: string;
   preRunGitSnapshot?: ProjectGitWorkingTreeSnapshot;
@@ -610,6 +614,8 @@ export function createSessionRunRecord(input: CreateSessionRunRecordInput): Sess
     patternId: input.pattern.id,
     patternName: input.pattern.name,
     patternMode: input.pattern.mode,
+    workflowId: normalizeOptionalString(input.workflow?.id),
+    workflowName: normalizeOptionalString(input.workflow?.name),
     triggerMessageId: input.triggerMessageId,
     startedAt: input.startedAt,
     status: 'running',
@@ -655,6 +661,8 @@ export function normalizeSessionRunRecords(
     const workingDirectory = normalizeOptionalString(run.workingDirectory);
     const patternId = normalizeOptionalString(run.patternId);
     const patternName = normalizeOptionalString(run.patternName);
+    const workflowId = normalizeOptionalString(run.workflowId);
+    const workflowName = normalizeOptionalString(run.workflowName);
     const triggerMessageId = normalizeOptionalString(run.triggerMessageId);
     const startedAt = normalizeOptionalString(run.startedAt);
     if (!id || !requestId || !projectId || !projectPath || !patternId || !patternName || !triggerMessageId || !startedAt) {
@@ -672,6 +680,8 @@ export function normalizeSessionRunRecords(
         patternId,
         patternName,
         patternMode: run.patternMode,
+        workflowId,
+        workflowName,
         triggerMessageId,
         startedAt,
         completedAt: normalizeOptionalString(run.completedAt),

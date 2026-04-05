@@ -11,6 +11,7 @@ describe('session workspace helpers', () => {
     return {
       projects: [],
       patterns: [],
+      workflows: [],
       settings: createWorkspaceSettings(),
       sessions: [
         {

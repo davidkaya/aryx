@@ -6,6 +6,7 @@ import type {
   BranchSessionInput,
   CancelSessionTurnInput,
   CreateSessionInput,
+  CreateWorkflowSessionInput,
   CreateProjectGitBranchInput,
   DismissSessionMcpAuthInput,
   DismissSessionPlanReviewInput,
@@ -34,6 +35,7 @@ import type {
   SaveLspProfileInput,
   SaveMcpServerInput,
   SavePatternInput,
+  SaveWorkflowInput,
   SaveWorkspaceAgentInput,
   SendSessionMessageInput,
   SetPatternFavoriteInput,
@@ -112,6 +114,8 @@ export function registerIpcHandlers(
   ipcMain.handle(ipcChannels.setPatternFavorite, (_event, input: SetPatternFavoriteInput) =>
     service.setPatternFavorite(input.patternId, input.isFavorite),
   );
+  ipcMain.handle(ipcChannels.saveWorkflow, (_event, input: SaveWorkflowInput) => service.saveWorkflow(input.workflow));
+  ipcMain.handle(ipcChannels.deleteWorkflow, (_event, workflowId: string) => service.deleteWorkflow(workflowId));
   ipcMain.handle(ipcChannels.setTheme, async (_event, theme: AppearanceTheme) => {
     const result = await service.setTheme(theme);
     applyTitleBarTheme(window, theme);
@@ -179,6 +183,9 @@ export function registerIpcHandlers(
   );
   ipcMain.handle(ipcChannels.createSession, (_event, input: CreateSessionInput) =>
     service.createSession(input.projectId, input.patternId),
+  );
+  ipcMain.handle(ipcChannels.createWorkflowSession, (_event, input: CreateWorkflowSessionInput) =>
+    service.createWorkflowSession(input.projectId, input.workflowId),
   );
   ipcMain.handle(ipcChannels.duplicateSession, (_event, input: DuplicateSessionInput) =>
     service.duplicateSession(input.sessionId),

@@ -11,6 +11,7 @@ public sealed class SidecarProtocolHost
 {
     private const string DescribeCapabilitiesCommandType = "describe-capabilities";
     private const string ValidatePatternCommandType = "validate-pattern";
+    private const string ValidateWorkflowCommandType = "validate-workflow";
     private const string RunTurnCommandType = "run-turn";
     private const string CancelTurnCommandType = "cancel-turn";
     private const string ResolveApprovalCommandType = "resolve-approval";
@@ -42,6 +43,7 @@ public sealed class SidecarProtocolHost
 
     private readonly Func<CancellationToken, Task<SidecarCapabilitiesDto>> _capabilitiesProvider;
     private readonly PatternValidator _patternValidator;
+    private readonly WorkflowValidator _workflowValidator;
     private readonly ITurnWorkflowRunner _workflowRunner;
     private readonly ICopilotSessionManager _sessionManager;
     private readonly JsonSerializerOptions _jsonOptions;
@@ -53,7 +55,7 @@ public sealed class SidecarProtocolHost
         new(StringComparer.Ordinal);
 
     public SidecarProtocolHost()
-        : this(new PatternValidator())
+        : this(new PatternValidator(), new WorkflowValidator())
     {
     }
 
@@ -62,9 +64,20 @@ public sealed class SidecarProtocolHost
         ITurnWorkflowRunner? workflowRunner = null,
         Func<CancellationToken, Task<SidecarCapabilitiesDto>>? capabilitiesProvider = null,
         ICopilotSessionManager? sessionManager = null)
+        : this(patternValidator, new WorkflowValidator(), workflowRunner, capabilitiesProvider, sessionManager)
+    {
+    }
+
+    public SidecarProtocolHost(
+        PatternValidator patternValidator,
+        WorkflowValidator workflowValidator,
+        ITurnWorkflowRunner? workflowRunner = null,
+        Func<CancellationToken, Task<SidecarCapabilitiesDto>>? capabilitiesProvider = null,
+        ICopilotSessionManager? sessionManager = null)
     {
         _patternValidator = patternValidator;
-        _workflowRunner = workflowRunner ?? new CopilotWorkflowRunner(_patternValidator);
+        _workflowValidator = workflowValidator;
+        _workflowRunner = workflowRunner ?? new CopilotWorkflowRunner(_patternValidator, _workflowValidator);
         _capabilitiesProvider = capabilitiesProvider ?? BuildCapabilitiesAsync;
         _sessionManager = sessionManager ?? new CopilotSessionManager();
         _jsonOptions = JsonSerialization.CreateWebOptions();
@@ -74,6 +87,7 @@ public sealed class SidecarProtocolHost
         {
             [DescribeCapabilitiesCommandType] = HandleDescribeCapabilitiesAsync,
             [ValidatePatternCommandType] = HandleValidatePatternAsync,
+            [ValidateWorkflowCommandType] = HandleValidateWorkflowAsync,
             [RunTurnCommandType] = HandleRunTurnAsync,
             [CancelTurnCommandType] = HandleCancelTurnAsync,
             [ResolveApprovalCommandType] = HandleResolveApprovalAsync,
@@ -177,6 +191,18 @@ public sealed class SidecarProtocolHost
             Type = "pattern-validation",
             RequestId = context.Envelope.RequestId,
             Issues = _patternValidator.Validate(command.Pattern),
+        }, context.CancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task HandleValidateWorkflowAsync(CommandContext context)
+    {
+        ValidateWorkflowCommandDto command = DeserializeCommand<ValidateWorkflowCommandDto>(context);
+
+        await WriteAsync(context.Output, new WorkflowValidationEventDto
+        {
+            Type = "workflow-validation",
+            RequestId = context.Envelope.RequestId,
+            Issues = _workflowValidator.Validate(command.Workflow),
         }, context.CancellationToken).ConfigureAwait(false);
     }
 

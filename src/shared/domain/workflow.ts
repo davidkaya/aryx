@@ -10,8 +10,7 @@ export type WorkflowNodeKind =
   | 'start'
   | 'end'
   | 'agent'
-  | 'code-executor'
-  | 'function-executor'
+  | 'invoke-function'
   | 'sub-workflow'
   | 'request-port';
 
@@ -61,17 +60,12 @@ export interface AgentNodeConfig extends PatternAgentDefinition {
   kind: 'agent';
 }
 
-export interface CodeExecutorConfig {
-  kind: 'code-executor';
-  inputType?: string;
-  outputType?: string;
-  implementation?: string;
-}
-
-export interface FunctionExecutorConfig {
-  kind: 'function-executor';
-  functionRef: string;
-  parameters?: Record<string, unknown>;
+export interface InvokeFunctionConfig {
+  kind: 'invoke-function';
+  functionName: string;
+  arguments?: Record<string, unknown>;
+  requireApproval?: boolean;
+  resultVariable?: string;
 }
 
 export interface SubWorkflowConfig {
@@ -92,8 +86,7 @@ export type WorkflowNodeConfig =
   | StartNodeConfig
   | EndNodeConfig
   | AgentNodeConfig
-  | CodeExecutorConfig
-  | FunctionExecutorConfig
+  | InvokeFunctionConfig
   | SubWorkflowConfig
   | RequestPortConfig;
 
@@ -174,8 +167,7 @@ const executableNodeKinds = new Set<WorkflowNodeKind>([
   'start',
   'end',
   'agent',
-  'code-executor',
-  'function-executor',
+  'invoke-function',
   'sub-workflow',
   'request-port',
 ]);
@@ -219,21 +211,14 @@ function normalizeNodeConfig(kind: WorkflowNodeKind, config?: Partial<WorkflowNo
         overrides: agent?.overrides,
       };
     }
-    case 'code-executor': {
-      const value = config as Partial<CodeExecutorConfig> | undefined;
+    case 'invoke-function': {
+      const value = config as Partial<InvokeFunctionConfig> | undefined;
       return {
         kind,
-        inputType: normalizeOptionalString(value?.inputType),
-        outputType: normalizeOptionalString(value?.outputType),
-        implementation: value?.implementation?.trim(),
-      };
-    }
-    case 'function-executor': {
-      const value = config as Partial<FunctionExecutorConfig> | undefined;
-      return {
-        kind,
-        functionRef: normalizeOptionalString(value?.functionRef) ?? '',
-        parameters: value?.parameters,
+        functionName: normalizeOptionalString(value?.functionName) ?? '',
+        arguments: value?.arguments,
+        requireApproval: value?.requireApproval,
+        resultVariable: normalizeOptionalString(value?.resultVariable),
       };
     }
     case 'sub-workflow': {
@@ -750,23 +735,13 @@ function validateSubWorkflowNode(node: WorkflowNode, issues: WorkflowValidationI
 
 function validateExecutableNodeConfig(node: WorkflowNode, issues: WorkflowValidationIssue[]): void {
   switch (node.kind) {
-    case 'code-executor':
-      if (node.config.kind === 'code-executor' && !node.config.implementation?.trim()) {
+    case 'invoke-function':
+      if (node.config.kind === 'invoke-function' && !node.config.functionName.trim()) {
         addIssue(issues, {
           level: 'error',
-          field: 'graph.nodes.config.implementation',
+          field: 'graph.nodes.config.functionName',
           nodeId: node.id,
-          message: 'Code executor nodes require a non-empty implementation.',
-        });
-      }
-      return;
-    case 'function-executor':
-      if (node.config.kind === 'function-executor' && !node.config.functionRef.trim()) {
-        addIssue(issues, {
-          level: 'error',
-          field: 'graph.nodes.config.functionRef',
-          nodeId: node.id,
-          message: 'Function executor nodes require a non-empty functionRef.',
+          message: 'Function tool nodes require a non-empty functionName.',
         });
       }
       return;
@@ -930,8 +905,7 @@ export function validateWorkflowDefinition(workflow: WorkflowDefinition): Workfl
   const endNodes = normalized.graph.nodes.filter((node) => node.kind === 'end');
   const executableWorkNodes = normalized.graph.nodes.filter((node) =>
     node.kind === 'agent'
-    || node.kind === 'code-executor'
-    || node.kind === 'function-executor'
+    || node.kind === 'invoke-function'
     || node.kind === 'sub-workflow'
     || node.kind === 'request-port');
 

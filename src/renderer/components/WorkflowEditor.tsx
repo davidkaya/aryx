@@ -97,10 +97,8 @@ function defaultConfigForKind(kind: WorkflowNodeKind): WorkflowNodeConfig {
         model: 'gpt-5.4',
         reasoningEffort: 'high',
       };
-    case 'code-executor':
-      return { kind: 'code-executor' };
-    case 'function-executor':
-      return { kind: 'function-executor', functionRef: '' };
+    case 'invoke-function':
+      return { kind: 'invoke-function', functionName: '', arguments: {} };
     case 'sub-workflow':
       return { kind: 'sub-workflow' };
     case 'request-port':
@@ -116,10 +114,8 @@ function defaultLabelForKind(kind: WorkflowNodeKind): string {
       return 'End';
     case 'agent':
       return 'New Agent';
-    case 'code-executor':
-      return 'Code Executor';
-    case 'function-executor':
-      return 'Function';
+    case 'invoke-function':
+      return 'Function Tool';
     case 'sub-workflow':
       return 'Sub-Workflow';
     case 'request-port':

@@ -36,10 +36,8 @@ function resolveNodeType(kind: WorkflowNodeKind): string {
       return 'endNode';
     case 'agent':
       return 'agentNode';
-    case 'code-executor':
-      return 'codeExecutorNode';
-    case 'function-executor':
-      return 'functionExecutorNode';
+    case 'invoke-function':
+      return 'invokeFunctionNode';
     case 'sub-workflow':
       return 'subWorkflowNode';
     case 'request-port':

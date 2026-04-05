@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { AlertCircle, Bot, Code, FunctionSquare, GitBranch, Info, Radio, Trash2 } from 'lucide-react';
+import { AlertCircle, Bot, FunctionSquare, GitBranch, Info, Radio, Trash2 } from 'lucide-react';
 
 import {
   findModel,
@@ -17,9 +17,8 @@ import type {
   AgentNodeConfig,
 } from '@shared/domain/workflow';
 import { ModelSelect, ReasoningEffortSelect } from '@renderer/components/AgentConfigFields';
-import { CodeExecutorInspector } from '@renderer/components/workflow/CodeExecutorInspector';
+import { InvokeFunctionInspector } from '@renderer/components/workflow/InvokeFunctionInspector';
 import { ConditionEditor } from '@renderer/components/workflow/ConditionEditor';
-import { FunctionExecutorInspector } from '@renderer/components/workflow/FunctionExecutorInspector';
 import { RequestPortInspector } from '@renderer/components/workflow/RequestPortInspector';
 import { SubWorkflowInspector } from '@renderer/components/workflow/SubWorkflowInspector';
 
@@ -194,9 +193,7 @@ function SystemNodeInspector({ node }: { node: WorkflowNode }) {
 
 /* ── Placeholder inspector for future node kinds ───────────── */
 
-const placeholderIcons: Record<string, typeof Code> = {
-  'code-executor': Code,
-  'function-executor': FunctionSquare,
+const placeholderIcons: Record<string, typeof FunctionSquare> = {
   'sub-workflow': GitBranch,
   'request-port': Radio,
 };
@@ -460,24 +457,10 @@ export function WorkflowGraphInspector({
     );
   }
 
-  if (selectedNode.kind === 'code-executor') {
+  if (selectedNode.kind === 'invoke-function') {
     return (
       <div className="p-4">
-        <CodeExecutorInspector
-          node={selectedNode}
-          validationIssues={validationIssues}
-          onNodeChange={onNodeChange}
-          onNodeConfigChange={onNodeConfigChange}
-          onNodeRemove={onNodeRemove}
-        />
-      </div>
-    );
-  }
-
-  if (selectedNode.kind === 'function-executor') {
-    return (
-      <div className="p-4">
-        <FunctionExecutorInspector
+        <InvokeFunctionInspector
           node={selectedNode}
           validationIssues={validationIssues}
           onNodeChange={onNodeChange}

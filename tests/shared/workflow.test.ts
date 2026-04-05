@@ -119,17 +119,17 @@ describe('workflow validation', () => {
   test('accepts phase 4 executor node kinds as executable work', () => {
     const workflow = createWorkflow();
     workflow.graph.nodes[1] = {
-      id: 'code-executor',
-      kind: 'code-executor',
-      label: 'Transform',
+      id: 'invoke-function',
+      kind: 'invoke-function',
+      label: 'Function Tool',
       position: { x: 100, y: 0 },
       config: {
-        kind: 'code-executor',
-        implementation: 'return-text:done',
+        kind: 'invoke-function',
+        functionName: 'GetUserData',
       },
     };
-    workflow.graph.edges[0] = { id: 'edge-start-code', source: 'start', target: 'code-executor', kind: 'direct' };
-    workflow.graph.edges[1] = { id: 'edge-code-end', source: 'code-executor', target: 'end', kind: 'direct' };
+    workflow.graph.edges[0] = { id: 'edge-start-fn', source: 'start', target: 'invoke-function', kind: 'direct' };
+    workflow.graph.edges[1] = { id: 'edge-fn-end', source: 'invoke-function', target: 'end', kind: 'direct' };
 
     expect(validateWorkflowDefinition(workflow)).toEqual([]);
   });
@@ -137,17 +137,17 @@ describe('workflow validation', () => {
   test('counts function and request port nodes as executable work', () => {
     const functionWorkflow = createWorkflow();
     functionWorkflow.graph.nodes[1] = {
-      id: 'function-executor',
-      kind: 'function-executor',
-      label: 'Function',
+      id: 'invoke-function',
+      kind: 'invoke-function',
+      label: 'Function Tool',
       position: { x: 200, y: 0 },
       config: {
-        kind: 'function-executor',
-        functionRef: 'identity',
+        kind: 'invoke-function',
+        functionName: 'identity',
       },
     };
-    functionWorkflow.graph.edges[0] = { id: 'edge-start-function', source: 'start', target: 'function-executor', kind: 'direct' };
-    functionWorkflow.graph.edges[1] = { id: 'edge-function-end', source: 'function-executor', target: 'end', kind: 'direct' };
+    functionWorkflow.graph.edges[0] = { id: 'edge-start-function', source: 'start', target: 'invoke-function', kind: 'direct' };
+    functionWorkflow.graph.edges[1] = { id: 'edge-function-end', source: 'invoke-function', target: 'end', kind: 'direct' };
 
     const requestPortWorkflow = createWorkflow();
     requestPortWorkflow.graph.nodes[1] = {
@@ -170,33 +170,19 @@ describe('workflow validation', () => {
   });
 
   test('rejects invalid phase 4 executor configs', () => {
-    const codeWorkflow = createWorkflow();
-    codeWorkflow.graph.nodes[1] = {
-      id: 'code-executor',
-      kind: 'code-executor',
-      label: 'Code',
-      position: { x: 200, y: 0 },
-      config: {
-        kind: 'code-executor',
-        implementation: '   ',
-      },
-    };
-    codeWorkflow.graph.edges[0] = { id: 'edge-start-code', source: 'start', target: 'code-executor', kind: 'direct' };
-    codeWorkflow.graph.edges[1] = { id: 'edge-code-end', source: 'code-executor', target: 'end', kind: 'direct' };
-
     const functionWorkflow = createWorkflow();
     functionWorkflow.graph.nodes[1] = {
-      id: 'function-executor',
-      kind: 'function-executor',
-      label: 'Function',
+      id: 'invoke-function',
+      kind: 'invoke-function',
+      label: 'Function Tool',
       position: { x: 200, y: 0 },
       config: {
-        kind: 'function-executor',
-        functionRef: '   ',
+        kind: 'invoke-function',
+        functionName: '   ',
       },
     };
-    functionWorkflow.graph.edges[0] = { id: 'edge-start-function', source: 'start', target: 'function-executor', kind: 'direct' };
-    functionWorkflow.graph.edges[1] = { id: 'edge-function-end', source: 'function-executor', target: 'end', kind: 'direct' };
+    functionWorkflow.graph.edges[0] = { id: 'edge-start-function', source: 'start', target: 'invoke-function', kind: 'direct' };
+    functionWorkflow.graph.edges[1] = { id: 'edge-function-end', source: 'invoke-function', target: 'end', kind: 'direct' };
 
     const requestPortWorkflow = createWorkflow();
     requestPortWorkflow.graph.nodes[1] = {
@@ -214,8 +200,7 @@ describe('workflow validation', () => {
     requestPortWorkflow.graph.edges[0] = { id: 'edge-start-port', source: 'start', target: 'request-port', kind: 'direct' };
     requestPortWorkflow.graph.edges[1] = { id: 'edge-port-end', source: 'request-port', target: 'end', kind: 'direct' };
 
-    expect(validateWorkflowDefinition(codeWorkflow).some((issue) => issue.field === 'graph.nodes.config.implementation')).toBe(true);
-    expect(validateWorkflowDefinition(functionWorkflow).some((issue) => issue.field === 'graph.nodes.config.functionRef')).toBe(true);
+    expect(validateWorkflowDefinition(functionWorkflow).some((issue) => issue.field === 'graph.nodes.config.functionName')).toBe(true);
 
     const requestPortIssues = validateWorkflowDefinition(requestPortWorkflow);
     expect(requestPortIssues.some((issue) => issue.field === 'graph.nodes.config.portId')).toBe(true);

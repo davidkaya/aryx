@@ -1,6 +1,6 @@
 import { memo } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
-import { Bot, Circle, Code, FunctionSquare, GitBranch, Link2, Radio, Play, Square } from 'lucide-react';
+import { Bot, Circle, FunctionSquare, GitBranch, Link2, Radio, Play, Square } from 'lucide-react';
 
 import type { WorkflowGraphNodeData } from '@renderer/lib/workflowGraph';
 import type { WorkflowNodeKind } from '@shared/domain/workflow';
@@ -12,8 +12,7 @@ const kindColors: Record<WorkflowNodeKind, { bg: string; border: string; text: s
   start: { bg: 'bg-emerald-500/10', border: 'border-emerald-500/30', text: 'text-emerald-400' },
   end: { bg: 'bg-rose-500/10', border: 'border-rose-500/30', text: 'text-rose-400' },
   agent: { bg: 'bg-[var(--color-surface-2)]/80', border: 'border-[var(--color-border)]/40', text: 'text-[var(--color-text-primary)]' },
-  'code-executor': { bg: 'bg-sky-500/10', border: 'border-sky-500/30', text: 'text-sky-400' },
-  'function-executor': { bg: 'bg-violet-500/10', border: 'border-violet-500/30', text: 'text-violet-400' },
+  'invoke-function': { bg: 'bg-violet-500/10', border: 'border-violet-500/30', text: 'text-violet-400' },
   'sub-workflow': { bg: 'bg-amber-500/10', border: 'border-amber-500/30', text: 'text-amber-400' },
   'request-port': { bg: 'bg-teal-500/10', border: 'border-teal-500/30', text: 'text-teal-400' },
 };
@@ -22,8 +21,7 @@ const kindIcons: Record<WorkflowNodeKind, typeof Bot> = {
   start: Play,
   end: Square,
   agent: Bot,
-  'code-executor': Code,
-  'function-executor': FunctionSquare,
+  'invoke-function': FunctionSquare,
   'sub-workflow': GitBranch,
   'request-port': Radio,
 };
@@ -115,18 +113,7 @@ export const AgentNode = memo(function AgentNode({ data, selected }: NodeProps) 
   );
 });
 
-export const CodeExecutorNode = memo(function CodeExecutorNode({ data, selected }: NodeProps) {
-  const nodeData = data as unknown as WorkflowGraphNodeData;
-  return (
-    <>
-      <Handle type="target" position={Position.Left} className={handleStyles.flow} />
-      <WorkflowNodeContent data={nodeData} selected={selected ?? false} />
-      <Handle type="source" position={Position.Right} className={handleStyles.flow} />
-    </>
-  );
-});
-
-export const FunctionExecutorNode = memo(function FunctionExecutorNode({ data, selected }: NodeProps) {
+export const InvokeFunctionNode = memo(function InvokeFunctionNode({ data, selected }: NodeProps) {
   const nodeData = data as unknown as WorkflowGraphNodeData;
   return (
     <>
@@ -165,8 +152,7 @@ export const workflowNodeTypes = {
   startNode: StartNode,
   endNode: EndNode,
   agentNode: AgentNode,
-  codeExecutorNode: CodeExecutorNode,
-  functionExecutorNode: FunctionExecutorNode,
+  invokeFunctionNode: InvokeFunctionNode,
   subWorkflowNode: SubWorkflowNode,
   requestPortNode: RequestPortNode,
 };

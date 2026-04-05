@@ -2,13 +2,13 @@ import { useCallback, useState } from 'react';
 import { AlertCircle, FunctionSquare, Plus, Trash2, X } from 'lucide-react';
 
 import type {
-  FunctionExecutorConfig,
+  InvokeFunctionConfig,
   WorkflowNode,
   WorkflowNodeConfig,
   WorkflowValidationIssue,
 } from '@shared/domain/workflow';
 
-interface FunctionExecutorInspectorProps {
+interface InvokeFunctionInspectorProps {
   node: WorkflowNode;
   validationIssues?: WorkflowValidationIssue[];
   onNodeChange: (nodeId: string, patch: Partial<WorkflowNode>) => void;
@@ -42,66 +42,58 @@ function InputField({
   );
 }
 
-const builtInFunctions = [
-  { value: 'identity', label: 'identity — Pass through input' },
-  { value: 'return-parameter', label: 'return-parameter — Return a parameter value' },
-  { value: 'concat-text', label: 'concat-text — Concatenate text values' },
-  { value: 'state:get', label: 'state:get — Read state value' },
-  { value: 'state:set', label: 'state:set — Set state value' },
-] as const;
-
 function stringifyValue(v: unknown): string {
   if (typeof v === 'string') return v;
   return JSON.stringify(v) ?? '';
 }
 
-export function FunctionExecutorInspector({
+export function InvokeFunctionInspector({
   node,
   validationIssues,
   onNodeChange,
   onNodeConfigChange,
   onNodeRemove,
-}: FunctionExecutorInspectorProps) {
-  const config = node.config as FunctionExecutorConfig;
+}: InvokeFunctionInspectorProps) {
+  const config = node.config as InvokeFunctionConfig;
   const nodeIssues = validationIssues?.filter((i) => i.nodeId === node.id) ?? [];
-  const parameters = config.parameters ?? {};
-  const paramEntries = Object.entries(parameters);
+  const args = config.arguments ?? {};
+  const argEntries = Object.entries(args);
 
   const [newKey, setNewKey] = useState('');
 
   const patchConfig = useCallback(
-    (patch: Partial<FunctionExecutorConfig>) => {
+    (patch: Partial<InvokeFunctionConfig>) => {
       onNodeConfigChange(node.id, { ...config, ...patch });
     },
     [node.id, config, onNodeConfigChange],
   );
 
-  const handleParamChange = useCallback(
-    (oldKey: string, newParamKey: string, value: string) => {
-      const next = { ...parameters };
-      if (newParamKey !== oldKey) {
+  const handleArgChange = useCallback(
+    (oldKey: string, newArgKey: string, value: string) => {
+      const next = { ...args };
+      if (newArgKey !== oldKey) {
         delete next[oldKey];
       }
-      next[newParamKey] = value;
-      patchConfig({ parameters: next });
+      next[newArgKey] = value;
+      patchConfig({ arguments: next });
     },
-    [parameters, patchConfig],
+    [args, patchConfig],
   );
 
-  const handleParamRemove = useCallback(
+  const handleArgRemove = useCallback(
     (key: string) => {
-      const next = { ...parameters };
+      const next = { ...args };
       delete next[key];
-      patchConfig({ parameters: next });
+      patchConfig({ arguments: next });
     },
-    [parameters, patchConfig],
+    [args, patchConfig],
   );
 
-  const handleParamAdd = useCallback(() => {
-    const key = newKey.trim() || `param${paramEntries.length + 1}`;
-    patchConfig({ parameters: { ...parameters, [key]: '' } });
+  const handleArgAdd = useCallback(() => {
+    const key = newKey.trim() || `arg${argEntries.length + 1}`;
+    patchConfig({ arguments: { ...args, [key]: '' } });
     setNewKey('');
-  }, [newKey, paramEntries.length, parameters, patchConfig]);
+  }, [newKey, argEntries.length, args, patchConfig]);
 
   return (
     <div className="space-y-4">
@@ -112,7 +104,7 @@ export function FunctionExecutorInspector({
             <FunctionSquare className="size-4 text-violet-400" />
           </div>
           <div className="text-[13px] font-semibold text-[var(--color-text-primary)]">
-            {node.label || 'Function Executor'}
+            {node.label || 'Function Tool'}
           </div>
         </div>
         <button
@@ -133,61 +125,73 @@ export function FunctionExecutorInspector({
         value={node.label}
       />
 
-      {/* Function reference */}
-      <label className="block space-y-1.5">
-        <span className="text-[12px] font-medium text-[var(--color-text-secondary)]">Function</span>
-        <select
-          className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-1)] px-3 py-2 text-[13px] text-[var(--color-text-primary)] outline-none transition focus:border-[var(--color-accent)]/50"
-          onChange={(e) => patchConfig({ functionRef: e.target.value })}
-          value={config.functionRef}
-        >
-          <option value="">Select a function…</option>
-          {builtInFunctions.map((fn) => (
-            <option key={fn.value} value={fn.value}>
-              {fn.label}
-            </option>
-          ))}
-        </select>
+      {/* Function name */}
+      <InputField
+        label="Function Name"
+        onChange={(v) => patchConfig({ functionName: v })}
+        placeholder="e.g. GetUserData"
+        value={config.functionName}
+      />
+
+      {/* Result variable */}
+      <InputField
+        label="Result Variable"
+        onChange={(v) => patchConfig({ resultVariable: v || undefined })}
+        placeholder="e.g. Local.result"
+        value={config.resultVariable ?? ''}
+      />
+
+      {/* Require approval */}
+      <label className="flex items-center justify-between">
+        <span className="text-[12px] font-medium text-[var(--color-text-secondary)]">
+          Require Approval
+        </span>
+        <input
+          checked={config.requireApproval === true}
+          className="size-4 accent-[var(--color-accent)]"
+          onChange={(e) => patchConfig({ requireApproval: e.target.checked || undefined })}
+          type="checkbox"
+        />
       </label>
 
-      {/* Parameters editor */}
+      {/* Arguments editor */}
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">
           <span className="text-[12px] font-medium text-[var(--color-text-secondary)]">
-            Parameters
+            Arguments
           </span>
           <button
             className="flex size-6 items-center justify-center rounded-md text-[var(--color-text-muted)] transition-all duration-200 hover:bg-[var(--color-accent)]/10 hover:text-[var(--color-accent)]"
-            onClick={handleParamAdd}
-            title="Add parameter"
+            onClick={handleArgAdd}
+            title="Add argument"
             type="button"
           >
             <Plus className="size-3.5" />
           </button>
         </div>
 
-        {paramEntries.length === 0 && (
-          <p className="text-[11px] text-[var(--color-text-muted)]">No parameters defined.</p>
+        {argEntries.length === 0 && (
+          <p className="text-[11px] text-[var(--color-text-muted)]">No arguments defined.</p>
         )}
 
-        {paramEntries.map(([key, value]) => (
+        {argEntries.map(([key, value]) => (
           <div className="flex items-center gap-1.5" key={key}>
             <input
               className="w-1/3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-1)] px-2 py-1.5 text-[12px] text-[var(--color-text-primary)] placeholder-[var(--color-text-muted)] outline-none transition focus:border-[var(--color-accent)]/50"
-              onChange={(e) => handleParamChange(key, e.target.value, stringifyValue(value))}
+              onChange={(e) => handleArgChange(key, e.target.value, stringifyValue(value))}
               placeholder="key"
               value={key}
             />
             <input
               className="flex-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-1)] px-2 py-1.5 text-[12px] text-[var(--color-text-primary)] placeholder-[var(--color-text-muted)] outline-none transition focus:border-[var(--color-accent)]/50"
-              onChange={(e) => handleParamChange(key, key, e.target.value)}
+              onChange={(e) => handleArgChange(key, key, e.target.value)}
               placeholder="value"
               value={stringifyValue(value)}
             />
             <button
               className="flex size-6 shrink-0 items-center justify-center rounded-md text-[var(--color-text-muted)] transition-all duration-200 hover:bg-[var(--color-status-error)]/10 hover:text-[var(--color-status-error)]"
-              onClick={() => handleParamRemove(key)}
-              title="Remove parameter"
+              onClick={() => handleArgRemove(key)}
+              title="Remove argument"
               type="button"
             >
               <X className="size-3" />

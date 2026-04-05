@@ -1,4 +1,4 @@
-import { Bot, Code, FunctionSquare, GitBranch, Play, Radio, Square } from 'lucide-react';
+import { Bot, FunctionSquare, GitBranch, Play, Radio, Square } from 'lucide-react';
 
 import type { WorkflowNodeKind } from '@shared/domain/workflow';
 
@@ -36,8 +36,7 @@ const paletteGroups: PaletteGroup[] = [
   {
     label: 'Processing',
     items: [
-      { kind: 'code-executor', label: 'Code', icon: Code, color: 'text-sky-400' },
-      { kind: 'function-executor', label: 'Function', icon: FunctionSquare, color: 'text-violet-400' },
+      { kind: 'invoke-function', label: 'Function Tool', icon: FunctionSquare, color: 'text-violet-400' },
     ],
   },
   {

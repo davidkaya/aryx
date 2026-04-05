@@ -131,6 +131,8 @@ export interface WorkflowEdge {
   condition?: EdgeCondition;
   label?: string;
   fanOutConfig?: FanOutConfig;
+  isLoop?: boolean;
+  maxIterations?: number;
 }
 
 export interface WorkflowGraph {
@@ -236,6 +238,41 @@ function normalizeNodeConfig(kind: WorkflowNodeKind, config?: Partial<WorkflowNo
   }
 }
 
+function normalizeConditionRule(rule: WorkflowConditionRule): WorkflowConditionRule {
+  return {
+    propertyPath: rule.propertyPath.trim(),
+    operator: rule.operator,
+    value: rule.value.trim(),
+  };
+}
+
+function normalizeEdgeCondition(condition?: EdgeCondition): EdgeCondition | undefined {
+  if (!condition) {
+    return undefined;
+  }
+
+  switch (condition.type) {
+    case 'always':
+      return { type: 'always' };
+    case 'message-type':
+      return {
+        type: 'message-type',
+        typeName: condition.typeName.trim(),
+      };
+    case 'expression':
+      return {
+        type: 'expression',
+        expression: condition.expression.trim(),
+      };
+    case 'property':
+      return {
+        type: 'property',
+        combinator: condition.combinator === 'or' ? 'or' : 'and',
+        rules: condition.rules.map(normalizeConditionRule),
+      };
+  }
+}
+
 export function normalizeWorkflowDefinition(workflow: WorkflowDefinition): WorkflowDefinition {
   return {
     ...workflow,
@@ -256,7 +293,13 @@ export function normalizeWorkflowDefinition(workflow: WorkflowDefinition): Workf
         source: edge.source.trim(),
         target: edge.target.trim(),
         kind: edge.kind,
+        condition: normalizeEdgeCondition(edge.condition),
         label: normalizeOptionalString(edge.label),
+        isLoop: edge.isLoop === true ? true : undefined,
+        maxIterations:
+          typeof edge.maxIterations === 'number' && edge.maxIterations > 0
+            ? Math.round(edge.maxIterations)
+            : undefined,
       })),
     },
     settings: {
@@ -372,9 +415,10 @@ function hasPathToEnd(startNodeId: string, graph: WorkflowGraph, endNodeIds: Set
   const visited = new Set<string>();
   while (queue.length > 0) {
     const nodeId = queue.shift()!;
-    if (!visited.add(nodeId)) {
+    if (visited.has(nodeId)) {
       continue;
     }
+    visited.add(nodeId);
     if (endNodeIds.has(nodeId)) {
       return true;
     }
@@ -384,6 +428,184 @@ function hasPathToEnd(startNodeId: string, graph: WorkflowGraph, endNodeIds: Set
   }
 
   return false;
+}
+
+function buildOutgoingEdges(graph: WorkflowGraph, excludedEdgeId?: string): Map<string, WorkflowEdge[]> {
+  const outgoing = new Map<string, WorkflowEdge[]>();
+  for (const edge of graph.edges) {
+    if (edge.id === excludedEdgeId) {
+      continue;
+    }
+
+    const current = outgoing.get(edge.source);
+    if (current) {
+      current.push(edge);
+    } else {
+      outgoing.set(edge.source, [edge]);
+    }
+  }
+
+  return outgoing;
+}
+
+function canReachNode(graph: WorkflowGraph, startNodeId: string, targetNodeId: string, excludedEdgeId?: string): boolean {
+  if (startNodeId === targetNodeId) {
+    return true;
+  }
+
+  const outgoing = buildOutgoingEdges(graph, excludedEdgeId);
+  const queue = [startNodeId];
+  const visited = new Set<string>();
+  while (queue.length > 0) {
+    const nodeId = queue.shift()!;
+    if (visited.has(nodeId)) {
+      continue;
+    }
+    visited.add(nodeId);
+
+    for (const edge of outgoing.get(nodeId) ?? []) {
+      if (edge.target === targetNodeId) {
+        return true;
+      }
+
+      queue.push(edge.target);
+    }
+  }
+
+  return false;
+}
+
+function collectStronglyConnectedNodes(graph: WorkflowGraph, nodeId: string): Set<string> {
+  const connected = new Set<string>();
+  for (const candidate of graph.nodes) {
+    if (canReachNode(graph, nodeId, candidate.id) && canReachNode(graph, candidate.id, nodeId)) {
+      connected.add(candidate.id);
+    }
+  }
+
+  return connected;
+}
+
+function isLoopEdge(graph: WorkflowGraph, edge: WorkflowEdge): boolean {
+  return canReachNode(graph, edge.target, edge.source, edge.id);
+}
+
+function isSupportedExpressionCondition(expression: string): boolean {
+  const trimmed = expression.trim();
+  if (!trimmed) {
+    return false;
+  }
+
+  if (trimmed === 'true' || trimmed === 'false') {
+    return true;
+  }
+
+  const comparisonPattern =
+    /^[A-Za-z_][A-Za-z0-9_.]*\s*(==|!=|>|<|contains|matches)\s*(?:"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|-?\d+(?:\.\d+)?|true|false)$/;
+  const logicalOperator = trimmed.includes('&&') ? '&&' : trimmed.includes('||') ? '||' : undefined;
+  if (!logicalOperator) {
+    return comparisonPattern.test(trimmed);
+  }
+
+  return trimmed
+    .split(logicalOperator)
+    .map((segment) => segment.trim())
+    .every((segment) => comparisonPattern.test(segment));
+}
+
+function validateEdgeCondition(edge: WorkflowEdge, issues: WorkflowValidationIssue[]): void {
+  const condition = edge.condition;
+  if (!condition) {
+    return;
+  }
+
+  switch (condition.type) {
+    case 'always':
+      return;
+    case 'message-type':
+      if (!condition.typeName.trim()) {
+        addIssue(issues, {
+          level: 'error',
+          field: 'graph.edges.condition.typeName',
+          edgeId: edge.id,
+          message: 'Message-type conditions require a type name.',
+        });
+      }
+      return;
+    case 'expression':
+      if (!condition.expression.trim()) {
+        addIssue(issues, {
+          level: 'error',
+          field: 'graph.edges.condition.expression',
+          edgeId: edge.id,
+          message: 'Expression conditions require a non-empty expression.',
+        });
+        return;
+      }
+
+      if (!isSupportedExpressionCondition(condition.expression)) {
+        addIssue(issues, {
+          level: 'error',
+          field: 'graph.edges.condition.expression',
+          edgeId: edge.id,
+          message:
+            'Expression conditions currently support simple comparisons using ==, !=, >, <, contains, matches, optionally combined with && or ||.',
+        });
+      }
+      return;
+    case 'property': {
+      if (condition.rules.length === 0) {
+        addIssue(issues, {
+          level: 'error',
+          field: 'graph.edges.condition.rules',
+          edgeId: edge.id,
+          message: 'Property conditions require at least one rule.',
+        });
+      }
+
+      if (condition.combinator && condition.combinator !== 'and' && condition.combinator !== 'or') {
+        addIssue(issues, {
+          level: 'error',
+          field: 'graph.edges.condition.combinator',
+          edgeId: edge.id,
+          message: 'Property conditions must use the "and" or "or" combinator.',
+        });
+      }
+
+      for (const rule of condition.rules) {
+        if (!rule.propertyPath.trim()) {
+          addIssue(issues, {
+            level: 'error',
+            field: 'graph.edges.condition.rules.propertyPath',
+            edgeId: edge.id,
+            message: 'Property condition rules require a property path.',
+          });
+        }
+
+        if (!['equals', 'not-equals', 'contains', 'gt', 'lt', 'regex'].includes(rule.operator)) {
+          addIssue(issues, {
+            level: 'error',
+            field: 'graph.edges.condition.rules.operator',
+            edgeId: edge.id,
+            message: `Property condition operator "${rule.operator}" is not supported.`,
+          });
+        }
+
+        if (rule.operator === 'regex') {
+          try {
+            new RegExp(rule.value);
+          } catch {
+            addIssue(issues, {
+              level: 'error',
+              field: 'graph.edges.condition.rules.value',
+              edgeId: edge.id,
+              message: `Regex pattern "${rule.value}" is invalid.`,
+            });
+          }
+        }
+      }
+    }
+  }
 }
 
 export function validateWorkflowDefinition(workflow: WorkflowDefinition): WorkflowValidationIssue[] {
@@ -464,7 +686,6 @@ export function validateWorkflowDefinition(workflow: WorkflowDefinition): Workfl
       }
     }
   }
-
   for (const edge of normalized.graph.edges) {
     if (!edge.id) {
       addIssue(issues, { level: 'error', field: 'graph.edges.id', message: 'Workflow edges must have an ID.' });
@@ -490,8 +711,18 @@ export function validateWorkflowDefinition(workflow: WorkflowDefinition): Workfl
 
     outgoingCounts.set(edge.source, (outgoingCounts.get(edge.source) ?? 0) + 1);
     incomingCounts.set(edge.target, (incomingCounts.get(edge.target) ?? 0) + 1);
-  }
 
+    if (edge.kind === 'fan-in' && edge.condition) {
+      addIssue(issues, {
+        level: 'error',
+        field: 'graph.edges.condition',
+        edgeId: edge.id,
+        message: 'Fan-in edges do not support conditions.',
+      });
+    }
+
+    validateEdgeCondition(edge, issues);
+  }
   const startNodes = normalized.graph.nodes.filter((node) => node.kind === 'start');
   const endNodes = normalized.graph.nodes.filter((node) => node.kind === 'end');
   const agentNodes = normalized.graph.nodes.filter((node) => node.kind === 'agent');
@@ -592,7 +823,6 @@ export function validateWorkflowDefinition(workflow: WorkflowDefinition): Workfl
       });
     }
   }
-
   const startNode = startNodes[0];
   if (startNode && endNodes.length > 0 && !hasPathToEnd(startNode.id, normalized.graph, new Set(endNodes.map((node) => node.id)))) {
     addIssue(issues, {
@@ -600,6 +830,81 @@ export function validateWorkflowDefinition(workflow: WorkflowDefinition): Workfl
       field: 'graph.edges',
       message: 'Workflow graph must include a path from the start node to at least one end node.',
     });
+  }
+  if (
+    normalized.settings.maxIterations !== undefined
+    && (normalized.settings.maxIterations < 1 || normalized.settings.maxIterations > 100)
+  ) {
+    addIssue(issues, {
+      level: 'error',
+      field: 'settings.maxIterations',
+      message: 'Workflow maxIterations must be between 1 and 100.',
+    });
+  }
+
+  for (const edge of normalized.graph.edges) {
+    const loopEdge = isLoopEdge(normalized.graph, edge);
+
+    if (loopEdge && edge.kind !== 'direct') {
+      addIssue(issues, {
+        level: 'error',
+        field: 'graph.edges.kind',
+        edgeId: edge.id,
+        message: 'Loop edges currently support only direct edges.',
+      });
+    }
+
+    if (loopEdge && !edge.isLoop) {
+      addIssue(issues, {
+        level: 'error',
+        field: 'graph.edges.isLoop',
+        edgeId: edge.id,
+        message: 'Edges that participate in a cycle must be explicitly marked as loops.',
+      });
+    }
+
+    if (!loopEdge && edge.isLoop) {
+      addIssue(issues, {
+        level: 'warning',
+        field: 'graph.edges.isLoop',
+        edgeId: edge.id,
+        message: 'This edge is marked as a loop but does not currently form a cycle.',
+      });
+    }
+
+    if (!loopEdge) {
+      continue;
+    }
+
+    if (!edge.condition || edge.condition.type === 'always') {
+      addIssue(issues, {
+        level: 'error',
+        field: 'graph.edges.condition',
+        edgeId: edge.id,
+        message: 'Loop edges require a non-default condition so the loop can terminate.',
+      });
+    }
+
+    if (edge.maxIterations === undefined || edge.maxIterations < 1) {
+      addIssue(issues, {
+        level: 'error',
+        field: 'graph.edges.maxIterations',
+        edgeId: edge.id,
+        message: 'Loop edges require a maxIterations value of at least 1.',
+      });
+    }
+
+    const loopComponent = collectStronglyConnectedNodes(normalized.graph, edge.source);
+    const hasExitPath = normalized.graph.edges.some((candidate) =>
+      loopComponent.has(candidate.source) && !loopComponent.has(candidate.target));
+    if (!hasExitPath) {
+      addIssue(issues, {
+        level: 'error',
+        field: 'graph.edges',
+        edgeId: edge.id,
+        message: 'Loop cycles must include an exit path to a node outside the loop.',
+      });
+    }
   }
 
   return issues;

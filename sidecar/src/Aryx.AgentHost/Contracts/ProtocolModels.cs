@@ -138,6 +138,8 @@ public sealed class WorkflowEdgeDto
     public EdgeConditionDto? Condition { get; init; }
     public string? Label { get; init; }
     public FanOutConfigDto? FanOutConfig { get; init; }
+    public bool? IsLoop { get; init; }
+    public int? MaxIterations { get; init; }
 }
 
 public sealed class WorkflowGraphDto

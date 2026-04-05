@@ -135,6 +135,8 @@ public sealed class WorkflowValidator
             incomingCounts[edge.Target] = incomingCounts.TryGetValue(edge.Target, out int incoming)
                 ? incoming + 1
                 : 1;
+
+            ValidateEdgeCondition(edge, issues);
         }
 
         List<WorkflowNodeDto> startNodes = workflow.Graph.Nodes
@@ -250,7 +252,217 @@ public sealed class WorkflowValidator
             });
         }
 
+        if (workflow.Settings.MaxIterations is int workflowMaxIterations
+            && (workflowMaxIterations < 1 || workflowMaxIterations > 100))
+        {
+            issues.Add(new WorkflowValidationIssueDto
+            {
+                Field = "settings.maxIterations",
+                Message = "Workflow maxIterations must be between 1 and 100.",
+            });
+        }
+
+        foreach (WorkflowEdgeDto edge in workflow.Graph.Edges)
+        {
+            bool participatesInCycle = IsLoopEdge(workflow.Graph, edge);
+            if (!participatesInCycle)
+            {
+                if (edge.IsLoop == true)
+                {
+                    issues.Add(new WorkflowValidationIssueDto
+                    {
+                        Level = "warning",
+                        Field = "graph.edges.isLoop",
+                        EdgeId = edge.Id,
+                        Message = "This edge is marked as a loop but does not currently form a cycle.",
+                    });
+                }
+
+                continue;
+            }
+
+            if (!string.Equals(edge.Kind, "direct", StringComparison.OrdinalIgnoreCase))
+            {
+                issues.Add(new WorkflowValidationIssueDto
+                {
+                    Field = "graph.edges.kind",
+                    EdgeId = edge.Id,
+                    Message = "Loop edges currently support only direct edges.",
+                });
+            }
+
+            if (edge.IsLoop != true)
+            {
+                issues.Add(new WorkflowValidationIssueDto
+                {
+                    Field = "graph.edges.isLoop",
+                    EdgeId = edge.Id,
+                    Message = "Edges that participate in a cycle must be explicitly marked as loops.",
+                });
+            }
+
+            if (edge.Condition is null || string.Equals(edge.Condition.Type, "always", StringComparison.OrdinalIgnoreCase))
+            {
+                issues.Add(new WorkflowValidationIssueDto
+                {
+                    Field = "graph.edges.condition",
+                    EdgeId = edge.Id,
+                    Message = "Loop edges require a non-default condition so the loop can terminate.",
+                });
+            }
+
+            if (edge.MaxIterations is null || edge.MaxIterations < 1)
+            {
+                issues.Add(new WorkflowValidationIssueDto
+                {
+                    Field = "graph.edges.maxIterations",
+                    EdgeId = edge.Id,
+                    Message = "Loop edges require a maxIterations value of at least 1.",
+                });
+            }
+
+            HashSet<string> componentNodes = CollectStronglyConnectedNodes(workflow.Graph, edge.Source);
+            bool hasExitPath = workflow.Graph.Edges.Any(candidate =>
+                componentNodes.Contains(candidate.Source) && !componentNodes.Contains(candidate.Target));
+            if (!hasExitPath)
+            {
+                issues.Add(new WorkflowValidationIssueDto
+                {
+                    Field = "graph.edges",
+                    EdgeId = edge.Id,
+                    Message = "Loop cycles must include an exit path to a node outside the loop.",
+                });
+            }
+        }
+
         return issues;
+    }
+
+    private static void ValidateEdgeCondition(WorkflowEdgeDto edge, List<WorkflowValidationIssueDto> issues)
+    {
+        if (edge.Condition is null)
+        {
+            return;
+        }
+
+        if (string.Equals(edge.Kind, "fan-in", StringComparison.OrdinalIgnoreCase))
+        {
+            issues.Add(new WorkflowValidationIssueDto
+            {
+                Field = "graph.edges.condition",
+                EdgeId = edge.Id,
+                Message = "Fan-in edges do not support conditions.",
+            });
+        }
+
+        if (!WorkflowConditionEvaluator.IsSupportedConditionType(edge.Condition.Type))
+        {
+            issues.Add(new WorkflowValidationIssueDto
+            {
+                Field = "graph.edges.condition.type",
+                EdgeId = edge.Id,
+                Message = $"Condition type \"{edge.Condition.Type}\" is not supported.",
+            });
+            return;
+        }
+
+        if (string.Equals(edge.Condition.Type, "message-type", StringComparison.OrdinalIgnoreCase)
+            && string.IsNullOrWhiteSpace(edge.Condition.TypeName))
+        {
+            issues.Add(new WorkflowValidationIssueDto
+            {
+                Field = "graph.edges.condition.typeName",
+                EdgeId = edge.Id,
+                Message = "Message-type conditions require a type name.",
+            });
+        }
+
+        if (string.Equals(edge.Condition.Type, "expression", StringComparison.OrdinalIgnoreCase))
+        {
+            if (string.IsNullOrWhiteSpace(edge.Condition.Expression))
+            {
+                issues.Add(new WorkflowValidationIssueDto
+                {
+                    Field = "graph.edges.condition.expression",
+                    EdgeId = edge.Id,
+                    Message = "Expression conditions require a non-empty expression.",
+                });
+            }
+            else if (!WorkflowConditionEvaluator.IsSupportedExpression(edge.Condition.Expression))
+            {
+                issues.Add(new WorkflowValidationIssueDto
+                {
+                    Field = "graph.edges.condition.expression",
+                    EdgeId = edge.Id,
+                    Message = "Expression conditions currently support simple comparisons using ==, !=, >, <, contains, matches, optionally combined with && or ||.",
+                });
+            }
+        }
+
+        if (string.Equals(edge.Condition.Type, "property", StringComparison.OrdinalIgnoreCase))
+        {
+            if (edge.Condition.Rules.Count == 0)
+            {
+                issues.Add(new WorkflowValidationIssueDto
+                {
+                    Field = "graph.edges.condition.rules",
+                    EdgeId = edge.Id,
+                    Message = "Property conditions require at least one rule.",
+                });
+            }
+
+            if (!string.IsNullOrWhiteSpace(edge.Condition.Combinator)
+                && !string.Equals(edge.Condition.Combinator, "and", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(edge.Condition.Combinator, "or", StringComparison.OrdinalIgnoreCase))
+            {
+                issues.Add(new WorkflowValidationIssueDto
+                {
+                    Field = "graph.edges.condition.combinator",
+                    EdgeId = edge.Id,
+                    Message = "Property conditions must use the \"and\" or \"or\" combinator.",
+                });
+            }
+
+            foreach (WorkflowConditionRuleDto rule in edge.Condition.Rules)
+            {
+                if (string.IsNullOrWhiteSpace(rule.PropertyPath))
+                {
+                    issues.Add(new WorkflowValidationIssueDto
+                    {
+                        Field = "graph.edges.condition.rules.propertyPath",
+                        EdgeId = edge.Id,
+                        Message = "Property condition rules require a property path.",
+                    });
+                }
+
+                if (!WorkflowConditionEvaluator.IsSupportedOperator(rule.Operator))
+                {
+                    issues.Add(new WorkflowValidationIssueDto
+                    {
+                        Field = "graph.edges.condition.rules.operator",
+                        EdgeId = edge.Id,
+                        Message = $"Property condition operator \"{rule.Operator}\" is not supported.",
+                    });
+                }
+
+                if (string.Equals(rule.Operator, "regex", StringComparison.OrdinalIgnoreCase))
+                {
+                    try
+                    {
+                        _ = new System.Text.RegularExpressions.Regex(rule.Value);
+                    }
+                    catch (ArgumentException)
+                    {
+                        issues.Add(new WorkflowValidationIssueDto
+                        {
+                            Field = "graph.edges.condition.rules.value",
+                            EdgeId = edge.Id,
+                            Message = $"Regex pattern \"{rule.Value}\" is invalid.",
+                        });
+                    }
+                }
+            }
+        }
     }
 
     private static bool HasPathToAnyEnd(
@@ -288,5 +500,65 @@ public sealed class WorkflowValidator
         }
 
         return false;
+    }
+
+    private static bool CanReachNode(
+        WorkflowGraphDto graph,
+        string startNodeId,
+        string targetNodeId,
+        string? excludedEdgeId = null)
+    {
+        if (string.Equals(startNodeId, targetNodeId, StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        Dictionary<string, List<string>> outgoing = graph.Edges
+            .Where(edge => !string.Equals(edge.Id, excludedEdgeId, StringComparison.Ordinal))
+            .GroupBy(edge => edge.Source, StringComparer.Ordinal)
+            .ToDictionary(
+                group => group.Key,
+                group => group.Select(edge => edge.Target).ToList(),
+                StringComparer.Ordinal);
+
+        Queue<string> queue = new([startNodeId]);
+        HashSet<string> visited = new(StringComparer.Ordinal);
+        while (queue.Count > 0)
+        {
+            string current = queue.Dequeue();
+            if (!visited.Add(current))
+            {
+                continue;
+            }
+
+            foreach (string target in outgoing.GetValueOrDefault(current, []))
+            {
+                if (string.Equals(target, targetNodeId, StringComparison.Ordinal))
+                {
+                    return true;
+                }
+
+                queue.Enqueue(target);
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsLoopEdge(WorkflowGraphDto graph, WorkflowEdgeDto edge)
+        => CanReachNode(graph, edge.Target, edge.Source, edge.Id);
+
+    private static HashSet<string> CollectStronglyConnectedNodes(WorkflowGraphDto graph, string nodeId)
+    {
+        HashSet<string> connected = new(StringComparer.Ordinal);
+        foreach (WorkflowNodeDto candidate in graph.Nodes)
+        {
+            if (CanReachNode(graph, nodeId, candidate.Id) && CanReachNode(graph, candidate.Id, nodeId))
+            {
+                connected.Add(candidate.Id);
+            }
+        }
+
+        return connected;
     }
 }

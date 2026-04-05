@@ -92,4 +92,98 @@ describe('workflow validation', () => {
     expect(pattern.agents[0]?.name).toBe('Primary Agent');
     expect(pattern.graph?.nodes.map((node) => node.kind)).toEqual(['user-input', 'agent', 'user-output']);
   });
+
+  test('accepts simple property and expression conditions', () => {
+    const workflow = createWorkflow();
+    workflow.graph.edges[0] = {
+      ...workflow.graph.edges[0]!,
+      condition: {
+        type: 'property',
+        combinator: 'and',
+        rules: [
+          {
+            propertyPath: 'role',
+            operator: 'equals',
+            value: 'user',
+          },
+        ],
+      },
+    };
+    workflow.graph.edges[1] = {
+      ...workflow.graph.edges[1]!,
+      condition: {
+        type: 'expression',
+        expression: 'role == "assistant" || role == "user"',
+      },
+    };
+
+    expect(validateWorkflowDefinition(workflow)).toEqual([]);
+  });
+
+  test('rejects invalid condition operators and expressions', () => {
+    const workflow = createWorkflow();
+    workflow.graph.edges[0] = {
+      ...workflow.graph.edges[0]!,
+      condition: {
+        type: 'property',
+        rules: [
+          {
+            propertyPath: 'role',
+            operator: 'bad-op' as 'equals',
+            value: 'user',
+          },
+        ],
+      },
+    };
+    workflow.graph.edges[1] = {
+      ...workflow.graph.edges[1]!,
+      condition: {
+        type: 'expression',
+        expression: 'role ~= "user"',
+      },
+    };
+
+    const issues = validateWorkflowDefinition(workflow);
+    expect(issues.some((issue) => issue.field === 'graph.edges.condition.rules.operator')).toBe(true);
+    expect(issues.some((issue) => issue.field === 'graph.edges.condition.expression')).toBe(true);
+  });
+
+  test('rejects unmarked loop edges and requires termination metadata', () => {
+    const workflow = createWorkflow();
+    workflow.graph.edges.push({
+      id: 'edge-agent-loop',
+      source: 'agent-primary',
+      target: 'agent-primary',
+      kind: 'direct',
+    });
+
+    const issues = validateWorkflowDefinition(workflow);
+    expect(issues.some((issue) => issue.field === 'graph.edges.isLoop')).toBe(true);
+    expect(issues.some((issue) => issue.field === 'graph.edges.condition')).toBe(true);
+    expect(issues.some((issue) => issue.field === 'graph.edges.maxIterations')).toBe(true);
+  });
+
+  test('accepts loop edges with condition, cap, and exit path', () => {
+    const workflow = createWorkflow();
+    workflow.graph.edges.push({
+      id: 'edge-agent-loop',
+      source: 'agent-primary',
+      target: 'agent-primary',
+      kind: 'direct',
+      isLoop: true,
+      maxIterations: 3,
+      condition: {
+        type: 'property',
+        rules: [
+          {
+            propertyPath: 'iteration',
+            operator: 'lt',
+            value: '3',
+          },
+        ],
+      },
+    });
+
+    expect(validateWorkflowDefinition(workflow)).toEqual([]);
+  });
 });

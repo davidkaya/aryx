@@ -36,16 +36,41 @@ internal sealed class WorkflowRunner
         foreach (WorkflowEdgeDto edge in workflowDefinition.Graph.Edges.Where(edge =>
                      string.Equals(edge.Kind, "direct", StringComparison.OrdinalIgnoreCase)))
         {
-            builder.AddEdge(bindings[edge.Source], bindings[edge.Target]);
+            Func<object?, bool>? condition = WorkflowConditionEvaluator.Compile(edge);
+            if (condition is null)
+            {
+                builder.AddEdge(bindings[edge.Source], bindings[edge.Target]);
+            }
+            else
+            {
+                builder.AddEdge<object>(bindings[edge.Source], bindings[edge.Target], condition);
+            }
         }
 
         foreach (IGrouping<string, WorkflowEdgeDto> fanOutGroup in workflowDefinition.Graph.Edges
                      .Where(edge => string.Equals(edge.Kind, "fan-out", StringComparison.OrdinalIgnoreCase))
                      .GroupBy(edge => edge.Source, StringComparer.Ordinal))
         {
-            builder.AddFanOutEdge(
+            WorkflowEdgeDto[] fanOutEdges = fanOutGroup.ToArray();
+            ExecutorBinding[] targets = fanOutEdges.Select(edge => bindings[edge.Target]).ToArray();
+            Func<object?, bool>?[] compiledConditions = fanOutEdges
+                .Select(WorkflowConditionEvaluator.Compile)
+                .ToArray();
+            bool hasConditionalRouting = fanOutEdges.Any(edge => edge.Condition is not null);
+            if (!hasConditionalRouting)
+            {
+                builder.AddFanOutEdge(bindings[fanOutGroup.Key], targets);
+                continue;
+            }
+
+            builder.AddFanOutEdge<object>(
                 bindings[fanOutGroup.Key],
-                fanOutGroup.Select(edge => bindings[edge.Target]).ToArray());
+                targets,
+                (payload, _) => fanOutEdges
+                    .Select((edge, index) => (edge, index))
+                    .Where(pair => compiledConditions[pair.index]?.Invoke(payload) ?? true)
+                    .Select(pair => pair.index)
+                    .ToArray());
         }
 
         foreach (IGrouping<string, WorkflowEdgeDto> fanInGroup in workflowDefinition.Graph.Edges

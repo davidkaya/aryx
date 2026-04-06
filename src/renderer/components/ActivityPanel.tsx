@@ -17,20 +17,19 @@ import {
 } from '@renderer/lib/sessionActivity';
 import { RunTimeline } from '@renderer/components/RunTimeline';
 import { inferProvider } from '@shared/domain/models';
-import type { OrchestrationMode, PatternAgentDefinition, PatternDefinition } from '@shared/domain/pattern';
+import { resolveWorkflowAgentNodes, type AgentNodeConfig, type WorkflowDefinition, type WorkflowOrchestrationMode } from '@shared/domain/workflow';
 import type { ProjectGitFileReference } from '@shared/domain/project';
 import type { SessionRecord } from '@shared/domain/session';
 import { ProviderIcon } from './ProviderIcons';
 
 /* ── Mode accent colours ───────────────────────────────────── */
 
-const modeAccent: Record<OrchestrationMode, { dot: string; bar: string; label: string }> = {
+const modeAccent: Record<WorkflowOrchestrationMode, { dot: string; bar: string; label: string }> = {
   single:       { dot: 'bg-[#245CF9]',                       bar: 'bg-[#245CF9] opacity-60',                       label: 'text-[#245CF9]' },
   sequential:   { dot: 'bg-[var(--color-status-warning)]',   bar: 'bg-[var(--color-status-warning)] opacity-60',   label: 'text-[var(--color-status-warning)]' },
   concurrent:   { dot: 'bg-[var(--color-status-success)]',   bar: 'bg-[var(--color-status-success)] opacity-60',   label: 'text-[var(--color-status-success)]' },
   handoff:      { dot: 'bg-[var(--color-accent-sky)]',       bar: 'bg-[var(--color-accent-sky)] opacity-60',       label: 'text-[var(--color-accent-sky)]' },
   'group-chat': { dot: 'bg-[var(--color-accent-purple)]',   bar: 'bg-[var(--color-accent-purple)] opacity-60',   label: 'text-[var(--color-accent-purple)]' },
-  magentic:     { dot: 'bg-[var(--color-text-muted)]',       bar: 'bg-[var(--color-text-muted)] opacity-60',       label: 'text-[var(--color-text-muted)]' },
 };
 
 /* ── Helpers ───────────────────────────────────────────────── */
@@ -50,13 +49,12 @@ function formatEffort(effort: string | undefined): string | undefined {
   return labels[effort] ?? effort;
 }
 
-const modeLabels: Record<OrchestrationMode, string> = {
+const modeLabels: Record<WorkflowOrchestrationMode, string> = {
   single: 'Single agent',
   sequential: 'Sequential',
   concurrent: 'Concurrent',
   handoff: 'Handoff',
   'group-chat': 'Group chat',
-  magentic: 'Magentic',
 };
 
 /* ── Section header ────────────────────────────────────────── */
@@ -79,8 +77,8 @@ function AgentRow({
   agentUsage,
 }: {
   row: AgentActivityRow;
-  agent?: PatternAgentDefinition;
-  accent: (typeof modeAccent)[OrchestrationMode];
+  agent?: AgentNodeConfig;
+  accent: (typeof modeAccent)[WorkflowOrchestrationMode];
   isLast: boolean;
   agentUsage?: AgentUsageAccumulator;
 }) {
@@ -213,7 +211,7 @@ interface ActivityPanelProps {
   onJumpToMessage?: (messageId: string) => void;
   onDiscard?: (sessionId: string, runId: string, files?: ProjectGitFileReference[]) => Promise<unknown>;
   onOpenCommitComposer?: () => void;
-  pattern: PatternDefinition;
+  workflow: WorkflowDefinition;
   session: SessionRecord;
   sessionRequestUsage?: SessionRequestUsageState;
   turnEvents?: TurnEventLog;
@@ -224,21 +222,29 @@ export function ActivityPanel({
   onJumpToMessage,
   onDiscard,
   onOpenCommitComposer,
-  pattern,
+  workflow,
   session,
   sessionRequestUsage,
   turnEvents,
 }: ActivityPanelProps) {
+  const workflowAgents = useMemo(
+    () => resolveWorkflowAgentNodes(workflow)
+      .map((n) => n.config)
+      .filter((c): c is AgentNodeConfig => c.kind === 'agent'),
+    [workflow],
+  );
+  const workflowMode = workflow.settings.orchestrationMode ?? 'single';
+
   const activityRows = useMemo(
-    () => buildAgentActivityRows(activity, pattern.agents),
-    [activity, pattern.agents],
+    () => buildAgentActivityRows(activity, workflowAgents),
+    [activity, workflowAgents],
   );
 
   const isBusy = session.status === 'running';
   const hasPendingApproval = session.pendingApproval?.status === 'pending';
   const queuedCount = (session.pendingApprovalQueue ?? []).filter((a) => a.status === 'pending').length;
   const totalApprovalCount = (hasPendingApproval ? 1 : 0) + queuedCount;
-  const accent = modeAccent[pattern.mode] ?? modeAccent.single;
+  const accent = modeAccent[workflowMode] ?? modeAccent.single;
 
   return (
     <div className="flex h-full flex-col">
@@ -272,7 +278,7 @@ export function ActivityPanel({
               {activityRows.length}
             </span>
             <span className={`ml-auto text-[9px] font-medium normal-case tracking-normal ${accent.label}`}>
-              {modeLabels[pattern.mode]}
+              {modeLabels[workflowMode]}
             </span>
           </SectionHeader>
 
@@ -285,7 +291,7 @@ export function ActivityPanel({
                 return (
                   <AgentRow
                     accent={accent}
-                    agent={pattern.agents[index]}
+                    agent={workflowAgents[index]}
                     agentUsage={agentUsage}
                     isLast={index === activityRows.length - 1}
                     key={row.key}

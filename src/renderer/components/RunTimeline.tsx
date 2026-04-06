@@ -25,7 +25,7 @@ import {
   truncateContent,
   type CollapsedTimelineEvent,
 } from '@renderer/lib/runTimelineFormatting';
-import type { OrchestrationMode } from '@shared/domain/pattern';
+import type { WorkflowOrchestrationMode } from '@shared/domain/workflow';
 import type { ProjectGitFileReference, ProjectGitWorkingTreeSnapshot } from '@shared/domain/project';
 import type { RunTimelineEventRecord, SessionRunRecord } from '@shared/domain/runTimeline';
 import { FileChangePreview } from '@renderer/components/chat/FileChangePreview';
@@ -33,13 +33,12 @@ import { RunChangeSummaryCard } from '@renderer/components/chat/RunChangeSummary
 
 /* ── Mode accent colours (shared with ActivityPanel) ───────── */
 
-const modeAccent: Record<OrchestrationMode, { dot: string; ring: string; text: string }> = {
+const modeAccent: Record<WorkflowOrchestrationMode, { dot: string; ring: string; text: string }> = {
   single:       { dot: 'bg-[#245CF9]',                       ring: 'ring-[#245CF9]/30',                       text: 'text-[#245CF9]' },
   sequential:   { dot: 'bg-[var(--color-status-warning)]',   ring: 'ring-[var(--color-status-warning)]/30',   text: 'text-[var(--color-status-warning)]' },
   concurrent:   { dot: 'bg-[var(--color-status-success)]',   ring: 'ring-[var(--color-status-success)]/30',   text: 'text-[var(--color-status-success)]' },
   handoff:      { dot: 'bg-[var(--color-accent-sky)]',       ring: 'ring-[var(--color-accent-sky)]/30',       text: 'text-[var(--color-accent-sky)]' },
   'group-chat': { dot: 'bg-[var(--color-accent-purple)]',   ring: 'ring-[var(--color-accent-purple)]/30',   text: 'text-[var(--color-accent-purple)]' },
-  magentic:     { dot: 'bg-[var(--color-text-muted)]',       ring: 'ring-[var(--color-text-muted)]/30',       text: 'text-[var(--color-text-muted)]' },
 };
 
 /* ── Status badges ─────────────────────────────────────────── */
@@ -284,7 +283,7 @@ function RunCard({
   onDiscard?: (sessionId: string, runId: string, files?: ProjectGitFileReference[]) => Promise<unknown>;
   onOpenCommitComposer?: () => void;
 }) {
-  const accent = modeAccent[run.patternMode] ?? modeAccent.single;
+  const accent = modeAccent[run.workflowMode] ?? modeAccent.single;
   const statusStyle = runStatusStyles[run.status];
   const duration = formatRunDuration(run.startedAt, run.completedAt);
 
@@ -308,7 +307,7 @@ function RunCard({
         <Bot className={`size-3 shrink-0 ${accent.text}`} />
 
         <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-[var(--color-text-secondary)]">
-          {run.patternName}
+          {run.workflowName}
         </span>
 
         {/* Status */}

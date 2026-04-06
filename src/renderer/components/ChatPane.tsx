@@ -27,7 +27,7 @@ import {
   resolveReasoningEffort,
   type ModelDefinition,
 } from '@shared/domain/models';
-import { type PatternDefinition, type ReasoningEffort } from '@shared/domain/pattern';
+import { resolveWorkflowAgentNodes, type AgentNodeConfig, type ReasoningEffort, type WorkflowDefinition } from '@shared/domain/workflow';
 import { isScratchpadProject, type ProjectRecord } from '@shared/domain/project';
 import { resolveSessionToolingSelection, type ChatMessageRecord, type SessionBranchOriginAction, type SessionRecord } from '@shared/domain/session';
 import type { ProjectPromptInvocation } from '@shared/domain/projectCustomization';
@@ -48,7 +48,7 @@ type DisplayItem =
 
 interface ChatPaneProps {
   project: ProjectRecord;
-  pattern: PatternDefinition;
+  workflow: WorkflowDefinition;
   session: SessionRecord;
   availableModels: ReadonlyArray<ModelDefinition>;
   toolingSettings: WorkspaceToolingSettings;
@@ -85,7 +85,7 @@ interface ChatPaneProps {
 
 export function ChatPane({
   project,
-  pattern,
+  workflow,
   session,
   availableModels,
   toolingSettings,
@@ -184,8 +184,15 @@ export function ChatPane({
   const interactionMode: InteractionMode = session.interactionMode ?? 'interactive';
   const isPlanMode = interactionMode === 'plan';
   const isScratchpad = isScratchpadProject(project);
-  const isSingleAgent = pattern.agents.length === 1;
-  const primaryAgent = pattern.agents[0];
+  const workflowAgents = useMemo(
+    () => resolveWorkflowAgentNodes(workflow)
+      .map((n) => n.config)
+      .filter((c): c is AgentNodeConfig => c.kind === 'agent'),
+    [workflow],
+  );
+  const workflowMode = workflow.settings.orchestrationMode ?? 'single';
+  const isSingleAgent = workflowAgents.length === 1;
+  const primaryAgent = workflowAgents[0];
   const selectedModel = primaryAgent ? findModel(primaryAgent.model, availableModels) : undefined;
   const supportedEfforts = getSupportedReasoningEfforts(selectedModel);
   const sessionReasoningEffort = resolveReasoningEffort(selectedModel, primaryAgent?.reasoningEffort);
@@ -223,7 +230,7 @@ export function ChatPane({
   const mcpServers = toolingSettings.mcpServers;
   const lspProfiles = toolingSettings.lspProfiles;
   const hasConfigurableTools = mcpServers.length > 0 || lspProfiles.length > 0;
-  const hasToolCallApproval = pattern.approvalPolicy?.rules.some((r) => r.kind === 'tool-call') ?? false;
+  const hasToolCallApproval = workflow.settings.approvalPolicy?.rules.some((r) => r.kind === 'tool-call') ?? false;
   const approvalTools = useMemo(
     () => listApprovalToolDefinitions(toolingSettings, runtimeTools),
     [runtimeTools, toolingSettings],
@@ -233,9 +240,9 @@ export function ChatPane({
     () => new Set(
       isApprovalOverridden
         ? session.approvalSettings!.autoApprovedToolNames
-        : pattern.approvalPolicy?.autoApprovedToolNames ?? [],
+        : workflow.settings.approvalPolicy?.autoApprovedToolNames ?? [],
     ),
-    [isApprovalOverridden, session.approvalSettings, pattern.approvalPolicy],
+    [isApprovalOverridden, session.approvalSettings, workflow.settings.approvalPolicy],
   );
   const effectiveAutoApprovedCount = useMemo(() => {
     const groups = groupApprovalToolsByProvider(approvalTools, toolingSettings);
@@ -366,8 +373,8 @@ export function ChatPane({
             <h2 className="font-display truncate text-[13px] font-semibold leading-tight text-[var(--color-text-primary)]">{session.title}</h2>
             <p className="truncate text-[11px] leading-tight text-[var(--color-text-muted)]">
               {isScratchpad
-                ? `Scratchpad · ${pattern.name}`
-                : `${project.name} · ${pattern.name} · ${pattern.mode}`}
+                ? `Scratchpad · ${workflow.name}`
+                : `${project.name} · ${workflow.name} · ${workflowMode}`}
               {!isScratchpad && project.git?.status === 'ready' && (() => {
                 const git = project.git;
                 const tipLines: string[] = [git.branch ?? git.head?.shortHash ?? 'HEAD'];
@@ -442,11 +449,11 @@ export function ChatPane({
               {isScratchpad ? (
                 <>
                   Scratchpad is ready for ad-hoc questions using{' '}
-                  <span className="text-[var(--color-text-secondary)]">{pattern.name}</span>
+                  <span className="text-[var(--color-text-secondary)]">{workflow.name}</span>
                 </>
               ) : (
                 <>
-                  Using <span className="text-[var(--color-text-secondary)]">{pattern.name}</span> in{' '}
+                  Using <span className="text-[var(--color-text-secondary)]">{workflow.name}</span> in{' '}
                   <span className="text-[var(--color-text-secondary)]">{project.name}</span>
                 </>
               )}

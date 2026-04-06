@@ -8,7 +8,7 @@ import {
   providerMeta,
   type ModelDefinition,
 } from '@shared/domain/models';
-import { reasoningEffortOptions, type ReasoningEffort } from '@shared/domain/pattern';
+import { reasoningEffortOptions, type ReasoningEffort } from '@shared/domain/workflow';
 
 import { ProviderIcon } from './ProviderIcons';
 

@@ -7,7 +7,7 @@ import { useClickOutside } from '@renderer/hooks/useClickOutside';
 import type { ApprovalToolDefinition, LspProfileDefinition, McpServerDefinition, SessionToolingSelection, WorkspaceToolingSettings } from '@shared/domain/tooling';
 import { groupApprovalToolsByProvider, type ApprovalToolGroup } from '@shared/domain/tooling';
 import { findModel, inferProvider, providerMeta, type ModelDefinition } from '@shared/domain/models';
-import { reasoningEffortOptions, type ReasoningEffort } from '@shared/domain/pattern';
+import { reasoningEffortOptions, type ReasoningEffort } from '@shared/domain/workflow';
 import { RotateCcw, Server, ShieldCheck } from 'lucide-react';
 
 /* ── Tier badge ────────────────────────────────────────────── */

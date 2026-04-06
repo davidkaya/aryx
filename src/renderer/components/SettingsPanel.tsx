@@ -1,8 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { ArrowUpRight, ChevronLeft, ChevronRight, CircleCheck, Code, Cpu, FolderOpen, GitBranch, Palette, Plus, RefreshCw, Server, TriangleAlert, UserCircle, Workflow, Wrench } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CircleCheck, Code, Cpu, FolderOpen, GitBranch, Palette, Plus, RefreshCw, Server, TriangleAlert, UserCircle, Wrench } from 'lucide-react';
 
 import { CopilotStatusCard } from '@renderer/components/CopilotStatusCard';
-import { PatternEditor } from '@renderer/components/PatternEditor';
 import { WorkflowEditor } from '@renderer/components/WorkflowEditor';
 import { ToggleSwitch } from '@renderer/components/ui';
 import { LspProfileEditor } from '@renderer/components/settings/LspProfileEditor';
@@ -13,7 +12,6 @@ import type { SidecarCapabilities, QuotaSnapshot } from '@shared/contracts/sidec
 import type { DiscoveredMcpServer, DiscoveredToolingState } from '@shared/domain/discoveredTooling';
 import { listAcceptedDiscoveredMcpServers, listPendingDiscoveredMcpServers } from '@shared/domain/discoveredTooling';
 import type { ModelDefinition } from '@shared/domain/models';
-import type { PatternDefinition } from '@shared/domain/pattern';
 import type { UpdateStatus, UpdateStatusState } from '@shared/contracts/ipc';
 import { normalizeWorkflowDefinition, type WorkflowDefinition } from '@shared/domain/workflow';
 import type { WorkflowTemplateCategory, WorkflowTemplateDefinition } from '@shared/domain/workflowTemplate';
@@ -29,7 +27,6 @@ import { normalizeWorkspaceAgentDefinition, findWorkspaceAgentUsages, type Works
 
 interface SettingsPanelProps {
   availableModels: ReadonlyArray<ModelDefinition>;
-  patterns: PatternDefinition[];
   workflows: WorkflowDefinition[];
   sidecarCapabilities?: SidecarCapabilities;
   theme: AppearanceTheme;
@@ -39,9 +36,6 @@ interface SettingsPanelProps {
   initialSection?: SettingsSection;
   onRefreshCapabilities: () => void;
   onClose: () => void;
-  onSavePattern: (pattern: PatternDefinition) => Promise<void>;
-  onDeletePattern: (patternId: string) => Promise<void>;
-  onNewPattern: () => PatternDefinition;
   onSaveWorkflow: (workflow: WorkflowDefinition) => Promise<void>;
   onDeleteWorkflow: (workflowId: string) => Promise<void>;
   onNewWorkflow: () => WorkflowDefinition;
@@ -68,10 +62,9 @@ interface SettingsPanelProps {
   onGetQuota?: () => Promise<Record<string, QuotaSnapshot>>;
   workflowTemplates?: WorkflowTemplateDefinition[];
   onCreateWorkflowFromTemplate?: (templateId: string, name?: string) => Promise<void>;
-  onUpgradePatternToWorkflow?: (patternId: string) => Promise<void>;
 }
 
-export type SettingsSection = 'appearance' | 'connection' | 'patterns' | 'workflows' | 'agents' | 'mcp-servers' | 'lsp-profiles' | 'troubleshooting';
+export type SettingsSection = 'appearance' | 'connection' | 'workflows' | 'agents' | 'mcp-servers' | 'lsp-profiles' | 'troubleshooting';
 
 interface NavItem {
   id: SettingsSection;
@@ -100,7 +93,6 @@ const navGroups: NavGroup[] = [
   {
     label: 'Workflows',
     items: [
-      { id: 'patterns', label: 'Patterns', icon: <Workflow className="size-3.5" /> },
       { id: 'workflows', label: 'Workflows', icon: <GitBranch className="size-3.5" /> },
       { id: 'agents', label: 'Agents', icon: <UserCircle className="size-3.5" /> },
     ],
@@ -120,14 +112,8 @@ const navGroups: NavGroup[] = [
   },
 ];
 
-function modeBadgeClasses(pattern: PatternDefinition) {
-  if (pattern.availability === 'unavailable') return 'bg-[var(--color-status-warning)]/10 text-[var(--color-status-warning)]';
-  return 'bg-[var(--color-surface-3)] text-[var(--color-text-secondary)]';
-}
-
 export function SettingsPanel({
   availableModels,
-  patterns,
   workflows,
   sidecarCapabilities,
   theme,
@@ -137,9 +123,6 @@ export function SettingsPanel({
   initialSection,
   onRefreshCapabilities,
   onClose,
-  onSavePattern,
-  onDeletePattern,
-  onNewPattern,
   onSaveWorkflow,
   onDeleteWorkflow,
   onNewWorkflow,
@@ -166,43 +149,12 @@ export function SettingsPanel({
   onGetQuota,
   workflowTemplates,
   onCreateWorkflowFromTemplate,
-  onUpgradePatternToWorkflow,
 }: SettingsPanelProps) {
   const [activeSection, setActiveSection] = useState<SettingsSection>(initialSection ?? 'appearance');
-  const [editingPattern, setEditingPattern] = useState<PatternDefinition | null>(null);
   const [editingWorkflow, setEditingWorkflow] = useState<WorkflowDefinition | null>(null);
   const [editingMcpServer, setEditingMcpServer] = useState<McpServerDefinition | null>(null);
   const [editingLspProfile, setEditingLspProfile] = useState<LspProfileDefinition | null>(null);
   const [editingWorkspaceAgent, setEditingWorkspaceAgent] = useState<WorkspaceAgentDefinition | null>(null);
-
-  if (editingPattern) {
-    const isBuiltin = editingPattern.id.startsWith('pattern-');
-    return (
-      <div className="fixed inset-0 z-50 flex flex-col bg-[var(--color-surface-0)]">
-        <PatternEditor
-          availableModels={availableModels}
-          isBuiltin={isBuiltin}
-          onBack={() => setEditingPattern(null)}
-          onChange={setEditingPattern}
-          onDelete={
-            async () => {
-              await onDeletePattern(editingPattern.id);
-              setEditingPattern(null);
-            }
-          }
-          onSave={async () => {
-            await onSavePattern(editingPattern);
-            setEditingPattern(null);
-          }}
-          pattern={editingPattern}
-          runtimeTools={sidecarCapabilities?.runtimeTools}
-          toolingSettings={toolingSettings}
-          workspaceAgents={workspaceAgents}
-          onSaveWorkspaceAgent={onSaveWorkspaceAgent}
-        />
-      </div>
-    );
-  }
 
   if (editingWorkflow) {
     const api = getElectronApi();
@@ -299,9 +251,9 @@ export function SettingsPanel({
     const exists = workspaceAgents.some((a) => a.id === editingWorkspaceAgent.id);
     return (
       <div className="fixed inset-0 z-50 flex flex-col bg-[var(--color-surface-0)]">
-        <WorkspaceAgentEditor
-          agent={editingWorkspaceAgent}
-          availableModels={availableModels}
+          <WorkspaceAgentEditor
+            agent={editingWorkspaceAgent}
+            availableModels={availableModels}
           onBack={() => setEditingWorkspaceAgent(null)}
           onChange={setEditingWorkspaceAgent}
           onDelete={
@@ -312,14 +264,14 @@ export function SettingsPanel({
                 }
               : undefined
           }
-          onSave={async () => {
-            await onSaveWorkspaceAgent(normalizeWorkspaceAgentDefinition(editingWorkspaceAgent));
-            setEditingWorkspaceAgent(null);
-          }}
-          patterns={patterns}
-        />
-      </div>
-    );
+            onSave={async () => {
+              await onSaveWorkspaceAgent(normalizeWorkspaceAgentDefinition(editingWorkspaceAgent));
+              setEditingWorkspaceAgent(null);
+            }}
+            workflows={workflows}
+          />
+        </div>
+      );
   }
 
   return (
@@ -391,14 +343,6 @@ export function SettingsPanel({
                 onGetQuota={onGetQuota}
               />
             )}
-            {activeSection === 'patterns' && (
-              <PatternsSection
-                onEditPattern={(pattern) => setEditingPattern(structuredClone(pattern))}
-                onNewPattern={() => setEditingPattern(onNewPattern())}
-                onUpgradePatternToWorkflow={onUpgradePatternToWorkflow}
-                patterns={patterns}
-              />
-            )}
             {activeSection === 'workflows' && (
               <WorkflowsSection
                 onEditWorkflow={(wf) => setEditingWorkflow(structuredClone(wf))}
@@ -411,7 +355,7 @@ export function SettingsPanel({
             {activeSection === 'agents' && (
               <WorkspaceAgentsSection
                 agents={workspaceAgents}
-                patterns={patterns}
+                workflows={workflows}
                 onEditAgent={(agent) => setEditingWorkspaceAgent(structuredClone(agent))}
                 onNewAgent={() => setEditingWorkspaceAgent(onNewWorkspaceAgent())}
               />
@@ -624,77 +568,6 @@ function ConnectionSection({
   );
 }
 
-function PatternsSection({
-  patterns,
-  onEditPattern,
-  onNewPattern,
-  onUpgradePatternToWorkflow,
-}: {
-  patterns: PatternDefinition[];
-  onEditPattern: (pattern: PatternDefinition) => void;
-  onNewPattern: () => void;
-  onUpgradePatternToWorkflow?: (patternId: string) => Promise<void>;
-}) {
-  return (
-    <div>
-      <SectionHeader
-        description="Define reusable agent configurations for your sessions"
-        title="Workflow Patterns"
-      >
-        <SectionAction label="New Pattern" onClick={onNewPattern} />
-      </SectionHeader>
-
-      <div className="space-y-1">
-        {patterns.map((pattern) => (
-          <button
-            className="group flex w-full items-center gap-3 rounded-xl border border-transparent px-4 py-3 text-left transition-all duration-200 hover:border-[var(--color-border)] hover:bg-[var(--color-surface-1)]"
-            key={pattern.id}
-            onClick={() => onEditPattern(pattern)}
-            type="button"
-          >
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <span className="text-[13px] font-medium text-[var(--color-text-primary)]">{pattern.name}</span>
-                <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ${modeBadgeClasses(pattern)}`}>
-                  {pattern.mode}
-                </span>
-              </div>
-              <p className="mt-0.5 truncate text-[12px] text-[var(--color-text-muted)]">{pattern.description}</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-[12px] text-[var(--color-text-muted)]">
-                {pattern.agents.length} agent{pattern.agents.length === 1 ? '' : 's'}
-              </span>
-              {onUpgradePatternToWorkflow && (
-                <span
-                  className="flex size-6 items-center justify-center rounded-md text-[var(--color-text-muted)] opacity-0 transition-all duration-200 hover:bg-[var(--color-accent)]/10 hover:text-[var(--color-accent)] group-hover:opacity-100"
-                  title="Convert to workflow"
-                  role="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    void onUpgradePatternToWorkflow(pattern.id);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.stopPropagation();
-                      e.preventDefault();
-                      void onUpgradePatternToWorkflow(pattern.id);
-                    }
-                  }}
-                  tabIndex={0}
-                >
-                  <ArrowUpRight className="size-3.5" />
-                </span>
-              )}
-              <ChevronRight className="size-4 text-[var(--color-text-muted)] transition-all duration-200 group-hover:text-[var(--color-text-muted)]" />
-            </div>
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 const categoryLabels: Record<WorkflowTemplateCategory, string> = {
   'orchestration': 'Orchestration',
   'data-pipeline': 'Data Pipeline',
@@ -850,19 +723,19 @@ function WorkflowsSection({
 
 function WorkspaceAgentsSection({
   agents,
-  patterns,
+  workflows,
   onEditAgent,
   onNewAgent,
 }: {
   agents: WorkspaceAgentDefinition[];
-  patterns: PatternDefinition[];
+  workflows: WorkflowDefinition[];
   onEditAgent: (agent: WorkspaceAgentDefinition) => void;
   onNewAgent: () => void;
 }) {
   return (
     <div>
       <SectionHeader
-        description="Define reusable agents that can be shared across multiple patterns"
+        description="Define reusable agents that can be shared across multiple workflows"
         title="Workspace Agents"
       >
         <SectionAction label="New Agent" onClick={onNewAgent} />
@@ -875,14 +748,14 @@ function WorkspaceAgentsSection({
             No workspace agents yet
           </p>
           <p className="mt-1 text-[12px] text-[var(--color-text-muted)]">
-            Create agents here and reference them in multiple patterns.
-            Changes to a workspace agent automatically propagate to all linked patterns.
+            Create agents here and reference them in multiple workflows.
+            Changes to a workspace agent automatically propagate to all linked workflows.
           </p>
         </div>
       ) : (
         <div className="space-y-1">
           {agents.map((agent) => {
-            const usageCount = findWorkspaceAgentUsages(agent.id, patterns).length;
+            const usageCount = findWorkspaceAgentUsages(agent.id, workflows).length;
             return (
               <button
                 className="group flex w-full items-center gap-3 rounded-xl border border-transparent px-4 py-3 text-left transition-all duration-200 hover:border-[var(--color-border)] hover:bg-[var(--color-surface-1)]"
@@ -904,7 +777,7 @@ function WorkspaceAgentsSection({
                 <div className="flex items-center gap-2">
                   {usageCount > 0 && (
                     <span className="text-[12px] text-[var(--color-text-muted)]">
-                      {usageCount} pattern{usageCount === 1 ? '' : 's'}
+                      {usageCount} workflow{usageCount === 1 ? '' : 's'}
                     </span>
                   )}
                   <ChevronRight className="size-4 text-[var(--color-text-muted)]" />
@@ -1355,7 +1228,7 @@ function TroubleshootingSection({
             <div className="min-w-0 flex-1">
               <h4 className="text-[13px] font-semibold text-[var(--color-status-error)]">Reset Local Workspace</h4>
               <p className="mt-1 text-[12px] leading-relaxed text-[var(--color-text-secondary)]">
-                Restore Aryx to its initial state. This permanently removes all sessions, custom patterns,
+                Restore Aryx to its initial state. This permanently removes all sessions, custom workflows,
                 MCP server definitions, LSP profiles, and scratchpad contents. Your GitHub Copilot sign-in
                 is not affected.
               </p>

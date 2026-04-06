@@ -1,4 +1,4 @@
-import type { PatternDefinition } from '@shared/domain/pattern';
+import type { AgentNodeConfig } from '@shared/domain/workflow';
 import type { SessionEventRecord } from '@shared/domain/event';
 import type { QuotaSnapshot, WorkflowDiagnosticKind, WorkflowDiagnosticSeverity } from '@shared/contracts/sidecar';
 
@@ -93,7 +93,7 @@ export function pruneSessionActivities(
 
 export function buildAgentActivityRows(
   current: SessionActivityState | undefined,
-  agents: PatternDefinition['agents'],
+  agents: ReadonlyArray<{ id: string; name: string }>,
 ): AgentActivityRow[] {
   return agents.map((agent) => {
     const activity = current?.[agent.id] ?? current?.[agent.name];

@@ -13,7 +13,6 @@ import {
   GitBranch,
   GitFork,
   ListOrdered,
-  Lock,
   MessageSquare,
   MoreHorizontal,
   Pencil,
@@ -28,7 +27,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 
-import type { OrchestrationMode, PatternDefinition } from '@shared/domain/pattern';
+import { resolveWorkflowAgentNodes, type WorkflowDefinition, type WorkflowOrchestrationMode } from '@shared/domain/workflow';
 import { isScratchpadProject, type ProjectRecord, type ProjectGitContext } from '@shared/domain/project';
 import { listPendingDiscoveredMcpServers } from '@shared/domain/discoveredTooling';
 import type { SessionRecord } from '@shared/domain/session';
@@ -59,13 +58,12 @@ interface SidebarProps {
 
 /* ── Mode icon + accent colour mapping ─────────────────────── */
 
-const modeVisuals: Record<OrchestrationMode, { icon: LucideIcon; color: string }> = {
+const modeVisuals: Record<WorkflowOrchestrationMode, { icon: LucideIcon; color: string }> = {
   single: { icon: MessageSquare, color: 'text-[#245CF9]' },
   sequential: { icon: ListOrdered, color: 'text-[var(--color-status-warning)]' },
   concurrent: { icon: GitFork, color: 'text-[var(--color-status-success)]' },
   handoff: { icon: ArrowLeftRight, color: 'text-[var(--color-accent-sky)]' },
   'group-chat': { icon: Users, color: 'text-[var(--color-accent-purple)]' },
-  magentic: { icon: Lock, color: 'text-[var(--color-text-muted)]' },
 };
 
 /* ── Relative time helper ──────────────────────────────────── */
@@ -178,7 +176,7 @@ function ActionMenuItem({
 
 function SessionItem({
   session,
-  pattern,
+  workflow,
   isActive,
   isRenaming,
   onSelect,
@@ -187,7 +185,7 @@ function SessionItem({
   onRenameCancel,
 }: {
   session: SessionRecord;
-  pattern?: PatternDefinition;
+  workflow?: WorkflowDefinition;
   isActive: boolean;
   isRenaming: boolean;
   onSelect: () => void;
@@ -199,10 +197,10 @@ function SessionItem({
   const isError = session.status === 'error';
   const hasPendingApproval = session.pendingApproval?.status === 'pending';
   const queuedCount = (session.pendingApprovalQueue ?? []).filter((a) => a.status === 'pending').length;
-  const mode = pattern?.mode ?? 'single';
+  const mode = workflow?.settings.orchestrationMode ?? 'single';
   const visual = modeVisuals[mode];
   const ModeIcon = visual.icon;
-  const agentCount = pattern?.agents.length ?? 1;
+  const agentCount = workflow ? resolveWorkflowAgentNodes(workflow).length : 1;
 
   const [renameText, setRenameText] = useState(session.title);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -363,7 +361,7 @@ function SessionItem({
 function ProjectGroup({
   project,
   sessions,
-  patterns,
+  workflows,
   selectedSessionId,
   renamingSessionId,
   onSessionSelect,
@@ -377,7 +375,7 @@ function ProjectGroup({
 }: {
   project: ProjectRecord;
   sessions: SessionRecord[];
-  patterns: PatternDefinition[];
+  workflows: WorkflowDefinition[];
   selectedSessionId?: string;
   renamingSessionId?: string;
   onSessionSelect: (sessionId: string) => void;
@@ -392,11 +390,11 @@ function ProjectGroup({
   const [expanded, setExpanded] = useState(true);
   const isScratchpad = isScratchpadProject(project);
 
-  const patternMap = useMemo(() => {
-    const map = new Map<string, PatternDefinition>();
-    for (const p of patterns) map.set(p.id, p);
+  const workflowMap = useMemo(() => {
+    const map = new Map<string, WorkflowDefinition>();
+    for (const w of workflows) map.set(w.id, w);
     return map;
-  }, [patterns]);
+  }, [workflows]);
 
   const visibleSessions = useMemo(() =>
     sessions
@@ -519,7 +517,7 @@ function ProjectGroup({
                 onOpenMenu={(e) => onOpenMenu(session.id, e)}
                 onRenameSubmit={(title) => onRenameSubmit(session.id, title)}
                 onRenameCancel={onRenameCancel}
-                pattern={patternMap.get(session.patternId)}
+                 workflow={workflowMap.get(session.workflowId)}
                 session={session}
               />
             ))}
@@ -575,11 +573,13 @@ export function Sidebar({
 
   const isQueryActive = searchText.trim().length > 0;
 
-  const patternMap = useMemo(() => {
-    const map = new Map<string, PatternDefinition>();
-    for (const p of workspace.patterns) map.set(p.id, p);
+  const workflowMap = useMemo(() => {
+    const map = new Map<string, WorkflowDefinition>();
+    for (const w of workspace.workflows) {
+      map.set(w.id, w);
+    }
     return map;
-  }, [workspace.patterns]);
+  }, [workspace.workflows]);
 
   const queryResults = useMemo(() => {
     if (!isQueryActive) return [];
@@ -694,7 +694,7 @@ export function Sidebar({
                   onOpenMenu={(e) => handleOpenMenu(session.id, e)}
                   onRenameSubmit={(title) => handleRenameSubmit(session.id, title)}
                   onRenameCancel={() => setRenamingSessionId(undefined)}
-                  pattern={patternMap.get(session.patternId)}
+                   workflow={workflowMap.get(session.workflowId)}
                   session={session}
                 />
               ))
@@ -715,7 +715,7 @@ export function Sidebar({
                   onRenameSubmit={handleRenameSubmit}
                   onRenameCancel={() => setRenamingSessionId(undefined)}
                   renamingSessionId={renamingSessionId}
-                  patterns={workspace.patterns}
+                   workflows={[...workflowMap.values()]}
                   project={scratchpadProject}
                   selectedSessionId={workspace.selectedSessionId}
                   sessions={workspace.sessions.filter((session) => session.projectId === scratchpadProject.id)}
@@ -764,7 +764,7 @@ export function Sidebar({
                     onRefreshGitContext={onRefreshGitContext}
                     onOpenProjectSettings={onOpenProjectSettings}
                     renamingSessionId={renamingSessionId}
-                    patterns={workspace.patterns}
+                     workflows={[...workflowMap.values()]}
                     project={project}
                     selectedSessionId={workspace.selectedSessionId}
                     sessions={workspace.sessions.filter((session) => session.projectId === project.id)}

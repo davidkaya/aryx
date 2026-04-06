@@ -7,7 +7,6 @@ import { ChatPane } from '@renderer/components/ChatPane';
 import { CommandPalette } from '@renderer/components/CommandPalette';
 import { DiscoveredToolingModal } from '@renderer/components/DiscoveredToolingModal';
 import { KeyboardShortcutsPanel } from '@renderer/components/KeyboardShortcutsPanel';
-import { NewSessionModal } from '@renderer/components/NewSessionModal';
 import { ProjectSettingsPanel } from '@renderer/components/ProjectSettingsPanel';
 import { BookmarksPanel } from '@renderer/components/BookmarksPanel';
 import { SessionSearchPanel } from '@renderer/components/SessionSearchPanel';
@@ -39,46 +38,19 @@ import { useTheme, useSidecarCapabilities } from '@renderer/hooks/useAppHooks';
 import {
   buildAvailableModelCatalog,
   findModel,
-  normalizePatternModels,
+  normalizeWorkflowModels,
   resolveReasoningEffort,
 } from '@shared/domain/models';
-import { createDefaultToolApprovalPolicy } from '@shared/domain/approval';
 import { listPendingDiscoveredMcpServers } from '@shared/domain/discoveredTooling';
-import { syncPatternGraph, type PatternDefinition } from '@shared/domain/pattern';
+import { type ReasoningEffort, type WorkflowDefinition } from '@shared/domain/workflow';
 import { isScratchpadProject, SCRATCHPAD_PROJECT_ID } from '@shared/domain/project';
 import type { ProjectGitFileReference } from '@shared/domain/project';
 import { applySessionModelConfig } from '@shared/domain/session';
 import type { AppearanceTheme, LspProfileDefinition, McpServerDefinition } from '@shared/domain/tooling';
-import type { WorkflowDefinition } from '@shared/domain/workflow';
 import type { WorkspaceAgentDefinition } from '@shared/domain/workspaceAgent';
 import type { WorkspaceState } from '@shared/domain/workspace';
 import type { UpdateStatus } from '@shared/contracts/ipc';
 import { createId, nowIso } from '@shared/utils/ids';
-
-function createDraftPattern(defaultModelId: string, defaultReasoningEffort: PatternDefinition['agents'][0]['reasoningEffort']): PatternDefinition {
-  const timestamp = nowIso();
-  return syncPatternGraph({
-    id: createId('custom-pattern'),
-    name: 'New Pattern',
-    description: '',
-    mode: 'single',
-    availability: 'available',
-    maxIterations: 1,
-    approvalPolicy: createDefaultToolApprovalPolicy(),
-    agents: [
-      {
-        id: createId('agent'),
-        name: 'Primary Agent',
-        description: 'General-purpose assistant.',
-        instructions: 'You are a helpful coding assistant working inside the selected project.',
-        model: defaultModelId,
-        reasoningEffort: defaultReasoningEffort,
-      },
-    ],
-    createdAt: timestamp,
-    updatedAt: timestamp,
-  });
-}
 
 function createDraftMcpServer(): McpServerDefinition {
   const timestamp = nowIso();
@@ -122,7 +94,7 @@ function createDraftWorkspaceAgent(defaultModelId: string): WorkspaceAgentDefini
   };
 }
 
-function createDraftWorkflow(defaultModelId: string, defaultReasoningEffort: PatternDefinition['agents'][0]['reasoningEffort']): WorkflowDefinition {
+function createDraftWorkflow(defaultModelId: string, defaultReasoningEffort?: ReasoningEffort): WorkflowDefinition {
   const timestamp = nowIso();
   const startId = createId('wf-start');
   const agentId = createId('wf-agent');
@@ -181,7 +153,6 @@ export default function App() {
   const [settingsSection, setSettingsSection] = useState<SettingsSection>();
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({ state: 'idle' });
   const [projectSettingsId, setProjectSettingsId] = useState<string>();
-  const [newSessionProjectId, setNewSessionProjectId] = useState<string>();
   const [showDiscoveryModal, setShowDiscoveryModal] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
@@ -286,23 +257,23 @@ export default function App() {
     () => buildAvailableModelCatalog(sidecarCapabilities?.models),
     [sidecarCapabilities?.models],
   );
-  const patternForSession = useMemo(() => {
+  const workflowForSession = useMemo(() => {
     if (!selectedSession) {
       return undefined;
     }
 
-    const basePattern = workspace?.patterns.find((pattern) => pattern.id === selectedSession.patternId);
-    if (!basePattern) {
+    const baseWorkflow = workspace?.workflows.find((workflow) => workflow.id === selectedSession.workflowId);
+    if (!baseWorkflow) {
       return undefined;
     }
 
-    const patternWithSessionConfig =
+    const workflowWithSessionConfig =
       projectForSession && selectedSession.sessionModelConfig
-        ? applySessionModelConfig(basePattern, selectedSession)
-        : basePattern;
+        ? applySessionModelConfig(baseWorkflow, selectedSession)
+        : baseWorkflow;
 
-    return normalizePatternModels(patternWithSessionConfig, availableModels);
-  }, [availableModels, projectForSession, selectedSession, workspace?.patterns]);
+    return normalizeWorkflowModels(workflowWithSessionConfig, availableModels);
+  }, [availableModels, projectForSession, selectedSession, workspace?.workflows]);
   const activityForSession = useMemo(
     () => (selectedSession ? sessionActivities[selectedSession.id] : undefined),
     [selectedSession, sessionActivities],
@@ -361,8 +332,6 @@ export default function App() {
   commandPaletteOpenRef.current = commandPaletteOpen;
   const projectSettingsIdRef = useRef(projectSettingsId);
   projectSettingsIdRef.current = projectSettingsId;
-  const newSessionProjectIdRef = useRef(newSessionProjectId);
-  newSessionProjectIdRef.current = newSessionProjectId;
 
   // ── Global keyboard shortcuts ──
   useEffect(() => {
@@ -431,11 +400,6 @@ export default function App() {
           setShowSettings(false);
           return;
         }
-        if (newSessionProjectIdRef.current) {
-          e.preventDefault();
-          setNewSessionProjectId(undefined);
-          return;
-        }
 
         // If nothing is open, cancel a running turn on the selected session
         if (ws) {
@@ -460,7 +424,10 @@ export default function App() {
             ws.selectedProjectId ??
             ws.projects.find((p) => !isScratchpadProject(p))?.id;
           if (defaultProjectId) {
-            setNewSessionProjectId(defaultProjectId);
+            const defaultWorkflow = ws.workflows.find((w) => w.isFavorite) ?? ws.workflows[0];
+            if (defaultWorkflow) {
+              void api.createSession({ projectId: defaultProjectId, workflowId: defaultWorkflow.id });
+            }
           }
         }
         return;
@@ -584,17 +551,17 @@ export default function App() {
 
   const handleCreateScratchpad = useCallback(() => {
     if (!workspace) return;
-    const singlePatterns = workspace.patterns
-      .filter((p) => p.mode === 'single' && p.availability !== 'unavailable')
+    const singleWorkflows = workspace.workflows
+      .filter((w) => (w.settings.orchestrationMode ?? 'single') === 'single')
       .sort((a, b) => {
         if (a.isFavorite && !b.isFavorite) return -1;
         if (!a.isFavorite && b.isFavorite) return 1;
         return 0;
       });
 
-    const defaultPattern = singlePatterns[0];
-    if (defaultPattern) {
-      void api.createSession({ projectId: SCRATCHPAD_PROJECT_ID, patternId: defaultPattern.id });
+    const defaultWorkflow = singleWorkflows[0];
+    if (defaultWorkflow) {
+      void api.createSession({ projectId: SCRATCHPAD_PROJECT_ID, workflowId: defaultWorkflow.id });
     }
   }, [api, workspace]);
 
@@ -645,7 +612,7 @@ export default function App() {
         </div>
       </div>
     );
-  } else if (selectedSession && patternForSession && projectForSession) {
+  } else if (selectedSession && workflowForSession && projectForSession) {
     content = (
         <ChatPane
           onSend={(c, attachments, messageMode, promptInvocation) => api.sendSessionMessage({
@@ -715,7 +682,7 @@ export default function App() {
           mcpProbingServerIds={workspace.mcpProbingServerIds}
           onTerminalToggle={handleTerminalToggle}
           onGitToggle={!isScratchpadProject(selectedSession.projectId) ? handleGitToggle : undefined}
-          pattern={patternForSession}
+          workflow={workflowForSession}
           project={projectForSession}
           runtimeTools={sidecarCapabilities?.runtimeTools}
           session={selectedSession}
@@ -734,7 +701,7 @@ export default function App() {
         onDiscard={handleDiscardRunChanges}
         onJumpToMessage={jumpToMessage}
         onOpenCommitComposer={handleOpenCommitComposer}
-        pattern={patternForSession}
+        workflow={workflowForSession}
         session={selectedSession}
         sessionRequestUsage={requestUsageForSession}
         turnEvents={turnEventsForSession}
@@ -765,22 +732,11 @@ export default function App() {
         onDeleteMcpServer={async (id) => {
           await api.deleteMcpServer(id);
         }}
-        onDeletePattern={async (id) => {
-          await api.deletePattern(id);
-        }}
         onDeleteWorkflow={async (id) => {
           await api.deleteWorkflow(id);
         }}
         onNewLspProfile={createDraftLspProfile}
         onNewMcpServer={createDraftMcpServer}
-        onNewPattern={() => {
-          const defaultModel = availableModels[0] ?? findModel('gpt-5.4', availableModels) ?? findModel('gpt-5.4');
-
-          return createDraftPattern(
-            defaultModel?.id ?? 'gpt-5.4',
-            resolveReasoningEffort(defaultModel, 'high'),
-          );
-        }}
         onNewWorkflow={() => {
           const defaultModel = availableModels[0] ?? findModel('gpt-5.4', availableModels) ?? findModel('gpt-5.4');
           return createDraftWorkflow(
@@ -794,9 +750,6 @@ export default function App() {
         }}
         onSaveMcpServer={async (server) => {
           await api.saveMcpServer({ server });
-        }}
-        onSavePattern={async (pattern) => {
-          await api.savePattern({ pattern });
         }}
         onSaveWorkflow={async (workflow) => {
           await api.saveWorkflow({ workflow });
@@ -826,14 +779,10 @@ export default function App() {
           setSessionActivities({});
           setShowSettings(false);
         }}
-        patterns={workspace.patterns}
         workflows={workspace.workflows}
         workflowTemplates={workspace.workflowTemplates}
         onCreateWorkflowFromTemplate={async (templateId, name) => {
           await api.createWorkflowFromTemplate({ templateId, options: name ? { name } : undefined });
-        }}
-        onUpgradePatternToWorkflow={async (patternId) => {
-          await api.upgradePatternToWorkflow({ patternId, options: { save: true } });
         }}
         sidecarCapabilities={sidecarCapabilities}
         theme={workspace.settings.theme}
@@ -884,7 +833,10 @@ export default function App() {
             onAddProject={() => void api.addProject()}
             onCreateScratchpad={() => handleCreateScratchpad()}
             onNewProjectSession={(projectId) => {
-              setNewSessionProjectId(projectId);
+              const defaultWorkflow = workspace.workflows.find((w) => w.isFavorite) ?? workspace.workflows[0];
+              if (defaultWorkflow) {
+                void api.createSession({ projectId, workflowId: defaultWorkflow.id });
+              }
             }}
             onOpenSettings={() => setShowSettings(true)}
             onOpenProjectSettings={(projectId) => setProjectSettingsId(projectId)}
@@ -919,22 +871,6 @@ export default function App() {
           />
         }
       />
-
-      {newSessionProjectId && (
-        <NewSessionModal
-          defaultProjectId={newSessionProjectId}
-          onClose={() => setNewSessionProjectId(undefined)}
-          onCreate={(projectId, patternId) => {
-            setNewSessionProjectId(undefined);
-            void api.createSession({ projectId, patternId });
-          }}
-          onTogglePatternFavorite={(patternId, isFavorite) => {
-            void api.setPatternFavorite({ patternId, isFavorite });
-          }}
-          patterns={workspace.patterns}
-          projects={workspace.projects}
-        />
-      )}
 
       {showDiscoveryModal && (
         <DiscoveredToolingModal
@@ -987,7 +923,10 @@ export default function App() {
             void api.selectProject(projectId);
           }}
           onNewSession={(projectId) => {
-            setNewSessionProjectId(projectId);
+            const defaultWorkflow = workspace.workflows.find((w) => w.isFavorite) ?? workspace.workflows[0];
+            if (defaultWorkflow) {
+              void api.createSession({ projectId, workflowId: defaultWorkflow.id });
+            }
           }}
           onCreateScratchpad={handleCreateScratchpad}
           onOpenSettings={() => setShowSettings(true)}

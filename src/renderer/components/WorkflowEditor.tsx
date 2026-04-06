@@ -21,6 +21,7 @@ import { WorkflowGraphCanvas } from './workflow/WorkflowGraphCanvas';
 import { ExportDropdown, ExportModal, ImportModal } from './workflow/WorkflowExportImportPanel';
 import { WorkflowGraphInspector } from './workflow/WorkflowGraphInspector';
 import { WorkflowNodePalette } from './workflow/WorkflowNodePalette';
+import { OrchestrationModePanel } from './workflow/OrchestrationModePanel';
 
 interface WorkflowEditorProps {
   availableModels: ReadonlyArray<ModelDefinition>;
@@ -655,6 +656,12 @@ function WorkflowSettingsPanel({
       <h4 className="mb-3 text-[12px] font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
         Settings
       </h4>
+
+      {/* Orchestration mode — prominent, above general settings */}
+      <div className="mb-5">
+        <OrchestrationModePanel workflow={workflow} onChange={onChange} />
+      </div>
+
       <div className="grid grid-cols-2 gap-4">
         <InputField
           label="Name"

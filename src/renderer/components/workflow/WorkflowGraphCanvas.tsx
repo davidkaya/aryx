@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -19,8 +19,9 @@ import {
 import '@xyflow/react/dist/style.css';
 import { LayoutGrid, Maximize2, ZoomIn, ZoomOut } from 'lucide-react';
 
-import type { WorkflowDefinition, WorkflowGraph } from '@shared/domain/workflow';
+import type { WorkflowDefinition, WorkflowGraph, WorkflowOrchestrationMode } from '@shared/domain/workflow';
 import type { ModelDefinition } from '@shared/domain/models';
+import { inferWorkflowOrchestrationMode } from '@shared/domain/workflow';
 import {
   addWorkflowEdge,
   autoLayoutWorkflowGraph,
@@ -59,6 +60,19 @@ function WorkflowGraphCanvasInner({
   const graph = workflow.graph;
   const draggingRef = useRef(false);
   const [zoomLevel, setZoomLevel] = useState(1);
+
+  const modeBadge = useMemo(() => {
+    const mode = inferWorkflowOrchestrationMode(workflow);
+    const explicit = !!workflow.settings.orchestrationMode;
+    const meta: Record<WorkflowOrchestrationMode, { label: string; icon: string; color: string }> = {
+      single: { label: 'Single', icon: '●', color: 'text-emerald-400' },
+      sequential: { label: 'Sequential', icon: '→', color: 'text-sky-400' },
+      concurrent: { label: 'Concurrent', icon: '⇉', color: 'text-amber-400' },
+      handoff: { label: 'Handoff', icon: '⇢', color: 'text-violet-400' },
+      'group-chat': { label: 'Group Chat', icon: '⟳', color: 'text-rose-400' },
+    };
+    return { mode, explicit, ...meta[mode] };
+  }, [workflow]);
 
   const [nodes, setNodes, onNodesChangeBase] = useNodesState(
     toCanvasNodes(graph, availableModels, workflows),
@@ -249,6 +263,21 @@ function WorkflowGraphCanvasInner({
         deleteKeyCode="Delete"
       >
         <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#1a1e2e" />
+        <Panel position="top-left">
+          <div className="flex items-center gap-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]/90 px-2.5 py-1.5 shadow-sm backdrop-blur">
+            <span className={`text-[12px] font-semibold leading-none ${modeBadge.color}`}>
+              {modeBadge.icon}
+            </span>
+            <span className="text-[11px] font-medium text-[var(--color-text-secondary)]">
+              {modeBadge.label}
+            </span>
+            {!modeBadge.explicit && (
+              <span className="rounded bg-[var(--color-surface-3)] px-1.5 py-px text-[10px] text-[var(--color-text-muted)]">
+                auto
+              </span>
+            )}
+          </div>
+        </Panel>
         <MiniMap
           className="!rounded-lg !border !border-[var(--color-border)] !bg-[var(--color-surface-1)]"
           maskColor="rgba(0,0,0,0.6)"

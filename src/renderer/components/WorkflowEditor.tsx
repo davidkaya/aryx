@@ -490,7 +490,7 @@ export function WorkflowEditor({
         </div>
 
         {/* Center column: validation + canvas + settings */}
-        <div className="flex min-w-0 flex-1 flex-col">
+        <div className="min-w-0 flex-1 overflow-y-auto">
           {/* Validation banner */}
           <div className="px-5 pt-4">
             {issues.length > 0 ? (
@@ -517,8 +517,8 @@ export function WorkflowEditor({
             )}
           </div>
 
-          {/* Graph canvas */}
-          <div className="min-h-0 flex-1 px-5 pb-2 pt-4">
+          {/* Graph canvas — guaranteed minimum height so settings never collapse it */}
+          <div className="min-h-[360px] px-5 pb-2 pt-4" style={{ height: 'clamp(360px, 50vh, 100%)' }}>
             <WorkflowGraphCanvas
               availableModels={availableModels}
               onEdgeSelect={setSelectedEdgeId}
@@ -652,7 +652,7 @@ function WorkflowSettingsPanel({
   onChange: (workflow: WorkflowDefinition) => void;
 }) {
   return (
-    <div className="shrink-0 border-t border-[var(--color-border)] px-5 py-4">
+    <div className="border-t border-[var(--color-border)] px-5 py-4">
       <h4 className="mb-3 text-[12px] font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
         Settings
       </h4>

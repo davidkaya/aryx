@@ -51,6 +51,7 @@ import type { WorkspaceAgentDefinition } from '@shared/domain/workspaceAgent';
 import type { WorkspaceState } from '@shared/domain/workspace';
 import type { UpdateStatus } from '@shared/contracts/ipc';
 import { createId, nowIso } from '@shared/utils/ids';
+import { WorkflowPicker } from '@renderer/components/workflow/WorkflowPicker';
 
 function createDraftMcpServer(): McpServerDefinition {
   const timestamp = nowIso();
@@ -158,6 +159,9 @@ export default function App() {
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [showBookmarks, setShowBookmarks] = useState(false);
+
+  // Workflow picker state — holds the projectId we're creating a session for
+  const [workflowPickerProjectId, setWorkflowPickerProjectId] = useState<string | null>(null);
 
   // Commit composer state
   const [commitComposerCtx, setCommitComposerCtx] = useState<{ projectId: string; sessionId: string; runId?: string }>();
@@ -424,9 +428,11 @@ export default function App() {
             ws.selectedProjectId ??
             ws.projects.find((p) => !isScratchpadProject(p))?.id;
           if (defaultProjectId) {
-            const defaultWorkflow = ws.workflows.find((w) => w.isFavorite) ?? ws.workflows[0];
-            if (defaultWorkflow) {
-              void api.createSession({ projectId: defaultProjectId, workflowId: defaultWorkflow.id });
+            if (ws.workflows.length <= 1) {
+              const wf = ws.workflows[0];
+              if (wf) void api.createSession({ projectId: defaultProjectId, workflowId: wf.id });
+            } else {
+              setWorkflowPickerProjectId(defaultProjectId);
             }
           }
         }
@@ -564,6 +570,24 @@ export default function App() {
       void api.createSession({ projectId: SCRATCHPAD_PROJECT_ID, workflowId: defaultWorkflow.id });
     }
   }, [api, workspace]);
+
+  /** Opens the workflow picker, or creates immediately if ≤1 workflow. */
+  const handleNewSession = useCallback((projectId: string) => {
+    if (!workspace) return;
+    if (workspace.workflows.length <= 1) {
+      const wf = workspace.workflows[0];
+      if (wf) void api.createSession({ projectId, workflowId: wf.id });
+      return;
+    }
+    setWorkflowPickerProjectId(projectId);
+  }, [api, workspace]);
+
+  /** Called when a workflow is picked from the picker. */
+  const handleWorkflowPicked = useCallback((workflowId: string) => {
+    if (!workflowPickerProjectId) return;
+    void api.createSession({ projectId: workflowPickerProjectId, workflowId });
+    setWorkflowPickerProjectId(null);
+  }, [api, workflowPickerProjectId]);
 
   const handleOpenSettingsAt = useCallback((section?: SettingsSection) => {
     setSettingsSection(section);
@@ -832,12 +856,7 @@ export default function App() {
           <Sidebar
             onAddProject={() => void api.addProject()}
             onCreateScratchpad={() => handleCreateScratchpad()}
-            onNewProjectSession={(projectId) => {
-              const defaultWorkflow = workspace.workflows.find((w) => w.isFavorite) ?? workspace.workflows[0];
-              if (defaultWorkflow) {
-                void api.createSession({ projectId, workflowId: defaultWorkflow.id });
-              }
-            }}
+            onNewProjectSession={(projectId) => handleNewSession(projectId)}
             onOpenSettings={() => setShowSettings(true)}
             onOpenProjectSettings={(projectId) => setProjectSettingsId(projectId)}
             onProjectSelect={(projectId) => {
@@ -922,12 +941,7 @@ export default function App() {
           onSelectProject={(projectId) => {
             void api.selectProject(projectId);
           }}
-          onNewSession={(projectId) => {
-            const defaultWorkflow = workspace.workflows.find((w) => w.isFavorite) ?? workspace.workflows[0];
-            if (defaultWorkflow) {
-              void api.createSession({ projectId, workflowId: defaultWorkflow.id });
-            }
-          }}
+          onNewSession={(projectId) => handleNewSession(projectId)}
           onCreateScratchpad={handleCreateScratchpad}
           onOpenSettings={() => setShowSettings(true)}
           onOpenProjectSettings={(projectId) => setProjectSettingsId(projectId)}
@@ -983,6 +997,14 @@ export default function App() {
           projectId={commitComposerCtx.projectId}
           runId={commitComposerCtx.runId}
           sessionId={commitComposerCtx.sessionId}
+        />
+      )}
+
+      {workflowPickerProjectId && workspace && (
+        <WorkflowPicker
+          workflows={workspace.workflows}
+          onSelect={handleWorkflowPicked}
+          onClose={() => setWorkflowPickerProjectId(null)}
         />
       )}
     </>

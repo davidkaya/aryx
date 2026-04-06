@@ -430,12 +430,10 @@ describe('workflow validation', () => {
     const loopEdges = graph.edges.filter((edge) => edge.isLoop);
 
     expect(graph.nodes.map((node) => node.id)).toContain('agent-handoff-triage');
-    expect(loopEdges).toHaveLength(1);
-    expect(loopEdges[0]).toMatchObject({
-      source: 'agent-handoff-specialist-1',
-      target: 'agent-handoff-triage',
-      maxIterations: 4,
-    });
+    // Both forward (triage→specialist) and return (specialist→triage) edges are loops
+    expect(loopEdges).toHaveLength(2);
+    expect(loopEdges.every((edge) => edge.maxIterations === 4)).toBe(true);
+    expect(loopEdges.every((edge) => edge.condition?.type === 'always')).toBe(true);
   });
 
   test('scaffolds group-chat mode with loop edges between agent nodes', () => {

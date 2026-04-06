@@ -883,7 +883,11 @@ export function scaffoldGraphForMode(
       edges: [
         createWorkflowEdge(`edge-start-to-${triage.id}`, 'start', triage.id),
         createWorkflowEdge(`edge-${triage.id}-to-end`, triage.id, 'end'),
-        ...specialists.map((specialist) => createWorkflowEdge(`edge-${triage.id}-to-${specialist.id}`, triage.id, specialist.id)),
+        ...specialists.map((specialist) => createWorkflowEdge(`edge-${triage.id}-to-${specialist.id}`, triage.id, specialist.id, 'direct', {
+          isLoop: true,
+          maxIterations: 4,
+          condition: { type: 'always' },
+        })),
         ...specialists.map((specialist) => createWorkflowEdge(`edge-${specialist.id}-to-${triage.id}`, specialist.id, triage.id, 'direct', {
           isLoop: true,
           maxIterations: 4,
@@ -1147,8 +1151,16 @@ export function createBuiltinWorkflows(timestamp: string): WorkflowDefinition[] 
         edges: [
           createWorkflowEdge('edge-start-to-agent-handoff-triage', 'start', 'agent-handoff-triage'),
           createWorkflowEdge('edge-agent-handoff-triage-to-end', 'agent-handoff-triage', 'end'),
-          createWorkflowEdge('edge-agent-handoff-triage-to-agent-handoff-ux', 'agent-handoff-triage', 'agent-handoff-ux'),
-          createWorkflowEdge('edge-agent-handoff-triage-to-agent-handoff-runtime', 'agent-handoff-triage', 'agent-handoff-runtime'),
+          createWorkflowEdge('edge-agent-handoff-triage-to-agent-handoff-ux', 'agent-handoff-triage', 'agent-handoff-ux', 'direct', {
+            isLoop: true,
+            maxIterations: 4,
+            condition: { type: 'always' },
+          }),
+          createWorkflowEdge('edge-agent-handoff-triage-to-agent-handoff-runtime', 'agent-handoff-triage', 'agent-handoff-runtime', 'direct', {
+            isLoop: true,
+            maxIterations: 4,
+            condition: { type: 'always' },
+          }),
           createWorkflowEdge('edge-agent-handoff-ux-to-agent-handoff-triage', 'agent-handoff-ux', 'agent-handoff-triage', 'direct', {
             isLoop: true,
             maxIterations: 4,

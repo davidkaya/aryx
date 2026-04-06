@@ -87,11 +87,13 @@ function createWorkflow(): WorkflowDefinition {
 describe('AryxAppService workflow operations', () => {
   test('saves workflows into workspace state', async () => {
     const workspace = createWorkspaceSeed();
+    const initialWorkflowCount = workspace.workflows.length;
     const service = createService(workspace);
 
     const result = await service.saveWorkflow(createWorkflow());
 
-    expect(result.workflows).toHaveLength(1);
+    expect(result.workflows).toHaveLength(initialWorkflowCount + 1);
+    expect(result.workflows.some((workflow) => workflow.id === 'workflow-test')).toBe(true);
     expect(result.selectedWorkflowId).toBe('workflow-test');
   });
 
@@ -115,40 +117,28 @@ describe('AryxAppService workflow operations', () => {
 
   test('creates workflows from templates and selects the new workflow', async () => {
     const workspace = createWorkspaceSeed();
+    const initialWorkflowCount = workspace.workflows.length;
     const service = createService(workspace);
 
     const result = await service.createWorkflowFromTemplate('workflow-template-code-review', {
       name: 'Template Copy',
     });
 
-    expect(result.workflows).toHaveLength(1);
-    expect(result.workflows[0]?.name).toBe('Template Copy');
-    expect(result.selectedWorkflowId).toBe(result.workflows[0]?.id);
-  });
-
-  test('upgrades a pattern to a saved workflow without removing the pattern', async () => {
-    const workspace = createWorkspaceSeed();
-    const pattern = workspace.patterns.find((candidate) => candidate.mode === 'handoff');
-    if (!pattern) {
-      throw new Error('Expected a handoff pattern.');
-    }
-
-    const service = createService(workspace);
-    const result = await service.upgradePatternToWorkflow(pattern.id, { save: true });
-
-    expect(result.workspace?.workflows).toHaveLength(1);
-    expect(result.workspace?.patterns.some((candidate) => candidate.id === pattern.id)).toBe(true);
-    expect(result.workflow.id).toBe('workflow-handoff-support');
+    expect(result.workflows).toHaveLength(initialWorkflowCount + 1);
+    const createdWorkflow = result.workflows.find((workflow) => workflow.name === 'Template Copy');
+    expect(createdWorkflow).toBeDefined();
+    expect(result.selectedWorkflowId).toBe(createdWorkflow?.id);
   });
 
   test('imports and saves workflows from yaml', async () => {
     const workspace = createWorkspaceSeed();
+    const initialWorkflowCount = workspace.workflows.length;
     const service = createService(workspace);
     const yaml = exportWorkflowDefinition(createWorkflow(), 'yaml').content;
 
     const result = await service.importWorkflow(yaml, 'yaml', { save: true });
 
-    expect(result.workspace?.workflows).toHaveLength(1);
+    expect(result.workspace?.workflows).toHaveLength(initialWorkflowCount + 1);
     expect(result.workspace?.selectedWorkflowId).toBe('workflow-test');
     expect(result.workflow.id).toBe('workflow-test');
   });

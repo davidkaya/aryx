@@ -201,7 +201,7 @@ describe('AryxAppService sub-workflow operations', () => {
     expect(session?.workflowId).toBe('parent');
     expect(session?.sessionModelConfig).toEqual({
       model: 'gpt-5.4',
-      reasoningEffort: 'medium',
+      reasoningEffort: undefined,
     });
   });
 });

@@ -48,11 +48,11 @@ function createProject(overrides?: Partial<ProjectRecord>): ProjectRecord {
   };
 }
 
-function createSession(patternId: string, overrides?: Partial<SessionRecord>): SessionRecord {
+function createSession(workflowId: string, overrides?: Partial<SessionRecord>): SessionRecord {
   return {
     id: 'session-1',
     projectId: 'project-1',
-    patternId,
+    workflowId,
     title: 'Terminal Session',
     createdAt: TIMESTAMP,
     updatedAt: TIMESTAMP,
@@ -133,7 +133,7 @@ function createService(workspace: WorkspaceState, terminalSnapshot = createTermi
 describe('AryxAppService terminal integration', () => {
   test('uses the selected session cwd when creating and restarting the terminal', async () => {
     const workspace = createWorkspaceSeed();
-    const pattern = workspace.patterns[0];
+    const pattern = workspace.workflows[0];
     if (!pattern) {
       throw new Error('Expected a seeded pattern.');
     }

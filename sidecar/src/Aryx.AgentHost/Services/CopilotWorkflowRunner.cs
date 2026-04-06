@@ -14,7 +14,6 @@ namespace Aryx.AgentHost.Services;
 public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
 {
     private const string HandoffFunctionPrefix = "handoff_to_";
-    private readonly PatternValidator _patternValidator;
     private readonly WorkflowValidator _workflowValidator;
     private readonly WorkflowRunner _workflowRunner = new();
     private readonly CopilotApprovalCoordinator _approvalCoordinator = new();
@@ -22,9 +21,8 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
     private readonly CopilotMcpOAuthCoordinator _mcpOAuthCoordinator = new();
     private readonly CopilotExitPlanModeCoordinator _exitPlanModeCoordinator = new();
 
-    public CopilotWorkflowRunner(PatternValidator patternValidator, WorkflowValidator? workflowValidator = null)
+    public CopilotWorkflowRunner(WorkflowValidator? workflowValidator = null)
     {
-        _patternValidator = patternValidator;
         _workflowValidator = workflowValidator ?? new WorkflowValidator();
     }
 
@@ -38,9 +36,8 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
         Func<ExitPlanModeRequestedEventDto, Task> onExitPlanMode,
         CancellationToken cancellationToken)
     {
-        string? validationError = command.Workflow is null
-            ? _patternValidator.Validate(command.Pattern).FirstOrDefault()?.Message
-            : _workflowValidator.Validate(command.Workflow, command.WorkflowLibrary).FirstOrDefault()?.Message;
+        string? validationError = _workflowValidator.Validate(command.Workflow, command.WorkflowLibrary)
+            .FirstOrDefault()?.Message;
         if (validationError is not null)
         {
             throw new InvalidOperationException(validationError);
@@ -87,9 +84,7 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
                 },
                 runCancellation.Token);
             ConfigureHookLifecycleEventSuppression(state, bundle);
-            Workflow workflow = command.Workflow is null
-                ? bundle.BuildWorkflow(command.Pattern)
-                : _workflowRunner.BuildWorkflow(command.Workflow, command.Pattern, bundle.Agents, command.WorkflowLibrary);
+            Workflow workflow = _workflowRunner.BuildWorkflow(command.Workflow, bundle.Agents, command.WorkflowLibrary);
             List<ChatMessage> inputMessages = command.Messages.Select(WorkflowTranscriptProjector.ToChatMessage).ToList();
             WorkflowTranscriptProjector.AttachMessageMode(inputMessages, command.MessageMode);
 
@@ -166,12 +161,7 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
     internal static bool ShouldEnableWorkflowCheckpointing(RunTurnCommandDto command)
     {
         ArgumentNullException.ThrowIfNull(command);
-        if (command.Workflow is not null)
-        {
-            return command.Workflow.Settings.Checkpointing.Enabled;
-        }
-
-        return string.Equals(command.Pattern.Mode, "handoff", StringComparison.OrdinalIgnoreCase);
+        return command.Workflow.Settings.Checkpointing.Enabled;
     }
 
     internal static string GetCheckpointStorePath(RunTurnCommandDto command)
@@ -210,7 +200,7 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
     {
         ArgumentNullException.ThrowIfNull(command);
 
-        string executionMode = command.Workflow?.Settings.ExecutionMode?.Trim() ?? "off-thread";
+        string executionMode = command.Workflow.Settings.ExecutionMode?.Trim() ?? "off-thread";
         InProcessExecutionEnvironment environment = string.Equals(
             executionMode,
             "lockstep",
@@ -300,7 +290,7 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
         if (evt is ExecutorInvokedEvent invoked)
         {
             if (AgentIdentityResolver.TryResolveKnownAgentIdentity(
-                command.Pattern,
+                command.Workflow,
                 invoked.ExecutorId,
                 out AgentIdentity invokedAgent))
             {
@@ -357,7 +347,7 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
         if (evt is ExecutorCompletedEvent completed)
         {
             if (AgentIdentityResolver.TryResolveObservedAgentIdentity(
-                command.Pattern,
+                command.Workflow,
                 completed.ExecutorId,
                 state.ActiveAgent,
                 out AgentIdentity completedAgent))
@@ -471,7 +461,7 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
             authorName = observedMessageAgent.AgentName;
         }
         else if (AgentIdentityResolver.TryResolveObservedAgentIdentity(
-            command.Pattern,
+            command.Workflow,
             update.ExecutorId,
             state.ActiveAgent,
             out AgentIdentity resolvedUpdateAgent))
@@ -594,7 +584,7 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
             case ExecutorFailedEvent executorFailed:
             {
                 AgentIdentity? agent = AgentIdentityResolver.TryResolveObservedAgentIdentity(
-                    command.Pattern,
+                    command.Workflow,
                     executorFailed.ExecutorId,
                     state.ActiveAgent,
                     out AgentIdentity resolvedAgent)
@@ -754,7 +744,7 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
 
     private static void TraceHandoff(RunTurnCommandDto command, string message)
     {
-        if (!string.Equals(command.Pattern.Mode, "handoff", StringComparison.OrdinalIgnoreCase))
+        if (!command.Workflow.IsOrchestrationMode("handoff"))
         {
             return;
         }

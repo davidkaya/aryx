@@ -5,10 +5,10 @@ import {
   buildAvailableModelCatalog,
   findModel,
   findModelByReference,
-  normalizePatternModels,
+  normalizeWorkflowModels,
   resolveReasoningEffort,
 } from '@shared/domain/models';
-import type { PatternDefinition } from '@shared/domain/pattern';
+import type { WorkflowDefinition } from '@shared/domain/workflow';
 
 const availableModels: SidecarModelCapability[] = [
   {
@@ -24,24 +24,43 @@ const availableModels: SidecarModelCapability[] = [
   },
 ];
 
-function createPattern(): PatternDefinition {
+function createWorkflow(): WorkflowDefinition {
   return {
     id: 'pattern-1',
     name: 'Pattern',
     description: '',
-    mode: 'single',
-    availability: 'available',
-    maxIterations: 1,
-    agents: [
-      {
-        id: 'agent-1',
-        name: 'Primary Agent',
-        description: 'Helpful assistant',
-        instructions: 'Help the user.',
-        model: 'claude-sonnet-4.5',
-        reasoningEffort: 'high',
-      },
-    ],
+    graph: {
+      nodes: [
+        { id: 'start', kind: 'start', label: 'Start', position: { x: 0, y: 0 }, config: { kind: 'start' } },
+        {
+          id: 'agent-1',
+          kind: 'agent',
+          label: 'Primary Agent',
+          position: { x: 200, y: 0 },
+          order: 0,
+          config: {
+            kind: 'agent',
+            id: 'agent-1',
+            name: 'Primary Agent',
+            description: 'Helpful assistant',
+            instructions: 'Help the user.',
+            model: 'claude-sonnet-4.5',
+            reasoningEffort: 'high',
+          },
+        },
+        { id: 'end', kind: 'end', label: 'End', position: { x: 400, y: 0 }, config: { kind: 'end' } },
+      ],
+      edges: [
+        { id: 'edge-start-agent', source: 'start', target: 'agent-1', kind: 'direct' },
+        { id: 'edge-agent-end', source: 'agent-1', target: 'end', kind: 'direct' },
+      ],
+    },
+    settings: {
+      checkpointing: { enabled: false },
+      executionMode: 'off-thread',
+      orchestrationMode: 'single',
+      maxIterations: 1,
+    },
     createdAt: '2026-03-23T00:00:00.000Z',
     updatedAt: '2026-03-23T00:00:00.000Z',
   };
@@ -70,12 +89,13 @@ describe('dynamic model catalog', () => {
     expect(findModelByReference('Claude Sonnet 4.5', catalog)?.id).toBe('claude-sonnet-4.5');
   });
 
-  test('normalizes pattern agents before runtime execution', () => {
-    const normalized = normalizePatternModels(
-      createPattern(),
+  test('normalizes workflow agent reasoning effort before runtime execution', () => {
+    const normalized = normalizeWorkflowModels(
+      createWorkflow(),
       buildAvailableModelCatalog(availableModels),
     );
 
-    expect(normalized.agents[0].reasoningEffort).toBeUndefined();
+    const primaryAgent = normalized.graph.nodes.find((node) => node.kind === 'agent');
+    expect(primaryAgent?.config.kind === 'agent' ? primaryAgent.config.reasoningEffort : undefined).toBeUndefined();
   });
 });

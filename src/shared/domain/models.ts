@@ -1,5 +1,5 @@
 import type { SidecarModelCapability } from '@shared/contracts/sidecar';
-import type { PatternDefinition, ReasoningEffort } from '@shared/domain/pattern';
+import type { ReasoningEffort, WorkflowDefinition } from '@shared/domain/workflow';
 
 export type ModelProvider = 'openai' | 'anthropic' | 'google';
 
@@ -270,17 +270,31 @@ export function resolveReasoningEffort(
   return supported[0];
 }
 
-export function normalizePatternModels(
-  pattern: PatternDefinition,
+export function normalizeWorkflowModels(
+  workflow: WorkflowDefinition,
   models: ReadonlyArray<ModelDefinition>,
-): PatternDefinition {
+): WorkflowDefinition {
   return {
-    ...pattern,
-    agents: pattern.agents.map((agent) => {
-      const model = findModel(agent.model, models);
-      const reasoningEffort = resolveReasoningEffort(model, agent.reasoningEffort);
+    ...workflow,
+    graph: {
+      ...workflow.graph,
+      nodes: workflow.graph.nodes.map((node) => {
+        if (node.kind !== 'agent' || node.config.kind !== 'agent') {
+          return node;
+        }
 
-      return reasoningEffort === agent.reasoningEffort ? agent : { ...agent, reasoningEffort };
-    }),
+        const model = findModel(node.config.model, models);
+        const reasoningEffort = resolveReasoningEffort(model, node.config.reasoningEffort);
+        return reasoningEffort === node.config.reasoningEffort
+          ? node
+          : {
+            ...node,
+            config: {
+              ...node.config,
+              reasoningEffort,
+            },
+          };
+      }),
+    },
   };
 }

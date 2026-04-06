@@ -7,7 +7,7 @@ internal sealed class CopilotMcpOAuthCoordinator
 {
     public McpOauthRequiredEventDto BuildMcpOauthRequiredEvent(
         RunTurnCommandDto command,
-        PatternAgentDefinitionDto agent,
+        WorkflowNodeDto agent,
         McpOauthRequiredEvent request)
     {
         ArgumentNullException.ThrowIfNull(command);
@@ -19,8 +19,8 @@ internal sealed class CopilotMcpOAuthCoordinator
 
         string oauthRequestId = NormalizeOptionalString(requestData.RequestId)
             ?? throw new InvalidOperationException("MCP OAuth request ID is required.");
-        string? normalizedAgentId = NormalizeOptionalString(agent.Id);
-        string? normalizedAgentName = NormalizeOptionalString(agent.Name) ?? normalizedAgentId;
+        string? normalizedAgentId = NormalizeOptionalString(agent.GetAgentId());
+        string? normalizedAgentName = NormalizeOptionalString(agent.GetAgentName()) ?? normalizedAgentId;
 
         return new McpOauthRequiredEventDto
         {

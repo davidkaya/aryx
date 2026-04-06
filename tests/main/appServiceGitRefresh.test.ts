@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from 'bun:test';
 
 import type { RunTurnCommand } from '@shared/contracts/sidecar';
-import type { PatternDefinition } from '@shared/domain/pattern';
+import type { WorkflowDefinition } from '@shared/domain/workflow';
 import type {
   ProjectGitRunChangeSummary,
   ProjectGitWorkingTreeSnapshot,
@@ -68,11 +68,11 @@ function createProject(overrides?: Partial<ProjectRecord>): ProjectRecord {
   };
 }
 
-function createSession(projectId: string, patternId: string, overrides?: Partial<SessionRecord>): SessionRecord {
+function createSession(projectId: string, workflowId: string, overrides?: Partial<SessionRecord>): SessionRecord {
   return {
     id: 'session-alpha',
     projectId,
-    patternId,
+    workflowId,
     title: 'Alpha session',
     createdAt: TIMESTAMP,
     updatedAt: TIMESTAMP,
@@ -88,12 +88,12 @@ function createFixture(overrides?: {
   session?: Partial<SessionRecord>;
 }): {
   workspace: WorkspaceState;
-  pattern: PatternDefinition;
+  pattern: WorkflowDefinition;
   project: ProjectRecord;
   session: SessionRecord;
 } {
   const workspace = createWorkspaceSeed();
-  const pattern = workspace.patterns.find((candidate) => candidate.mode === 'single');
+  const pattern = workspace.workflows.find((candidate) => candidate.settings.orchestrationMode === 'single');
   if (!pattern) {
     throw new Error('Expected the workspace seed to include a single-agent pattern.');
   }
@@ -104,7 +104,7 @@ function createFixture(overrides?: {
   workspace.projects = [project];
   workspace.sessions = [session];
   workspace.selectedProjectId = project.id;
-  workspace.selectedPatternId = pattern.id;
+  workspace.selectedWorkflowId = pattern.id;
   workspace.selectedSessionId = session.id;
 
   return { workspace, pattern, project, session };
@@ -173,7 +173,7 @@ function createRunSummary(): ProjectGitRunChangeSummary {
 
 function createService(
   workspace: WorkspaceState,
-  pattern: PatternDefinition,
+  pattern: WorkflowDefinition,
   options?: {
     snapshot?: ProjectGitWorkingTreeSnapshot;
     runSummary?: ProjectGitRunChangeSummary;

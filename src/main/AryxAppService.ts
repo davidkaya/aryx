@@ -26,20 +26,16 @@ import {
   buildAvailableModelCatalog,
   findModel,
   findModelByReference,
-  normalizePatternModels,
+  normalizeWorkflowModels,
   resolveReasoningEffort,
 } from '@shared/domain/models';
 import {
+  buildWorkflowExecutionDefinition,
   isReasoningEffort,
-  syncPatternGraph,
-  type PatternDefinition,
-  type ReasoningEffort,
-  validatePatternDefinition,
-} from '@shared/domain/pattern';
-import {
-  buildWorkflowExecutionPattern,
   normalizeWorkflowDefinition,
+  resolveWorkflowAgentNodes,
   validateWorkflowDefinition,
+  type ReasoningEffort,
   type WorkflowDefinition,
   type WorkflowReference,
 } from '@shared/domain/workflow';
@@ -51,7 +47,6 @@ import {
 } from '@shared/domain/workflowSerialization';
 import {
   applyWorkflowTemplate,
-  buildWorkflowFromPattern,
   createWorkflowTemplateFromWorkflow,
   normalizeWorkflowTemplateDefinition,
   type WorkflowTemplateCategory,
@@ -59,7 +54,7 @@ import {
 } from '@shared/domain/workflowTemplate';
 import {
   normalizeWorkspaceAgentDefinition,
-  resolvePatternAgents,
+  resolveWorkflowAgents as resolveWorkspaceWorkflowAgents,
   type WorkspaceAgentDefinition,
 } from '@shared/domain/workspaceAgent';
 import {
@@ -82,6 +77,7 @@ import {
   type ProjectCustomizationState,
 } from '@shared/domain/projectCustomization';
 import {
+  applyDefaultToolApprovalPolicy,
   approvalPolicyRequiresCheckpoint,
   dequeuePendingApprovalState,
   enqueuePendingApprovalState,
@@ -138,6 +134,7 @@ import {
   upsertRunApprovalEvent,
   upsertRunMessageEvent,
   upsertSessionRunRecord,
+  type CreateSessionRunRecordInput,
   type RunTimelineEventRecord,
   type SessionRunRecord,
 } from '@shared/domain/runTimeline';
@@ -216,10 +213,6 @@ type WorkflowCheckpointRecoveryState = {
 };
 
 type DiscoveredToolingResolution = 'accept' | 'dismiss';
-
-function isBuiltinPattern(patternId: string): boolean {
-  return patternId.startsWith('pattern-');
-}
 
 function equalStringArrays(left?: readonly string[], right?: readonly string[]): boolean {
   const normalizedLeft = left ?? [];
@@ -613,37 +606,6 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     return result;
   }
 
-  async savePattern(pattern: PatternDefinition): Promise<WorkspaceState> {
-    const workspace = await this.loadWorkspace();
-    const knownApprovalToolNames = await this.listKnownApprovalToolNames(workspace);
-    const synchronizedPattern = pattern.graph ? pattern : syncPatternGraph(pattern);
-    const issues = validatePatternDefinition(
-      synchronizedPattern,
-      knownApprovalToolNames,
-    ).filter((issue) => issue.level === 'error');
-    if (issues.length > 0) {
-      throw new Error(issues[0].message);
-    }
-
-    const existingIndex = workspace.patterns.findIndex((current) => current.id === pattern.id);
-    const candidate: PatternDefinition = {
-      ...synchronizedPattern,
-      approvalPolicy: normalizeApprovalPolicy(synchronizedPattern.approvalPolicy),
-      isFavorite: pattern.isFavorite ?? workspace.patterns[existingIndex]?.isFavorite,
-      createdAt: existingIndex >= 0 ? workspace.patterns[existingIndex].createdAt : nowIso(),
-      updatedAt: nowIso(),
-    };
-
-    if (existingIndex >= 0) {
-      workspace.patterns[existingIndex] = candidate;
-    } else {
-      workspace.patterns.push(candidate);
-    }
-
-    workspace.selectedPatternId = candidate.id;
-    return this.persistAndBroadcast(workspace);
-  }
-
   async saveWorkflow(workflow: WorkflowDefinition): Promise<WorkspaceState> {
     const workspace = await this.loadWorkspace();
     const normalizedWorkflow = normalizeWorkflowDefinition(workflow);
@@ -747,48 +709,6 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     };
   }
 
-  async upgradePatternToWorkflow(
-    patternId: string,
-    options?: {
-      workflowId?: string;
-      name?: string;
-      description?: string;
-      save?: boolean;
-    },
-  ): Promise<{ workflow: WorkflowDefinition; workspace?: WorkspaceState }> {
-    const workspace = await this.loadWorkspace();
-    const pattern = this.requirePattern(workspace, patternId);
-    const baseWorkflow = buildWorkflowFromPattern(pattern);
-    const workflowId = options?.workflowId?.trim()
-      || this.createUniqueWorkflowId(workspace, baseWorkflow.id);
-    const workflow = normalizeWorkflowDefinition({
-      ...baseWorkflow,
-      id: workflowId,
-      name: options?.name?.trim() || baseWorkflow.name,
-      description: options?.description?.trim() ?? baseWorkflow.description,
-      createdAt: nowIso(),
-      updatedAt: nowIso(),
-    });
-
-    if (!options?.save) {
-      return { workflow };
-    }
-
-    const savedWorkspace = await this.saveWorkflow(workflow);
-    return {
-      workflow,
-      workspace: savedWorkspace,
-    };
-  }
-
-  async setPatternFavorite(patternId: string, isFavorite: boolean): Promise<WorkspaceState> {
-    const workspace = await this.loadWorkspace();
-    const pattern = this.requirePattern(workspace, patternId);
-    pattern.isFavorite = isFavorite;
-    pattern.updatedAt = nowIso();
-    return this.persistAndBroadcast(workspace);
-  }
-
   async setTheme(theme: AppearanceTheme): Promise<WorkspaceState> {
     const workspace = await this.loadWorkspace();
     workspace.settings.theme = normalizeTheme(theme);
@@ -865,23 +785,6 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
 
   resizeTerminal(cols: number, rows: number): void {
     this.ptyManager.resize(cols, rows);
-  }
-
-  async deletePattern(patternId: string): Promise<WorkspaceState> {
-    const workspace = await this.loadWorkspace();
-    workspace.patterns = workspace.patterns.filter((pattern) => pattern.id !== patternId);
-
-    if (isBuiltinPattern(patternId)) {
-      const deletedIds = new Set(workspace.deletedBuiltinPatternIds ?? []);
-      deletedIds.add(patternId);
-      workspace.deletedBuiltinPatternIds = [...deletedIds];
-    }
-
-    if (workspace.selectedPatternId === patternId) {
-      workspace.selectedPatternId = workspace.patterns[0]?.id;
-    }
-
-    return this.persistAndBroadcast(workspace);
   }
 
   async deleteWorkflow(workflowId: string): Promise<WorkspaceState> {
@@ -1038,50 +941,19 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     return this.persistAndBroadcast(workspace);
   }
 
-  async createSession(projectId: string, patternId: string): Promise<WorkspaceState> {
-    const workspace = await this.loadWorkspace();
-    const project = this.requireProject(workspace, projectId);
-    const pattern = this.requirePattern(workspace, patternId);
-    const modelCatalog = await this.loadAvailableModelCatalog();
-    const normalizedPattern = normalizePatternModels(pattern, modelCatalog);
-
-    const session: SessionRecord = {
-      id: createId('session'),
-      projectId: project.id,
-      patternId: pattern.id,
-      title: pattern.name,
-      titleSource: 'auto',
-      createdAt: nowIso(),
-      updatedAt: nowIso(),
-      status: 'idle',
-      messages: [],
-      sessionModelConfig: normalizedPattern.agents.length === 1
-        ? createSessionModelConfig(normalizedPattern)
-        : undefined,
-      tooling: createSessionToolingSelection(),
-      runs: [],
-    };
-
-    await this.ensureScratchpadSessionDirectory(session);
-    workspace.sessions.unshift(session);
-    workspace.selectedProjectId = project.id;
-    workspace.selectedPatternId = pattern.id;
-    workspace.selectedWorkflowId = undefined;
-    workspace.selectedSessionId = session.id;
-    return this.persistAndBroadcast(workspace);
-  }
-
-  async createWorkflowSession(projectId: string, workflowId: string): Promise<WorkspaceState> {
+  async createSession(projectId: string, workflowId: string): Promise<WorkspaceState> {
     const workspace = await this.loadWorkspace();
     const project = this.requireProject(workspace, projectId);
     const workflow = this.requireWorkflow(workspace, workflowId);
     const modelCatalog = await this.loadAvailableModelCatalog();
-    const executionPattern = normalizePatternModels(this.buildResolvedWorkflowExecutionPattern(workspace, workflow), modelCatalog);
+    const executionWorkflow = normalizeWorkflowModels(
+      this.buildResolvedExecutionWorkflow(workspace, workflow),
+      modelCatalog,
+    );
 
     const session: SessionRecord = {
       id: createId('session'),
       projectId: project.id,
-      patternId: workflow.id,
       workflowId: workflow.id,
       title: workflow.name,
       titleSource: 'auto',
@@ -1089,9 +961,10 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
       updatedAt: nowIso(),
       status: 'idle',
       messages: [],
-      sessionModelConfig: executionPattern.agents.length === 1
-        ? createSessionModelConfig(executionPattern)
-        : undefined,
+      sessionModelConfig: createSessionModelConfig(
+        executionWorkflow,
+        this.createWorkflowResolutionOptions(workspace),
+      ),
       tooling: createSessionToolingSelection(),
       runs: [],
     };
@@ -1099,10 +972,13 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     await this.ensureScratchpadSessionDirectory(session);
     workspace.sessions.unshift(session);
     workspace.selectedProjectId = project.id;
-    workspace.selectedPatternId = undefined;
     workspace.selectedWorkflowId = workflow.id;
     workspace.selectedSessionId = session.id;
     return this.persistAndBroadcast(workspace);
+  }
+
+  async createWorkflowSession(projectId: string, workflowId: string): Promise<WorkspaceState> {
+    return this.createSession(projectId, workflowId);
   }
 
   async duplicateSession(sessionId: string): Promise<WorkspaceState> {
@@ -1116,7 +992,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     await this.ensureScratchpadSessionDirectory(duplicate);
     workspace.sessions.unshift(duplicate);
     workspace.selectedProjectId = duplicate.projectId;
-    workspace.selectedPatternId = duplicate.patternId;
+    workspace.selectedWorkflowId = duplicate.workflowId;
     workspace.selectedSessionId = duplicate.id;
     return this.persistAndBroadcast(workspace);
   }
@@ -1124,8 +1000,8 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
   async branchSession(sessionId: string, messageId: string): Promise<WorkspaceState> {
     const workspace = await this.loadWorkspace();
     const session = this.requireSession(workspace, sessionId);
-    const pattern = this.requirePattern(workspace, session.patternId);
-    const branch = branchSessionRecord(session, pattern, createId('session'), messageId, nowIso());
+    const workflow = this.requireWorkflow(workspace, session.workflowId);
+    const branch = branchSessionRecord(session, workflow, createId('session'), messageId, nowIso());
     if (isScratchpadProject(branch.projectId)) {
       branch.cwd = undefined;
     }
@@ -1133,7 +1009,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     await this.ensureScratchpadSessionDirectory(branch);
     workspace.sessions.unshift(branch);
     workspace.selectedProjectId = branch.projectId;
-    workspace.selectedPatternId = branch.patternId;
+    workspace.selectedWorkflowId = branch.workflowId;
     workspace.selectedSessionId = branch.id;
     return this.persistAndBroadcast(workspace);
   }
@@ -1213,16 +1089,16 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     }
 
     const project = this.requireProject(workspace, session.projectId);
-    const { pattern, workflow } = this.resolveSessionExecutionDefinition(workspace, session);
-    const effectivePattern = this.applyProjectCustomizationToPattern(
-      await this.buildEffectivePattern(pattern, session, workspace.settings.agents ?? []),
+    const workflow = this.resolveSessionWorkflow(workspace, session);
+    const effectiveWorkflow = this.applyProjectCustomizationToWorkflow(
+      await this.buildEffectiveWorkflow(workflow, session, workspace.settings.agents ?? []),
       project,
     );
     const projectInstructions = resolveProjectInstructionsContent(project.customization);
     const occurredAt = nowIso();
     const regeneratedSession = regenerateSessionRecord(
       session,
-      effectivePattern,
+      effectiveWorkflow,
       createId('session'),
       messageId,
       occurredAt,
@@ -1234,7 +1110,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     await this.ensureScratchpadSessionDirectory(regeneratedSession);
     workspace.sessions.unshift(regeneratedSession);
     workspace.selectedProjectId = regeneratedSession.projectId;
-    workspace.selectedPatternId = regeneratedSession.patternId;
+    workspace.selectedWorkflowId = regeneratedSession.workflowId;
     workspace.selectedSessionId = regeneratedSession.id;
 
     const triggerMessage = regeneratedSession.messages.at(-1);
@@ -1246,14 +1122,13 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
       workspace,
       regeneratedSession,
       project,
-      effectivePattern,
+      effectiveWorkflow,
       projectInstructions,
       {
         occurredAt,
         requestId: createId('turn'),
         triggerMessageId: triggerMessage.id,
       },
-      workflow,
     );
   }
 
@@ -1280,9 +1155,9 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     }
 
     const project = this.requireProject(workspace, session.projectId);
-    const { pattern, workflow } = this.resolveSessionExecutionDefinition(workspace, session);
-    const effectivePattern = this.applyProjectCustomizationToPattern(
-      await this.buildEffectivePattern(pattern, session, workspace.settings.agents ?? []),
+    const workflow = this.resolveSessionWorkflow(workspace, session);
+    const effectiveWorkflow = this.applyProjectCustomizationToWorkflow(
+      await this.buildEffectiveWorkflow(workflow, session, workspace.settings.agents ?? []),
       project,
     );
     const projectInstructions = resolveProjectInstructionsContent(project.customization);
@@ -1290,7 +1165,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     const nextAttachments = attachments === undefined ? sourceMessage.attachments : attachments;
     const editedSession = editAndResendSessionRecord(
       session,
-      effectivePattern,
+      effectiveWorkflow,
       createId('session'),
       messageId,
       preparedContent,
@@ -1304,7 +1179,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     await this.ensureScratchpadSessionDirectory(editedSession);
     workspace.sessions.unshift(editedSession);
     workspace.selectedProjectId = editedSession.projectId;
-    workspace.selectedPatternId = editedSession.patternId;
+    workspace.selectedWorkflowId = editedSession.workflowId;
     workspace.selectedSessionId = editedSession.id;
 
     const triggerMessage = editedSession.messages.at(-1);
@@ -1316,14 +1191,13 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
       workspace,
       editedSession,
       project,
-      effectivePattern,
+      effectiveWorkflow,
       projectInstructions,
       {
         occurredAt,
         requestId: createId('turn'),
         triggerMessageId: triggerMessage.id,
       },
-      workflow,
     );
   }
 
@@ -1342,9 +1216,9 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
       throw new Error('Wait for the current response or approval checkpoint to finish before sending another message.');
     }
     const project = this.requireProject(workspace, session.projectId);
-    const { pattern, workflow } = this.resolveSessionExecutionDefinition(workspace, session);
-    const effectivePattern = this.applyProjectCustomizationToPattern(
-      await this.buildEffectivePattern(pattern, session, workspace.settings.agents ?? []),
+    const workflow = this.resolveSessionWorkflow(workspace, session);
+    const effectiveWorkflow = this.applyProjectCustomizationToWorkflow(
+      await this.buildEffectiveWorkflow(workflow, session, workspace.settings.agents ?? []),
       project,
     );
     const projectInstructions = resolveProjectInstructionsContent(project.customization);
@@ -1375,7 +1249,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
       workspace,
       session,
       project,
-      effectivePattern,
+      effectiveWorkflow,
       projectInstructions,
       {
         occurredAt,
@@ -1384,7 +1258,6 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
         messageMode,
         attachments,
       },
-      workflow,
     );
   }
 
@@ -1572,10 +1445,13 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     const session = this.requireSession(workspace, sessionId);
     const project = this.requireProject(workspace, session.projectId);
     const modelCatalog = await this.loadAvailableModelCatalog();
-    const { pattern } = this.resolveSessionExecutionDefinition(workspace, session);
-    const effectivePattern = normalizePatternModels(pattern, modelCatalog);
+    const workflow = normalizeWorkflowModels(
+      this.buildResolvedExecutionWorkflow(workspace, this.requireWorkflow(workspace, session.workflowId)),
+      modelCatalog,
+    );
+    const agentNodes = resolveWorkflowAgentNodes(workflow);
 
-    if (effectivePattern.agents.length !== 1) {
+    if (agentNodes.length !== 1) {
       throw new Error('Model override is only supported for single-agent sessions.');
     }
 
@@ -1732,7 +1608,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     workspace: WorkspaceState,
     session: SessionRecord,
     project: ProjectRecord,
-    effectivePattern: PatternDefinition,
+    effectiveWorkflow: WorkflowDefinition,
     projectInstructions: string | undefined,
     options: {
       occurredAt: string;
@@ -1741,12 +1617,11 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
       messageMode?: MessageMode;
       attachments?: ChatMessageAttachment[];
     },
-    effectiveWorkflow?: WorkflowDefinition,
   ): Promise<void> {
     const workspaceKind = isScratchpadProject(project) ? 'scratchpad' : 'project';
     const { occurredAt, requestId, triggerMessageId, messageMode, attachments } = options;
     const promptInvocation = this.resolveRunTurnPromptInvocation(session, triggerMessageId);
-    const patternForTurn = await this.applyPromptInvocationToPattern(effectivePattern, promptInvocation);
+    const workflowForTurn = await this.applyPromptInvocationToWorkflow(effectiveWorkflow, promptInvocation);
     const interactionMode: InteractionMode = isPlanPromptInvocation(promptInvocation)
       ? 'plan'
       : session.interactionMode ?? 'interactive';
@@ -1761,7 +1636,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
       console.warn(`[aryx git] Failed to capture pre-run git snapshot for project "${project.id}".`);
     }
 
-    session.title = resolveSessionTitle(session, patternForTurn, session.messages);
+    session.title = resolveSessionTitle(session, workflowForTurn, session.messages);
     session.status = 'running';
     session.lastError = undefined;
     session.pendingPlanReview = undefined;
@@ -1773,8 +1648,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
         project,
         workingDirectory: runWorkingDirectory,
         workspaceKind,
-        pattern: patternForTurn,
-        workflow: effectiveWorkflow ? { id: effectiveWorkflow.id, name: effectiveWorkflow.name } : undefined,
+        workflow: workflowForTurn,
         triggerMessageId,
         startedAt: occurredAt,
         preRunGitSnapshot,
@@ -1803,9 +1677,8 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
         mode: interactionMode,
         messageMode,
         projectInstructions,
-        pattern: patternForTurn,
-        workflow: effectiveWorkflow,
-        workflowLibrary: effectiveWorkflow ? workspace.workflows : undefined,
+        workflow: workflowForTurn,
+        workflowLibrary: workspace.workflows,
         messages: session.messages,
         attachments: attachments?.length ? attachments : undefined,
         promptInvocation,
@@ -1846,7 +1719,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
         },
       );
 
-      await this.awaitFinalResponseApproval(workspace, session.id, requestId, effectivePattern, responseMessages);
+      await this.awaitFinalResponseApproval(workspace, session.id, requestId, workflowForTurn, responseMessages);
       this.finalizeTurn(workspace, session.id, requestId, responseMessages);
       if (workspaceKind === 'project') {
         const completedRun = await this.refreshSessionRunGitSummary(session, project, requestId, nowIso());
@@ -2194,13 +2067,6 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     return this.persistAndBroadcast(workspace);
   }
 
-  async selectPattern(patternId?: string): Promise<WorkspaceState> {
-    const workspace = await this.loadWorkspace();
-    workspace.selectedPatternId = patternId;
-    workspace.selectedSessionId = workspace.selectedSessionId;
-    return this.persistAndBroadcast(workspace);
-  }
-
   async selectSession(sessionId?: string): Promise<WorkspaceState> {
     const workspace = await this.loadWorkspace();
     if (sessionId) {
@@ -2365,15 +2231,6 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     }
   }
 
-  private requirePattern(workspace: WorkspaceState, patternId: string): PatternDefinition {
-    const pattern = workspace.patterns.find((current) => current.id === patternId);
-    if (!pattern) {
-      throw new Error(`Pattern "${patternId}" was not found.`);
-    }
-
-    return pattern;
-  }
-
   private requireWorkflowTemplate(workspace: WorkspaceState, templateId: string): WorkflowTemplateDefinition {
     const template = workspace.workflowTemplates.find((current) => current.id === templateId);
     if (!template) {
@@ -2417,30 +2274,30 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     return normalized || createId(fallbackPrefix);
   }
 
-  private resolveSessionExecutionDefinition(
+  private resolveSessionWorkflow(
     workspace: WorkspaceState,
     session: SessionRecord,
-  ): { pattern: PatternDefinition; workflow?: WorkflowDefinition } {
-    if (session.workflowId) {
-      const workflow = this.requireWorkflow(workspace, session.workflowId);
-      return {
-        workflow,
-        pattern: this.buildResolvedWorkflowExecutionPattern(workspace, workflow),
-      };
-    }
-
-    return {
-      pattern: this.requirePattern(workspace, session.patternId),
-    };
+  ): WorkflowDefinition {
+    return this.requireWorkflow(workspace, session.workflowId);
   }
 
-  private buildResolvedWorkflowExecutionPattern(
+  private buildResolvedExecutionWorkflow(
     workspace: WorkspaceState,
     workflow: WorkflowDefinition,
-  ): PatternDefinition {
-    return buildWorkflowExecutionPattern(workflow, {
-      resolveWorkflow: (workflowId) => workspace.workflows.find((candidate) => candidate.id === workflowId),
+  ): WorkflowDefinition {
+    return normalizeWorkflowDefinition({
+      ...workflow,
+      settings: {
+        ...workflow.settings,
+        approvalPolicy: applyDefaultToolApprovalPolicy(workflow.settings.approvalPolicy),
+      },
     });
+  }
+
+  private createWorkflowResolutionOptions(workspace: WorkspaceState) {
+    return {
+      resolveWorkflow: (workflowId: string) => workspace.workflows.find((candidate) => candidate.id === workflowId),
+    };
   }
 
   private validateWorkflowReferences(
@@ -2712,15 +2569,19 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
 
   private emitCompletedActivity(
     sessionId: string,
-    pattern: PatternDefinition,
+    workflow: WorkflowDefinition,
     message: ChatMessageRecord,
   ): void {
     if (message.role !== 'assistant') {
       return;
     }
 
-    const agent = pattern.agents.find((candidate) =>
-      candidate.id === message.authorName || candidate.name === message.authorName);
+    const agentNode = resolveWorkflowAgentNodes(workflow)
+      .find((candidate) =>
+        candidate.config.kind === 'agent'
+        && (candidate.config.id === message.authorName || candidate.config.name === message.authorName))
+      ;
+    const agent = agentNode?.config.kind === 'agent' ? agentNode.config : undefined;
     if (!agent) {
       return;
     }
@@ -2742,7 +2603,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     messages: ChatMessageRecord[],
   ): void {
     const session = this.requireSession(workspace, sessionId);
-    const { pattern } = this.resolveSessionExecutionDefinition(workspace, session);
+    const workflow = this.resolveSessionWorkflow(workspace, session);
     const incomingIds = new Set(messages.map((message) => message.id));
 
     // Messages that were streamed during the turn already exist in session.messages
@@ -2807,7 +2668,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
         this.emitRunUpdated(sessionId, occurredAt, nextRun);
       }
 
-      this.emitCompletedActivity(sessionId, pattern, message);
+        this.emitCompletedActivity(sessionId, workflow, message);
     }
 
     for (const message of session.messages) {
@@ -3275,10 +3136,10 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     workspace: WorkspaceState,
     sessionId: string,
     requestId: string,
-    pattern: PatternDefinition,
+    workflow: WorkflowDefinition,
     messages: ChatMessageRecord[],
   ): Promise<void> {
-    const pendingApproval = this.buildFinalResponseApproval(pattern, messages);
+    const pendingApproval = this.buildFinalResponseApproval(workflow, messages);
     if (!pendingApproval) {
       return;
     }
@@ -3305,7 +3166,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
   }
 
   private buildFinalResponseApproval(
-    pattern: PatternDefinition,
+    workflow: WorkflowDefinition,
     messages: ChatMessageRecord[],
   ): PendingApprovalRecord | undefined {
     const assistantMessages = messages.filter((message) => message.role === 'assistant');
@@ -3325,9 +3186,13 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
         continue;
       }
 
-      const agent = pattern.agents.find((candidate) =>
-        candidate.id === message.authorName || candidate.name === message.authorName);
-      if (!approvalPolicyRequiresCheckpoint(pattern.approvalPolicy, 'final-response', agent?.id)) {
+      const agentNode = resolveWorkflowAgentNodes(workflow)
+        .find((candidate) =>
+          candidate.config.kind === 'agent'
+          && (candidate.config.id === message.authorName || candidate.config.name === message.authorName))
+        ;
+      const agent = agentNode?.config.kind === 'agent' ? agentNode.config : undefined;
+      if (!approvalPolicyRequiresCheckpoint(workflow.settings.approvalPolicy, 'final-response', agent?.id)) {
         continue;
       }
 
@@ -3363,28 +3228,28 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     }
   }
 
-  private async buildEffectivePattern(
-    pattern: PatternDefinition,
+  private async buildEffectiveWorkflow(
+    workflow: WorkflowDefinition,
     session: SessionRecord,
     workspaceAgents: ReadonlyArray<WorkspaceAgentDefinition>,
-  ): Promise<PatternDefinition> {
-    const resolvedPattern = resolvePatternAgents(pattern, workspaceAgents);
-    const patternWithSessionConfig = session.sessionModelConfig
-      ? applySessionModelConfig(resolvedPattern, session)
-      : resolvedPattern;
-    const patternWithApprovalSettings = applySessionApprovalSettings(patternWithSessionConfig, session);
+  ): Promise<WorkflowDefinition> {
+    const resolvedWorkflow = resolveWorkspaceWorkflowAgents(workflow, workspaceAgents);
+    const workflowWithSessionConfig = session.sessionModelConfig
+      ? applySessionModelConfig(resolvedWorkflow, session)
+      : resolvedWorkflow;
+    const workflowWithApprovalSettings = applySessionApprovalSettings(workflowWithSessionConfig, session);
 
     const modelCatalog = await this.loadAvailableModelCatalog();
-    return normalizePatternModels(patternWithApprovalSettings, modelCatalog);
+    return normalizeWorkflowModels(workflowWithApprovalSettings, modelCatalog);
   }
 
-  private async applyPromptInvocationToPattern(
-    pattern: PatternDefinition,
+  private async applyPromptInvocationToWorkflow(
+    workflow: WorkflowDefinition,
     promptInvocation?: ProjectPromptInvocation,
-  ): Promise<PatternDefinition> {
+  ): Promise<WorkflowDefinition> {
     const requestedModel = promptInvocation?.model?.trim();
     if (!requestedModel) {
-      return pattern;
+      return workflow;
     }
 
     const modelCatalog = await this.loadAvailableModelCatalog();
@@ -3392,7 +3257,12 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     const effectiveModelId = resolvedModel?.id ?? requestedModel;
 
     let didChange = false;
-    const agents = pattern.agents.map((agent) => {
+    const nodes = workflow.graph.nodes.map((node) => {
+      if (node.kind !== 'agent' || node.config.kind !== 'agent') {
+        return node;
+      }
+
+      const agent = node.config;
       // When overriding the model, re-normalize reasoning effort for the target model.
       // If the target model's reasoning capabilities are unknown (supportedReasoningEfforts
       // is undefined — common for dynamically-discovered models), strip reasoning effort
@@ -3405,39 +3275,50 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
       }
 
       if (agent.model === effectiveModelId && agent.reasoningEffort === reasoningEffort) {
-        return agent;
+        return node;
       }
 
       didChange = true;
       return {
-        ...agent,
-        model: effectiveModelId,
-        reasoningEffort,
+        ...node,
+        config: {
+          ...agent,
+          model: effectiveModelId,
+          reasoningEffort,
+        },
       };
     });
 
-    return didChange ? { ...pattern, agents } : pattern;
+    return didChange
+      ? {
+        ...workflow,
+        graph: {
+          ...workflow.graph,
+          nodes,
+        },
+      }
+      : workflow;
   }
 
-  private applyProjectCustomizationToPattern(
-    pattern: PatternDefinition,
+  private applyProjectCustomizationToWorkflow(
+    workflow: WorkflowDefinition,
     project: ProjectRecord,
-  ): PatternDefinition {
+  ): WorkflowDefinition {
     if (isScratchpadProject(project)) {
-      return pattern;
+      return workflow;
     }
 
     const projectCustomAgents = this.buildProjectCustomAgents(project.customization);
     if (projectCustomAgents.length === 0) {
-      return pattern;
+      return workflow;
     }
 
-    const [primaryAgent, ...remainingAgents] = pattern.agents;
-    if (!primaryAgent) {
-      return pattern;
+    const primaryAgentNode = resolveWorkflowAgentNodes(workflow)[0];
+    if (!primaryAgentNode || primaryAgentNode.config.kind !== 'agent') {
+      return workflow;
     }
 
-    const existingCustomAgents = primaryAgent.copilot?.customAgents ?? [];
+    const existingCustomAgents = primaryAgentNode.config.copilot?.customAgents ?? [];
     const existingAgentNames = new Set(existingCustomAgents.map((agent) => agent.name.toLowerCase()));
     const mergedCustomAgents = [
       ...existingCustomAgents,
@@ -3445,17 +3326,26 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     ];
 
     return {
-      ...pattern,
-      agents: [
-        {
-          ...primaryAgent,
-          copilot: {
-            ...primaryAgent.copilot,
-            customAgents: mergedCustomAgents,
-          },
-        },
-        ...remainingAgents,
-      ],
+      ...workflow,
+      graph: {
+        ...workflow.graph,
+        nodes: workflow.graph.nodes.map((node) => {
+          if (node.id !== primaryAgentNode.id || node.kind !== 'agent' || node.config.kind !== 'agent') {
+            return node;
+          }
+
+          return {
+            ...node,
+            config: {
+              ...node.config,
+              copilot: {
+                ...node.config.copilot,
+                customAgents: mergedCustomAgents,
+              },
+            },
+          };
+        }),
+      },
     };
   }
 
@@ -3511,13 +3401,13 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     );
     let changed = false;
 
-    for (const pattern of workspace.patterns) {
-      const nextPolicy = pruneApprovalPolicyTools(pattern.approvalPolicy, workspaceKnownToolNames);
+    for (const workflow of workspace.workflows) {
+      const nextPolicy = pruneApprovalPolicyTools(workflow.settings.approvalPolicy, workspaceKnownToolNames);
       if (!equalStringArrays(
-        pattern.approvalPolicy?.autoApprovedToolNames,
+        workflow.settings.approvalPolicy?.autoApprovedToolNames,
         nextPolicy?.autoApprovedToolNames,
       )) {
-        pattern.approvalPolicy = nextPolicy;
+        workflow.settings.approvalPolicy = nextPolicy;
         changed = true;
       }
     }

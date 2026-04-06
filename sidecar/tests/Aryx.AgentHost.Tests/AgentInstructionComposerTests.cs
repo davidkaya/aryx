@@ -8,19 +8,10 @@ public sealed class AgentInstructionComposerTests
     [Fact]
     public void Compose_LeavesNonHandoffInstructionsUnchanged()
     {
-        PatternDefinitionDto pattern = new()
-        {
-            Id = "pattern-sequential",
-            Name = "Sequential",
-            Mode = "sequential",
-            Availability = "available",
-        };
-        PatternAgentDefinitionDto agent = CreateAgent(
-            id: "agent-reviewer",
-            name: "Reviewer",
-            instructions: "Review the proposal.");
+        WorkflowDefinitionDto workflow = CreateWorkflow("sequential");
+        WorkflowNodeDto agent = CreateAgent("agent-reviewer", "Reviewer", "Review the proposal.");
 
-        string instructions = AgentInstructionComposer.Compose(pattern, agent, agentIndex: 0);
+        string instructions = AgentInstructionComposer.Compose(workflow, agent, agentIndex: 0);
 
         Assert.Equal("Review the proposal.", instructions);
     }
@@ -28,24 +19,12 @@ public sealed class AgentInstructionComposerTests
     [Fact]
     public void Compose_StrengthensGroupChatCollaborationRoles()
     {
-        PatternDefinitionDto pattern = new()
-        {
-            Id = "pattern-group-chat",
-            Name = "Group Chat",
-            Mode = "group-chat",
-            Availability = "available",
-        };
-        PatternAgentDefinitionDto writer = CreateAgent(
-            id: "agent-group-writer",
-            name: "Writer",
-            instructions: "Draft an answer.");
-        PatternAgentDefinitionDto reviewer = CreateAgent(
-            id: "agent-group-reviewer",
-            name: "Reviewer",
-            instructions: "Review the draft.");
+        WorkflowDefinitionDto workflow = CreateWorkflow("group-chat");
+        WorkflowNodeDto writer = CreateAgent("agent-group-writer", "Writer", "Draft an answer.");
+        WorkflowNodeDto reviewer = CreateAgent("agent-group-reviewer", "Reviewer", "Review the draft.");
 
-        string writerInstructions = AgentInstructionComposer.Compose(pattern, writer, agentIndex: 0);
-        string reviewerInstructions = AgentInstructionComposer.Compose(pattern, reviewer, agentIndex: 1);
+        string writerInstructions = AgentInstructionComposer.Compose(workflow, writer, agentIndex: 0);
+        string reviewerInstructions = AgentInstructionComposer.Compose(workflow, reviewer, agentIndex: 1);
 
         Assert.Contains("collaborative multi-turn group chat", writerInstructions, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("refine your earlier draft", writerInstructions, StringComparison.OrdinalIgnoreCase);
@@ -56,19 +35,13 @@ public sealed class AgentInstructionComposerTests
     [Fact]
     public void Compose_LeavesHandoffTriagePromptFocusedOnAgentInstructions()
     {
-        PatternDefinitionDto pattern = new()
-        {
-            Id = "pattern-handoff",
-            Name = "Handoff",
-            Mode = "handoff",
-            Availability = "available",
-        };
-        PatternAgentDefinitionDto triage = CreateAgent(
-            id: "agent-handoff-triage",
-            name: "Triage",
-            instructions: "You triage requests and must hand them off to the most appropriate specialist.");
+        WorkflowDefinitionDto workflow = CreateWorkflow("handoff");
+        WorkflowNodeDto triage = CreateAgent(
+            "agent-handoff-triage",
+            "Triage",
+            "You triage requests and must hand them off to the most appropriate specialist.");
 
-        string instructions = AgentInstructionComposer.Compose(pattern, triage, agentIndex: 0);
+        string instructions = AgentInstructionComposer.Compose(workflow, triage, agentIndex: 0);
 
         Assert.Equal("You triage requests and must hand them off to the most appropriate specialist.", instructions);
         Assert.DoesNotContain("routing", instructions, StringComparison.OrdinalIgnoreCase);
@@ -78,19 +51,13 @@ public sealed class AgentInstructionComposerTests
     [Fact]
     public void Compose_LeavesHandoffSpecialistPromptFocusedOnAgentInstructions()
     {
-        PatternDefinitionDto pattern = new()
-        {
-            Id = "pattern-handoff",
-            Name = "Handoff",
-            Mode = "handoff",
-            Availability = "available",
-        };
-        PatternAgentDefinitionDto specialist = CreateAgent(
-            id: "agent-handoff-ux",
-            name: "UX Specialist",
-            instructions: "You focus on navigation, UX, and interaction details.");
+        WorkflowDefinitionDto workflow = CreateWorkflow("handoff");
+        WorkflowNodeDto specialist = CreateAgent(
+            "agent-handoff-ux",
+            "UX Specialist",
+            "You focus on navigation, UX, and interaction details.");
 
-        string instructions = AgentInstructionComposer.Compose(pattern, specialist, agentIndex: 1);
+        string instructions = AgentInstructionComposer.Compose(workflow, specialist, agentIndex: 1);
 
         Assert.Equal("You focus on navigation, UX, and interaction details.", instructions);
         Assert.DoesNotContain("triage agent", instructions, StringComparison.OrdinalIgnoreCase);
@@ -100,20 +67,11 @@ public sealed class AgentInstructionComposerTests
     [Fact]
     public void Compose_AddsScratchpadGuidanceForProjectlessQaSessions()
     {
-        PatternDefinitionDto pattern = new()
-        {
-            Id = "pattern-single",
-            Name = "Single",
-            Mode = "single",
-            Availability = "available",
-        };
-        PatternAgentDefinitionDto agent = CreateAgent(
-            id: "agent-primary",
-            name: "Primary Agent",
-            instructions: "You are a helpful assistant.");
+        WorkflowDefinitionDto workflow = CreateWorkflow("single");
+        WorkflowNodeDto agent = CreateAgent("agent-primary", "Primary Agent", "You are a helpful assistant.");
 
         string instructions = AgentInstructionComposer.Compose(
-            pattern,
+            workflow,
             agent,
             agentIndex: 0,
             workspaceKind: "scratchpad");
@@ -127,20 +85,11 @@ public sealed class AgentInstructionComposerTests
     [Fact]
     public void Compose_AddsPlanModeGuidanceWhenRequested()
     {
-        PatternDefinitionDto pattern = new()
-        {
-            Id = "pattern-single",
-            Name = "Single",
-            Mode = "single",
-            Availability = "available",
-        };
-        PatternAgentDefinitionDto agent = CreateAgent(
-            id: "agent-primary",
-            name: "Primary Agent",
-            instructions: "You are a helpful assistant.");
+        WorkflowDefinitionDto workflow = CreateWorkflow("single");
+        WorkflowNodeDto agent = CreateAgent("agent-primary", "Primary Agent", "You are a helpful assistant.");
 
         string instructions = AgentInstructionComposer.Compose(
-            pattern,
+            workflow,
             agent,
             agentIndex: 0,
             interactionMode: "plan");
@@ -154,20 +103,11 @@ public sealed class AgentInstructionComposerTests
     [Fact]
     public void Compose_InsertsProjectInstructionsBetweenBaseAndRuntimeGuidance()
     {
-        PatternDefinitionDto pattern = new()
-        {
-            Id = "pattern-single",
-            Name = "Single",
-            Mode = "single",
-            Availability = "available",
-        };
-        PatternAgentDefinitionDto agent = CreateAgent(
-            id: "agent-primary",
-            name: "Primary Agent",
-            instructions: "You are a helpful assistant.");
+        WorkflowDefinitionDto workflow = CreateWorkflow("single");
+        WorkflowNodeDto agent = CreateAgent("agent-primary", "Primary Agent", "You are a helpful assistant.");
 
         string instructions = AgentInstructionComposer.Compose(
-            pattern,
+            workflow,
             agent,
             agentIndex: 0,
             workspaceKind: "scratchpad",
@@ -187,20 +127,11 @@ public sealed class AgentInstructionComposerTests
     [Fact]
     public void Compose_AppendsPromptInvocationAsATaskDirective()
     {
-        PatternDefinitionDto pattern = new()
-        {
-            Id = "pattern-single",
-            Name = "Single",
-            Mode = "single",
-            Availability = "available",
-        };
-        PatternAgentDefinitionDto agent = CreateAgent(
-            id: "agent-primary",
-            name: "Primary Agent",
-            instructions: "You are a helpful assistant.");
+        WorkflowDefinitionDto workflow = CreateWorkflow("single");
+        WorkflowNodeDto agent = CreateAgent("agent-primary", "Primary Agent", "You are a helpful assistant.");
 
         string instructions = AgentInstructionComposer.Compose(
-            pattern,
+            workflow,
             agent,
             agentIndex: 0,
             promptInvocation: new RunTurnPromptInvocationDto
@@ -228,14 +159,34 @@ public sealed class AgentInstructionComposerTests
             StringComparison.Ordinal);
     }
 
-    private static PatternAgentDefinitionDto CreateAgent(string id, string name, string instructions)
+    private static WorkflowDefinitionDto CreateWorkflow(string orchestrationMode)
     {
-        return new PatternAgentDefinitionDto
+        return new WorkflowDefinitionDto
+        {
+            Id = $"{orchestrationMode}-workflow",
+            Name = "Workflow",
+            Settings = new WorkflowSettingsDto
+            {
+                OrchestrationMode = orchestrationMode,
+            },
+        };
+    }
+
+    private static WorkflowNodeDto CreateAgent(string id, string name, string instructions)
+    {
+        return new WorkflowNodeDto
         {
             Id = id,
-            Name = name,
-            Instructions = instructions,
-            Model = "gpt-5.4",
+            Kind = "agent",
+            Label = name,
+            Config = new WorkflowNodeConfigDto
+            {
+                Kind = "agent",
+                Id = id,
+                Name = name,
+                Instructions = instructions,
+                Model = "gpt-5.4",
+            },
         };
     }
 }

@@ -157,22 +157,41 @@ describe('SidecarClient', () => {
       requestId: 'turn-1',
       sessionId: 'session-1',
       projectPath: 'C:\\workspace\\project',
-      pattern: {
-        id: 'pattern-1',
+      workflow: {
+        id: 'workflow-1',
         name: 'Single Agent',
         description: '',
-        mode: 'single',
-        availability: 'available',
-        maxIterations: 1,
-        agents: [
-          {
-            id: 'agent-1',
-            name: 'Primary',
-            description: '',
-            instructions: 'Help with the request.',
-            model: 'gpt-5.4',
-          },
-        ],
+        graph: {
+          nodes: [
+            { id: 'start', kind: 'start', label: 'Start', position: { x: 0, y: 0 }, config: { kind: 'start' } },
+            {
+              id: 'agent-1',
+              kind: 'agent',
+              label: 'Primary',
+              position: { x: 200, y: 0 },
+              order: 0,
+              config: {
+                kind: 'agent',
+                id: 'agent-1',
+                name: 'Primary',
+                description: '',
+                instructions: 'Help with the request.',
+                model: 'gpt-5.4',
+              },
+            },
+            { id: 'end', kind: 'end', label: 'End', position: { x: 400, y: 0 }, config: { kind: 'end' } },
+          ],
+          edges: [
+            { id: 'edge-start-agent', source: 'start', target: 'agent-1', kind: 'direct' },
+            { id: 'edge-agent-end', source: 'agent-1', target: 'end', kind: 'direct' },
+          ],
+        },
+        settings: {
+          checkpointing: { enabled: false },
+          executionMode: 'off-thread',
+          orchestrationMode: 'single',
+          maxIterations: 1,
+        },
         createdAt: '2026-04-01T00:00:00.000Z',
         updatedAt: '2026-04-01T00:00:00.000Z',
       },
@@ -253,22 +272,41 @@ describe('SidecarClient', () => {
       requestId: 'turn-1',
       sessionId: 'session-1',
       projectPath: 'C:\\workspace\\project',
-      pattern: {
-        id: 'pattern-1',
+      workflow: {
+        id: 'workflow-1',
         name: 'Handoff',
         description: '',
-        mode: 'handoff',
-        availability: 'available',
-        maxIterations: 1,
-        agents: [
-          {
-            id: 'agent-1',
-            name: 'Primary',
-            description: '',
-            instructions: 'Help with the request.',
-            model: 'gpt-5.4',
-          },
-        ],
+        graph: {
+          nodes: [
+            { id: 'start', kind: 'start', label: 'Start', position: { x: 0, y: 0 }, config: { kind: 'start' } },
+            {
+              id: 'agent-1',
+              kind: 'agent',
+              label: 'Primary',
+              position: { x: 200, y: 0 },
+              order: 0,
+              config: {
+                kind: 'agent',
+                id: 'agent-1',
+                name: 'Primary',
+                description: '',
+                instructions: 'Help with the request.',
+                model: 'gpt-5.4',
+              },
+            },
+            { id: 'end', kind: 'end', label: 'End', position: { x: 400, y: 0 }, config: { kind: 'end' } },
+          ],
+          edges: [
+            { id: 'edge-start-agent', source: 'start', target: 'agent-1', kind: 'direct' },
+            { id: 'edge-agent-end', source: 'agent-1', target: 'end', kind: 'direct' },
+          ],
+        },
+        settings: {
+          checkpointing: { enabled: true },
+          executionMode: 'off-thread',
+          orchestrationMode: 'handoff',
+          maxIterations: 1,
+        },
         createdAt: '2026-04-01T00:00:00.000Z',
         updatedAt: '2026-04-01T00:00:00.000Z',
       },

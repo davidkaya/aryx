@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 
-import type { PatternDefinition } from '@shared/domain/pattern';
+import type { WorkflowDefinition } from '@shared/domain/workflow';
 import {
   appendRunActivityEvent,
   completeSessionRunRecord,
@@ -12,30 +12,58 @@ import {
 import type { ProjectRecord } from '@shared/domain/project';
 import type { PendingApprovalRecord } from '@shared/domain/approval';
 
-function createPattern(): PatternDefinition {
+function createWorkflow(): WorkflowDefinition {
   return {
-    id: 'pattern-sequential',
+    id: 'workflow-sequential',
     name: 'Sequential Trio Review',
     description: 'Sequential handoff review flow.',
-    mode: 'sequential',
-    availability: 'available',
-    maxIterations: 1,
-    agents: [
-      {
-        id: 'agent-writer',
-        name: 'Writer',
-        description: 'Writes the draft.',
-        instructions: 'Write.',
-        model: 'gpt-5.4',
-      },
-      {
-        id: 'agent-reviewer',
-        name: 'Reviewer',
-        description: 'Reviews the draft.',
-        instructions: 'Review.',
-        model: 'claude-sonnet-4.5',
-      },
-    ],
+    graph: {
+      nodes: [
+        { id: 'start', kind: 'start', label: 'Start', position: { x: 0, y: 0 }, config: { kind: 'start' } },
+        {
+          id: 'agent-writer',
+          kind: 'agent',
+          label: 'Writer',
+          position: { x: 200, y: 0 },
+          order: 0,
+          config: {
+            kind: 'agent',
+            id: 'agent-writer',
+            name: 'Writer',
+            description: 'Writes the draft.',
+            instructions: 'Write.',
+            model: 'gpt-5.4',
+          },
+        },
+        {
+          id: 'agent-reviewer',
+          kind: 'agent',
+          label: 'Reviewer',
+          position: { x: 400, y: 0 },
+          order: 1,
+          config: {
+            kind: 'agent',
+            id: 'agent-reviewer',
+            name: 'Reviewer',
+            description: 'Reviews the draft.',
+            instructions: 'Review.',
+            model: 'claude-sonnet-4.5',
+          },
+        },
+        { id: 'end', kind: 'end', label: 'End', position: { x: 600, y: 0 }, config: { kind: 'end' } },
+      ],
+      edges: [
+        { id: 'edge-start-writer', source: 'start', target: 'agent-writer', kind: 'direct' },
+        { id: 'edge-writer-reviewer', source: 'agent-writer', target: 'agent-reviewer', kind: 'direct' },
+        { id: 'edge-reviewer-end', source: 'agent-reviewer', target: 'end', kind: 'direct' },
+      ],
+    },
+    settings: {
+      checkpointing: { enabled: false },
+      executionMode: 'off-thread',
+      orchestrationMode: 'sequential',
+      maxIterations: 1,
+    },
     createdAt: '2026-03-23T00:00:00.000Z',
     updatedAt: '2026-03-23T00:00:00.000Z',
   };
@@ -57,7 +85,7 @@ describe('run timeline helpers', () => {
       project: createProject(),
       workingDirectory: 'C:\\workspace\\alpha\\packages\\app',
       workspaceKind: 'project',
-      pattern: createPattern(),
+      workflow: createWorkflow(),
       triggerMessageId: 'msg-user-1',
       startedAt: '2026-03-23T00:00:01.000Z',
       preRunGitBaselineFiles: [
@@ -73,9 +101,9 @@ describe('run timeline helpers', () => {
       projectId: 'project-1',
       projectPath: 'C:\\workspace\\alpha',
       workingDirectory: 'C:\\workspace\\alpha\\packages\\app',
-      patternId: 'pattern-sequential',
-      patternName: 'Sequential Trio Review',
-      patternMode: 'sequential',
+      workflowId: 'workflow-sequential',
+      workflowName: 'Sequential Trio Review',
+      workflowMode: 'sequential',
       triggerMessageId: 'msg-user-1',
       status: 'running',
     });
@@ -112,7 +140,7 @@ describe('run timeline helpers', () => {
       requestId: 'turn-1',
       project: createProject(),
       workspaceKind: 'project',
-      pattern: createPattern(),
+      workflow: createWorkflow(),
       triggerMessageId: 'msg-user-1',
       startedAt: '2026-03-23T00:00:01.000Z',
     });
@@ -159,7 +187,7 @@ describe('run timeline helpers', () => {
         requestId: 'turn-1',
         project: createProject(),
         workspaceKind: 'project',
-        pattern: createPattern(),
+        workflow: createWorkflow(),
         triggerMessageId: 'msg-user-1',
         startedAt: '2026-03-23T00:00:01.000Z',
       }),
@@ -187,7 +215,7 @@ describe('run timeline helpers', () => {
       requestId: 'turn-1',
       project: createProject(),
       workspaceKind: 'project',
-      pattern: createPattern(),
+      workflow: createWorkflow(),
       triggerMessageId: 'msg-user-1',
       startedAt: '2026-03-23T00:00:01.000Z',
     });
@@ -242,7 +270,7 @@ describe('run timeline helpers', () => {
       requestId: 'turn-1',
       project: createProject(),
       workspaceKind: 'project',
-      pattern: createPattern(),
+      workflow: createWorkflow(),
       triggerMessageId: 'msg-user-1',
       startedAt: '2026-03-23T00:00:01.000Z',
     });

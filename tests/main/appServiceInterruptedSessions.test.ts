@@ -2,12 +2,12 @@ import { describe, expect, mock, test } from 'bun:test';
 
 import type { PendingApprovalRecord } from '@shared/domain/approval';
 import type { PendingMcpAuthRecord } from '@shared/domain/mcpAuth';
-import type { PatternDefinition } from '@shared/domain/pattern';
 import type { PendingPlanReviewRecord } from '@shared/domain/planReview';
 import type { SessionRunRecord } from '@shared/domain/runTimeline';
 import type { SessionRecord } from '@shared/domain/session';
 import type { PendingUserInputRecord } from '@shared/domain/userInput';
 import { createWorkspaceSeed, type WorkspaceState } from '@shared/domain/workspace';
+import type { WorkflowDefinition } from '@shared/domain/workflow';
 
 const TIMESTAMP = '2026-03-28T00:00:00.000Z';
 const INTERRUPTED_RUN_ERROR =
@@ -44,20 +44,20 @@ mock.module('keytar', () => ({
 
 const { AryxAppService } = await import('@main/AryxAppService');
 
-function requireSinglePattern(workspace: WorkspaceState): PatternDefinition {
-  const pattern = workspace.patterns.find((candidate) => candidate.mode === 'single');
-  if (!pattern) {
-    throw new Error('Expected the workspace seed to include a single-agent pattern.');
+function requireSingleWorkflow(workspace: WorkspaceState): WorkflowDefinition {
+  const workflow = workspace.workflows.find((candidate) => candidate.settings.orchestrationMode === 'single');
+  if (!workflow) {
+    throw new Error('Expected the workspace seed to include a single-agent workflow.');
   }
 
-  return pattern;
+  return workflow;
 }
 
-function createSession(patternId: string, overrides?: Partial<SessionRecord>): SessionRecord {
+function createSession(workflowId: string, overrides?: Partial<SessionRecord>): SessionRecord {
   return {
     id: 'session-1',
     projectId: 'project-1',
-    patternId,
+    workflowId,
     title: 'Session',
     createdAt: TIMESTAMP,
     updatedAt: TIMESTAMP,
@@ -69,7 +69,7 @@ function createSession(patternId: string, overrides?: Partial<SessionRecord>): S
 }
 
 function createRun(
-  pattern: PatternDefinition,
+  workflow: WorkflowDefinition,
   overrides?: Partial<SessionRunRecord>,
 ): SessionRunRecord {
   return {
@@ -78,9 +78,9 @@ function createRun(
     projectId: 'project-1',
     projectPath: 'C:\\workspace\\personal\\repositories\\aryx',
     workspaceKind: 'project',
-    patternId: pattern.id,
-    patternName: pattern.name,
-    patternMode: pattern.mode,
+    workflowId: workflow.id,
+    workflowName: workflow.name,
+    workflowMode: workflow.settings.orchestrationMode ?? 'single',
     triggerMessageId: 'message-1',
     startedAt: TIMESTAMP,
     status: 'running',
@@ -171,9 +171,9 @@ function createService(
 describe('AryxAppService interrupted session cleanup', () => {
   test('clears stale approvals and user input, then fails the interrupted run on load', async () => {
     const workspace = createWorkspaceSeed();
-    const pattern = requireSinglePattern(workspace);
-    const runningRun = createRun(pattern);
-    const session = createSession(pattern.id, {
+    const workflow = requireSingleWorkflow(workspace);
+    const runningRun = createRun(workflow);
+    const session = createSession(workflow.id, {
       status: 'running',
       pendingApproval: createPendingApproval('approval-1', 'Approve reading the repo'),
       pendingApprovalQueue: [createPendingApproval('approval-2', 'Approve writing the repo')],
@@ -212,10 +212,10 @@ describe('AryxAppService interrupted session cleanup', () => {
 
   test('fails sessions that were left in running state even without pending interaction records', async () => {
     const workspace = createWorkspaceSeed();
-    const pattern = requireSinglePattern(workspace);
-    const session = createSession(pattern.id, {
+    const workflow = requireSingleWorkflow(workspace);
+    const session = createSession(workflow.id, {
       status: 'running',
-      runs: [createRun(pattern)],
+      runs: [createRun(workflow)],
     });
     workspace.sessions = [session];
 
@@ -235,10 +235,10 @@ describe('AryxAppService interrupted session cleanup', () => {
 
   test('preserves restart-safe plan review and MCP auth prompts', async () => {
     const workspace = createWorkspaceSeed();
-    const pattern = requireSinglePattern(workspace);
+    const workflow = requireSingleWorkflow(workspace);
     const planReview = createPendingPlanReview();
     const mcpAuth = createPendingMcpAuth();
-    const session = createSession(pattern.id, {
+    const session = createSession(workflow.id, {
       pendingPlanReview: planReview,
       pendingMcpAuth: mcpAuth,
     });

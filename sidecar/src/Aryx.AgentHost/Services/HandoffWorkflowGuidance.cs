@@ -21,17 +21,17 @@ internal static class HandoffWorkflowGuidance
                """;
     }
 
-    public static string CreateForwardReason(PatternAgentDefinitionDto target)
+    public static string CreateForwardReason(WorkflowNodeDto target)
     {
-        string specialty = string.IsNullOrWhiteSpace(target.Description)
-            ? target.Name
-            : target.Description.TrimEnd('.');
+        string specialty = string.IsNullOrWhiteSpace(target.Config.Description)
+            ? target.GetAgentName()
+            : target.Config.Description.TrimEnd('.');
 
-        return $"Hand off when the request primarily concerns {specialty}. Once handed off, let {target.Name} own the substantive response.";
+        return $"Hand off when the request primarily concerns {specialty}. Once handed off, let {target.GetAgentName()} own the substantive response.";
     }
 
-    public static string CreateReturnReason(PatternAgentDefinitionDto triageAgent)
+    public static string CreateReturnReason(WorkflowNodeDto triageAgent)
     {
-        return $"Hand off back to {triageAgent.Name} only when the task needs re-routing, cross-specialist coordination, or is outside your specialty.";
+        return $"Hand off back to {triageAgent.GetAgentName()} only when the task needs re-routing, cross-specialist coordination, or is outside your specialty.";
     }
 }

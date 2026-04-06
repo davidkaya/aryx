@@ -8,14 +8,14 @@ public sealed class AgentIdentityResolverTests
     [Fact]
     public void TryResolveKnownAgentIdentity_MatchesRuntimeExecutorIdentifier()
     {
-        PatternDefinitionDto pattern = CreatePattern(
+        WorkflowDefinitionDto workflow = CreateWorkflow(
         [
-            CreateAgent(id: "agent-concurrent-architect", name: "Architect"),
-            CreateAgent(id: "agent-concurrent-product", name: "Product"),
+            CreateAgent("agent-concurrent-architect", "Architect"),
+            CreateAgent("agent-concurrent-product", "Product"),
         ]);
 
         bool resolved = AgentIdentityResolver.TryResolveKnownAgentIdentity(
-            pattern,
+            workflow,
             "Architect_agent_concurrent_architect",
             out AgentIdentity agent);
 
@@ -27,14 +27,14 @@ public sealed class AgentIdentityResolverTests
     [Fact]
     public void TryResolveKnownAgentIdentity_MatchesSanitizedNameAndId()
     {
-        PatternDefinitionDto pattern = CreatePattern(
+        WorkflowDefinitionDto workflow = CreateWorkflow(
         [
-            CreateAgent(id: "agent-single-primary", name: "Primary Agent"),
+            CreateAgent("agent-single-primary", "Primary Agent"),
         ],
-        mode: "single");
+        orchestrationMode: "single");
 
         bool resolved = AgentIdentityResolver.TryResolveKnownAgentIdentity(
-            pattern,
+            workflow,
             "Primary_Agent_agent_single_primary",
             out AgentIdentity agent);
 
@@ -46,14 +46,14 @@ public sealed class AgentIdentityResolverTests
     [Fact]
     public void TryResolveKnownAgentIdentity_MapsAssistantToSingleAgent()
     {
-        PatternDefinitionDto pattern = CreatePattern(
+        WorkflowDefinitionDto workflow = CreateWorkflow(
         [
-            CreateAgent(id: "agent-single-primary", name: "Primary Agent"),
+            CreateAgent("agent-single-primary", "Primary Agent"),
         ],
-        mode: "single");
+        orchestrationMode: "single");
 
         bool resolved = AgentIdentityResolver.TryResolveKnownAgentIdentity(
-            pattern,
+            workflow,
             "assistant",
             out AgentIdentity agent);
 
@@ -63,16 +63,16 @@ public sealed class AgentIdentityResolverTests
     }
 
     [Fact]
-    public void TryResolveKnownAgentIdentity_DoesNotGuessAssistantForMultiAgentPattern()
+    public void TryResolveKnownAgentIdentity_DoesNotGuessAssistantForMultiAgentWorkflow()
     {
-        PatternDefinitionDto pattern = CreatePattern(
+        WorkflowDefinitionDto workflow = CreateWorkflow(
         [
-            CreateAgent(id: "agent-concurrent-architect", name: "Architect"),
-            CreateAgent(id: "agent-concurrent-product", name: "Product"),
+            CreateAgent("agent-concurrent-architect", "Architect"),
+            CreateAgent("agent-concurrent-product", "Product"),
         ]);
 
         bool resolved = AgentIdentityResolver.TryResolveKnownAgentIdentity(
-            pattern,
+            workflow,
             "assistant",
             out _);
 
@@ -82,14 +82,14 @@ public sealed class AgentIdentityResolverTests
     [Fact]
     public void ResolveDisplayAuthorName_UsesCanonicalAgentName()
     {
-        PatternDefinitionDto pattern = CreatePattern(
+        WorkflowDefinitionDto workflow = CreateWorkflow(
         [
-            CreateAgent(id: "agent-concurrent-implementer", name: "Implementer"),
+            CreateAgent("agent-concurrent-implementer", "Implementer"),
         ],
-        mode: "single");
+        orchestrationMode: "single");
 
         string authorName = AgentIdentityResolver.ResolveDisplayAuthorName(
-            pattern,
+            workflow,
             "Implementer_agent_concurrent_implementer");
 
         Assert.Equal("Implementer", authorName);
@@ -98,14 +98,14 @@ public sealed class AgentIdentityResolverTests
     [Fact]
     public void TryResolveObservedAgentIdentity_UsesFallbackAgentForGenericAssistant()
     {
-        PatternDefinitionDto pattern = CreatePattern(
+        WorkflowDefinitionDto workflow = CreateWorkflow(
         [
-            CreateAgent(id: "agent-handoff-ux", name: "UX Specialist"),
-            CreateAgent(id: "agent-handoff-runtime", name: "Runtime Specialist"),
+            CreateAgent("agent-handoff-ux", "UX Specialist"),
+            CreateAgent("agent-handoff-runtime", "Runtime Specialist"),
         ]);
 
         bool resolved = AgentIdentityResolver.TryResolveObservedAgentIdentity(
-            pattern,
+            workflow,
             "assistant",
             new AgentIdentity("agent-handoff-ux", "UX Specialist"),
             out AgentIdentity agent);
@@ -115,28 +115,43 @@ public sealed class AgentIdentityResolverTests
         Assert.Equal("UX Specialist", agent.AgentName);
     }
 
-    private static PatternDefinitionDto CreatePattern(
-        IReadOnlyList<PatternAgentDefinitionDto> agents,
-        string mode = "concurrent")
+    private static WorkflowDefinitionDto CreateWorkflow(
+        IReadOnlyList<WorkflowNodeDto> agents,
+        string orchestrationMode = "concurrent")
     {
-        return new PatternDefinitionDto
+        return new WorkflowDefinitionDto
         {
-            Id = $"{mode}-pattern",
-            Name = "Pattern",
-            Mode = mode,
-            Availability = "available",
-            Agents = agents,
+            Id = $"{orchestrationMode}-workflow",
+            Name = "Workflow",
+            Graph = new WorkflowGraphDto
+            {
+                Nodes =
+                [
+                    .. agents,
+                ],
+            },
+            Settings = new WorkflowSettingsDto
+            {
+                OrchestrationMode = orchestrationMode,
+            },
         };
     }
 
-    private static PatternAgentDefinitionDto CreateAgent(string id, string name)
+    private static WorkflowNodeDto CreateAgent(string id, string name)
     {
-        return new PatternAgentDefinitionDto
+        return new WorkflowNodeDto
         {
             Id = id,
-            Name = name,
-            Model = "gpt-5.4",
-            Instructions = "Help with the request.",
+            Kind = "agent",
+            Label = name,
+            Config = new WorkflowNodeConfigDto
+            {
+                Kind = "agent",
+                Id = id,
+                Name = name,
+                Model = "gpt-5.4",
+                Instructions = "Help with the request.",
+            },
         };
     }
 }

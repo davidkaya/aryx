@@ -1,5 +1,9 @@
 import type { PatternAgentCopilotConfig } from '@shared/contracts/sidecar';
-import type { PatternAgentDefinition, PatternDefinition, ReasoningEffort } from '@shared/domain/pattern';
+import type {
+  AgentNodeConfig,
+  ReasoningEffort,
+  WorkflowDefinition,
+} from '@shared/domain/workflow';
 
 export interface WorkspaceAgentDefinition {
   id: string;
@@ -13,38 +17,32 @@ export interface WorkspaceAgentDefinition {
   updatedAt: string;
 }
 
-export interface PatternAgentOverrides {
-  name?: string;
-  description?: string;
-  instructions?: string;
-  model?: string;
-  reasoningEffort?: ReasoningEffort;
+export interface WorkflowAgentUsage {
+  workflowId: string;
+  workflowName: string;
 }
 
-export interface WorkspaceAgentUsage {
-  patternId: string;
-  patternName: string;
+function normalizeOptionalString(value?: string): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
 }
 
-/**
- * Resolves a single pattern agent by merging its workspace agent base with
- * per-pattern overrides. Returns the agent unchanged if it is inline.
- */
-export function resolvePatternAgent(
-  agent: PatternAgentDefinition,
+export function resolveWorkflowAgentNode(
+  agent: AgentNodeConfig,
   workspaceAgents: ReadonlyArray<WorkspaceAgentDefinition>,
-): PatternAgentDefinition {
+): AgentNodeConfig {
   if (!agent.workspaceAgentId) {
     return agent;
   }
 
-  const base = workspaceAgents.find((wa) => wa.id === agent.workspaceAgentId);
+  const base = workspaceAgents.find((workspaceAgent) => workspaceAgent.id === agent.workspaceAgentId);
   if (!base) {
     return agent;
   }
 
   const overrides = agent.overrides ?? {};
   return {
+    ...agent,
     id: agent.id,
     name: overrides.name ?? base.name,
     description: overrides.description ?? base.description,
@@ -57,40 +55,45 @@ export function resolvePatternAgent(
   };
 }
 
-/**
- * Resolves all agents in a pattern, producing a new pattern whose agents
- * have workspace-agent references merged with their base definitions.
- */
-export function resolvePatternAgents(
-  pattern: PatternDefinition,
+export function resolveWorkflowAgents(
+  workflow: WorkflowDefinition,
   workspaceAgents: ReadonlyArray<WorkspaceAgentDefinition>,
-): PatternDefinition {
+): WorkflowDefinition {
   return {
-    ...pattern,
-    agents: pattern.agents.map((agent) => resolvePatternAgent(agent, workspaceAgents)),
+    ...workflow,
+    graph: {
+      ...workflow.graph,
+      nodes: workflow.graph.nodes.map((node) => {
+        if (node.kind !== 'agent' || node.config.kind !== 'agent') {
+          return node;
+        }
+
+        return {
+          ...node,
+          config: resolveWorkflowAgentNode(node.config, workspaceAgents),
+        };
+      }),
+    },
   };
 }
 
-/**
- * Returns every pattern that references the given workspace agent.
- */
 export function findWorkspaceAgentUsages(
   agentId: string,
-  patterns: ReadonlyArray<PatternDefinition>,
-): WorkspaceAgentUsage[] {
-  const usages: WorkspaceAgentUsage[] = [];
-  for (const pattern of patterns) {
-    if (pattern.agents.some((a) => a.workspaceAgentId === agentId)) {
-      usages.push({ patternId: pattern.id, patternName: pattern.name });
+  workflows: ReadonlyArray<WorkflowDefinition>,
+): WorkflowAgentUsage[] {
+  const usages: WorkflowAgentUsage[] = [];
+  for (const workflow of workflows) {
+    if (workflow.graph.nodes.some((node) =>
+      node.kind === 'agent'
+      && node.config.kind === 'agent'
+      && node.config.workspaceAgentId === agentId)) {
+      usages.push({ workflowId: workflow.id, workflowName: workflow.name });
     }
   }
+
   return usages;
 }
 
-/**
- * Normalizes a workspace agent definition, trimming string fields and
- * ensuring consistent shape.
- */
 export function normalizeWorkspaceAgentDefinition(
   agent: WorkspaceAgentDefinition,
 ): WorkspaceAgentDefinition {
@@ -100,5 +103,6 @@ export function normalizeWorkspaceAgentDefinition(
     description: agent.description.trim(),
     instructions: agent.instructions.trim(),
     model: agent.model.trim(),
+    reasoningEffort: normalizeOptionalString(agent.reasoningEffort) as ReasoningEffort | undefined,
   };
 }

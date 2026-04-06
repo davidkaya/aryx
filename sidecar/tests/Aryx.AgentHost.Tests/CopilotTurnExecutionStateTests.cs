@@ -14,7 +14,7 @@ public sealed class CopilotTurnExecutionStateTests
         CopilotTurnExecutionState state = new(command);
 
         state.ObserveSessionEvent(
-            command.Pattern.Agents[0],
+            command.Workflow.GetAgentNodes()[0],
             new McpOauthRequiredEvent
             {
                 Data = new McpOauthRequiredData
@@ -37,7 +37,7 @@ public sealed class CopilotTurnExecutionStateTests
         CopilotTurnExecutionState state = new(command);
 
         state.ObserveSessionEvent(
-            command.Pattern.Agents[0],
+            command.Workflow.GetAgentNodes()[0],
             SessionEvent.FromJson(
                 """
                 {
@@ -66,7 +66,7 @@ public sealed class CopilotTurnExecutionStateTests
         CopilotTurnExecutionState state = new(command);
 
         state.ObserveSessionEvent(
-            command.Pattern.Agents[0],
+            command.Workflow.GetAgentNodes()[0],
             SessionEvent.FromJson(
                 """{"type":"tool.execution_start","data":{"toolCallId":"tool-call-1","toolName":"view"},"id":"33333333-3333-3333-3333-333333333333","timestamp":"2026-03-27T00:00:00Z"}"""));
 
@@ -85,7 +85,7 @@ public sealed class CopilotTurnExecutionStateTests
         CopilotTurnExecutionState state = new(command);
 
         state.ObserveSessionEvent(
-            command.Pattern.Agents[0],
+            command.Workflow.GetAgentNodes()[0],
             SessionEvent.FromJson(
                 """{"type":"tool.execution_start","data":{"toolCallId":"tool-call-1","toolName":"handoff_to_specialist"},"id":"1ce9d1dc-68f1-4df5-9728-f97017233279","timestamp":"2026-03-27T00:00:00Z"}"""));
 
@@ -101,7 +101,7 @@ public sealed class CopilotTurnExecutionStateTests
         CopilotTurnExecutionState state = new(command);
 
         state.ObserveSessionEvent(
-            command.Pattern.Agents[0],
+            command.Workflow.GetAgentNodes()[0],
             SessionEvent.FromJson(
                 """
                 {
@@ -142,7 +142,7 @@ public sealed class CopilotTurnExecutionStateTests
         CopilotTurnExecutionState state = new(command);
 
         state.ObserveSessionEvent(
-            command.Pattern.Agents[0],
+            command.Workflow.GetAgentNodes()[0],
             SessionEvent.FromJson(
                 """
                 {
@@ -158,7 +158,7 @@ public sealed class CopilotTurnExecutionStateTests
         _ = state.DrainPendingEvents();
 
         state.ObserveSessionEvent(
-            command.Pattern.Agents[0],
+            command.Workflow.GetAgentNodes()[0],
             SessionEvent.FromJson(
                 """
                 {
@@ -172,7 +172,7 @@ public sealed class CopilotTurnExecutionStateTests
                 }
                 """));
         state.ObserveSessionEvent(
-            command.Pattern.Agents[0],
+            command.Workflow.GetAgentNodes()[0],
             SessionEvent.FromJson(
                 """
                 {
@@ -207,7 +207,7 @@ public sealed class CopilotTurnExecutionStateTests
         CopilotTurnExecutionState state = new(command);
 
         state.ObserveSessionEvent(
-            command.Pattern.Agents[0],
+            command.Workflow.GetAgentNodes()[0],
             SessionEvent.FromJson(
                 """
                 {
@@ -231,7 +231,7 @@ public sealed class CopilotTurnExecutionStateTests
         CopilotTurnExecutionState state = new(command);
 
         state.ObserveSessionEvent(
-            command.Pattern.Agents[0],
+            command.Workflow.GetAgentNodes()[0],
             SessionEvent.FromJson(
                 """
                 {
@@ -267,7 +267,7 @@ public sealed class CopilotTurnExecutionStateTests
         CopilotTurnExecutionState state = new(command);
 
         state.ObserveSessionEvent(
-            command.Pattern.Agents[0],
+            command.Workflow.GetAgentNodes()[0],
             SessionEvent.FromJson(
                 """
                 {
@@ -298,7 +298,7 @@ public sealed class CopilotTurnExecutionStateTests
         CopilotTurnExecutionState state = new(command);
 
         state.ObserveSessionEvent(
-            command.Pattern.Agents[0],
+            command.Workflow.GetAgentNodes()[0],
             SessionEvent.FromJson(
                 """
                 {
@@ -356,7 +356,7 @@ public sealed class CopilotTurnExecutionStateTests
         CopilotTurnExecutionState state = new(command);
 
         state.ObserveSessionEvent(
-            command.Pattern.Agents[0],
+            command.Workflow.GetAgentNodes()[0],
             SessionEvent.FromJson(
                 """
                 {
@@ -386,7 +386,7 @@ public sealed class CopilotTurnExecutionStateTests
         CopilotTurnExecutionState state = new(command);
 
         state.ObserveSessionEvent(
-            command.Pattern.Agents[0],
+            command.Workflow.GetAgentNodes()[0],
             SessionEvent.FromJson(
                 """
                 {
@@ -417,7 +417,7 @@ public sealed class CopilotTurnExecutionStateTests
         RunTurnCommandDto command = CreateCommand();
         CopilotTurnExecutionState state = new(command);
 
-        state.ObserveSessionEvent(command.Pattern.Agents[0], CreateHookStartEvent());
+        state.ObserveSessionEvent(command.Workflow.GetAgentNodes()[0], CreateHookStartEvent());
 
         HookLifecycleEventDto evt = Assert.Single(state.DrainPendingEvents().OfType<HookLifecycleEventDto>());
         Assert.Equal("start", evt.Phase);
@@ -432,7 +432,7 @@ public sealed class CopilotTurnExecutionStateTests
         RunTurnCommandDto command = CreateCommand();
         CopilotTurnExecutionState state = new(command);
 
-        state.ObserveSessionEvent(command.Pattern.Agents[0], CreateHookEndEvent());
+        state.ObserveSessionEvent(command.Workflow.GetAgentNodes()[0], CreateHookEndEvent());
 
         HookLifecycleEventDto evt = Assert.Single(state.DrainPendingEvents().OfType<HookLifecycleEventDto>());
         Assert.Equal("end", evt.Phase);
@@ -450,8 +450,8 @@ public sealed class CopilotTurnExecutionStateTests
             SuppressHookLifecycleEvents = true,
         };
 
-        state.ObserveSessionEvent(command.Pattern.Agents[0], CreateHookStartEvent());
-        state.ObserveSessionEvent(command.Pattern.Agents[0], CreateHookEndEvent());
+        state.ObserveSessionEvent(command.Workflow.GetAgentNodes()[0], CreateHookStartEvent());
+        state.ObserveSessionEvent(command.Workflow.GetAgentNodes()[0], CreateHookEndEvent());
 
         Assert.Empty(state.DrainPendingEvents());
     }
@@ -463,7 +463,7 @@ public sealed class CopilotTurnExecutionStateTests
         CopilotTurnExecutionState state = new(command);
 
         state.ObserveSessionEvent(
-            command.Pattern.Agents[0],
+            command.Workflow.GetAgentNodes()[0],
             SessionEvent.FromJson(
                 """
                 {
@@ -526,7 +526,7 @@ public sealed class CopilotTurnExecutionStateTests
         CopilotTurnExecutionState state = new(command);
 
         state.ObserveSessionEvent(
-            command.Pattern.Agents[0],
+            command.Workflow.GetAgentNodes()[0],
             SessionEvent.FromJson(
                 """
                 {
@@ -561,7 +561,7 @@ public sealed class CopilotTurnExecutionStateTests
         CopilotTurnExecutionState state = new(command);
 
         state.ObserveSessionEvent(
-            command.Pattern.Agents[0],
+            command.Workflow.GetAgentNodes()[0],
             SessionEvent.FromJson(
                 """
                 {
@@ -624,7 +624,7 @@ public sealed class CopilotTurnExecutionStateTests
 
         // Simulate assistant message with tool requests → triggers reclassification
         state.ObserveSessionEvent(
-            command.Pattern.Agents[0],
+            command.Workflow.GetAgentNodes()[0],
             SessionEvent.FromJson(
                 """
                 {
@@ -672,23 +672,36 @@ public sealed class CopilotTurnExecutionStateTests
         {
             RequestId = "turn-1",
             SessionId = "session-1",
-            Pattern = new PatternDefinitionDto
+            Workflow = new WorkflowDefinitionDto
             {
-                Id = "pattern-1",
-                Name = "MCP OAuth Pattern",
-                Mode = "single",
-                Availability = "available",
-                Agents =
-                [
-                    new PatternAgentDefinitionDto
-                    {
-                        Id = "agent-1",
-                        Name = "Primary",
-                        Model = "gpt-5.4",
-                        Instructions = "Help with the request.",
-                    },
-                ],
+                Id = "workflow-1",
+                Name = "Execution State Workflow",
+                Graph = new WorkflowGraphDto
+                {
+                    Nodes =
+                    [
+                        new WorkflowNodeDto
+                        {
+                            Id = "agent-1",
+                            Kind = "agent",
+                            Label = "Primary",
+                            Config = new WorkflowNodeConfigDto
+                            {
+                                Kind = "agent",
+                                Id = "agent-1",
+                                Name = "Primary",
+                                Model = "gpt-5.4",
+                                Instructions = "Help with the request.",
+                            },
+                        },
+                    ],
+                },
+                Settings = new WorkflowSettingsDto
+                {
+                    OrchestrationMode = "single",
+                },
             },
         };
     }
 }
+

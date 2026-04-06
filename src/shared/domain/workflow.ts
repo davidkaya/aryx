@@ -1,10 +1,23 @@
+import type { PatternAgentCopilotConfig } from '@shared/contracts/sidecar';
 import type { ApprovalPolicy } from '@shared/domain/approval';
-import {
-  syncPatternGraph,
-  type PatternDefinition,
-  type PatternGraph,
-  type PatternAgentDefinition,
-} from '@shared/domain/pattern';
+
+export type ReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh';
+export type WorkflowOrchestrationMode = 'single' | 'sequential' | 'concurrent' | 'handoff' | 'group-chat';
+
+export interface WorkflowAgentOverrides {
+  name?: string;
+  description?: string;
+  instructions?: string;
+  model?: string;
+  reasoningEffort?: ReasoningEffort;
+}
+
+export const reasoningEffortOptions: ReadonlyArray<{ value: ReasoningEffort; label: string }> = [
+  { value: 'low', label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high', label: 'High' },
+  { value: 'xhigh', label: 'Very High' },
+];
 
 export type WorkflowNodeKind =
   | 'start'
@@ -40,6 +53,7 @@ export interface WorkflowStateScope {
 export interface WorkflowSettings {
   checkpointing: WorkflowCheckpointSettings;
   executionMode: WorkflowExecutionMode;
+  orchestrationMode?: WorkflowOrchestrationMode;
   maxIterations?: number;
   approvalPolicy?: ApprovalPolicy;
   stateScopes?: WorkflowStateScope[];
@@ -56,8 +70,17 @@ export interface EndNodeConfig {
   outputType?: string;
 }
 
-export interface AgentNodeConfig extends PatternAgentDefinition {
+export interface AgentNodeConfig {
   kind: 'agent';
+  id: string;
+  name: string;
+  description: string;
+  instructions: string;
+  model: string;
+  reasoningEffort?: ReasoningEffort;
+  copilot?: PatternAgentCopilotConfig;
+  workspaceAgentId?: string;
+  overrides?: WorkflowAgentOverrides;
 }
 
 export interface InvokeFunctionConfig {
@@ -163,6 +186,16 @@ export interface WorkflowResolutionOptions {
   resolveWorkflow?: (workflowId: string) => WorkflowDefinition | undefined;
 }
 
+export interface WorkflowExecutionDefinition {
+  id: string;
+  name: string;
+  description: string;
+  orchestrationMode: WorkflowOrchestrationMode;
+  maxIterations: number;
+  approvalPolicy?: ApprovalPolicy;
+  agents: AgentNodeConfig[];
+}
+
 const executableNodeKinds = new Set<WorkflowNodeKind>([
   'start',
   'end',
@@ -175,6 +208,25 @@ const executableNodeKinds = new Set<WorkflowNodeKind>([
 function normalizeOptionalString(value?: string): string | undefined {
   const trimmed = value?.trim();
   return trimmed ? trimmed : undefined;
+}
+
+function normalizeWorkflowOrchestrationMode(
+  mode?: WorkflowOrchestrationMode,
+): WorkflowOrchestrationMode | undefined {
+  switch (mode) {
+    case 'single':
+    case 'sequential':
+    case 'concurrent':
+    case 'handoff':
+    case 'group-chat':
+      return mode;
+    default:
+      return undefined;
+  }
+}
+
+export function isReasoningEffort(value: string | undefined): value is ReasoningEffort {
+  return reasoningEffortOptions.some((option) => option.value === value);
 }
 
 function normalizePosition(position?: Partial<WorkflowPosition>): WorkflowPosition {
@@ -311,6 +363,7 @@ export function normalizeWorkflowDefinition(workflow: WorkflowDefinition): Workf
         enabled: workflow.settings?.checkpointing?.enabled ?? false,
       },
       executionMode: workflow.settings?.executionMode === 'lockstep' ? 'lockstep' : 'off-thread',
+      orchestrationMode: normalizeWorkflowOrchestrationMode(workflow.settings?.orchestrationMode),
       maxIterations:
         typeof workflow.settings?.maxIterations === 'number' && workflow.settings.maxIterations > 0
           ? Math.round(workflow.settings.maxIterations)
@@ -346,13 +399,14 @@ export function resolveWorkflowAgentNodes(workflow: WorkflowDefinition): Workflo
     });
 }
 
-export function resolveWorkflowAgents(workflow: WorkflowDefinition): PatternAgentDefinition[] {
+export function resolveWorkflowAgents(workflow: WorkflowDefinition): AgentNodeConfig[] {
   return resolveWorkflowAgentNodes(workflow).flatMap((node) => {
     if (node.config.kind !== 'agent') {
       return [];
     }
 
     return [{
+      kind: 'agent',
       id: node.config.id || node.id,
       name: node.config.name,
       description: node.config.description,
@@ -410,7 +464,7 @@ function resolveWorkflowExecutionAgents(
   options?: WorkflowResolutionOptions,
   visitedReferencedWorkflowIds = new Set<string>([workflow.id]),
   visitedInlineWorkflows = new Set<WorkflowDefinition>(),
-): PatternAgentDefinition[] {
+): AgentNodeConfig[] {
   const agents = [...resolveWorkflowAgents(workflow)];
 
   for (const node of workflow.graph.nodes) {
@@ -448,10 +502,15 @@ function resolveWorkflowExecutionAgents(
   return agents;
 }
 
-function inferWorkflowPatternMode(
+export function inferWorkflowOrchestrationMode(
   workflow: WorkflowDefinition,
   options?: WorkflowResolutionOptions,
-): PatternDefinition['mode'] {
+): WorkflowOrchestrationMode {
+  const configuredMode = normalizeWorkflowOrchestrationMode(workflow.settings?.orchestrationMode);
+  if (configuredMode) {
+    return configuredMode;
+  }
+
   const hasFanEdges = hasWorkflowExecutionFanEdges(workflow, options);
   const agentCount = resolveWorkflowExecutionAgents(workflow, options).length;
   if (hasFanEdges) {
@@ -461,28 +520,364 @@ function inferWorkflowPatternMode(
   return agentCount <= 1 ? 'single' : 'sequential';
 }
 
-export function buildWorkflowExecutionPattern(
+export function buildWorkflowExecutionDefinition(
   workflow: WorkflowDefinition,
   options?: WorkflowResolutionOptions,
-): PatternDefinition {
+): WorkflowExecutionDefinition {
   const agents = resolveWorkflowExecutionAgents(workflow, options);
-  const pattern: PatternDefinition = {
+
+  return {
     id: workflow.id,
     name: workflow.name,
     description: workflow.description,
-    mode: inferWorkflowPatternMode(workflow, options),
-    availability: 'available',
+    orchestrationMode: inferWorkflowOrchestrationMode(workflow, options),
     maxIterations: workflow.settings.maxIterations ?? 5,
     approvalPolicy: workflow.settings.approvalPolicy,
     agents,
-    createdAt: workflow.createdAt,
-    updatedAt: workflow.updatedAt,
   };
+}
 
+const builtinWorkflowModels = {
+  claude: 'claude-opus-4.5',
+  gpt54: 'gpt-5.4',
+  gpt53: 'gpt-5.3-codex',
+} as const;
+
+function createStartNode(x: number, y: number): WorkflowNode {
+  return { id: 'start', kind: 'start', label: 'Start', position: { x, y }, config: { kind: 'start' } };
+}
+
+function createEndNode(x: number, y: number): WorkflowNode {
+  return { id: 'end', kind: 'end', label: 'End', position: { x, y }, config: { kind: 'end' } };
+}
+
+function createAgentNode(
+  id: string,
+  label: string,
+  description: string,
+  instructions: string,
+  model: string,
+  reasoningEffort: ReasoningEffort | undefined,
+  x: number,
+  y: number,
+  order: number,
+): WorkflowNode {
   return {
-    ...pattern,
-    graph: syncPatternGraph(pattern).graph as PatternGraph,
+    id,
+    kind: 'agent',
+    label,
+    position: { x, y },
+    order,
+    config: {
+      kind: 'agent',
+      id,
+      name: label,
+      description,
+      instructions,
+      model,
+      reasoningEffort,
+    },
   };
+}
+
+function createWorkflowEdge(
+  id: string,
+  source: string,
+  target: string,
+  kind: WorkflowEdgeKind = 'direct',
+  overrides?: Partial<Omit<WorkflowEdge, 'id' | 'source' | 'target' | 'kind'>>,
+): WorkflowEdge {
+  return {
+    id,
+    source,
+    target,
+    kind,
+    ...overrides,
+  };
+}
+
+function createBuiltinWorkflow(
+  workflow: Omit<WorkflowDefinition, 'createdAt' | 'updatedAt'>,
+  timestamp: string,
+): WorkflowDefinition {
+  return normalizeWorkflowDefinition({
+    ...workflow,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  });
+}
+
+export function createBuiltinWorkflows(timestamp: string): WorkflowDefinition[] {
+  return [
+    createBuiltinWorkflow({
+      id: 'workflow-single-chat',
+      name: '1-on-1 Copilot Chat',
+      description: 'Direct human-agent conversation for a selected project.',
+      graph: {
+        nodes: [
+          createStartNode(0, 0),
+          createAgentNode(
+            'agent-single-primary',
+            'Primary Agent',
+            'General-purpose project assistant.',
+            'You are a helpful coding assistant working inside the selected project.',
+            builtinWorkflowModels.gpt54,
+            'high',
+            220,
+            0,
+            0,
+          ),
+          createEndNode(440, 0),
+        ],
+        edges: [
+          createWorkflowEdge('edge-start-to-agent-single-primary', 'start', 'agent-single-primary'),
+          createWorkflowEdge('edge-agent-single-primary-to-end', 'agent-single-primary', 'end'),
+        ],
+      },
+      settings: {
+        checkpointing: { enabled: false },
+        executionMode: 'off-thread',
+        orchestrationMode: 'single',
+        maxIterations: 1,
+      },
+    }, timestamp),
+    createBuiltinWorkflow({
+      id: 'workflow-sequential-review',
+      name: 'Sequential Trio Review',
+      description: 'Agents execute in order, each seeing the full conversation and appending to a shared transcript.',
+      graph: {
+        nodes: [
+          createStartNode(0, 0),
+          createAgentNode(
+            'agent-sequential-analyst',
+            'Analyst',
+            'Breaks the task down and captures risks.',
+            'Analyze the request, identify constraints, and produce a short working plan.',
+            builtinWorkflowModels.gpt54,
+            'high',
+            220,
+            0,
+            0,
+          ),
+          createAgentNode(
+            'agent-sequential-builder',
+            'Builder',
+            'Translates the plan into a practical implementation.',
+            'Use the prior context to propose a concrete implementation.',
+            builtinWorkflowModels.gpt53,
+            'medium',
+            440,
+            0,
+            1,
+          ),
+          createAgentNode(
+            'agent-sequential-reviewer',
+            'Reviewer',
+            'Checks the proposal for gaps and edge cases.',
+            'Review the previous answer, tighten it, and call out any missing edge cases.',
+            builtinWorkflowModels.claude,
+            'medium',
+            660,
+            0,
+            2,
+          ),
+          createEndNode(880, 0),
+        ],
+        edges: [
+          createWorkflowEdge('edge-start-to-agent-sequential-analyst', 'start', 'agent-sequential-analyst'),
+          createWorkflowEdge('edge-agent-sequential-analyst-to-agent-sequential-builder', 'agent-sequential-analyst', 'agent-sequential-builder'),
+          createWorkflowEdge('edge-agent-sequential-builder-to-agent-sequential-reviewer', 'agent-sequential-builder', 'agent-sequential-reviewer'),
+          createWorkflowEdge('edge-agent-sequential-reviewer-to-end', 'agent-sequential-reviewer', 'end'),
+        ],
+      },
+      settings: {
+        checkpointing: { enabled: false },
+        executionMode: 'off-thread',
+        orchestrationMode: 'sequential',
+        maxIterations: 1,
+      },
+    }, timestamp),
+    createBuiltinWorkflow({
+      id: 'workflow-concurrent-brainstorm',
+      name: 'Concurrent Brainstorm',
+      description: 'Agents work independently in parallel and the final conversation aggregates every response.',
+      graph: {
+        nodes: [
+          createStartNode(0, 120),
+          createAgentNode(
+            'agent-concurrent-architect',
+            'Architect',
+            'Focuses on architecture and boundaries.',
+            'Answer from an architecture-first perspective.',
+            builtinWorkflowModels.gpt54,
+            'high',
+            260,
+            0,
+            0,
+          ),
+          createAgentNode(
+            'agent-concurrent-product',
+            'Product',
+            'Focuses on UX and scope.',
+            'Answer from a product and UX perspective.',
+            builtinWorkflowModels.claude,
+            'medium',
+            260,
+            120,
+            1,
+          ),
+          createAgentNode(
+            'agent-concurrent-implementer',
+            'Implementer',
+            'Focuses on practical delivery.',
+            'Answer from an implementation and testing perspective.',
+            builtinWorkflowModels.gpt53,
+            'medium',
+            260,
+            240,
+            2,
+          ),
+          createEndNode(520, 120),
+        ],
+        edges: [
+          createWorkflowEdge('edge-start-to-agent-concurrent-architect', 'start', 'agent-concurrent-architect', 'fan-out', { fanOutConfig: { strategy: 'broadcast' } }),
+          createWorkflowEdge('edge-start-to-agent-concurrent-product', 'start', 'agent-concurrent-product', 'fan-out', { fanOutConfig: { strategy: 'broadcast' } }),
+          createWorkflowEdge('edge-start-to-agent-concurrent-implementer', 'start', 'agent-concurrent-implementer', 'fan-out', { fanOutConfig: { strategy: 'broadcast' } }),
+          createWorkflowEdge('edge-agent-concurrent-architect-to-end', 'agent-concurrent-architect', 'end', 'fan-in'),
+          createWorkflowEdge('edge-agent-concurrent-product-to-end', 'agent-concurrent-product', 'end', 'fan-in'),
+          createWorkflowEdge('edge-agent-concurrent-implementer-to-end', 'agent-concurrent-implementer', 'end', 'fan-in'),
+        ],
+      },
+      settings: {
+        checkpointing: { enabled: false },
+        executionMode: 'off-thread',
+        orchestrationMode: 'concurrent',
+        maxIterations: 1,
+      },
+    }, timestamp),
+    createBuiltinWorkflow({
+      id: 'workflow-handoff-support',
+      name: 'Handoff Support Flow',
+      description: 'A triage agent routes work to specialists, and the next user turn continues when more input is needed.',
+      graph: {
+        nodes: [
+          createStartNode(0, 120),
+          createAgentNode(
+            'agent-handoff-triage',
+            'Triage',
+            'Routes the request to the right specialist.',
+            'You triage requests and must hand them off to the most appropriate specialist. For any substantive task, hand off before inspecting files, calling tools, or drafting the implementation yourself. Do not claim that you delegated unless you actually executed the handoff.',
+            builtinWorkflowModels.gpt54,
+            'medium',
+            240,
+            120,
+            0,
+          ),
+          createAgentNode(
+            'agent-handoff-ux',
+            'UX Specialist',
+            'Handles user experience questions.',
+            'You focus on navigation, UX, and interaction details. Once triage hands work to you, you own the substantive answer.',
+            builtinWorkflowModels.claude,
+            'medium',
+            520,
+            0,
+            1,
+          ),
+          createAgentNode(
+            'agent-handoff-runtime',
+            'Runtime Specialist',
+            'Handles backend and execution details.',
+            'You focus on runtime, orchestration, and backend integration details. Once triage hands work to you, you own the substantive answer.',
+            builtinWorkflowModels.gpt53,
+            'medium',
+            520,
+            240,
+            2,
+          ),
+          createEndNode(800, 120),
+        ],
+        edges: [
+          createWorkflowEdge('edge-start-to-agent-handoff-triage', 'start', 'agent-handoff-triage'),
+          createWorkflowEdge('edge-agent-handoff-triage-to-end', 'agent-handoff-triage', 'end'),
+          createWorkflowEdge('edge-agent-handoff-triage-to-agent-handoff-ux', 'agent-handoff-triage', 'agent-handoff-ux'),
+          createWorkflowEdge('edge-agent-handoff-triage-to-agent-handoff-runtime', 'agent-handoff-triage', 'agent-handoff-runtime'),
+          createWorkflowEdge('edge-agent-handoff-ux-to-agent-handoff-triage', 'agent-handoff-ux', 'agent-handoff-triage', 'direct', {
+            isLoop: true,
+            maxIterations: 4,
+            condition: { type: 'always' },
+          }),
+          createWorkflowEdge('edge-agent-handoff-runtime-to-agent-handoff-triage', 'agent-handoff-runtime', 'agent-handoff-triage', 'direct', {
+            isLoop: true,
+            maxIterations: 4,
+            condition: { type: 'always' },
+          }),
+          createWorkflowEdge('edge-agent-handoff-ux-to-end', 'agent-handoff-ux', 'end'),
+          createWorkflowEdge('edge-agent-handoff-runtime-to-end', 'agent-handoff-runtime', 'end'),
+        ],
+      },
+      settings: {
+        checkpointing: { enabled: true },
+        executionMode: 'off-thread',
+        orchestrationMode: 'handoff',
+        maxIterations: 4,
+      },
+    }, timestamp),
+    createBuiltinWorkflow({
+      id: 'workflow-group-chat',
+      name: 'Collaborative Group Chat',
+      description: 'Agents take turns under a round-robin manager, iteratively refining a shared conversation.',
+      graph: {
+        nodes: [
+          createStartNode(0, 0),
+          createAgentNode(
+            'agent-group-writer',
+            'Writer',
+            'Produces candidate answers.',
+            'You draft a concise, useful answer for the task. On later turns, refine your earlier draft based on peer feedback rather than restarting.',
+            builtinWorkflowModels.gpt54,
+            'medium',
+            240,
+            0,
+            0,
+          ),
+          createAgentNode(
+            'agent-group-reviewer',
+            'Reviewer',
+            'Critiques and refines the answer.',
+            'You review the latest draft and offer specific improvements. Focus on critique and refinement instead of restarting the conversation.',
+            builtinWorkflowModels.claude,
+            'medium',
+            480,
+            0,
+            1,
+          ),
+          createEndNode(720, 0),
+        ],
+        edges: [
+          createWorkflowEdge('edge-start-to-agent-group-writer', 'start', 'agent-group-writer'),
+          createWorkflowEdge('edge-agent-group-writer-to-agent-group-reviewer', 'agent-group-writer', 'agent-group-reviewer', 'direct', {
+            isLoop: true,
+            maxIterations: 5,
+            condition: { type: 'always' },
+          }),
+          createWorkflowEdge('edge-agent-group-reviewer-to-agent-group-writer', 'agent-group-reviewer', 'agent-group-writer', 'direct', {
+            isLoop: true,
+            maxIterations: 5,
+            condition: { type: 'always' },
+            label: 'Loop',
+          }),
+          createWorkflowEdge('edge-agent-group-reviewer-to-end', 'agent-group-reviewer', 'end'),
+        ],
+      },
+      settings: {
+        checkpointing: { enabled: false },
+        executionMode: 'off-thread',
+        orchestrationMode: 'group-chat',
+        maxIterations: 5,
+      },
+    }, timestamp),
+  ];
 }
 
 function addIssue(
@@ -1091,3 +1486,4 @@ export function validateWorkflowDefinition(workflow: WorkflowDefinition): Workfl
 
   return issues;
 }
+

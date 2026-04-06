@@ -9,30 +9,49 @@ import {
   renameSessionRecord,
   setSessionMessagePinnedRecord,
 } from '@shared/domain/sessionLibrary';
-import type { PatternDefinition } from '@shared/domain/pattern';
+import type { WorkflowDefinition } from '@shared/domain/workflow';
 import type { ProjectRecord } from '@shared/domain/project';
 import type { SessionRecord } from '@shared/domain/session';
 import { createWorkspaceSettings } from '@shared/domain/tooling';
 import type { WorkspaceState } from '@shared/domain/workspace';
 
-function createPattern(overrides?: Partial<PatternDefinition>): PatternDefinition {
+function createWorkflow(overrides?: Partial<WorkflowDefinition>): WorkflowDefinition {
   return {
-    id: 'pattern-sequential-review',
+    id: 'workflow-sequential-review',
     name: 'Sequential Review',
     description: 'Multi-agent review workflow.',
-    mode: 'sequential',
-    availability: 'available',
-    maxIterations: 1,
-    agents: [
-      {
-        id: 'agent-analyst',
-        name: 'Analyst',
-        description: 'Reviews the request and finds issues.',
-        instructions: 'Analyze the request.',
-        model: 'gpt-5.4',
-        reasoningEffort: 'high',
-      },
-    ],
+    graph: {
+      nodes: [
+        { id: 'start', kind: 'start', label: 'Start', position: { x: 0, y: 0 }, config: { kind: 'start' } },
+        {
+          id: 'agent-analyst-node',
+          kind: 'agent',
+          label: 'Analyst',
+          position: { x: 200, y: 0 },
+          order: 0,
+          config: {
+            kind: 'agent',
+            id: 'agent-analyst',
+            name: 'Analyst',
+            description: 'Reviews the request and finds issues.',
+            instructions: 'Analyze the request.',
+            model: 'gpt-5.4',
+            reasoningEffort: 'high',
+          },
+        },
+        { id: 'end', kind: 'end', label: 'End', position: { x: 400, y: 0 }, config: { kind: 'end' } },
+      ],
+      edges: [
+        { id: 'edge-start-agent', source: 'start', target: 'agent-analyst-node', kind: 'direct' },
+        { id: 'edge-agent-end', source: 'agent-analyst-node', target: 'end', kind: 'direct' },
+      ],
+    },
+    settings: {
+      checkpointing: { enabled: false },
+      executionMode: 'off-thread',
+      orchestrationMode: 'sequential',
+      maxIterations: 1,
+    },
     createdAt: '2026-03-23T00:00:00.000Z',
     updatedAt: '2026-03-23T00:00:00.000Z',
     ...overrides,
@@ -53,7 +72,7 @@ function createSession(overrides?: Partial<SessionRecord>): SessionRecord {
   return {
     id: 'session-1',
     projectId: 'project-alpha',
-    patternId: 'pattern-sequential-review',
+    workflowId: 'workflow-sequential-review',
     title: 'Investigate Copilot refresh bug',
     createdAt: '2026-03-23T00:00:00.000Z',
     updatedAt: '2026-03-23T00:05:00.000Z',
@@ -75,8 +94,7 @@ function createSession(overrides?: Partial<SessionRecord>): SessionRecord {
 function createWorkspace(overrides?: Partial<WorkspaceState>): WorkspaceState {
   const workspace: WorkspaceState = {
     projects: [createProject(), createProject({ id: 'project-scratchpad', name: 'Scratchpad', path: 'C:\\scratchpad' })],
-    patterns: [createPattern(), createPattern({ id: 'pattern-single-chat', name: '1-on-1 Copilot Chat', mode: 'single' })],
-    workflows: [],
+    workflows: [createWorkflow(), createWorkflow({ id: 'workflow-single-chat', name: '1-on-1 Copilot Chat', settings: { checkpointing: { enabled: false }, executionMode: 'off-thread', orchestrationMode: 'single', maxIterations: 1 } })],
     workflowTemplates: [],
     settings: createWorkspaceSettings(),
     sessions: [
@@ -84,7 +102,7 @@ function createWorkspace(overrides?: Partial<WorkspaceState>): WorkspaceState {
       createSession({
         id: 'session-2',
         projectId: 'project-scratchpad',
-        patternId: 'pattern-single-chat',
+        workflowId: 'workflow-single-chat',
         title: 'Scratchpad brainstorm',
         status: 'running',
         updatedAt: '2026-03-23T00:10:00.000Z',
@@ -109,7 +127,7 @@ function createWorkspace(overrides?: Partial<WorkspaceState>): WorkspaceState {
       }),
     ],
     selectedProjectId: 'project-alpha',
-    selectedPatternId: 'pattern-sequential-review',
+    selectedWorkflowId: 'workflow-sequential-review',
     selectedSessionId: 'session-1',
     lastUpdatedAt: '2026-03-23T00:10:00.000Z',
     ...overrides,
@@ -291,7 +309,7 @@ describe('session library helpers', () => {
 
     const branch = branchSessionRecord(
       sourceSession,
-      createPattern(),
+      createWorkflow(),
       'session-branch',
       'msg-3',
       '2026-03-23T00:04:00.000Z',
@@ -341,7 +359,7 @@ describe('session library helpers', () => {
     expect(() =>
       branchSessionRecord(
         sourceSession,
-        createPattern(),
+        createWorkflow(),
         'session-branch',
         'msg-1',
         '2026-03-23T00:04:00.000Z',
@@ -384,7 +402,7 @@ describe('session library helpers', () => {
 
     const branch = branchSessionRecord(
       sourceSession,
-      createPattern(),
+      createWorkflow(),
       'session-branch',
       'msg-2',
       '2026-03-23T00:05:00.000Z',
@@ -436,7 +454,7 @@ describe('session library helpers', () => {
 
     const regenerated = regenerateSessionRecord(
       sourceSession,
-      createPattern(),
+      createWorkflow(),
       'session-regenerated',
       'msg-4',
       '2026-03-23T00:06:00.000Z',
@@ -483,7 +501,7 @@ describe('session library helpers', () => {
     expect(() =>
       regenerateSessionRecord(
         sourceSession,
-        createPattern(),
+        createWorkflow(),
         'session-regenerated',
         'msg-2',
         '2026-03-23T00:06:00.000Z',
@@ -541,7 +559,7 @@ describe('session library helpers', () => {
 
     const edited = editAndResendSessionRecord(
       sourceSession,
-      createPattern(),
+      createWorkflow(),
       'session-edited',
       'msg-3',
       'Focus on session state only.',
@@ -585,7 +603,7 @@ describe('session library helpers', () => {
       {
         sessionId: 'session-1',
         score: 31,
-        matchedFields: ['title', 'message', 'project', 'pattern'],
+        matchedFields: ['title', 'message', 'project', 'workflow'],
       },
     ]);
   });

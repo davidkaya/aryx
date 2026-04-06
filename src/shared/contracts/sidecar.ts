@@ -1,10 +1,14 @@
-import type { PatternDefinition, PatternValidationIssue, ReasoningEffort } from '@shared/domain/pattern';
 import type { ApprovalCheckpointKind, ApprovalDecision } from '@shared/domain/approval';
 import type { ChatMessageRecord } from '@shared/domain/session';
 import type { RuntimeToolDefinition } from '@shared/domain/tooling';
 import type { ChatMessageAttachment } from '@shared/domain/attachment';
 import type { ProjectPromptInvocation } from '@shared/domain/projectCustomization';
-import type { WorkflowDefinition, WorkflowValidationIssue } from '@shared/domain/workflow';
+import type {
+  ReasoningEffort,
+  WorkflowDefinition,
+  WorkflowOrchestrationMode,
+  WorkflowValidationIssue,
+} from '@shared/domain/workflow';
 
 export interface SidecarModeCapability {
   available: boolean;
@@ -54,7 +58,7 @@ export interface SidecarModelCapability {
 
 export interface SidecarCapabilities {
   runtime: 'dotnet-maf';
-  modes: Record<PatternDefinition['mode'], SidecarModeCapability>;
+  modes: Record<WorkflowOrchestrationMode | 'magentic', SidecarModeCapability>;
   models: SidecarModelCapability[];
   runtimeTools: RuntimeToolDefinition[];
   connection: SidecarConnectionDiagnostics;
@@ -63,12 +67,6 @@ export interface SidecarCapabilities {
 export interface DescribeCapabilitiesCommand {
   type: 'describe-capabilities';
   requestId: string;
-}
-
-export interface ValidatePatternCommand {
-  type: 'validate-pattern';
-  requestId: string;
-  pattern: PatternDefinition;
 }
 
 export interface ValidateWorkflowCommand {
@@ -96,8 +94,7 @@ export interface RunTurnCommand {
   mode?: InteractionMode;
   messageMode?: MessageMode;
   projectInstructions?: string;
-  pattern: PatternDefinition;
-  workflow?: WorkflowDefinition;
+  workflow: WorkflowDefinition;
   workflowLibrary?: WorkflowDefinition[];
   messages: ChatMessageRecord[];
   attachments?: ChatMessageAttachment[];
@@ -156,7 +153,6 @@ export interface CopilotSessionListFilter {
 
 export type SidecarCommand =
   | DescribeCapabilitiesCommand
-  | ValidatePatternCommand
   | ValidateWorkflowCommand
   | RunTurnCommand
   | CancelTurnCommand
@@ -233,12 +229,6 @@ export interface CapabilitiesEvent {
   type: 'capabilities';
   requestId: string;
   capabilities: SidecarCapabilities;
-}
-
-export interface PatternValidationEvent {
-  type: 'pattern-validation';
-  requestId: string;
-  issues: PatternValidationIssue[];
 }
 
 export interface WorkflowValidationEvent {
@@ -608,7 +598,6 @@ export interface CommandCompleteEvent {
 
 export type SidecarEvent =
   | CapabilitiesEvent
-  | PatternValidationEvent
   | WorkflowValidationEvent
   | TurnDeltaEvent
   | TurnCompleteEvent

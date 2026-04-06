@@ -73,7 +73,7 @@ internal static class WorkflowTranscriptProjector
         List<ChatMessageDto> projectedMessages = [];
         int fallbackOutputIndex = 0;
         string createdAt = DateTimeOffset.UtcNow.ToString("O");
-        List<TranscriptSegment> preparedSegments = PrepareSegmentsForProjection(command.Pattern, segments);
+        List<TranscriptSegment> preparedSegments = PrepareSegmentsForProjection(command.Workflow, segments);
         List<TranscriptSegment> remainingSegments = preparedSegments.ToList();
         List<ChatMessage> assistantMessages = newMessages.Where(message => message.Role != ChatRole.User).ToList();
 
@@ -84,7 +84,7 @@ internal static class WorkflowTranscriptProjector
                 message,
                 remainingSegments,
                 assistantMessages.Count - messageIndex,
-                command.Pattern,
+                command.Workflow,
                 fallbackAgent);
             string content = ResolveProjectedContent(message, matchedSegment);
             if (string.IsNullOrWhiteSpace(content))
@@ -133,7 +133,7 @@ internal static class WorkflowTranscriptProjector
                 ?? $"{command.RequestId}-final-{fallbackOutputIndex}",
             Role = message.Role == ChatRole.System ? "system" : "assistant",
             AuthorName = ResolveProjectedAuthorName(
-                command.Pattern,
+                command.Workflow,
                 message.AuthorName,
                 matchedSegment?.AuthorName,
                 fallbackAgent),
@@ -180,17 +180,17 @@ internal static class WorkflowTranscriptProjector
         {
             Id = segment.MessageId,
             Role = "assistant",
-            AuthorName = AgentIdentityResolver.ResolveDisplayAuthorName(command.Pattern, segment.AuthorName),
+            AuthorName = AgentIdentityResolver.ResolveDisplayAuthorName(command.Workflow, segment.AuthorName),
             Content = segment.Content,
             CreatedAt = createdAt,
         };
     }
 
     private static List<TranscriptSegment> PrepareSegmentsForProjection(
-        PatternDefinitionDto pattern,
+        WorkflowDefinitionDto workflow,
         IReadOnlyList<TranscriptSegment> segments)
     {
-        if (!string.Equals(pattern.Mode, "concurrent", StringComparison.Ordinal)
+        if (!workflow.IsOrchestrationMode("concurrent")
             || segments.Count <= 1)
         {
             return segments.ToList();
@@ -205,7 +205,7 @@ internal static class WorkflowTranscriptProjector
         for (int index = 0; index < segments.Count; index++)
         {
             TranscriptSegment segment = segments[index];
-            string authorKey = AgentIdentityResolver.ResolveDisplayAuthorName(pattern, segment.AuthorName);
+            string authorKey = AgentIdentityResolver.ResolveDisplayAuthorName(workflow, segment.AuthorName);
             latestSegmentByAuthor[authorKey] = (segment, index);
         }
 
@@ -219,7 +219,7 @@ internal static class WorkflowTranscriptProjector
         ChatMessage message,
         IReadOnlyList<TranscriptSegment> remainingSegments,
         int remainingMessageCount,
-        PatternDefinitionDto pattern,
+        WorkflowDefinitionDto workflow,
         AgentIdentity? fallbackAgent)
     {
         if (remainingSegments.Count == 0)
@@ -231,7 +231,7 @@ internal static class WorkflowTranscriptProjector
         if (messageText is not null)
         {
             string resolvedAuthorName = ResolveProjectedAuthorName(
-                pattern,
+                workflow,
                 message.AuthorName,
                 fallbackIdentifier: null,
                 fallbackAgent);
@@ -240,7 +240,7 @@ internal static class WorkflowTranscriptProjector
                     remainingSegments,
                     segment => string.Equals(segment.Content, messageText, StringComparison.Ordinal)
                         && string.Equals(
-                            AgentIdentityResolver.ResolveDisplayAuthorName(pattern, segment.AuthorName),
+                            AgentIdentityResolver.ResolveDisplayAuthorName(workflow, segment.AuthorName),
                             resolvedAuthorName,
                             StringComparison.Ordinal),
                     out TranscriptSegment authorMatchedSegment))
@@ -264,7 +264,7 @@ internal static class WorkflowTranscriptProjector
                 && TryFindLastSegment(
                     remainingSegments,
                     segment => string.Equals(
-                        AgentIdentityResolver.ResolveDisplayAuthorName(pattern, segment.AuthorName),
+                        AgentIdentityResolver.ResolveDisplayAuthorName(workflow, segment.AuthorName),
                         fallbackAgent.Value.AgentName,
                         StringComparison.Ordinal),
                     out TranscriptSegment fallbackMatchedSegment))
@@ -382,7 +382,7 @@ internal static class WorkflowTranscriptProjector
     }
 
     private static string ResolveProjectedAuthorName(
-        PatternDefinitionDto pattern,
+        WorkflowDefinitionDto workflow,
         string? primaryIdentifier,
         string? fallbackIdentifier,
         AgentIdentity? fallbackAgent)
@@ -399,16 +399,17 @@ internal static class WorkflowTranscriptProjector
             return fallbackAgent.Value.AgentName;
         }
 
-        if (pattern.Agents.Count == 1
+        IReadOnlyList<WorkflowNodeDto> agentNodes = workflow.GetAgentNodes();
+        if (agentNodes.Count == 1
             && string.IsNullOrWhiteSpace(primaryIdentifier)
             && string.IsNullOrWhiteSpace(fallbackIdentifier))
         {
-            PatternAgentDefinitionDto singleAgent = pattern.Agents[0];
-            return AgentIdentityResolver.ResolveDisplayAuthorName(pattern, singleAgent.Id, singleAgent.Name);
+            WorkflowNodeDto singleAgent = agentNodes[0];
+            return AgentIdentityResolver.ResolveDisplayAuthorName(workflow, singleAgent.GetAgentId(), singleAgent.GetAgentName());
         }
 
         return AgentIdentityResolver.ResolveDisplayAuthorName(
-            pattern,
+            workflow,
             primaryIdentifier,
             fallbackIdentifier);
     }

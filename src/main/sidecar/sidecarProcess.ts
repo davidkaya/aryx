@@ -13,7 +13,6 @@ import type {
   UserInputRequestedEvent,
   McpOauthRequiredEvent,
   ExitPlanModeRequestedEvent,
-  ValidatePatternCommand,
   ValidateWorkflowCommand,
   RunTurnCommand,
   CopilotSessionListFilter,
@@ -39,12 +38,6 @@ type PendingCommand =
       processId: number;
       kind: 'capabilities';
       resolve: (capabilities: SidecarCapabilities) => void;
-      reject: (error: Error) => void;
-    })
-  | ({
-      processId: number;
-      kind: 'validate-pattern';
-      resolve: (issues: ValidatePatternCommand['pattern'] extends never ? never : unknown) => void;
       reject: (error: Error) => void;
     })
   | ({
@@ -124,14 +117,6 @@ export class SidecarClient {
     });
 
     return command;
-  }
-
-  async validatePattern(pattern: ValidatePatternCommand['pattern']): Promise<unknown> {
-    return this.dispatch<unknown>({
-      type: 'validate-pattern',
-      requestId: `validate-${Date.now()}`,
-      pattern,
-    });
   }
 
   async validateWorkflow(
@@ -329,13 +314,6 @@ export class SidecarClient {
           onTurnScopedEvent: onTurnScopedEvent ?? (() => undefined),
           errored: false,
         });
-      } else if (command.type === 'validate-pattern') {
-        this.pending.set(command.requestId, {
-          processId: state.id,
-          kind: 'validate-pattern',
-          resolve: resolve as (issues: unknown) => void,
-          reject,
-        });
       } else if (command.type === 'validate-workflow') {
         this.pending.set(command.requestId, {
           processId: state.id,
@@ -430,12 +408,6 @@ export class SidecarClient {
       case 'capabilities':
         if (pending.kind === 'capabilities') {
           pending.resolve(event.capabilities);
-          this.pending.delete(event.requestId);
-        }
-        return;
-      case 'pattern-validation':
-        if (pending.kind === 'validate-pattern') {
-          pending.resolve(event.issues);
           this.pending.delete(event.requestId);
         }
         return;

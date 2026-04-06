@@ -186,54 +186,52 @@ public sealed class WorkflowRequestInfoInterpreterTests
     }
 
     private static RunTurnCommandDto CreateSingleAgentCommand()
-    {
-        return new RunTurnCommandDto
-        {
-            RequestId = "turn-1",
-            SessionId = "session-1",
-            Pattern = new PatternDefinitionDto
-            {
-                Id = "pattern-single",
-                Name = "Single Agent",
-                Mode = "single",
-                Availability = "available",
-                Agents =
-                [
-                    CreateAgent("agent-1", "Primary"),
-                ],
-            },
-        };
-    }
+        => CreateCommand("single", [CreateAgent("agent-1", "Primary")]);
 
     private static RunTurnCommandDto CreateHandoffCommand()
+        => CreateCommand("handoff",
+        [
+            CreateAgent("agent-handoff-triage", "Triage"),
+            CreateAgent("agent-handoff-ux", "UX Specialist"),
+        ]);
+
+    private static RunTurnCommandDto CreateCommand(string orchestrationMode, IReadOnlyList<WorkflowNodeDto> agents)
     {
         return new RunTurnCommandDto
         {
             RequestId = "turn-1",
             SessionId = "session-1",
-            Pattern = new PatternDefinitionDto
+            Workflow = new WorkflowDefinitionDto
             {
-                Id = "pattern-handoff",
-                Name = "Handoff Flow",
-                Mode = "handoff",
-                Availability = "available",
-                Agents =
-                [
-                    CreateAgent("agent-handoff-triage", "Triage"),
-                    CreateAgent("agent-handoff-ux", "UX Specialist"),
-                ],
+                Id = $"{orchestrationMode}-workflow",
+                Name = "Workflow",
+                Graph = new WorkflowGraphDto
+                {
+                    Nodes = [.. agents],
+                },
+                Settings = new WorkflowSettingsDto
+                {
+                    OrchestrationMode = orchestrationMode,
+                },
             },
         };
     }
 
-    private static PatternAgentDefinitionDto CreateAgent(string id, string name)
+    private static WorkflowNodeDto CreateAgent(string id, string name)
     {
-        return new PatternAgentDefinitionDto
+        return new WorkflowNodeDto
         {
             Id = id,
-            Name = name,
-            Model = "gpt-5.4",
-            Instructions = "Help with the request.",
+            Kind = "agent",
+            Label = name,
+            Config = new WorkflowNodeConfigDto
+            {
+                Kind = "agent",
+                Id = id,
+                Name = name,
+                Model = "gpt-5.4",
+                Instructions = "Help with the request.",
+            },
         };
     }
 

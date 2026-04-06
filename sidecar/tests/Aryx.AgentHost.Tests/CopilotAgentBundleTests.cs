@@ -158,34 +158,17 @@ public sealed class CopilotAgentBundleTests
         Assert.Equal(HandoffWorkflowGuidance.CreateWorkflowInstructions(), builder.HandoffInstructions);
     }
 
-    [Theory]
-    [InlineData("single", 1)]
-    [InlineData("sequential", 2)]
-    [InlineData("concurrent", 2)]
-    [InlineData("group-chat", 2)]
-    public void BuildWorkflow_ExplicitlyConfiguresAgentHostOptions(string mode, int agentCount)
+    [Fact]
+    public void CreateAgentHostOptions_UsesExpectedAryxDefaults()
     {
-        CopilotAgentBundle bundle = new(CreateAgents(agentCount), hasConfiguredHooks: false);
-        PatternDefinitionDto pattern = CreatePattern(mode, agentCount);
+        AIAgentHostOptions options = CopilotAgentBundle.CreateAgentHostOptions();
 
-        Workflow workflow = bundle.BuildWorkflow(pattern);
-
-        AIAgentBinding[] bindings = workflow.ReflectExecutors().Values
-            .OfType<AIAgentBinding>()
-            .ToArray();
-
-        Assert.Equal(agentCount, bindings.Length);
-
-        foreach (AIAgentBinding binding in bindings)
-        {
-            AIAgentHostOptions options = Assert.IsType<AIAgentHostOptions>(binding.Options);
-            Assert.Null(options.EmitAgentUpdateEvents);
-            Assert.False(options.EmitAgentResponseEvents);
-            Assert.False(options.InterceptUserInputRequests);
-            Assert.False(options.InterceptUnterminatedFunctionCalls);
-            Assert.True(options.ReassignOtherAgentsAsUsers);
-            Assert.True(options.ForwardIncomingMessages);
-        }
+        Assert.Null(options.EmitAgentUpdateEvents);
+        Assert.False(options.EmitAgentResponseEvents);
+        Assert.False(options.InterceptUserInputRequests);
+        Assert.False(options.InterceptUnterminatedFunctionCalls);
+        Assert.True(options.ReassignOtherAgentsAsUsers);
+        Assert.True(options.ForwardIncomingMessages);
     }
 
     [Fact]
@@ -387,28 +370,12 @@ public sealed class CopilotAgentBundleTests
             ProjectPath = @"C:\workspace\project",
             WorkspaceKind = "project",
             Mode = "interactive",
-            Pattern = new PatternDefinitionDto
-            {
-                Id = "pattern-1",
-                Name = "Pattern",
-                Mode = "single",
-                Availability = "available",
-                Agents =
-                [
-                    new PatternAgentDefinitionDto
-                    {
-                        Id = "agent-1",
-                        Name = "Primary",
-                        Model = "gpt-5.4",
-                        Instructions = "Help.",
-                    },
-                ],
-            },
+            Workflow = CreateWorkflow("single", 1),
         };
 
         SessionConfig sessionConfig = CopilotAgentBundle.CreateSessionConfig(
             command,
-            command.Pattern.Agents[0],
+            command.Workflow.GetAgentNodes()[0],
             agentIndex: 0);
 
         Assert.Null(sessionConfig.SessionId);
@@ -427,28 +394,12 @@ public sealed class CopilotAgentBundleTests
             WorkspaceKind = "project",
             Mode = "interactive",
             ProjectInstructions = "Follow repository guidance.",
-            Pattern = new PatternDefinitionDto
-            {
-                Id = "pattern-1",
-                Name = "Pattern",
-                Mode = "single",
-                Availability = "available",
-                Agents =
-                [
-                    new PatternAgentDefinitionDto
-                    {
-                        Id = "agent-1",
-                        Name = "Primary",
-                        Model = "gpt-5.4",
-                        Instructions = "Help.",
-                    },
-                ],
-            },
+            Workflow = CreateWorkflow("single", 1),
         };
 
         SessionConfig sessionConfig = CopilotAgentBundle.CreateSessionConfig(
             command,
-            command.Pattern.Agents[0],
+            command.Workflow.GetAgentNodes()[0],
             agentIndex: 0);
 
         Assert.Equal("Help.\n\nFollow repository guidance.", sessionConfig.SystemMessage?.Content);
@@ -471,28 +422,12 @@ public sealed class CopilotAgentBundleTests
                 Agent = "designer",
                 ResolvedPrompt = "Review the docs for missing steps.",
             },
-            Pattern = new PatternDefinitionDto
-            {
-                Id = "pattern-1",
-                Name = "Pattern",
-                Mode = "single",
-                Availability = "available",
-                Agents =
-                [
-                    new PatternAgentDefinitionDto
-                    {
-                        Id = "agent-1",
-                        Name = "Primary",
-                        Model = "gpt-5.4",
-                        Instructions = "Help.",
-                    },
-                ],
-            },
+            Workflow = CreateWorkflow("single", 1),
         };
 
         SessionConfig sessionConfig = CopilotAgentBundle.CreateSessionConfig(
             command,
-            command.Pattern.Agents[0],
+            command.Workflow.GetAgentNodes()[0],
             agentIndex: 0);
 
         Assert.Equal("designer", sessionConfig.Agent);
@@ -516,28 +451,12 @@ public sealed class CopilotAgentBundleTests
                 ResolvedPrompt = "Review the docs for missing steps.",
                 Tools = ["view"],
             },
-            Pattern = new PatternDefinitionDto
-            {
-                Id = "pattern-1",
-                Name = "Pattern",
-                Mode = "single",
-                Availability = "available",
-                Agents =
-                [
-                    new PatternAgentDefinitionDto
-                    {
-                        Id = "agent-1",
-                        Name = "Primary",
-                        Model = "gpt-5.4",
-                        Instructions = "Help.",
-                    },
-                ],
-            },
+            Workflow = CreateWorkflow("single", 1),
         };
 
         SessionConfig sessionConfig = CopilotAgentBundle.CreateSessionConfig(
             command,
-            command.Pattern.Agents[0],
+            command.Workflow.GetAgentNodes()[0],
             agentIndex: 0);
 
         Assert.Equal("agent", sessionConfig.Agent);
@@ -550,13 +469,10 @@ public sealed class CopilotAgentBundleTests
         {
             RequestId = "turn-1",
             SessionId = "session-1",
-            Pattern = new PatternDefinitionDto
-            {
-                Id = "pattern-1",
-                Name = "Pattern",
-                Mode = "single",
-                Availability = "available",
-                ApprovalPolicy = new ApprovalPolicyDto
+            Workflow = CreateWorkflow(
+                "single",
+                1,
+                new ApprovalPolicyDto
                 {
                     Rules =
                     [
@@ -566,21 +482,10 @@ public sealed class CopilotAgentBundleTests
                             AgentIds = ["agent-1"],
                         },
                     ],
-                },
-                Agents =
-                [
-                    new PatternAgentDefinitionDto
-                    {
-                        Id = "agent-1",
-                        Name = "Primary",
-                        Model = "gpt-5.4",
-                        Instructions = "Help.",
-                    },
-                ],
-            },
+                }),
         };
 
-        SessionHooks hooks = CopilotSessionHooks.Create(command, command.Pattern.Agents[0]);
+        SessionHooks hooks = CopilotSessionHooks.Create(command, command.Workflow.GetAgentNodes()[0]);
         PreToolUseHookOutput? decision = await hooks.OnPreToolUse!(
             new PreToolUseHookInput
             {
@@ -630,25 +535,41 @@ public sealed class CopilotAgentBundleTests
             .Select(index => (AIAgent)CreateChatClientAgent($"agent-{index}", $"Agent {index}"))
             .ToArray();
 
-    private static PatternDefinitionDto CreatePattern(string mode, int agentCount)
+    private static WorkflowDefinitionDto CreateWorkflow(
+        string mode,
+        int agentCount,
+        ApprovalPolicyDto? approvalPolicy = null)
     {
-        return new PatternDefinitionDto
+        return new WorkflowDefinitionDto
         {
-            Id = $"pattern-{mode}",
-            Name = $"Pattern {mode}",
-            Mode = mode,
-            Availability = "available",
-            Agents =
-            [
-                .. Enumerable.Range(1, agentCount).Select(index => new PatternAgentDefinitionDto
-                {
-                    Id = $"agent-{index}",
-                    Name = $"Agent {index}",
-                    Description = $"Agent {index} description.",
-                    Instructions = $"Agent {index} instructions.",
-                    Model = "gpt-5.4",
-                }),
-            ],
+            Id = $"workflow-{mode}",
+            Name = $"Workflow {mode}",
+            Graph = new WorkflowGraphDto
+            {
+                Nodes =
+                [
+                    .. Enumerable.Range(1, agentCount).Select(index => new WorkflowNodeDto
+                    {
+                        Id = $"agent-{index}",
+                        Kind = "agent",
+                        Label = $"Agent {index}",
+                        Config = new WorkflowNodeConfigDto
+                        {
+                            Kind = "agent",
+                            Id = $"agent-{index}",
+                            Name = $"Agent {index}",
+                            Description = $"Agent {index} description.",
+                            Instructions = "Help.",
+                            Model = "gpt-5.4",
+                        },
+                    }),
+                ],
+            },
+            Settings = new WorkflowSettingsDto
+            {
+                OrchestrationMode = mode,
+                ApprovalPolicy = approvalPolicy,
+            },
         };
     }
 
@@ -697,3 +618,4 @@ public sealed class CopilotAgentBundleTests
         }
     }
 }
+

@@ -4,7 +4,6 @@ import type {
   PendingApprovalRecord,
 } from '@shared/domain/approval';
 import type { ToolCallFileChangePreview } from '@shared/contracts/sidecar';
-import type { PatternDefinition, ReasoningEffort } from '@shared/domain/pattern';
 import type {
   ProjectGitBaselineFile,
   ProjectGitChangeSummary,
@@ -17,7 +16,13 @@ import type {
   ProjectGitWorkingTreeSnapshot,
   ProjectRecord,
 } from '@shared/domain/project';
-import type { WorkflowDefinition } from '@shared/domain/workflow';
+import type {
+  AgentNodeConfig,
+  ReasoningEffort,
+  WorkflowDefinition,
+  WorkflowOrchestrationMode,
+} from '@shared/domain/workflow';
+import { resolveWorkflowAgents } from '@shared/domain/workflow';
 import { createId } from '@shared/utils/ids';
 
 export type SessionRunStatus = 'running' | 'completed' | 'cancelled' | 'error';
@@ -74,11 +79,9 @@ export interface SessionRunRecord {
   projectPath: string;
   workingDirectory?: string;
   workspaceKind: SessionRunWorkspaceKind;
-  patternId: string;
-  patternName: string;
-  patternMode: PatternDefinition['mode'];
-  workflowId?: string;
-  workflowName?: string;
+  workflowId: string;
+  workflowName: string;
+  workflowMode: WorkflowOrchestrationMode;
   triggerMessageId: string;
   startedAt: string;
   completedAt?: string;
@@ -90,13 +93,18 @@ export interface SessionRunRecord {
   postRunGitSummary?: ProjectGitRunChangeSummary;
 }
 
+export type SessionRunWorkflowInput =
+  | WorkflowDefinition
+  | (Pick<WorkflowDefinition, 'id' | 'name' | 'settings'> & {
+    agents: Pick<AgentNodeConfig, 'id' | 'name' | 'model' | 'reasoningEffort'>[];
+  });
+
 export interface CreateSessionRunRecordInput {
   requestId: string;
   project: Pick<ProjectRecord, 'id' | 'path'>;
   workingDirectory?: string;
   workspaceKind: SessionRunWorkspaceKind;
-  pattern: Pick<PatternDefinition, 'id' | 'name' | 'mode' | 'agents'>;
-  workflow?: Pick<WorkflowDefinition, 'id' | 'name'>;
+  workflow: SessionRunWorkflowInput;
   triggerMessageId: string;
   startedAt: string;
   preRunGitSnapshot?: ProjectGitWorkingTreeSnapshot;
@@ -603,7 +611,23 @@ function settleOpenMessageEvents(
   };
 }
 
+function resolveSessionRunWorkflowAgents(
+  workflow: SessionRunWorkflowInput,
+): ReadonlyArray<Pick<AgentNodeConfig, 'id' | 'name' | 'model' | 'reasoningEffort'>> {
+  if ('graph' in workflow) {
+    return resolveWorkflowAgents(workflow).map((agent) => ({
+      id: agent.id,
+      name: agent.name,
+      model: agent.model,
+      reasoningEffort: agent.reasoningEffort,
+    }));
+  }
+
+  return workflow.agents;
+}
+
 export function createSessionRunRecord(input: CreateSessionRunRecordInput): SessionRunRecord {
+  const agents = resolveSessionRunWorkflowAgents(input.workflow);
   return {
     id: createId('run'),
     requestId: input.requestId,
@@ -611,11 +635,9 @@ export function createSessionRunRecord(input: CreateSessionRunRecordInput): Sess
     projectPath: input.project.path,
     workingDirectory: normalizeOptionalString(input.workingDirectory),
     workspaceKind: input.workspaceKind,
-    patternId: input.pattern.id,
-    patternName: input.pattern.name,
-    patternMode: input.pattern.mode,
-    workflowId: normalizeOptionalString(input.workflow?.id),
-    workflowName: normalizeOptionalString(input.workflow?.name),
+    workflowId: input.workflow.id,
+    workflowName: input.workflow.name,
+    workflowMode: input.workflow.settings.orchestrationMode ?? 'single',
     triggerMessageId: input.triggerMessageId,
     startedAt: input.startedAt,
     status: 'running',
@@ -623,7 +645,7 @@ export function createSessionRunRecord(input: CreateSessionRunRecordInput): Sess
     preRunGitSnapshot: normalizeWorkingTreeSnapshot(input.preRunGitSnapshot),
     preRunGitBaselineFiles: normalizeGitBaselineFiles(input.preRunGitBaselineFiles),
     postRunGitSummary: undefined,
-    agents: input.pattern.agents
+    agents: agents
       .map((agent): RunTimelineAgentRecord => ({
         agentId: agent.id,
         agentName: agent.name,
@@ -659,13 +681,11 @@ export function normalizeSessionRunRecords(
     const projectId = normalizeOptionalString(run.projectId);
     const projectPath = normalizeOptionalString(run.projectPath);
     const workingDirectory = normalizeOptionalString(run.workingDirectory);
-    const patternId = normalizeOptionalString(run.patternId);
-    const patternName = normalizeOptionalString(run.patternName);
     const workflowId = normalizeOptionalString(run.workflowId);
     const workflowName = normalizeOptionalString(run.workflowName);
     const triggerMessageId = normalizeOptionalString(run.triggerMessageId);
     const startedAt = normalizeOptionalString(run.startedAt);
-    if (!id || !requestId || !projectId || !projectPath || !patternId || !patternName || !triggerMessageId || !startedAt) {
+    if (!id || !requestId || !projectId || !projectPath || !workflowId || !workflowName || !triggerMessageId || !startedAt) {
       return [];
     }
 
@@ -677,11 +697,14 @@ export function normalizeSessionRunRecords(
         projectPath,
         workingDirectory,
         workspaceKind: run.workspaceKind === 'scratchpad' ? 'scratchpad' : 'project',
-        patternId,
-        patternName,
-        patternMode: run.patternMode,
         workflowId,
         workflowName,
+        workflowMode: run.workflowMode === 'concurrent'
+          || run.workflowMode === 'handoff'
+          || run.workflowMode === 'group-chat'
+          || run.workflowMode === 'single'
+          ? run.workflowMode
+          : 'sequential',
         triggerMessageId,
         startedAt,
         completedAt: normalizeOptionalString(run.completedAt),

@@ -2,7 +2,7 @@
 
 ## What this system is
 
-Aryx is a desktop workspace for Copilot-powered development work. It combines a persistent session model, project-aware context, reusable multi-agent orchestration patterns, optional external tooling, and live run visibility inside a single Electron application.
+Aryx is a desktop workspace for Copilot-powered development work. It combines a persistent session model, project-aware context, reusable workflow orchestration, optional external tooling, and live run visibility inside a single Electron application.
 
 At a high level, the architecture is built around one core idea:
 
@@ -23,7 +23,7 @@ The current architecture optimizes for:
 - **persistent workspaces** rather than disposable chat threads
 - **project-aware execution** with repository context and optional tooling
 - **observable AI runs** with streamed output, activity, and history
-- **extensible orchestration** so patterns, models, and tool integrations can evolve without collapsing boundaries
+- **extensible orchestration** so workflows, models, and tool integrations can evolve without collapsing boundaries
 
 ## System context
 
@@ -56,7 +56,7 @@ flowchart LR
 | Renderer | Screens, interaction, local view composition, theme application | Filesystem, process spawning, raw Electron access, Copilot runtime | Typed preload API and pushed events |
 | Preload | Narrow bridge between browser context and Electron IPC | Business logic, persistence, orchestration | `ipcRenderer` / `ipcMain` |
 | Main process | Workspace mutation, persistence, git inspection/write operations, run change attribution, commit workflow orchestration, session lifecycle, native window state, sidecar lifecycle, PTY-backed terminal lifecycle | UI rendering, LLM orchestration internals | IPC, filesystem, git CLI, stdio with sidecar, native child processes |
-| Sidecar | Capability discovery, pattern validation, run execution, streaming deltas and activity | UI, workspace persistence, Electron APIs | Line-delimited JSON over stdio |
+| Sidecar | Capability discovery, workflow validation, run execution, streaming deltas and activity | UI, workspace persistence, Electron APIs | Line-delimited JSON over stdio |
 | External systems | Git data, Copilot account/model access, OS window chrome | Application state and UI behavior | Controlled adapters owned by main or sidecar |
 
 This split is the most important architectural feature in the app. It is what keeps the system understandable as more capabilities are added.
@@ -108,9 +108,8 @@ This flow is important because it shows that Aryx is not architected as a simple
 The durable state of the app is a **workspace**. The workspace contains:
 
 - connected projects
-- orchestration patterns
-- workflow templates
 - workflows
+- workflow templates
 - sessions
 - settings
 - run history
@@ -130,36 +129,34 @@ Project-backed entries also persist scanned Copilot customization metadata disco
 
 For git-backed projects, the main process also owns background git refreshes, captures a structured pre-run working-tree snapshot on each run record, and persists a post-run git change summary after project-backed turns complete. It also owns all git write operations exposed by Aryx — selective discard, staging, commit, push/pull/fetch, and branch lifecycle actions — so the renderer never shells out directly or manipulates repository state on its own.
 
-### Patterns
+### Workflows
 
-Patterns describe how agents collaborate. The architecture supports:
+Workflows describe how agents collaborate. The architecture supports:
 
 - one-agent conversations
-- sequential workflows
-- concurrent responses
-- handoff flows
-- group chat style collaboration
+- sequential execution
+- concurrent fan-out / fan-in flows
+- handoff-style routing
+- group-chat style collaboration
 
 Their runtime semantics follow the Agent Framework orchestration model: sequential and group chat preserve a visible shared conversation, concurrent aggregates multiple independent responses into one turn, and handoff turns can end once the active agent has responded and is waiting for the next user input.
 
-For Copilot-backed agents, Aryx uses a repo-local adapter around the Copilot SDK session layer so handoff routes still behave like Agent Framework handoffs. This is necessary because the upstream `GitHubCopilotAgent` does not currently project run-time handoff tool declarations into Copilot sessions or surface Copilot tool requests back as `FunctionCallContent` for the workflow runtime.
+For Copilot-backed agents, Aryx uses a repo-local adapter around the Copilot SDK session layer so workflow agent routes still behave like Agent Framework handoffs. This is necessary because the upstream `GitHubCopilotAgent` does not currently project run-time handoff tool declarations into Copilot sessions or surface Copilot tool requests back as `FunctionCallContent` for the workflow runtime.
 
-Patterns are shared application data, not renderer-only configuration. That means the same pattern definition can drive validation, persistence, UI rendering, and sidecar execution.
+Workflows are shared application data, not renderer-only configuration. The same workflow definition now drives validation, persistence, session execution, and sidecar orchestration.
 
-Patterns now persist an explicit graph-backed topology alongside the flat agent list. Agent nodes carry stable agent ids, ordering, and layout metadata, while system nodes such as user input/output, distributor, collector, and orchestrator make mode-specific flow visible in the saved contract.
+Each workflow persists an explicit graph-backed topology. Agent nodes carry stable ids, ordering, and layout metadata, while start/end, fan-out/fan-in, sub-workflow, function, and request-port nodes make execution structure visible in the saved contract.
 
-That graph is now the execution contract for the sidecar: sequential order comes from the saved path, handoff routes come from directed graph edges, and concurrent/group-chat participant ordering can be derived from graph node metadata instead of hard-coded runtime assumptions.
+That graph is the execution contract for the sidecar: sequencing comes from saved edges, sub-workflow execution comes from referenced workflow graphs, and orchestration hints such as handoff or group-chat are carried as workflow settings rather than through a separate pattern domain.
 
-The pattern editor renders an interactive graph canvas powered by React Flow (`@xyflow/react`). The canvas projects the authoritative `PatternGraph` into React Flow nodes and edges via a view-model layer (`src/renderer/lib/patternGraph.ts`). Users can drag nodes to reposition them, and in handoff mode can draw new agent-to-agent edges directly on the canvas. A right-side inspector panel shows the details of the selected node — system node metadata for system nodes, or the full agent configuration form (model, reasoning, instructions) for agent nodes. The mode selector, pattern metadata, approval checkpoints, and tool auto-approval settings remain below the graph as scrollable settings sections. The `syncPatternGraph()` adapter is still called when agents are added/removed or the mode changes, rebuilding the graph from the current state; direct graph edits (drag positions, handoff edges) are persisted without the adapter.
-
-Workflows now sit alongside patterns as a first-class shared-domain contract. The shared layer owns workflow definitions, workflow template definitions, and workflow import/export helpers (YAML import/export plus Mermaid and DOT export). Built-in workflow templates are derived from built-in patterns, while custom templates are persisted in workspace state and used by the main process to create new saved workflows without expanding the sidecar protocol.
+Workflow templates remain a first-class shared-domain contract. The shared layer owns workflow definitions, workflow template definitions, and workflow import/export helpers (YAML import/export plus Mermaid and DOT export). Built-in workflows seed workspace state directly, while built-in and custom templates let the main process create additional saved workflows without expanding the sidecar protocol.
 
 ### Sessions
 
 A session is the working unit of the product. It binds together:
 
 - a project
-- a pattern
+- a workflow
 - a message history
 - status and errors
 - optional per-session tool selection
@@ -212,7 +209,7 @@ This is a structured stdio protocol used for:
 
 - capability discovery
 - on-demand account quota lookup
-- pattern validation
+- workflow validation
 - run execution
 - streaming partial output
 - streaming agent activity
@@ -241,7 +238,7 @@ The same boundary also supports server-scoped sidecar commands that do not requi
 
 For project-backed sessions, the sidecar also discovers GitHub Copilot CLI hook definitions from `.github/hooks/*.json` under the repository root. Those files are parsed and merged once per run bundle, then projected onto the SDK session hook delegates. Hook commands run synchronously in the sidecar through the platform shell, with stdin JSON payloads shaped to match Copilot CLI hook expectations as closely as the SDK allows. Hook failures are logged to stderr and treated as non-fatal diagnostics, while `preToolUse` hook outputs can still deny a tool call before Aryx falls back to its built-in approval policy.
 
-The `run-turn` command now also carries a project-instruction payload derived from scanned repo customization files. The main process composes that payload from always-on repo instructions plus formatted file-scoped and task-scoped `.instructions.md` / `.claude/rules` entries, while omitting manual-only instruction files from automatic injection. It also merges enabled discovered custom agent profiles into the primary pattern agent's Copilot configuration before sending the command across the stdio boundary. Prompt-file submissions can additionally attach a structured `promptInvocation` payload with prompt identity, resolved prompt body, optional `agent`, optional `model`, and optional `tools` metadata. The main process stores that prompt invocation metadata on the triggering user message so replay and regenerate flows can rebuild it, hydrates missing metadata from the scanned prompt definition, promotes `agent: plan` to a per-turn plan-mode override, applies per-turn prompt model overrides to the effective pattern before execution, and falls back to a lightweight transcript message instead of pasting the full prompt body into chat history. The sidecar then folds both the project instructions and prompt invocation into the final SDK system message, uses prompt agent metadata to override `SessionConfig.Agent`, and narrows available tools for that turn when prompt `tools` metadata is present.
+The `run-turn` command now also carries a project-instruction payload derived from scanned repo customization files. The main process composes that payload from always-on repo instructions plus formatted file-scoped and task-scoped `.instructions.md` / `.claude/rules` entries, while omitting manual-only instruction files from automatic injection. It also merges enabled discovered custom agent profiles into the primary workflow agent's Copilot configuration before sending the command across the stdio boundary. Prompt-file submissions can additionally attach a structured `promptInvocation` payload with prompt identity, resolved prompt body, optional `agent`, optional `model`, and optional `tools` metadata. The main process stores that prompt invocation metadata on the triggering user message so replay and regenerate flows can rebuild it, hydrates missing metadata from the scanned prompt definition, promotes `agent: plan` to a per-turn plan-mode override, applies per-turn prompt model overrides to the effective workflow before execution, and falls back to a lightweight transcript message instead of pasting the full prompt body into chat history. The sidecar then folds both the project instructions and prompt invocation into the final SDK system message, uses prompt agent metadata to override `SessionConfig.Agent`, and narrows available tools for that turn when prompt `tools` metadata is present.
 
 For handoff workflows, the sidecar now also enables Agent Framework JSON checkpointing backed by a per-turn filesystem store under local app data. Each saved checkpoint is surfaced to the main process, which pairs the durable Agent Framework checkpoint with an in-memory rollback snapshot of `session.messages` and the active run timeline events. If the sidecar child process exits unexpectedly during the same app lifetime, Aryx restores the latest snapshot, clears pending approval/user-input/MCP-auth state for that run, and retries the `run-turn` request once with `resumeFromCheckpoint`. Checkpoint directories are deleted after the turn completes, cancels, or fails. This recovery path is intentionally scoped to same-app sidecar restarts; full app-restart workflow rehydration would require durable rollback snapshots in addition to the Agent Framework checkpoint payloads.
 
@@ -303,7 +300,7 @@ Tooling is deliberately split into two levels:
 - **global definitions** for MCP servers and LSP profiles
 - **MCP tool discovery** — when MCP server configs declare wildcard tools (empty `tools` array), the main process probes each server directly via the MCP protocol `tools/list` method to discover available tools, using the same auth credentials Aryx manages for OAuth-protected servers
 - **incremental probe progress** — MCP probing runs concurrently and publishes per-server progress through the pushed workspace snapshot, using the runtime-only `mcpProbingServerIds` field so the renderer can reflect in-flight discovery without persisting transient UI state
-- **pattern defaults** where tool-call approval is enabled by default, plus which known runtime tools can bypass manual approval
+- **workflow defaults** where tool-call approval is enabled by default, plus which known runtime tools can bypass manual approval
 - **per-session overrides** for both tool enablement and tool auto-approval
 
 This lets the application treat tooling as reusable workspace capability while still preserving session-level control and safety.

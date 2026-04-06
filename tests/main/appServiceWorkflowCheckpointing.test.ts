@@ -8,6 +8,7 @@ import {
   type RunTimelineEventRecord,
   type SessionRunRecord,
 } from '@shared/domain/runTimeline';
+import type { WorkflowDefinition } from '@shared/domain/workflow';
 
 mock.module('electron', () => {
   const electronMock = {
@@ -200,7 +201,7 @@ describe('AryxAppService workflow checkpointing', () => {
         workspaceKind: 'scratchpad',
         mode: 'interactive',
         messageMode: 'enqueue',
-        pattern: createPattern(),
+        workflow: createWorkflow(),
         messages: session.messages,
         resumeFromCheckpoint,
       }),
@@ -230,7 +231,7 @@ describe('AryxAppService workflow checkpointing', () => {
 });
 
 function createRunningSession(): { session: SessionRecord; run: SessionRunRecord } {
-  const pattern = createPattern();
+  const workflow = createWorkflow();
   const run = createSessionRunRecord({
     requestId: 'turn-1',
     project: {
@@ -239,14 +240,14 @@ function createRunningSession(): { session: SessionRecord; run: SessionRunRecord
     },
     workingDirectory: 'C:\\scratchpad',
     workspaceKind: 'scratchpad',
-    pattern,
+    workflow,
     triggerMessageId: 'msg-user-1',
     startedAt: '2026-04-01T12:00:00.000Z',
   });
   const session: SessionRecord = {
     id: 'session-1',
     projectId: SCRATCHPAD_PROJECT_ID,
-    patternId: pattern.id,
+    workflowId: workflow.id,
     title: 'Checkpoint session',
     createdAt: '2026-04-01T12:00:00.000Z',
     updatedAt: '2026-04-01T12:00:00.000Z',
@@ -274,23 +275,42 @@ function createRunningSession(): { session: SessionRecord; run: SessionRunRecord
   return { session, run };
 }
 
-function createPattern() {
+function createWorkflow(): WorkflowDefinition {
   return {
-    id: 'pattern-handoff',
+    id: 'workflow-handoff',
     name: 'Checkpointing flow',
     description: '',
-    mode: 'handoff' as const,
-    availability: 'available' as const,
-    maxIterations: 4,
-    agents: [
-      {
-        id: 'agent-1',
-        name: 'Primary',
-        description: '',
-        instructions: 'Help with the request.',
-        model: 'gpt-5.4',
-      },
-    ],
+    graph: {
+      nodes: [
+        { id: 'start', kind: 'start', label: 'Start', position: { x: 0, y: 0 }, config: { kind: 'start' } },
+        {
+          id: 'agent-1',
+          kind: 'agent',
+          label: 'Primary',
+          position: { x: 200, y: 0 },
+          order: 0,
+          config: {
+            kind: 'agent',
+            id: 'agent-1',
+            name: 'Primary',
+            description: '',
+            instructions: 'Help with the request.',
+            model: 'gpt-5.4',
+          },
+        },
+        { id: 'end', kind: 'end', label: 'End', position: { x: 400, y: 0 }, config: { kind: 'end' } },
+      ],
+      edges: [
+        { id: 'edge-start-agent', source: 'start', target: 'agent-1', kind: 'direct' },
+        { id: 'edge-agent-end', source: 'agent-1', target: 'end', kind: 'direct' },
+      ],
+    },
+    settings: {
+      checkpointing: { enabled: true },
+      executionMode: 'off-thread' as const,
+      orchestrationMode: 'handoff' as const,
+      maxIterations: 4,
+    },
     createdAt: '2026-04-01T00:00:00.000Z',
     updatedAt: '2026-04-01T00:00:00.000Z',
   };

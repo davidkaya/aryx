@@ -1,9 +1,8 @@
 import type { ApprovalDecision } from '@shared/domain/approval';
 import type { SidecarCapabilities, InteractionMode, MessageMode, QuotaSnapshot } from '@shared/contracts/sidecar';
-import type { PatternDefinition, ReasoningEffort } from '@shared/domain/pattern';
 import type { WorkflowExportFormat, WorkflowExportResult } from '@shared/domain/workflowSerialization';
 import type { WorkflowTemplateCategory } from '@shared/domain/workflowTemplate';
-import type { WorkflowDefinition, WorkflowReference } from '@shared/domain/workflow';
+import type { ReasoningEffort, WorkflowDefinition, WorkflowReference } from '@shared/domain/workflow';
 import type {
   ProjectGitBranchSummary,
   ProjectGitCommitMessageSuggestion,
@@ -28,17 +27,10 @@ import type { WorkspaceAgentDefinition } from '@shared/domain/workspaceAgent';
 
 export interface CreateSessionInput {
   projectId: string;
-  patternId: string;
-}
-
-export interface CreateWorkflowSessionInput {
-  projectId: string;
   workflowId: string;
 }
 
-export interface SavePatternInput {
-  pattern: PatternDefinition;
-}
+export type CreateWorkflowSessionInput = CreateSessionInput;
 
 export interface SaveWorkflowInput {
   workflow: WorkflowDefinition;
@@ -72,16 +64,6 @@ export interface ImportWorkflowInput {
   content: string;
   format: 'yaml' | 'json';
   options?: {
-    save?: boolean;
-  };
-}
-
-export interface UpgradePatternToWorkflowInput {
-  patternId: string;
-  options?: {
-    workflowId?: string;
-    name?: string;
-    description?: string;
     save?: boolean;
   };
 }
@@ -163,11 +145,6 @@ export interface SetSessionPinnedInput {
 export interface SetSessionArchivedInput {
   sessionId: string;
   isArchived: boolean;
-}
-
-export interface SetPatternFavoriteInput {
-  patternId: string;
-  isFavorite: boolean;
 }
 
 export interface SaveMcpServerInput {
@@ -331,8 +308,6 @@ export interface ElectronApi {
   rescanProjectCustomization(input: RescanProjectCustomizationInput): Promise<WorkspaceState>;
   resolveProjectDiscoveredTooling(input: ResolveProjectDiscoveredToolingInput): Promise<WorkspaceState>;
   setProjectAgentProfileEnabled(input: SetProjectAgentProfileEnabledInput): Promise<WorkspaceState>;
-  savePattern(input: SavePatternInput): Promise<WorkspaceState>;
-  deletePattern(patternId: string): Promise<WorkspaceState>;
   saveWorkflow(input: SaveWorkflowInput): Promise<WorkspaceState>;
   saveWorkflowTemplate(input: SaveWorkflowTemplateInput): Promise<WorkspaceState>;
   deleteWorkflow(workflowId: string): Promise<WorkspaceState>;
@@ -340,7 +315,6 @@ export interface ElectronApi {
   createWorkflowFromTemplate(input: CreateWorkflowFromTemplateInput): Promise<WorkspaceState>;
   exportWorkflow(input: ExportWorkflowInput): Promise<WorkflowExportResult>;
   importWorkflow(input: ImportWorkflowInput): Promise<ImportWorkflowResult>;
-  upgradePatternToWorkflow(input: UpgradePatternToWorkflowInput): Promise<ImportWorkflowResult>;
   saveMcpServer(input: SaveMcpServerInput): Promise<WorkspaceState>;
   deleteMcpServer(serverId: string): Promise<WorkspaceState>;
   saveLspProfile(input: SaveLspProfileInput): Promise<WorkspaceState>;
@@ -371,9 +345,7 @@ export interface ElectronApi {
   updateSessionModelConfig(input: UpdateSessionModelConfigInput): Promise<WorkspaceState>;
   querySessions(input: QuerySessionsInput): Promise<SessionQueryResult[]>;
   selectProject(projectId?: string): Promise<WorkspaceState>;
-  selectPattern(patternId?: string): Promise<WorkspaceState>;
   selectSession(sessionId?: string): Promise<WorkspaceState>;
-  setPatternFavorite(input: SetPatternFavoriteInput): Promise<WorkspaceState>;
   setTheme(theme: AppearanceTheme): Promise<WorkspaceState>;
   setTerminalHeight(input: SetTerminalHeightInput): Promise<WorkspaceState>;
   setNotificationsEnabled(enabled: boolean): Promise<WorkspaceState>;
@@ -413,5 +385,5 @@ export interface ElectronApi {
 
 export interface RendererSelectionState {
   selectedProject?: ProjectRecord;
-  selectedPattern?: PatternDefinition;
+  selectedWorkflow?: WorkflowDefinition;
 }

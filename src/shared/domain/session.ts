@@ -1,25 +1,32 @@
-import { buildSessionTitle, type PatternDefinition, type ReasoningEffort } from '@shared/domain/pattern';
-import {
-  createSessionToolingSelection,
-  normalizeSessionToolingSelection,
-  type SessionToolingSelection,
-} from '@shared/domain/tooling';
 import {
   normalizeSessionApprovalSettings,
   resolveEffectiveApprovalPolicy,
   type PendingApprovalRecord,
   type SessionApprovalSettings,
 } from '@shared/domain/approval';
-import type { SessionRunRecord } from '@shared/domain/runTimeline';
-import type { PendingUserInputRecord } from '@shared/domain/userInput';
-import type { PendingPlanReviewRecord } from '@shared/domain/planReview';
-import type { PendingMcpAuthRecord } from '@shared/domain/mcpAuth';
 import type { ChatMessageAttachment } from '@shared/domain/attachment';
-import type { InteractionMode } from '@shared/contracts/sidecar';
+import type { PendingMcpAuthRecord } from '@shared/domain/mcpAuth';
+import type { PendingPlanReviewRecord } from '@shared/domain/planReview';
 import {
   normalizeProjectPromptInvocation,
   type ProjectPromptInvocation,
 } from '@shared/domain/projectCustomization';
+import type { SessionRunRecord } from '@shared/domain/runTimeline';
+import {
+  createSessionToolingSelection,
+  normalizeSessionToolingSelection,
+  type SessionToolingSelection,
+} from '@shared/domain/tooling';
+import type { PendingUserInputRecord } from '@shared/domain/userInput';
+import {
+  buildWorkflowExecutionDefinition,
+  resolveWorkflowAgentNodes,
+  type ReasoningEffort,
+  type WorkflowDefinition,
+  type WorkflowResolutionOptions,
+} from '@shared/domain/workflow';
+import type { InteractionMode } from '@shared/contracts/sidecar';
+import { buildMarkdownExcerpt } from '@shared/utils/markdownText';
 
 export type ChatRole = 'system' | 'user' | 'assistant';
 export type ChatMessageKind = 'response' | 'thinking';
@@ -56,8 +63,7 @@ export interface SessionBranchOrigin {
 export interface SessionRecord {
   id: string;
   projectId: string;
-  patternId: string;
-  workflowId?: string;
+  workflowId: string;
   title: string;
   titleSource?: SessionTitleSource;
   createdAt: string;
@@ -120,20 +126,26 @@ export function normalizeSessionBranchOrigin(
 
 export function resolveSessionTitle(
   session: Pick<SessionRecord, 'title' | 'titleSource'>,
-  pattern: PatternDefinition,
+  workflow: Pick<WorkflowDefinition, 'name'>,
   messages: ChatMessageRecord[],
 ): string {
   if (session.titleSource === 'manual') {
     return session.title;
   }
 
-  return buildSessionTitle(pattern, messages);
+  const firstUserMessage = messages.find((message) => message.role === 'user');
+  if (!firstUserMessage) {
+    return workflow.name;
+  }
+
+  return buildMarkdownExcerpt(firstUserMessage.content, 48) ?? workflow.name;
 }
 
 export function createSessionModelConfig(
-  pattern: PatternDefinition,
+  workflow: WorkflowDefinition,
+  options?: WorkflowResolutionOptions,
 ): SessionModelConfig | undefined {
-  const primaryAgent = pattern.agents[0];
+  const primaryAgent = buildWorkflowExecutionDefinition(workflow, options).agents[0];
   if (!primaryAgent) {
     return undefined;
   }
@@ -158,9 +170,9 @@ export function resolveSessionApprovalSettings(
 
 export function resolveSessionModelConfig(
   session: SessionRecord,
-  pattern: PatternDefinition,
+  workflow: WorkflowDefinition,
 ): SessionModelConfig | undefined {
-  const defaults = createSessionModelConfig(pattern);
+  const defaults = createSessionModelConfig(workflow);
   if (!defaults) {
     return undefined;
   }
@@ -187,38 +199,56 @@ export function normalizeChatMessageRecord(message: ChatMessageRecord): ChatMess
 }
 
 export function applySessionModelConfig(
-  pattern: PatternDefinition,
+  workflow: WorkflowDefinition,
   session: SessionRecord,
-): PatternDefinition {
-  const config = resolveSessionModelConfig(session, pattern);
-  const primaryAgent = pattern.agents[0];
-  if (!config || !primaryAgent) {
-    return pattern;
+): WorkflowDefinition {
+  const config = resolveSessionModelConfig(session, workflow);
+  if (!config) {
+    return workflow;
   }
 
-  return {
-    ...pattern,
-    agents: [
-      {
-        ...primaryAgent,
+  let applied = false;
+  const nodes = workflow.graph.nodes.map((node, index) => {
+    if (applied || node.kind !== 'agent' || node.config.kind !== 'agent') {
+      return node;
+    }
+
+    applied = true;
+    return {
+      ...node,
+      config: {
+        ...node.config,
         model: config.model,
         reasoningEffort: config.reasoningEffort,
       },
-      ...pattern.agents.slice(1),
-    ],
-  };
+    };
+  });
+
+  return applied
+    ? {
+      ...workflow,
+      graph: {
+        ...workflow.graph,
+        nodes,
+      },
+    }
+    : workflow;
 }
 
 export function applySessionApprovalSettings(
-  pattern: PatternDefinition,
+  workflow: WorkflowDefinition,
   session: Pick<SessionRecord, 'approvalSettings'>,
-): PatternDefinition {
+): WorkflowDefinition {
   if (session.approvalSettings === undefined) {
-    return pattern;
+    return workflow;
   }
 
+  const execution = buildWorkflowExecutionDefinition(workflow);
   return {
-    ...pattern,
-    approvalPolicy: resolveEffectiveApprovalPolicy(pattern.approvalPolicy, session.approvalSettings),
+    ...workflow,
+    settings: {
+      ...workflow.settings,
+      approvalPolicy: resolveEffectiveApprovalPolicy(execution.approvalPolicy, session.approvalSettings),
+    },
   };
 }

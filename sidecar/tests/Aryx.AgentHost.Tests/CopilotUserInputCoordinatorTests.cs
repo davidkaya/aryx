@@ -15,7 +15,7 @@ public sealed class CopilotUserInputCoordinatorTests
 
         Task<UserInputResponse> pending = coordinator.RequestUserInputAsync(
             command,
-            command.Pattern.Agents[0],
+            command.Workflow.GetAgentNodes()[0],
             new UserInputRequest
             {
                 Question = "How should I proceed?",
@@ -76,33 +76,40 @@ public sealed class CopilotUserInputCoordinatorTests
         Assert.Contains("is not pending", error.Message);
     }
 
-    private static PatternAgentDefinitionDto CreateAgent(string id, string name)
-    {
-        return new PatternAgentDefinitionDto
-        {
-            Id = id,
-            Name = name,
-            Model = "gpt-5.4",
-            Instructions = "Help with the request.",
-        };
-    }
-
     private static RunTurnCommandDto CreateUserInputCommand()
     {
         return new RunTurnCommandDto
         {
             RequestId = "turn-1",
             SessionId = "session-1",
-            Pattern = new PatternDefinitionDto
+            Workflow = new WorkflowDefinitionDto
             {
-                Id = "pattern-1",
-                Name = "User Input Pattern",
-                Mode = "single",
-                Availability = "available",
-                Agents =
-                [
-                    CreateAgent("agent-1", "Primary"),
-                ],
+                Id = "workflow-1",
+                Name = "User Input Workflow",
+                Graph = new WorkflowGraphDto
+                {
+                    Nodes =
+                    [
+                        new WorkflowNodeDto
+                        {
+                            Id = "agent-1",
+                            Kind = "agent",
+                            Label = "Primary",
+                            Config = new WorkflowNodeConfigDto
+                            {
+                                Kind = "agent",
+                                Id = "agent-1",
+                                Name = "Primary",
+                                Model = "gpt-5.4",
+                                Instructions = "Help with the request.",
+                            },
+                        },
+                    ],
+                },
+                Settings = new WorkflowSettingsDto
+                {
+                    OrchestrationMode = "single",
+                },
             },
         };
     }

@@ -11,7 +11,7 @@ internal sealed class CopilotExitPlanModeCoordinator
 
     public ExitPlanModeRequestedEventDto RecordExitPlanModeRequest(
         RunTurnCommandDto command,
-        PatternAgentDefinitionDto agent,
+        WorkflowNodeDto agent,
         ExitPlanModeRequestedEvent request)
     {
         ArgumentNullException.ThrowIfNull(command);
@@ -33,7 +33,7 @@ internal sealed class CopilotExitPlanModeCoordinator
 
     internal static ExitPlanModeRequestedEventDto BuildExitPlanModeRequestedEvent(
         RunTurnCommandDto command,
-        PatternAgentDefinitionDto agent,
+        WorkflowNodeDto agent,
         ExitPlanModeRequestedEvent request)
     {
         ArgumentNullException.ThrowIfNull(command);
@@ -45,8 +45,8 @@ internal sealed class CopilotExitPlanModeCoordinator
 
         string exitPlanId = NormalizeOptionalString(requestData.RequestId)
             ?? throw new InvalidOperationException("Exit plan mode request ID is required.");
-        string? normalizedAgentId = NormalizeOptionalString(agent.Id);
-        string? normalizedAgentName = NormalizeOptionalString(agent.Name) ?? normalizedAgentId;
+        string? normalizedAgentId = NormalizeOptionalString(agent.GetAgentId());
+        string? normalizedAgentName = NormalizeOptionalString(agent.GetAgentName()) ?? normalizedAgentId;
 
         return new ExitPlanModeRequestedEventDto
         {

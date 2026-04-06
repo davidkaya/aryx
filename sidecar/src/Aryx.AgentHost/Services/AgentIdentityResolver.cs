@@ -10,14 +10,14 @@ internal static class AgentIdentityResolver
     private const string GenericAssistantIdentifier = "assistant";
 
     public static bool TryResolveKnownAgentIdentity(
-        PatternDefinitionDto pattern,
+        WorkflowDefinitionDto workflow,
         string? agentIdentifier,
         out AgentIdentity agent)
     {
         agent = default;
 
-        PatternAgentDefinitionDto? match = FindKnownAgent(pattern, agentIdentifier)
-            ?? ResolveSingleAgentAssistantAlias(pattern, agentIdentifier);
+        WorkflowNodeDto? match = FindKnownAgent(workflow, agentIdentifier)
+            ?? ResolveSingleAgentAssistantAlias(workflow, agentIdentifier);
         if (match is null)
         {
             return false;
@@ -28,12 +28,12 @@ internal static class AgentIdentityResolver
     }
 
     public static bool TryResolveObservedAgentIdentity(
-        PatternDefinitionDto pattern,
+        WorkflowDefinitionDto workflow,
         string? agentIdentifier,
         AgentIdentity? fallbackAgent,
         out AgentIdentity agent)
     {
-        if (TryResolveKnownAgentIdentity(pattern, agentIdentifier, out agent))
+        if (TryResolveKnownAgentIdentity(workflow, agentIdentifier, out agent))
         {
             return true;
         }
@@ -49,13 +49,13 @@ internal static class AgentIdentityResolver
     }
 
     public static AgentIdentity ResolveAgentIdentity(
-        PatternDefinitionDto pattern,
+        WorkflowDefinitionDto workflow,
         string? agentId,
         string? agentName)
     {
-        PatternAgentDefinitionDto? match = FindKnownAgent(pattern, agentId)
-            ?? FindKnownAgent(pattern, agentName)
-            ?? ResolveSingleAgentAssistantAlias(pattern, agentId, agentName);
+        WorkflowNodeDto? match = FindKnownAgent(workflow, agentId)
+            ?? FindKnownAgent(workflow, agentName)
+            ?? ResolveSingleAgentAssistantAlias(workflow, agentId, agentName);
 
         return match is not null
             ? ToAgentIdentity(match)
@@ -63,16 +63,16 @@ internal static class AgentIdentityResolver
     }
 
     public static string ResolveDisplayAuthorName(
-        PatternDefinitionDto pattern,
+        WorkflowDefinitionDto workflow,
         string? primaryIdentifier,
         string? fallbackIdentifier = null)
     {
-        if (TryResolveKnownAgentIdentity(pattern, primaryIdentifier, out AgentIdentity primaryAgent))
+        if (TryResolveKnownAgentIdentity(workflow, primaryIdentifier, out AgentIdentity primaryAgent))
         {
             return primaryAgent.AgentName;
         }
 
-        if (TryResolveKnownAgentIdentity(pattern, fallbackIdentifier, out AgentIdentity fallbackAgent))
+        if (TryResolveKnownAgentIdentity(workflow, fallbackIdentifier, out AgentIdentity fallbackAgent))
         {
             return fallbackAgent.AgentName;
         }
@@ -98,26 +98,23 @@ internal static class AgentIdentityResolver
             StringComparison.Ordinal);
     }
 
-    private static PatternAgentDefinitionDto? ResolveSingleAgentAssistantAlias(
-        PatternDefinitionDto pattern,
+    private static WorkflowNodeDto? ResolveSingleAgentAssistantAlias(
+        WorkflowDefinitionDto workflow,
         params string?[] agentIdentifiers)
     {
-        return pattern.Agents.Count == 1 && agentIdentifiers.Any(IsGenericAssistantIdentifier)
-            ? pattern.Agents[0]
+        IReadOnlyList<WorkflowNodeDto> agentNodes = workflow.GetAgentNodes();
+        return agentNodes.Count == 1 && agentIdentifiers.Any(IsGenericAssistantIdentifier)
+            ? agentNodes[0]
             : null;
     }
 
-    private static PatternAgentDefinitionDto? FindKnownAgent(PatternDefinitionDto pattern, string? candidate)
+    private static WorkflowNodeDto? FindKnownAgent(WorkflowDefinitionDto workflow, string? candidate)
     {
-        return pattern.Agents.FirstOrDefault(agent => MatchesAgent(agent, candidate));
+        return workflow.GetAgentNodes().FirstOrDefault(agent => MatchesAgent(agent, candidate));
     }
 
-    private static AgentIdentity ToAgentIdentity(PatternAgentDefinitionDto agent)
-    {
-        return new AgentIdentity(
-            agent.Id,
-            string.IsNullOrWhiteSpace(agent.Name) ? agent.Id : agent.Name);
-    }
+    private static AgentIdentity ToAgentIdentity(WorkflowNodeDto agent)
+        => new(agent.GetAgentId(), agent.GetAgentName());
 
     private static AgentIdentity CreateFallbackIdentity(string? agentId, string? agentName)
     {
@@ -131,22 +128,24 @@ internal static class AgentIdentityResolver
         return new AgentIdentity(resolvedAgentId, resolvedAgentName);
     }
 
-    private static bool MatchesAgent(PatternAgentDefinitionDto agent, string? candidate)
+    private static bool MatchesAgent(WorkflowNodeDto agent, string? candidate)
     {
         if (string.IsNullOrWhiteSpace(candidate))
         {
             return false;
         }
 
-        if (string.Equals(agent.Id, candidate, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(agent.Name, candidate, StringComparison.OrdinalIgnoreCase))
+        string agentId = agent.GetAgentId();
+        string agentName = agent.GetAgentName();
+        if (string.Equals(agentId, candidate, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(agentName, candidate, StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }
 
         string normalizedCandidate = NormalizeComparisonKey(candidate);
-        string normalizedId = NormalizeComparisonKey(agent.Id);
-        string normalizedName = NormalizeComparisonKey(agent.Name);
+        string normalizedId = NormalizeComparisonKey(agentId);
+        string normalizedName = NormalizeComparisonKey(agentName);
         if (normalizedCandidate.Length == 0)
         {
             return false;

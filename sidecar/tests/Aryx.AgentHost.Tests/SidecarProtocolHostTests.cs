@@ -63,52 +63,6 @@ public sealed class SidecarProtocolHostTests
     }
 
     [Fact]
-    public async Task ValidatePatternCommand_ReturnsIssuesAndCompletion()
-    {
-        IReadOnlyList<JsonElement> events = await RunHostAsync(new ValidatePatternCommandDto
-        {
-            Type = "validate-pattern",
-            RequestId = "validate-1",
-            Pattern = new PatternDefinitionDto
-            {
-                Id = "single-pattern",
-                Name = "",
-                Mode = "single",
-                Availability = "available",
-                Agents =
-                [
-                    CreateAgent(),
-                    CreateAgent(id: "agent-2", name: "Reviewer", model: ""),
-                ],
-            },
-        });
-
-        Assert.Collection(
-            events,
-            validationEvent =>
-            {
-                Assert.Equal("pattern-validation", validationEvent.GetProperty("type").GetString());
-                Assert.Equal("validate-1", validationEvent.GetProperty("requestId").GetString());
-
-                JsonElement[] issues = validationEvent.GetProperty("issues").EnumerateArray().ToArray();
-                Assert.Contains(issues, issue =>
-                    issue.GetProperty("field").GetString() == "name"
-                    && issue.GetProperty("message").GetString() == "Pattern name is required.");
-                Assert.Contains(issues, issue =>
-                    issue.GetProperty("field").GetString() == "agents"
-                    && issue.GetProperty("message").GetString() == "Single-agent chat requires exactly one agent.");
-                Assert.Contains(issues, issue =>
-                    issue.GetProperty("field").GetString() == "agents.model"
-                    && issue.GetProperty("message").GetString() == "Agent \"Reviewer\" requires a model identifier.");
-            },
-            completionEvent =>
-            {
-                Assert.Equal("command-complete", completionEvent.GetProperty("type").GetString());
-                Assert.Equal("validate-1", completionEvent.GetProperty("requestId").GetString());
-            });
-    }
-
-    [Fact]
     public async Task ValidateWorkflowCommand_ReturnsIssuesAndCompletion()
     {
         IReadOnlyList<JsonElement> events = await RunHostAsync(new ValidateWorkflowCommandDto
@@ -182,7 +136,7 @@ public sealed class SidecarProtocolHostTests
     public async Task RunTurnCommand_ReturnsActivityEventsAndCompletion()
     {
         SidecarProtocolHost host = new(
-            new PatternValidator(),
+            new WorkflowValidator(),
             new FakeWorkflowRunner(async (command, onDelta, onActivity, onApproval, onUserInput, onMcpOAuthRequired, onExitPlanMode, cancellationToken) =>
             {
                 await onActivity(new AgentActivityEventDto
@@ -230,37 +184,7 @@ public sealed class SidecarProtocolHostTests
                 ];
             }));
 
-        IReadOnlyList<JsonElement> events = await RunHostAsync(
-            new RunTurnCommandDto
-            {
-                Type = "run-turn",
-                RequestId = "turn-1",
-                SessionId = "session-1",
-                ProjectPath = "C:\\workspace\\project",
-                Pattern = new PatternDefinitionDto
-                {
-                    Id = "pattern-1",
-                    Name = "Single Agent",
-                    Mode = "single",
-                    Availability = "available",
-                    Agents =
-                    [
-                        CreateAgent(name: "Primary"),
-                    ],
-                },
-                Messages =
-                [
-                    new ChatMessageDto
-                    {
-                        Id = "user-1",
-                        Role = "user",
-                        AuthorName = "You",
-                        Content = "Hello",
-                        CreatedAt = "2026-01-01T00:00:00.0000000Z",
-                    },
-                ],
-            },
-            host);
+        IReadOnlyList<JsonElement> events = await RunHostAsync(CreateRunTurnCommand(), host);
 
         Assert.Collection(
             events,
@@ -306,7 +230,7 @@ public sealed class SidecarProtocolHostTests
     public async Task RunTurnCommand_ReturnsWorkflowDiagnosticEventsAndCompletion()
     {
         SidecarProtocolHost host = new(
-            new PatternValidator(),
+            new WorkflowValidator(),
             new FakeWorkflowRunner(async (command, onDelta, onActivity, onApproval, onUserInput, onMcpOAuthRequired, onExitPlanMode, cancellationToken) =>
             {
                 await onActivity(new WorkflowDiagnosticEventDto
@@ -327,25 +251,7 @@ public sealed class SidecarProtocolHostTests
             }));
 
         IReadOnlyList<JsonElement> events = await RunHostAsync(
-            new RunTurnCommandDto
-            {
-                Type = "run-turn",
-                RequestId = "turn-diagnostic",
-                SessionId = "session-1",
-                ProjectPath = "C:\\workspace\\project",
-                Pattern = new PatternDefinitionDto
-                {
-                    Id = "pattern-1",
-                    Name = "Single Agent",
-                    Mode = "single",
-                    Availability = "available",
-                    Agents =
-                    [
-                        CreateAgent(name: "Primary"),
-                    ],
-                },
-                Messages = [],
-            },
+            CreateRunTurnCommand(requestId: "turn-diagnostic", messages: []),
             host);
 
         Assert.Collection(
@@ -378,7 +284,7 @@ public sealed class SidecarProtocolHostTests
     {
         string? capturedMode = null;
         SidecarProtocolHost host = new(
-            new PatternValidator(),
+            new WorkflowValidator(),
             new FakeWorkflowRunner(async (command, onDelta, onActivity, onApproval, onUserInput, onMcpOAuthRequired, onExitPlanMode, cancellationToken) =>
             {
                 capturedMode = command.Mode;
@@ -386,25 +292,7 @@ public sealed class SidecarProtocolHostTests
             }));
 
         await RunHostAsync(
-            new RunTurnCommandDto
-            {
-                Type = "run-turn",
-                RequestId = "turn-plan",
-                SessionId = "session-1",
-                ProjectPath = "C:\\workspace\\project",
-                Mode = "plan",
-                Pattern = new PatternDefinitionDto
-                {
-                    Id = "pattern-1",
-                    Name = "Single Agent",
-                    Mode = "single",
-                    Availability = "available",
-                    Agents =
-                    [
-                        CreateAgent(name: "Primary"),
-                    ],
-                },
-            },
+            CreateRunTurnCommand(requestId: "turn-plan", interactionMode: "plan"),
             host);
 
         Assert.Equal("plan", capturedMode);
@@ -414,7 +302,7 @@ public sealed class SidecarProtocolHostTests
     public async Task RunTurnCommand_ReturnsApprovalEvents()
     {
         SidecarProtocolHost host = new(
-            new PatternValidator(),
+            new WorkflowValidator(),
             new FakeWorkflowRunner(async (command, onDelta, onActivity, onApproval, onUserInput, onMcpOAuthRequired, onExitPlanMode, cancellationToken) =>
             {
                 await onApproval(new ApprovalRequestedEventDto
@@ -441,24 +329,7 @@ public sealed class SidecarProtocolHostTests
             }));
 
         IReadOnlyList<JsonElement> events = await RunHostAsync(
-            new RunTurnCommandDto
-            {
-                Type = "run-turn",
-                RequestId = "turn-approval",
-                SessionId = "session-1",
-                ProjectPath = "C:\\workspace\\project",
-                Pattern = new PatternDefinitionDto
-                {
-                    Id = "pattern-1",
-                    Name = "Single Agent",
-                    Mode = "single",
-                    Availability = "available",
-                    Agents =
-                    [
-                        CreateAgent(name: "Primary"),
-                    ],
-                },
-            },
+            CreateRunTurnCommand(requestId: "turn-approval"),
             host);
 
         Assert.Collection(
@@ -492,7 +363,7 @@ public sealed class SidecarProtocolHostTests
     public async Task RunTurnCommand_ReturnsUserInputEvents()
     {
         SidecarProtocolHost host = new(
-            new PatternValidator(),
+            new WorkflowValidator(),
             new FakeWorkflowRunner(async (command, onDelta, onActivity, onApproval, onUserInput, onMcpOAuthRequired, onExitPlanMode, cancellationToken) =>
             {
                 await onUserInput(new UserInputRequestedEventDto
@@ -512,24 +383,7 @@ public sealed class SidecarProtocolHostTests
             }));
 
         IReadOnlyList<JsonElement> events = await RunHostAsync(
-            new RunTurnCommandDto
-            {
-                Type = "run-turn",
-                RequestId = "turn-user-input",
-                SessionId = "session-1",
-                ProjectPath = "C:\\workspace\\project",
-                Pattern = new PatternDefinitionDto
-                {
-                    Id = "pattern-1",
-                    Name = "Single Agent",
-                    Mode = "single",
-                    Availability = "available",
-                    Agents =
-                    [
-                        CreateAgent(name: "Primary"),
-                    ],
-                },
-            },
+            CreateRunTurnCommand(requestId: "turn-user-input"),
             host);
 
         Assert.Collection(
@@ -565,7 +419,7 @@ public sealed class SidecarProtocolHostTests
     public async Task RunTurnCommand_ReturnsMcpOauthRequiredEvents()
     {
         SidecarProtocolHost host = new(
-            new PatternValidator(),
+            new WorkflowValidator(),
             new FakeWorkflowRunner(async (command, onDelta, onActivity, onApproval, onUserInput, onMcpOAuthRequired, onExitPlanMode, cancellationToken) =>
             {
                 await onMcpOAuthRequired(new McpOauthRequiredEventDto
@@ -623,7 +477,7 @@ public sealed class SidecarProtocolHostTests
     public async Task RunTurnCommand_ReturnsExitPlanModeEvents()
     {
         SidecarProtocolHost host = new(
-            new PatternValidator(),
+            new WorkflowValidator(),
             new FakeWorkflowRunner(async (command, onDelta, onActivity, onApproval, onUserInput, onMcpOAuthRequired, onExitPlanMode, cancellationToken) =>
             {
                 await onExitPlanMode(new ExitPlanModeRequestedEventDto
@@ -644,25 +498,7 @@ public sealed class SidecarProtocolHostTests
             }));
 
         IReadOnlyList<JsonElement> events = await RunHostAsync(
-            new RunTurnCommandDto
-            {
-                Type = "run-turn",
-                RequestId = "turn-plan-mode",
-                SessionId = "session-1",
-                ProjectPath = "C:\\workspace\\project",
-                Mode = "plan",
-                Pattern = new PatternDefinitionDto
-                {
-                    Id = "pattern-1",
-                    Name = "Single Agent",
-                    Mode = "single",
-                    Availability = "available",
-                    Agents =
-                    [
-                        CreateAgent(name: "Primary"),
-                    ],
-                },
-            },
+            CreateRunTurnCommand(requestId: "turn-plan-mode", interactionMode: "plan"),
             host);
 
         Assert.Collection(
@@ -698,7 +534,7 @@ public sealed class SidecarProtocolHostTests
     public async Task CancelTurnCommand_CancelsInProgressTurnAndCompletesBothCommands()
     {
         SidecarProtocolHost host = new(
-            new PatternValidator(),
+            new WorkflowValidator(),
             new FakeWorkflowRunner(async (command, onDelta, onActivity, onApproval, onUserInput, onMcpOAuthRequired, onExitPlanMode, cancellationToken) =>
             {
                 await Task.Delay(Timeout.Infinite, cancellationToken);
@@ -746,7 +582,7 @@ public sealed class SidecarProtocolHostTests
     public async Task CancelTurnCommand_AfterTurnCompletion_IsNoOp()
     {
         SidecarProtocolHost host = new(
-            new PatternValidator(),
+            new WorkflowValidator(),
             new FakeWorkflowRunner(async (command, onDelta, onActivity, onApproval, onUserInput, onMcpOAuthRequired, onExitPlanMode, cancellationToken) => []));
 
         await RunHostAsync(CreateRunTurnCommand(requestId: "turn-completed"), host);
@@ -768,7 +604,7 @@ public sealed class SidecarProtocolHostTests
     {
         ResolveApprovalCommandDto? captured = null;
         SidecarProtocolHost host = new(
-            new PatternValidator(),
+            new WorkflowValidator(),
             new FakeWorkflowRunner(
                 handler: async (command, onDelta, onActivity, onApproval, onUserInput, onMcpOAuthRequired, onExitPlanMode, cancellationToken) => [],
                 resolveApprovalHandler: (command, cancellationToken) =>
@@ -801,7 +637,7 @@ public sealed class SidecarProtocolHostTests
     {
         ResolveUserInputCommandDto? captured = null;
         SidecarProtocolHost host = new(
-            new PatternValidator(),
+            new WorkflowValidator(),
             new FakeWorkflowRunner(
                 handler: async (command, onDelta, onActivity, onApproval, onUserInput, onMcpOAuthRequired, onExitPlanMode, cancellationToken) => [],
                 resolveUserInputHandler: (command, cancellationToken) =>
@@ -925,7 +761,7 @@ public sealed class SidecarProtocolHostTests
     public async Task ListSessionsCommand_ReturnsSessionsListedEvent()
     {
         SidecarProtocolHost host = new(
-            new PatternValidator(),
+            new WorkflowValidator(),
             sessionManager: new FakeSessionManager
             {
                 Sessions =
@@ -972,7 +808,7 @@ public sealed class SidecarProtocolHostTests
             ],
         };
         SidecarProtocolHost host = new(
-            new PatternValidator(),
+            new WorkflowValidator(),
             sessionManager: sessionManager);
 
         IReadOnlyList<JsonElement> events = await RunHostAsync(
@@ -995,7 +831,7 @@ public sealed class SidecarProtocolHostTests
     public async Task GetQuotaCommand_ReturnsQuotaResultEvent()
     {
         SidecarProtocolHost host = new(
-            new PatternValidator(),
+            new WorkflowValidator(),
             sessionManager: new FakeSessionManager
             {
                 QuotaSnapshots = new Dictionary<string, QuotaSnapshotDto>(StringComparer.Ordinal)
@@ -1037,7 +873,7 @@ public sealed class SidecarProtocolHostTests
             await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
             return [];
         });
-        SidecarProtocolHost host = new(new PatternValidator(), runner);
+        SidecarProtocolHost host = new(new WorkflowValidator(), runner);
 
         IReadOnlyList<JsonElement> events = await RunHostAsync(
         [
@@ -1098,7 +934,7 @@ public sealed class SidecarProtocolHostTests
     private static SidecarProtocolHost CreateHostForTests()
     {
         return new SidecarProtocolHost(
-            new PatternValidator(),
+            new WorkflowValidator(),
             capabilitiesProvider: _ => Task.FromResult(new SidecarCapabilitiesDto
             {
                 Modes = new Dictionary<string, SidecarModeCapabilityDto>(StringComparer.OrdinalIgnoreCase)
@@ -1176,24 +1012,35 @@ public sealed class SidecarProtocolHostTests
         return events;
     }
 
-    private static PatternAgentDefinitionDto CreateAgent(
+    private static WorkflowNodeDto CreateAgent(
         string id = "agent-1",
         string name = "Primary",
         string model = "gpt-5.4",
         string instructions = "Help with the user's request.")
     {
-        return new PatternAgentDefinitionDto
+        return new WorkflowNodeDto
         {
             Id = id,
-            Name = name,
-            Model = model,
-            Instructions = instructions,
+            Kind = "agent",
+            Label = name,
+            Config = new WorkflowNodeConfigDto
+            {
+                Kind = "agent",
+                Id = id,
+                Name = name,
+                Model = model,
+                Instructions = instructions,
+            },
         };
     }
 
     private static RunTurnCommandDto CreateRunTurnCommand(
         string requestId = "turn-1",
-        string sessionId = "session-1")
+        string sessionId = "session-1",
+        string mode = "single",
+        string interactionMode = "interactive",
+        IReadOnlyList<WorkflowNodeDto>? agents = null,
+        IReadOnlyList<ChatMessageDto>? messages = null)
     {
         return new RunTurnCommandDto
         {
@@ -1201,18 +1048,9 @@ public sealed class SidecarProtocolHostTests
             RequestId = requestId,
             SessionId = sessionId,
             ProjectPath = "C:\\workspace\\project",
-            Pattern = new PatternDefinitionDto
-            {
-                Id = "pattern-1",
-                Name = "Single Agent",
-                Mode = "single",
-                Availability = "available",
-                Agents =
-                [
-                    CreateAgent(name: "Primary"),
-                ],
-            },
-            Messages =
+            Mode = interactionMode,
+            Workflow = CreateWorkflow(mode, agents),
+            Messages = messages ??
             [
                 new ChatMessageDto
                 {
@@ -1223,6 +1061,25 @@ public sealed class SidecarProtocolHostTests
                     CreatedAt = "2026-01-01T00:00:00.0000000Z",
                 },
             ],
+        };
+    }
+
+    private static WorkflowDefinitionDto CreateWorkflow(
+        string mode = "single",
+        IReadOnlyList<WorkflowNodeDto>? agents = null)
+    {
+        return new WorkflowDefinitionDto
+        {
+            Id = $"workflow-{mode}",
+            Name = "Single Agent",
+            Graph = new WorkflowGraphDto
+            {
+                Nodes = [.. agents ?? [CreateAgent(name: "Primary")]],
+            },
+            Settings = new WorkflowSettingsDto
+            {
+                OrchestrationMode = mode,
+            },
         };
     }
 
@@ -1325,3 +1182,4 @@ public sealed class SidecarProtocolHostTests
         }
     }
 }
+

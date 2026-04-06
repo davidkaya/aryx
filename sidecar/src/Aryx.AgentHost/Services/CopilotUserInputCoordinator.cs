@@ -32,7 +32,7 @@ internal sealed class CopilotUserInputCoordinator
 
     public async Task<UserInputResponse> RequestUserInputAsync(
         RunTurnCommandDto command,
-        PatternAgentDefinitionDto agent,
+        WorkflowNodeDto agent,
         UserInputRequest request,
         UserInputInvocation invocation,
         Func<UserInputRequestedEventDto, Task> onUserInput,
@@ -46,8 +46,8 @@ internal sealed class CopilotUserInputCoordinator
 
         return await RequestUserInputCoreAsync(
             command,
-            agent.Id,
-            agent.Name,
+            agent.GetAgentId(),
+            agent.GetAgentName(),
             request,
             onUserInput,
             cancellationToken).ConfigureAwait(false);
@@ -74,7 +74,7 @@ internal sealed class CopilotUserInputCoordinator
 
     internal static UserInputRequestedEventDto BuildUserInputRequestedEvent(
         RunTurnCommandDto command,
-        PatternAgentDefinitionDto agent,
+        WorkflowNodeDto agent,
         UserInputRequest request,
         string userInputId)
     {
@@ -82,8 +82,8 @@ internal sealed class CopilotUserInputCoordinator
         ArgumentNullException.ThrowIfNull(agent);
         ArgumentNullException.ThrowIfNull(request);
 
-        string? normalizedAgentId = NormalizeOptionalString(agent.Id);
-        string? normalizedAgentName = NormalizeOptionalString(agent.Name) ?? normalizedAgentId;
+        string? normalizedAgentId = NormalizeOptionalString(agent.GetAgentId());
+        string? normalizedAgentName = NormalizeOptionalString(agent.GetAgentName()) ?? normalizedAgentId;
 
         return new UserInputRequestedEventDto
         {

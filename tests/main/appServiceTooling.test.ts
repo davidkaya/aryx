@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from 'bun:test';
 
 import type { RunTurnCommand } from '@shared/contracts/sidecar';
-import type { PatternDefinition } from '@shared/domain/pattern';
+import type { WorkflowDefinition } from '@shared/domain/workflow';
 import { createScratchpadProject } from '@shared/domain/project';
 import type { SessionRecord } from '@shared/domain/session';
 import { createWorkspaceSeed, type WorkspaceState } from '@shared/domain/workspace';
@@ -43,11 +43,11 @@ const { AryxAppService } = await import('@main/AryxAppService');
 
 function createWorkspaceFixture(): {
   workspace: WorkspaceState;
-  pattern: PatternDefinition;
+  pattern: WorkflowDefinition;
   session: SessionRecord;
 } {
   const workspace = createWorkspaceSeed();
-  const pattern = workspace.patterns.find((candidate) => candidate.mode === 'single');
+  const pattern = workspace.workflows.find((candidate) => candidate.settings.orchestrationMode === 'single');
   if (!pattern) {
     throw new Error('Expected the workspace seed to include a single-agent pattern.');
   }
@@ -56,7 +56,7 @@ function createWorkspaceFixture(): {
   const session: SessionRecord = {
     id: 'session-scratchpad',
     projectId: project.id,
-    patternId: pattern.id,
+    workflowId: pattern.id,
     title: 'Scratchpad',
     createdAt: TIMESTAMP,
     updatedAt: TIMESTAMP,
@@ -69,7 +69,7 @@ function createWorkspaceFixture(): {
   workspace.projects = [project];
   workspace.sessions = [session];
   workspace.selectedProjectId = project.id;
-  workspace.selectedPatternId = pattern.id;
+  workspace.selectedWorkflowId = pattern.id;
   workspace.selectedSessionId = session.id;
   workspace.settings.tooling = {
     mcpServers: [
@@ -105,7 +105,7 @@ function createWorkspaceFixture(): {
 
 function createService(
   workspace: WorkspaceState,
-  pattern: PatternDefinition,
+  pattern: WorkflowDefinition,
   options?: {
     captureRunTurn?: (command: RunTurnCommand) => void;
     knownApprovalToolNames?: string[];

@@ -10,7 +10,6 @@ describe('session workspace helpers', () => {
   function createWorkspace(): WorkspaceState {
     return {
       projects: [],
-      patterns: [],
       workflows: [],
       workflowTemplates: [],
       settings: createWorkspaceSettings(),
@@ -18,7 +17,7 @@ describe('session workspace helpers', () => {
         {
           id: 'session-1',
           projectId: 'project-1',
-          patternId: 'pattern-1',
+          workflowId: 'workflow-1',
           title: 'Session',
           createdAt: '2026-03-23T00:00:00.000Z',
           updatedAt: '2026-03-23T00:00:00.000Z',
@@ -196,9 +195,9 @@ describe('session workspace helpers', () => {
       projectId: 'project-1',
       projectPath: 'C:\\workspace\\alpha',
       workspaceKind: 'project',
-      patternId: 'pattern-1',
-      patternName: 'Sequential Review',
-      patternMode: 'sequential',
+      workflowId: 'workflow-1',
+      workflowName: 'Sequential Review',
+      workflowMode: 'sequential',
       triggerMessageId: 'msg-user-1',
       startedAt: '2026-03-23T00:00:01.000Z',
       status: 'running',

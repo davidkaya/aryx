@@ -14,7 +14,7 @@ public sealed class CopilotMcpOAuthCoordinatorTests
 
         McpOauthRequiredEventDto oauthEvent = coordinator.BuildMcpOauthRequiredEvent(
             command,
-            command.Pattern.Agents[0],
+            command.Workflow.GetAgentNodes()[0],
             new McpOauthRequiredEvent
             {
                 Data = new McpOauthRequiredData
@@ -49,23 +49,36 @@ public sealed class CopilotMcpOAuthCoordinatorTests
         {
             RequestId = "turn-1",
             SessionId = "session-1",
-            Pattern = new PatternDefinitionDto
+            Workflow = new WorkflowDefinitionDto
             {
-                Id = "pattern-1",
-                Name = "MCP OAuth Pattern",
-                Mode = "single",
-                Availability = "available",
-                Agents =
-                [
-                    new PatternAgentDefinitionDto
-                    {
-                        Id = "agent-1",
-                        Name = "Primary",
-                        Model = "gpt-5.4",
-                        Instructions = "Help with the request.",
-                    },
-                ],
+                Id = "workflow-1",
+                Name = "MCP OAuth Workflow",
+                Graph = new WorkflowGraphDto
+                {
+                    Nodes =
+                    [
+                        new WorkflowNodeDto
+                        {
+                            Id = "agent-1",
+                            Kind = "agent",
+                            Label = "Primary",
+                            Config = new WorkflowNodeConfigDto
+                            {
+                                Kind = "agent",
+                                Id = "agent-1",
+                                Name = "Primary",
+                                Model = "gpt-5.4",
+                                Instructions = "Help with the request.",
+                            },
+                        },
+                    ],
+                },
+                Settings = new WorkflowSettingsDto
+                {
+                    OrchestrationMode = "single",
+                },
             },
         };
     }
 }
+

@@ -65,12 +65,12 @@ internal sealed class CopilotTurnExecutionState
         }
     }
 
-    public void ObserveSessionEvent(PatternAgentDefinitionDto agentDefinition, SessionEvent sessionEvent)
+    public void ObserveSessionEvent(WorkflowNodeDto agentDefinition, SessionEvent sessionEvent)
     {
         AgentIdentity agent = AgentIdentityResolver.ResolveAgentIdentity(
-            _command.Pattern,
-            agentDefinition.Id,
-            agentDefinition.Name);
+            _command.Workflow,
+            agentDefinition.GetAgentId(),
+            agentDefinition.GetAgentName());
 
         switch (sessionEvent)
         {

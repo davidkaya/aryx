@@ -10,7 +10,7 @@ function createSession(
   return {
     id: 'session-1',
     projectId: 'project-1',
-    patternId: 'pattern-1',
+    workflowId: 'pattern-1',
     title: 'Test session',
     createdAt: '2026-03-23T00:00:00.000Z',
     updatedAt: '2026-03-23T00:00:00.000Z',

@@ -95,23 +95,10 @@ public sealed class CopilotWorkflowRunnerTests
     [Fact]
     public void ProjectCompletedMessages_FallsBackToStreamingSegmentsWhenWorkflowOutputIsMissing()
     {
-        RunTurnCommandDto command = new()
-        {
-            RequestId = "turn-1",
-            SessionId = "session-1",
-            Pattern = new PatternDefinitionDto
-            {
-                Id = "pattern-concurrent",
-                Name = "Concurrent Brainstorm",
-                Mode = "concurrent",
-                Availability = "available",
-                Agents =
-                [
-                    CreateAgent(id: "agent-concurrent-architect", name: "Architect"),
-                    CreateAgent(id: "agent-concurrent-implementer", name: "Implementer"),
-                ],
-            },
-        };
+        RunTurnCommandDto command = CreateCommand(
+            "concurrent",
+            CreateAgent(id: "agent-concurrent-architect", name: "Architect"),
+            CreateAgent(id: "agent-concurrent-implementer", name: "Implementer"));
 
         IReadOnlyList<ChatMessageDto> messages = WorkflowTranscriptProjector.ProjectCompletedMessages(
             command,
@@ -140,22 +127,9 @@ public sealed class CopilotWorkflowRunnerTests
     [Fact]
     public void ProjectCompletedMessages_CanonicalizesWorkflowOutputAuthorNames()
     {
-        RunTurnCommandDto command = new()
-        {
-            RequestId = "turn-1",
-            SessionId = "session-1",
-            Pattern = new PatternDefinitionDto
-            {
-                Id = "pattern-single",
-                Name = "Single Agent",
-                Mode = "single",
-                Availability = "available",
-                Agents =
-                [
-                    CreateAgent(id: "agent-single-primary", name: "Primary Agent"),
-                ],
-            },
-        };
+        RunTurnCommandDto command = CreateCommand(
+            "single",
+            CreateAgent(id: "agent-single-primary", name: "Primary Agent"));
 
         IReadOnlyList<ChatMessageDto> messages = WorkflowTranscriptProjector.ProjectCompletedMessages(
             command,
@@ -178,22 +152,9 @@ public sealed class CopilotWorkflowRunnerTests
     [Fact]
     public void ProjectCompletedMessages_UsesFinalAssistantPayloadWhenStreamingTextIsMissing()
     {
-        RunTurnCommandDto command = new()
-        {
-            RequestId = "turn-1",
-            SessionId = "session-1",
-            Pattern = new PatternDefinitionDto
-            {
-                Id = "pattern-single",
-                Name = "Single Agent",
-                Mode = "single",
-                Availability = "available",
-                Agents =
-                [
-                    CreateAgent(id: "agent-single-primary", name: "Primary Agent"),
-                ],
-            },
-        };
+        RunTurnCommandDto command = CreateCommand(
+            "single",
+            CreateAgent(id: "agent-single-primary", name: "Primary Agent"));
 
         IReadOnlyList<ChatMessageDto> messages = WorkflowTranscriptProjector.ProjectCompletedMessages(
             command,
@@ -222,24 +183,11 @@ public sealed class CopilotWorkflowRunnerTests
     [Fact]
     public void ProjectCompletedMessages_PreservesSequentialConversationHistory()
     {
-        RunTurnCommandDto command = new()
-        {
-            RequestId = "turn-1",
-            SessionId = "session-1",
-            Pattern = new PatternDefinitionDto
-            {
-                Id = "pattern-sequential",
-                Name = "Sequential Trio Review",
-                Mode = "sequential",
-                Availability = "available",
-                Agents =
-                [
-                    CreateAgent(id: "agent-sequential-analyst", name: "Analyst"),
-                    CreateAgent(id: "agent-sequential-builder", name: "Builder"),
-                    CreateAgent(id: "agent-sequential-reviewer", name: "Reviewer"),
-                ],
-            },
-        };
+        RunTurnCommandDto command = CreateCommand(
+            "sequential",
+            CreateAgent(id: "agent-sequential-analyst", name: "Analyst"),
+            CreateAgent(id: "agent-sequential-builder", name: "Builder"),
+            CreateAgent(id: "agent-sequential-reviewer", name: "Reviewer"));
 
         IReadOnlyList<ChatMessageDto> messages = WorkflowTranscriptProjector.ProjectCompletedMessages(
             command,
@@ -272,24 +220,11 @@ public sealed class CopilotWorkflowRunnerTests
     [Fact]
     public void ProjectCompletedMessages_PreservesConcurrentAggregatedResponses()
     {
-        RunTurnCommandDto command = new()
-        {
-            RequestId = "turn-1",
-            SessionId = "session-1",
-            Pattern = new PatternDefinitionDto
-            {
-                Id = "pattern-concurrent",
-                Name = "Concurrent Brainstorm",
-                Mode = "concurrent",
-                Availability = "available",
-                Agents =
-                [
-                    CreateAgent(id: "agent-concurrent-architect", name: "Architect"),
-                    CreateAgent(id: "agent-concurrent-product", name: "Product"),
-                    CreateAgent(id: "agent-concurrent-implementer", name: "Implementer"),
-                ],
-            },
-        };
+        RunTurnCommandDto command = CreateCommand(
+            "concurrent",
+            CreateAgent(id: "agent-concurrent-architect", name: "Architect"),
+            CreateAgent(id: "agent-concurrent-product", name: "Product"),
+            CreateAgent(id: "agent-concurrent-implementer", name: "Implementer"));
 
         IReadOnlyList<ChatMessageDto> messages = WorkflowTranscriptProjector.ProjectCompletedMessages(
             command,
@@ -310,24 +245,11 @@ public sealed class CopilotWorkflowRunnerTests
     [Fact]
     public void ProjectCompletedMessages_ConcurrentUsesLastStreamedMessagePerAgentForGenericOutput()
     {
-        RunTurnCommandDto command = new()
-        {
-            RequestId = "turn-1",
-            SessionId = "session-1",
-            Pattern = new PatternDefinitionDto
-            {
-                Id = "pattern-concurrent",
-                Name = "Concurrent Brainstorm",
-                Mode = "concurrent",
-                Availability = "available",
-                Agents =
-                [
-                    CreateAgent(id: "agent-concurrent-architect", name: "Architect"),
-                    CreateAgent(id: "agent-concurrent-product", name: "Product"),
-                    CreateAgent(id: "agent-concurrent-implementer", name: "Implementer"),
-                ],
-            },
-        };
+        RunTurnCommandDto command = CreateCommand(
+            "concurrent",
+            CreateAgent(id: "agent-concurrent-architect", name: "Architect"),
+            CreateAgent(id: "agent-concurrent-product", name: "Product"),
+            CreateAgent(id: "agent-concurrent-implementer", name: "Implementer"));
 
         IReadOnlyList<ChatMessageDto> messages = WorkflowTranscriptProjector.ProjectCompletedMessages(
             command,
@@ -379,23 +301,10 @@ public sealed class CopilotWorkflowRunnerTests
     [Fact]
     public void ProjectCompletedMessages_PreservesGroupChatConversationHistory()
     {
-        RunTurnCommandDto command = new()
-        {
-            RequestId = "turn-1",
-            SessionId = "session-1",
-            Pattern = new PatternDefinitionDto
-            {
-                Id = "pattern-group-chat",
-                Name = "Collaborative Group Chat",
-                Mode = "group-chat",
-                Availability = "available",
-                Agents =
-                [
-                    CreateAgent(id: "agent-group-writer", name: "Writer"),
-                    CreateAgent(id: "agent-group-reviewer", name: "Reviewer"),
-                ],
-            },
-        };
+        RunTurnCommandDto command = CreateCommand(
+            "group-chat",
+            CreateAgent(id: "agent-group-writer", name: "Writer"),
+            CreateAgent(id: "agent-group-reviewer", name: "Reviewer"));
 
         IReadOnlyList<ChatMessageDto> messages = WorkflowTranscriptProjector.ProjectCompletedMessages(
             command,
@@ -428,23 +337,10 @@ public sealed class CopilotWorkflowRunnerTests
     [Fact]
     public void ProjectCompletedMessages_FallsBackToPositionWhenOutputTextDiffers()
     {
-        RunTurnCommandDto command = new()
-        {
-            RequestId = "turn-1",
-            SessionId = "session-1",
-            Pattern = new PatternDefinitionDto
-            {
-                Id = "pattern-group-chat",
-                Name = "Collaborative Group Chat",
-                Mode = "group-chat",
-                Availability = "available",
-                Agents =
-                [
-                    CreateAgent(id: "agent-group-writer", name: "Writer"),
-                    CreateAgent(id: "agent-group-reviewer", name: "Reviewer"),
-                ],
-            },
-        };
+        RunTurnCommandDto command = CreateCommand(
+            "group-chat",
+            CreateAgent(id: "agent-group-writer", name: "Writer"),
+            CreateAgent(id: "agent-group-reviewer", name: "Reviewer"));
 
         IReadOnlyList<ChatMessageDto> messages = WorkflowTranscriptProjector.ProjectCompletedMessages(
             command,
@@ -482,23 +378,10 @@ public sealed class CopilotWorkflowRunnerTests
     [Fact]
     public void ProjectCompletedMessages_UsesFallbackAgentForGenericAssistantOutput()
     {
-        RunTurnCommandDto command = new()
-        {
-            RequestId = "turn-1",
-            SessionId = "session-1",
-            Pattern = new PatternDefinitionDto
-            {
-                Id = "pattern-handoff",
-                Name = "Handoff Support Flow",
-                Mode = "handoff",
-                Availability = "available",
-                Agents =
-                [
-                    CreateAgent(id: "agent-handoff-triage", name: "Triage"),
-                    CreateAgent(id: "agent-handoff-ux", name: "UX Specialist"),
-                ],
-            },
-        };
+        RunTurnCommandDto command = CreateCommand(
+            "handoff",
+            CreateAgent(id: "agent-handoff-triage", name: "Triage"),
+            CreateAgent(id: "agent-handoff-ux", name: "UX Specialist"));
 
         IReadOnlyList<ChatMessageDto> messages = WorkflowTranscriptProjector.ProjectCompletedMessages(
             command,
@@ -519,23 +402,10 @@ public sealed class CopilotWorkflowRunnerTests
     [Fact]
     public void ProjectCompletedMessages_PrefersContentMatchedStreamingSegmentOverPosition()
     {
-        RunTurnCommandDto command = new()
-        {
-            RequestId = "turn-1",
-            SessionId = "session-1",
-            Pattern = new PatternDefinitionDto
-            {
-                Id = "pattern-handoff",
-                Name = "Handoff Support Flow",
-                Mode = "handoff",
-                Availability = "available",
-                Agents =
-                [
-                    CreateAgent(id: "agent-handoff-triage", name: "Triage"),
-                    CreateAgent(id: "agent-handoff-runtime", name: "Runtime Specialist"),
-                ],
-            },
-        };
+        RunTurnCommandDto command = CreateCommand(
+            "handoff",
+            CreateAgent(id: "agent-handoff-triage", name: "Triage"),
+            CreateAgent(id: "agent-handoff-runtime", name: "Runtime Specialist"));
 
         IReadOnlyList<ChatMessageDto> messages = WorkflowTranscriptProjector.ProjectCompletedMessages(
             command,
@@ -560,23 +430,10 @@ public sealed class CopilotWorkflowRunnerTests
     [Fact]
     public void ProjectCompletedMessages_UsesFallbackAgentForSingleGenericAssistantOutputWithMultipleSegments()
     {
-        RunTurnCommandDto command = new()
-        {
-            RequestId = "turn-1",
-            SessionId = "session-1",
-            Pattern = new PatternDefinitionDto
-            {
-                Id = "pattern-handoff",
-                Name = "Handoff Support Flow",
-                Mode = "handoff",
-                Availability = "available",
-                Agents =
-                [
-                    CreateAgent(id: "agent-handoff-triage", name: "Triage"),
-                    CreateAgent(id: "agent-handoff-runtime", name: "Runtime Specialist"),
-                ],
-            },
-        };
+        RunTurnCommandDto command = CreateCommand(
+            "handoff",
+            CreateAgent(id: "agent-handoff-triage", name: "Triage"),
+            CreateAgent(id: "agent-handoff-runtime", name: "Runtime Specialist"));
 
         IReadOnlyList<ChatMessageDto> messages = WorkflowTranscriptProjector.ProjectCompletedMessages(
             command,
@@ -601,23 +458,10 @@ public sealed class CopilotWorkflowRunnerTests
     [Fact]
     public void ProjectCompletedMessages_DropsBlankAssistantOutputMessages()
     {
-        RunTurnCommandDto command = new()
-        {
-            RequestId = "turn-1",
-            SessionId = "session-1",
-            Pattern = new PatternDefinitionDto
-            {
-                Id = "pattern-handoff",
-                Name = "Handoff Support Flow",
-                Mode = "handoff",
-                Availability = "available",
-                Agents =
-                [
-                    CreateAgent(id: "agent-handoff-triage", name: "Triage"),
-                    CreateAgent(id: "agent-handoff-ux", name: "UX Specialist"),
-                ],
-            },
-        };
+        RunTurnCommandDto command = CreateCommand(
+            "handoff",
+            CreateAgent(id: "agent-handoff-triage", name: "Triage"),
+            CreateAgent(id: "agent-handoff-ux", name: "UX Specialist"));
 
         IReadOnlyList<ChatMessageDto> messages = WorkflowTranscriptProjector.ProjectCompletedMessages(
             command,
@@ -835,7 +679,7 @@ public sealed class CopilotWorkflowRunnerTests
     [Fact]
     public async Task RunTurnAsync_RequestPortWorkflowUsesUserInputBridge()
     {
-        CopilotWorkflowRunner runner = new(new PatternValidator());
+        CopilotWorkflowRunner runner = new(new WorkflowValidator());
         List<UserInputRequestedEventDto> requests = [];
 
         IReadOnlyList<ChatMessageDto> messages = await runner.RunTurnAsync(
@@ -927,6 +771,25 @@ public sealed class CopilotWorkflowRunnerTests
     public async Task HandleWorkflowEventAsync_EmitsWorkflowCheckpointSavedEvent()
     {
         RunTurnCommandDto command = CreateHandoffCommand();
+        command = new RunTurnCommandDto
+        {
+            RequestId = command.RequestId,
+            SessionId = command.SessionId,
+            Workflow = new WorkflowDefinitionDto
+            {
+                Id = command.Workflow.Id,
+                Name = command.Workflow.Name,
+                Graph = command.Workflow.Graph,
+                Settings = new WorkflowSettingsDto
+                {
+                    OrchestrationMode = command.Workflow.Settings.OrchestrationMode,
+                    Checkpointing = new WorkflowCheckpointSettingsDto
+                    {
+                        Enabled = true,
+                    },
+                },
+            },
+        };
         CopilotTurnExecutionState state = new(command);
         List<WorkflowCheckpointSavedEventDto> checkpoints = [];
 
@@ -1831,7 +1694,7 @@ public sealed class CopilotWorkflowRunnerTests
 
         Task<PermissionRequestResult> pending = coordinator.RequestApprovalAsync(
             command,
-            command.Pattern.Agents[0],
+            command.Workflow.GetAgentNodes()[0],
             new PermissionRequestCustomTool
             {
                 Kind = "custom tool",
@@ -1875,7 +1738,7 @@ public sealed class CopilotWorkflowRunnerTests
 
         Task<PermissionRequestResult> pending = coordinator.RequestApprovalAsync(
             command,
-            command.Pattern.Agents[0],
+            command.Workflow.GetAgentNodes()[0],
             new PermissionRequestWrite
             {
                 Kind = "write",
@@ -1938,7 +1801,7 @@ public sealed class CopilotWorkflowRunnerTests
 
         PermissionRequestResult result = await coordinator.RequestApprovalAsync(
             command,
-            command.Pattern.Agents[0],
+            command.Workflow.GetAgentNodes()[0],
             new PermissionRequestCustomTool
             {
                 Kind = "custom tool",
@@ -1972,7 +1835,7 @@ public sealed class CopilotWorkflowRunnerTests
 
         PermissionRequestResult result = await coordinator.RequestApprovalAsync(
             command,
-            command.Pattern.Agents[0],
+            command.Workflow.GetAgentNodes()[0],
             new PermissionRequestHook
             {
                 Kind = "hook",
@@ -2007,7 +1870,7 @@ public sealed class CopilotWorkflowRunnerTests
 
         Task<PermissionRequestResult> firstPending = coordinator.RequestApprovalAsync(
             command,
-            command.Pattern.Agents[0],
+            command.Workflow.GetAgentNodes()[0],
             new PermissionRequestRead
             {
                 Kind = "read",
@@ -2048,7 +1911,7 @@ public sealed class CopilotWorkflowRunnerTests
         bool sawSecondApproval = false;
         PermissionRequestResult secondResult = await coordinator.RequestApprovalAsync(
             command,
-            command.Pattern.Agents[0],
+            command.Workflow.GetAgentNodes()[0],
             new PermissionRequestRead
             {
                 Kind = "read",
@@ -2084,7 +1947,7 @@ public sealed class CopilotWorkflowRunnerTests
 
         Task<PermissionRequestResult> firstPending = coordinator.RequestApprovalAsync(
             firstCommand,
-            firstCommand.Pattern.Agents[0],
+            firstCommand.Workflow.GetAgentNodes()[0],
             new PermissionRequestRead
             {
                 Kind = "read",
@@ -2124,7 +1987,7 @@ public sealed class CopilotWorkflowRunnerTests
         RunTurnCommandDto secondCommand = CreateApprovalCommand(requestId: "turn-2");
         Task<PermissionRequestResult> secondPending = coordinator.RequestApprovalAsync(
             secondCommand,
-            secondCommand.Pattern.Agents[0],
+            secondCommand.Workflow.GetAgentNodes()[0],
             new PermissionRequestRead
             {
                 Kind = "read",
@@ -2179,36 +2042,54 @@ public sealed class CopilotWorkflowRunnerTests
         Assert.Contains("is not pending", error.Message);
     }
 
-    private static PatternAgentDefinitionDto CreateAgent(string id, string name)
+    private static WorkflowNodeDto CreateAgent(string id, string name)
     {
-        return new PatternAgentDefinitionDto
+        return new WorkflowNodeDto
         {
             Id = id,
-            Name = name,
-            Model = "gpt-5.4",
-            Instructions = "Help with the request.",
+            Kind = "agent",
+            Label = name,
+            Config = new WorkflowNodeConfigDto
+            {
+                Kind = "agent",
+                Id = id,
+                Name = name,
+                Model = "gpt-5.4",
+                Instructions = "Help with the request.",
+            },
         };
     }
 
-    private static RunTurnCommandDto CreateHandoffCommand()
+    private static RunTurnCommandDto CreateCommand(
+        string orchestrationMode,
+        params WorkflowNodeDto[] agents)
     {
         return new RunTurnCommandDto
         {
             RequestId = "turn-1",
             SessionId = "session-1",
-            Pattern = new PatternDefinitionDto
+            Workflow = new WorkflowDefinitionDto
             {
-                Id = "pattern-handoff",
-                Name = "Handoff Flow",
-                Mode = "handoff",
-                Availability = "available",
-                Agents =
-                [
-                    CreateAgent("agent-handoff-triage", "Triage"),
-                    CreateAgent("agent-handoff-ux", "UX Specialist"),
-                ],
+                Id = $"workflow-{orchestrationMode}",
+                Name = $"Workflow {orchestrationMode}",
+                Graph = new WorkflowGraphDto
+                {
+                    Nodes = [.. agents],
+                },
+                Settings = new WorkflowSettingsDto
+                {
+                    OrchestrationMode = orchestrationMode,
+                },
             },
         };
+    }
+
+    private static RunTurnCommandDto CreateHandoffCommand()
+    {
+        return CreateCommand(
+            "handoff",
+            CreateAgent("agent-handoff-triage", "Triage"),
+            CreateAgent("agent-handoff-ux", "UX Specialist"));
     }
 
     private static RequestInfoEvent CreateRequestInfoEvent(object payload)
@@ -2253,30 +2134,35 @@ public sealed class CopilotWorkflowRunnerTests
                 {
                     McpServers = [.. mcpServers],
                 },
-            Pattern = new PatternDefinitionDto
+            Workflow = new WorkflowDefinitionDto
             {
-                Id = "pattern-1",
-                Name = "Approval Pattern",
-                Mode = "single",
-                Availability = "available",
-                ApprovalPolicy = new ApprovalPolicyDto
+                Id = "workflow-1",
+                Name = "Approval Workflow",
+                Graph = new WorkflowGraphDto
                 {
-                    Rules =
+                    Nodes =
                     [
-                        new ApprovalCheckpointRuleDto
-                        {
-                            Kind = "tool-call",
-                            AgentIds = ["agent-1"],
-                        },
+                        CreateAgent("agent-1", "Primary"),
                     ],
-                    AutoApprovedToolNames = autoApprovedToolNames is null
-                        ? ["web_fetch"]
-                        : [.. autoApprovedToolNames],
                 },
-                Agents =
-                [
-                    CreateAgent("agent-1", "Primary"),
-                ],
+                Settings = new WorkflowSettingsDto
+                {
+                    OrchestrationMode = "single",
+                    ApprovalPolicy = new ApprovalPolicyDto
+                    {
+                        Rules =
+                        [
+                            new ApprovalCheckpointRuleDto
+                            {
+                                Kind = "tool-call",
+                                AgentIds = ["agent-1"],
+                            },
+                        ],
+                        AutoApprovedToolNames = autoApprovedToolNames is null
+                            ? ["web_fetch"]
+                            : [.. autoApprovedToolNames],
+                    },
+                },
             },
         };
     }
@@ -2288,14 +2174,6 @@ public sealed class CopilotWorkflowRunnerTests
             RequestId = "turn-request-port",
             SessionId = "session-request-port",
             ProjectPath = "c:\\workspace\\personal\\projects\\aryx.worktrees\\copilot-powerful-vulture",
-            Pattern = new PatternDefinitionDto
-            {
-                Id = "pattern-request-port",
-                Name = "Request Port Pattern",
-                Mode = "single",
-                Availability = "available",
-                Agents = [],
-            },
             Messages =
             [
                 new ChatMessageDto
@@ -2407,3 +2285,4 @@ public sealed class CopilotWorkflowRunnerTests
         }
     }
 }
+

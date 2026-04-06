@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { access, mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import type { PatternDefinition } from '@shared/domain/pattern';
+import type { WorkflowDefinition } from '@shared/domain/workflow';
 import { createScratchpadProject } from '@shared/domain/project';
 import type { SessionRecord } from '@shared/domain/session';
 import { createWorkspaceSeed, type WorkspaceState } from '@shared/domain/workspace';
@@ -50,8 +50,8 @@ async function pathExists(path: string): Promise<boolean> {
   }
 }
 
-function requireSinglePattern(workspace: WorkspaceState): PatternDefinition {
-  const pattern = workspace.patterns.find((candidate) => candidate.mode === 'single');
+function requireSinglePattern(workspace: WorkspaceState): WorkflowDefinition {
+  const pattern = workspace.workflows.find((candidate) => candidate.settings.orchestrationMode === 'single');
   if (!pattern) {
     throw new Error('Expected the workspace seed to include a single-agent pattern.');
   }
@@ -59,11 +59,11 @@ function requireSinglePattern(workspace: WorkspaceState): PatternDefinition {
   return pattern;
 }
 
-function createScratchpadSession(patternId: string, overrides?: Partial<SessionRecord>): SessionRecord {
+function createScratchpadSession(workflowId: string, overrides?: Partial<SessionRecord>): SessionRecord {
   return {
     id: 'session-scratchpad',
     projectId: 'project-scratchpad',
-    patternId,
+    workflowId,
     title: 'Scratchpad',
     createdAt: TIMESTAMP,
     updatedAt: TIMESTAMP,
@@ -116,7 +116,7 @@ describe('AryxAppService scratchpad directories', () => {
     const scratchpadProject = createScratchpadProject(join(USER_DATA_PATH, 'scratchpad'), TIMESTAMP);
     workspace.projects = [scratchpadProject];
     workspace.selectedProjectId = scratchpadProject.id;
-    workspace.selectedPatternId = pattern.id;
+    workspace.selectedWorkflowId = pattern.id;
 
     const service = createService(workspace);
 
@@ -152,7 +152,7 @@ describe('AryxAppService scratchpad directories', () => {
     workspace.projects = [scratchpadProject];
     workspace.sessions = [originalSession];
     workspace.selectedProjectId = scratchpadProject.id;
-    workspace.selectedPatternId = pattern.id;
+    workspace.selectedWorkflowId = pattern.id;
     workspace.selectedSessionId = originalSession.id;
 
     const service = createService(workspace);
@@ -212,7 +212,7 @@ describe('AryxAppService scratchpad directories', () => {
     workspace.projects = [scratchpadProject];
     workspace.sessions = [originalSession];
     workspace.selectedProjectId = scratchpadProject.id;
-    workspace.selectedPatternId = pattern.id;
+    workspace.selectedWorkflowId = pattern.id;
     workspace.selectedSessionId = originalSession.id;
 
     const service = createService(workspace);
@@ -248,7 +248,7 @@ describe('AryxAppService scratchpad directories', () => {
     workspace.projects = [scratchpadProject];
     workspace.sessions = [session];
     workspace.selectedProjectId = scratchpadProject.id;
-    workspace.selectedPatternId = pattern.id;
+    workspace.selectedWorkflowId = pattern.id;
     workspace.selectedSessionId = session.id;
 
     const service = createService(workspace);

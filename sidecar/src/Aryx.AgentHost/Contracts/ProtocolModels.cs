@@ -3,68 +3,13 @@ using System.Text.Json.Serialization;
 
 namespace Aryx.AgentHost.Contracts;
 
-public sealed class PatternAgentDefinitionDto
-{
-    public string Id { get; init; } = string.Empty;
-    public string Name { get; init; } = string.Empty;
-    public string Description { get; init; } = string.Empty;
-    public string Instructions { get; init; } = string.Empty;
-    public string Model { get; init; } = string.Empty;
-    public string? ReasoningEffort { get; init; }
-    public PatternAgentCopilotConfigDto? Copilot { get; init; }
-}
-
-public sealed class PatternAgentCopilotConfigDto
+public sealed class WorkflowAgentCopilotConfigDto
 {
     public IReadOnlyList<RunTurnCustomAgentConfigDto> CustomAgents { get; init; } = [];
     public string? Agent { get; init; }
     public IReadOnlyList<string> SkillDirectories { get; init; } = [];
     public IReadOnlyList<string> DisabledSkills { get; init; } = [];
     public RunTurnInfiniteSessionsConfigDto? InfiniteSessions { get; init; }
-}
-
-public sealed class PatternGraphPositionDto
-{
-    public double X { get; init; }
-    public double Y { get; init; }
-}
-
-public sealed class PatternGraphNodeDto
-{
-    public string Id { get; init; } = string.Empty;
-    public string Kind { get; init; } = string.Empty;
-    public PatternGraphPositionDto Position { get; init; } = new();
-    public string? AgentId { get; init; }
-    public int? Order { get; init; }
-}
-
-public sealed class PatternGraphEdgeDto
-{
-    public string Id { get; init; } = string.Empty;
-    public string Source { get; init; } = string.Empty;
-    public string Target { get; init; } = string.Empty;
-}
-
-public sealed class PatternGraphDto
-{
-    public IReadOnlyList<PatternGraphNodeDto> Nodes { get; init; } = [];
-    public IReadOnlyList<PatternGraphEdgeDto> Edges { get; init; } = [];
-}
-
-public sealed class PatternDefinitionDto
-{
-    public string Id { get; init; } = string.Empty;
-    public string Name { get; init; } = string.Empty;
-    public string Description { get; init; } = string.Empty;
-    public string Mode { get; init; } = string.Empty;
-    public string Availability { get; init; } = "available";
-    public string? UnavailabilityReason { get; init; }
-    public int MaxIterations { get; init; }
-    public ApprovalPolicyDto? ApprovalPolicy { get; init; }
-    public IReadOnlyList<PatternAgentDefinitionDto> Agents { get; init; } = [];
-    public PatternGraphDto? Graph { get; init; }
-    public string CreatedAt { get; init; } = string.Empty;
-    public string UpdatedAt { get; init; } = string.Empty;
 }
 
 public sealed class WorkflowPositionDto
@@ -84,7 +29,7 @@ public sealed class WorkflowNodeConfigDto
     public string Instructions { get; init; } = string.Empty;
     public string Model { get; init; } = string.Empty;
     public string? ReasoningEffort { get; init; }
-    public PatternAgentCopilotConfigDto? Copilot { get; init; }
+    public WorkflowAgentCopilotConfigDto? Copilot { get; init; }
     public string? WorkspaceAgentId { get; init; }
     public string? Implementation { get; init; }
     public string? FunctionRef { get; init; }
@@ -170,6 +115,7 @@ public sealed class WorkflowSettingsDto
 {
     public WorkflowCheckpointSettingsDto Checkpointing { get; init; } = new();
     public string ExecutionMode { get; init; } = "off-thread";
+    public string? OrchestrationMode { get; init; }
     public int? MaxIterations { get; init; }
     public ApprovalPolicyDto? ApprovalPolicy { get; init; }
     public IReadOnlyList<WorkflowStateScopeDto> StateScopes { get; init; } = [];
@@ -218,13 +164,6 @@ public sealed class ChatMessageAttachmentDto
     public string? Data { get; init; }
     public string? MimeType { get; init; }
     public string? DisplayName { get; init; }
-}
-
-public sealed class PatternValidationIssueDto
-{
-    public string Level { get; init; } = "error";
-    public string? Field { get; init; }
-    public string Message { get; init; } = string.Empty;
 }
 
 public sealed class WorkflowValidationIssueDto
@@ -303,11 +242,6 @@ public class SidecarCommandEnvelope
 
 public sealed class DescribeCapabilitiesCommandDto : SidecarCommandEnvelope;
 
-public sealed class ValidatePatternCommandDto : SidecarCommandEnvelope
-{
-    public PatternDefinitionDto Pattern { get; init; } = new();
-}
-
 public sealed class ValidateWorkflowCommandDto : SidecarCommandEnvelope
 {
     public WorkflowDefinitionDto Workflow { get; init; } = new();
@@ -322,8 +256,7 @@ public sealed class RunTurnCommandDto : SidecarCommandEnvelope
     public string Mode { get; init; } = "interactive";
     public string MessageMode { get; init; } = "enqueue";
     public string? ProjectInstructions { get; init; }
-    public PatternDefinitionDto Pattern { get; init; } = new();
-    public WorkflowDefinitionDto? Workflow { get; init; }
+    public WorkflowDefinitionDto Workflow { get; init; } = new();
     public IReadOnlyList<WorkflowDefinitionDto> WorkflowLibrary { get; init; } = [];
     public IReadOnlyList<ChatMessageDto> Messages { get; init; } = [];
     public RunTurnPromptInvocationDto? PromptInvocation { get; init; }
@@ -462,11 +395,6 @@ public abstract class SidecarEventDto
 public sealed class CapabilitiesEventDto : SidecarEventDto
 {
     public SidecarCapabilitiesDto Capabilities { get; init; } = new();
-}
-
-public sealed class PatternValidationEventDto : SidecarEventDto
-{
-    public IReadOnlyList<PatternValidationIssueDto> Issues { get; init; } = [];
 }
 
 public sealed class WorkflowValidationEventDto : SidecarEventDto

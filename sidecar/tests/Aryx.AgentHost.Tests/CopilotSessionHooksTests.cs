@@ -23,7 +23,7 @@ public sealed class CopilotSessionHooksTests
             ],
         };
 
-        SessionHooks hooks = CopilotSessionHooks.Create(command, command.Pattern.Agents[0], configuredHooks, runner);
+        SessionHooks hooks = CopilotSessionHooks.Create(command, command.Workflow.GetAgentNodes()[0], configuredHooks, runner);
 
         PreToolUseHookOutput? decision = await hooks.OnPreToolUse!(
             new PreToolUseHookInput
@@ -64,7 +64,7 @@ public sealed class CopilotSessionHooksTests
             ],
         };
 
-        SessionHooks hooks = CopilotSessionHooks.Create(command, command.Pattern.Agents[0], configuredHooks, runner);
+        SessionHooks hooks = CopilotSessionHooks.Create(command, command.Workflow.GetAgentNodes()[0], configuredHooks, runner);
 
         PreToolUseHookOutput? decision = await hooks.OnPreToolUse!(
             new PreToolUseHookInput
@@ -93,7 +93,7 @@ public sealed class CopilotSessionHooksTests
             ],
         };
 
-        SessionHooks hooks = CopilotSessionHooks.Create(command, command.Pattern.Agents[0], configuredHooks, runner);
+        SessionHooks hooks = CopilotSessionHooks.Create(command, command.Workflow.GetAgentNodes()[0], configuredHooks, runner);
 
         PreToolUseHookOutput? decision = await hooks.OnPreToolUse!(
             new PreToolUseHookInput
@@ -123,7 +123,7 @@ public sealed class CopilotSessionHooksTests
     public async Task Create_PreToolUseAutoAllowsInternalOrchestrationTools(string toolName)
     {
         RunTurnCommandDto command = CreateCommandWithToolApproval();
-        SessionHooks hooks = CopilotSessionHooks.Create(command, command.Pattern.Agents[0], ResolvedHookSet.Empty, new RecordingHookCommandRunner());
+        SessionHooks hooks = CopilotSessionHooks.Create(command, command.Workflow.GetAgentNodes()[0], ResolvedHookSet.Empty, new RecordingHookCommandRunner());
 
         PreToolUseHookOutput? decision = await hooks.OnPreToolUse!(
             new PreToolUseHookInput
@@ -139,7 +139,7 @@ public sealed class CopilotSessionHooksTests
     public async Task Create_PreToolUseKeepsStoreMemoryUnderApprovalPolicy()
     {
         RunTurnCommandDto command = CreateCommandWithToolApproval();
-        SessionHooks hooks = CopilotSessionHooks.Create(command, command.Pattern.Agents[0], ResolvedHookSet.Empty, new RecordingHookCommandRunner());
+        SessionHooks hooks = CopilotSessionHooks.Create(command, command.Workflow.GetAgentNodes()[0], ResolvedHookSet.Empty, new RecordingHookCommandRunner());
 
         PreToolUseHookOutput? decision = await hooks.OnPreToolUse!(
             new PreToolUseHookInput
@@ -159,7 +159,7 @@ public sealed class CopilotSessionHooksTests
     public async Task Create_PreToolUseAutoAllowsWhenCategoryIsApproved(string toolName, string category)
     {
         RunTurnCommandDto command = CreateCommandWithAutoApprovedCategory(category);
-        SessionHooks hooks = CopilotSessionHooks.Create(command, command.Pattern.Agents[0], ResolvedHookSet.Empty, new RecordingHookCommandRunner());
+        SessionHooks hooks = CopilotSessionHooks.Create(command, command.Workflow.GetAgentNodes()[0], ResolvedHookSet.Empty, new RecordingHookCommandRunner());
 
         PreToolUseHookOutput? decision = await hooks.OnPreToolUse!(
             new PreToolUseHookInput
@@ -177,7 +177,7 @@ public sealed class CopilotSessionHooksTests
         RunTurnCommandDto command = CreateCommandWithConfiguredMcpServers(
             ["icm-mcp"],
             ["mcp_server:icm-mcp"]);
-        SessionHooks hooks = CopilotSessionHooks.Create(command, command.Pattern.Agents[0], ResolvedHookSet.Empty, new RecordingHookCommandRunner());
+        SessionHooks hooks = CopilotSessionHooks.Create(command, command.Workflow.GetAgentNodes()[0], ResolvedHookSet.Empty, new RecordingHookCommandRunner());
 
         PreToolUseHookOutput? decision = await hooks.OnPreToolUse!(
             new PreToolUseHookInput
@@ -193,7 +193,7 @@ public sealed class CopilotSessionHooksTests
     public async Task Create_PreToolUseRequiresApprovalWhenMcpServerIsNotApproved()
     {
         RunTurnCommandDto command = CreateCommandWithConfiguredMcpServers(["icm-mcp"]);
-        SessionHooks hooks = CopilotSessionHooks.Create(command, command.Pattern.Agents[0], ResolvedHookSet.Empty, new RecordingHookCommandRunner());
+        SessionHooks hooks = CopilotSessionHooks.Create(command, command.Workflow.GetAgentNodes()[0], ResolvedHookSet.Empty, new RecordingHookCommandRunner());
 
         PreToolUseHookOutput? decision = await hooks.OnPreToolUse!(
             new PreToolUseHookInput
@@ -219,7 +219,7 @@ public sealed class CopilotSessionHooksTests
             ErrorOccurred = [CreateHookCommand("error-hook")],
         };
 
-        SessionHooks hooks = CopilotSessionHooks.Create(command, command.Pattern.Agents[0], configuredHooks, runner);
+        SessionHooks hooks = CopilotSessionHooks.Create(command, command.Workflow.GetAgentNodes()[0], configuredHooks, runner);
 
         await hooks.OnSessionStart!(
             new SessionStartHookInput
@@ -293,7 +293,7 @@ public sealed class CopilotSessionHooksTests
     public async Task Create_WithoutConfiguredFileHooksPreservesExistingApprovalBehavior()
     {
         RunTurnCommandDto command = CreateCommandWithoutApprovalRules();
-        SessionHooks hooks = CopilotSessionHooks.Create(command, command.Pattern.Agents[0], ResolvedHookSet.Empty, new RecordingHookCommandRunner());
+        SessionHooks hooks = CopilotSessionHooks.Create(command, command.Workflow.GetAgentNodes()[0], ResolvedHookSet.Empty, new RecordingHookCommandRunner());
 
         PreToolUseHookOutput? decision = await hooks.OnPreToolUse!(
             new PreToolUseHookInput
@@ -312,34 +312,17 @@ public sealed class CopilotSessionHooksTests
             RequestId = "turn-1",
             SessionId = "session-1",
             ProjectPath = @"C:\workspace\project",
-            Pattern = new PatternDefinitionDto
+            Workflow = CreateWorkflow(new ApprovalPolicyDto
             {
-                Id = "pattern-1",
-                Name = "Pattern",
-                Mode = "single",
-                Availability = "available",
-                ApprovalPolicy = new ApprovalPolicyDto
-                {
-                    Rules =
-                    [
-                        new ApprovalCheckpointRuleDto
-                        {
-                            Kind = "tool-call",
-                            AgentIds = ["agent-1"],
-                        },
-                    ],
-                },
-                Agents =
+                Rules =
                 [
-                    new PatternAgentDefinitionDto
+                    new ApprovalCheckpointRuleDto
                     {
-                        Id = "agent-1",
-                        Name = "Primary",
-                        Model = "gpt-5.4",
-                        Instructions = "Help.",
+                        Kind = "tool-call",
+                        AgentIds = ["agent-1"],
                     },
                 ],
-            },
+            }),
         };
     }
 
@@ -351,15 +334,7 @@ public sealed class CopilotSessionHooksTests
             RequestId = command.RequestId,
             SessionId = command.SessionId,
             ProjectPath = command.ProjectPath,
-            Pattern = new PatternDefinitionDto
-            {
-                Id = command.Pattern.Id,
-                Name = command.Pattern.Name,
-                Mode = command.Pattern.Mode,
-                Availability = command.Pattern.Availability,
-                ApprovalPolicy = new ApprovalPolicyDto(),
-                Agents = command.Pattern.Agents,
-            },
+            Workflow = CreateWorkflow(new ApprovalPolicyDto()),
         };
     }
 
@@ -370,35 +345,18 @@ public sealed class CopilotSessionHooksTests
             RequestId = "turn-1",
             SessionId = "session-1",
             ProjectPath = @"C:\workspace\project",
-            Pattern = new PatternDefinitionDto
+            Workflow = CreateWorkflow(new ApprovalPolicyDto
             {
-                Id = "pattern-1",
-                Name = "Pattern",
-                Mode = "single",
-                Availability = "available",
-                ApprovalPolicy = new ApprovalPolicyDto
-                {
-                    Rules =
-                    [
-                        new ApprovalCheckpointRuleDto
-                        {
-                            Kind = "tool-call",
-                            AgentIds = ["agent-1"],
-                        },
-                    ],
-                    AutoApprovedToolNames = [category],
-                },
-                Agents =
+                Rules =
                 [
-                    new PatternAgentDefinitionDto
+                    new ApprovalCheckpointRuleDto
                     {
-                        Id = "agent-1",
-                        Name = "Primary",
-                        Model = "gpt-5.4",
-                        Instructions = "Help.",
+                        Kind = "tool-call",
+                        AgentIds = ["agent-1"],
                     },
                 ],
-            },
+                AutoApprovedToolNames = [category],
+            }),
         };
     }
 
@@ -416,18 +374,44 @@ public sealed class CopilotSessionHooksTests
             {
                 McpServers = [.. serverNames.Select(CreateMcpServerConfig)],
             },
-            Pattern = new PatternDefinitionDto
+            Workflow = CreateWorkflow(new ApprovalPolicyDto
             {
-                Id = command.Pattern.Id,
-                Name = command.Pattern.Name,
-                Mode = command.Pattern.Mode,
-                Availability = command.Pattern.Availability,
-                ApprovalPolicy = new ApprovalPolicyDto
-                {
-                    Rules = command.Pattern.ApprovalPolicy?.Rules ?? [],
-                    AutoApprovedToolNames = autoApprovedToolNames ?? [],
-                },
-                Agents = command.Pattern.Agents,
+                Rules = command.Workflow.Settings.ApprovalPolicy?.Rules ?? [],
+                AutoApprovedToolNames = autoApprovedToolNames ?? [],
+            }),
+        };
+    }
+
+    private static WorkflowDefinitionDto CreateWorkflow(ApprovalPolicyDto approvalPolicy)
+    {
+        return new WorkflowDefinitionDto
+        {
+            Id = "workflow-1",
+            Name = "Workflow",
+            Graph = new WorkflowGraphDto
+            {
+                Nodes =
+                [
+                    new WorkflowNodeDto
+                    {
+                        Id = "agent-1",
+                        Kind = "agent",
+                        Label = "Primary",
+                        Config = new WorkflowNodeConfigDto
+                        {
+                            Kind = "agent",
+                            Id = "agent-1",
+                            Name = "Primary",
+                            Model = "gpt-5.4",
+                            Instructions = "Help.",
+                        },
+                    },
+                ],
+            },
+            Settings = new WorkflowSettingsDto
+            {
+                OrchestrationMode = "single",
+                ApprovalPolicy = approvalPolicy,
             },
         };
     }
@@ -477,3 +461,4 @@ public sealed class CopilotSessionHooksTests
         string InputJson,
         string ProjectPath);
 }
+

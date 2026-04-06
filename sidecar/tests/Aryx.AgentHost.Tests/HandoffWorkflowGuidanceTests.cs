@@ -23,13 +23,20 @@ public sealed class HandoffWorkflowGuidanceTests
     [Fact]
     public void CreateForwardReason_UsesTargetSpecialtyAndOwnership()
     {
-        PatternAgentDefinitionDto specialist = new()
+        WorkflowNodeDto specialist = new()
         {
             Id = "agent-handoff-ux",
-            Name = "UX Specialist",
-            Description = "Handles user experience questions.",
-            Instructions = "Focus on UX.",
-            Model = "claude-opus-4.5",
+            Kind = "agent",
+            Label = "UX Specialist",
+            Config = new WorkflowNodeConfigDto
+            {
+                Kind = "agent",
+                Id = "agent-handoff-ux",
+                Name = "UX Specialist",
+                Description = "Handles user experience questions.",
+                Instructions = "Focus on UX.",
+                Model = "claude-opus-4.5",
+            },
         };
 
         string reason = HandoffWorkflowGuidance.CreateForwardReason(specialist);
@@ -42,13 +49,20 @@ public sealed class HandoffWorkflowGuidanceTests
     [Fact]
     public void CreateReturnReason_RestrictsReturnToReroutingCases()
     {
-        PatternAgentDefinitionDto triage = new()
+        WorkflowNodeDto triage = new()
         {
             Id = "agent-handoff-triage",
-            Name = "Triage",
-            Description = "Routes the request to the right specialist.",
-            Instructions = "Triages requests.",
-            Model = "gpt-5.4",
+            Kind = "agent",
+            Label = "Triage",
+            Config = new WorkflowNodeConfigDto
+            {
+                Kind = "agent",
+                Id = "agent-handoff-triage",
+                Name = "Triage",
+                Description = "Routes the request to the right specialist.",
+                Instructions = "Triages requests.",
+                Model = "gpt-5.4",
+            },
         };
 
         string reason = HandoffWorkflowGuidance.CreateReturnReason(triage);

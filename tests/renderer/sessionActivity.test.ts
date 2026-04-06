@@ -16,11 +16,11 @@ import {
   type SessionActivityMap,
   type SessionRequestUsageMap,
 } from '@renderer/lib/sessionActivity';
-import type { PatternDefinition } from '@shared/domain/pattern';
+import type { WorkflowDefinition } from '@shared/domain/workflow';
 import type { SessionEventRecord } from '@shared/domain/event';
 
 describe('session activity helpers', () => {
-  const agents: PatternDefinition['agents'] = [
+  const agents = [
     {
       id: 'architect',
       name: 'Architect',
@@ -37,7 +37,14 @@ describe('session activity helpers', () => {
       model: 'gpt-5.4',
       reasoningEffort: 'medium',
     },
-  ];
+  ] satisfies Array<{
+    id: string;
+    name: string;
+    description: string;
+    instructions: string;
+    model: string;
+    reasoningEffort?: 'high' | 'medium';
+  }>;
 
   test('stores activity per session and per agent', () => {
     const architectEvent: SessionEventRecord = {
@@ -247,9 +254,9 @@ describe('session activity helpers', () => {
           projectId: 'project-1',
           projectPath: 'C:\\workspace\\project',
           workspaceKind: 'project',
-          patternId: 'pattern-1',
-          patternName: 'Pattern',
-          patternMode: 'single',
+          workflowId: 'workflow-1',
+          workflowName: 'Pattern',
+          workflowMode: 'single',
           triggerMessageId: 'msg-1',
           startedAt: '2026-03-23T00:00:00.000Z',
           completedAt: '2026-03-23T00:00:01.000Z',

@@ -15,7 +15,6 @@ public sealed class WorkflowRunnerTests
         WorkflowRunner runner = new();
         Workflow workflow = runner.BuildWorkflow(
             CreateSubworkflowParent(inlineWorkflow: CreateAgentWorkflow("child-inline", "agent-child")),
-            CreatePattern("agent-child"),
             [CreateChatClientAgent("agent-child", "Child Agent")]);
 
         ProtocolDescriptor descriptor = await workflow.DescribeProtocolAsync();
@@ -30,7 +29,6 @@ public sealed class WorkflowRunnerTests
         WorkflowDefinitionDto childWorkflow = CreateAgentWorkflow("child-ref", "agent-child");
         Workflow workflow = runner.BuildWorkflow(
             CreateSubworkflowParent(workflowId: childWorkflow.Id),
-            CreatePattern("agent-child"),
             [CreateChatClientAgent("agent-child", "Child Agent")],
             [childWorkflow]);
 
@@ -46,7 +44,6 @@ public sealed class WorkflowRunnerTests
 
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(() => runner.BuildWorkflow(
             CreateSubworkflowParent(workflowId: "missing-child"),
-            CreatePattern("agent-child"),
             [CreateChatClientAgent("agent-child", "Child Agent")],
             []));
 
@@ -65,7 +62,6 @@ public sealed class WorkflowRunnerTests
                     Kind = "code-executor",
                     Implementation = "return-text:done",
                 }),
-            CreateEmptyPattern(),
             []);
 
         List<ChatMessage> output = await RunWorkflowToOutputAsync(workflow);
@@ -81,7 +77,6 @@ public sealed class WorkflowRunnerTests
         WorkflowRunner runner = new();
         Workflow workflow = runner.BuildWorkflow(
             CreateStatefulFunctionWorkflow(),
-            CreateEmptyPattern(),
             []);
 
         List<ChatMessage> output = await RunWorkflowToOutputAsync(workflow);
@@ -105,7 +100,6 @@ public sealed class WorkflowRunnerTests
                     ResponseType = "string",
                     Prompt = "Approve the workflow?",
                 }),
-            CreateEmptyPattern(),
             []);
 
         ChatMessage[] input =
@@ -153,31 +147,9 @@ public sealed class WorkflowRunnerTests
                     Kind = "function-executor",
                     FunctionRef = "missing-function",
                 }),
-            CreateEmptyPattern(),
             []));
 
         Assert.Contains("unsupported functionRef", error.Message, StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static PatternDefinitionDto CreatePattern(string agentId)
-    {
-        return new PatternDefinitionDto
-        {
-            Id = "pattern-1",
-            Name = "Workflow Pattern",
-            Mode = "single",
-            Availability = "available",
-            Agents =
-            [
-                new PatternAgentDefinitionDto
-                {
-                    Id = agentId,
-                    Name = "Child Agent",
-                    Instructions = "Help with the request.",
-                    Model = "gpt-5.4",
-                },
-            ],
-        };
     }
 
     private static WorkflowDefinitionDto CreateAgentWorkflow(string id, string agentId)
@@ -240,18 +212,6 @@ public sealed class WorkflowRunnerTests
             {
                 Checkpointing = new WorkflowCheckpointSettingsDto(),
             },
-        };
-    }
-
-    private static PatternDefinitionDto CreateEmptyPattern()
-    {
-        return new PatternDefinitionDto
-        {
-            Id = "pattern-empty",
-            Name = "Workflow Pattern",
-            Mode = "single",
-            Availability = "available",
-            Agents = [],
         };
     }
 

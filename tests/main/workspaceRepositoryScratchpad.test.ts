@@ -27,15 +27,15 @@ const { WorkspaceRepository } = await import('@main/persistence/workspaceReposit
 function createStoredWorkspace(): WorkspaceState {
   const workspace = createWorkspaceSeed();
   const scratchpadProject = createScratchpadProject('C:\\legacy\\scratchpad', TIMESTAMP);
-  const patternId = workspace.patterns[0]?.id;
-  if (!patternId) {
+  const workflowId = workspace.workflows[0]?.id;
+  if (!workflowId) {
     throw new Error('Expected workspace seed to include at least one pattern.');
   }
 
   const session: SessionRecord = {
     id: 'session-scratchpad',
     projectId: scratchpadProject.id,
-    patternId,
+    workflowId,
     title: 'Scratchpad',
     createdAt: TIMESTAMP,
     updatedAt: TIMESTAMP,
@@ -49,7 +49,7 @@ function createStoredWorkspace(): WorkspaceState {
     projects: [scratchpadProject],
     sessions: [session],
     selectedProjectId: scratchpadProject.id,
-    selectedPatternId: patternId,
+    selectedWorkflowId: workflowId,
     selectedSessionId: session.id,
   };
 }

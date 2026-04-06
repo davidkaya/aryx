@@ -556,7 +556,7 @@ export function InlineApprovalPill({
 
       {open && !disabled && (
         <div className="absolute bottom-full left-0 z-40 mb-1.5 max-h-[28rem] w-80 overflow-y-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-1)] shadow-2xl">
-          {/* Header: session override / pattern defaults */}
+          {/* Header: session override / workflow defaults */}
           <div className="sticky top-0 z-10 border-b border-[var(--color-border)] bg-[var(--color-surface-1)]">
             <div className="flex items-center gap-2 px-3 py-2">
               <span className={`rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider ${

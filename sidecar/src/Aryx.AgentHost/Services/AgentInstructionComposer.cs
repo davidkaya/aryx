@@ -5,15 +5,15 @@ namespace Aryx.AgentHost.Services;
 internal static class AgentInstructionComposer
 {
     public static string Compose(
-        PatternDefinitionDto pattern,
-        PatternAgentDefinitionDto agent,
+        WorkflowDefinitionDto workflow,
+        WorkflowNodeDto agentNode,
         int agentIndex,
         string workspaceKind = "project",
         string interactionMode = "interactive",
         string? projectInstructions = null,
         RunTurnPromptInvocationDto? promptInvocation = null)
     {
-        string baseInstructions = agent.Instructions.Trim();
+        string baseInstructions = agentNode.Config.Instructions.Trim();
         string repositoryInstructions = projectInstructions?.Trim() ?? string.Empty;
         string promptInvocationInstructions = FormatPromptInvocation(promptInvocation);
         string workspaceGuidance = string.Equals(workspaceKind, "scratchpad", StringComparison.OrdinalIgnoreCase)
@@ -34,7 +34,7 @@ internal static class AgentInstructionComposer
               """
             : string.Empty;
 
-        if (string.Equals(pattern.Mode, "group-chat", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(workflow.Settings.OrchestrationMode, "group-chat", StringComparison.OrdinalIgnoreCase))
         {
             string groupChatGuidance = agentIndex == 0
                 ? """

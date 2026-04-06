@@ -40,7 +40,7 @@ internal static class CopilotSessionHooks
 
     public static SessionHooks Create(
         RunTurnCommandDto command,
-        PatternAgentDefinitionDto agentDefinition,
+        WorkflowNodeDto agentDefinition,
         ResolvedHookSet? configuredHooks = null,
         IHookCommandRunner? hookCommandRunner = null)
     {
@@ -62,7 +62,7 @@ internal static class CopilotSessionHooks
 
     private static async Task<PreToolUseHookOutput?> CreatePreToolUseOutputAsync(
         RunTurnCommandDto command,
-        PatternAgentDefinitionDto agentDefinition,
+        WorkflowNodeDto agentDefinition,
         ResolvedHookSet configuredHooks,
         IHookCommandRunner hookCommandRunner,
         PreToolUseHookInput input)
@@ -236,7 +236,7 @@ internal static class CopilotSessionHooks
 
     private static PreToolUseHookOutput CreateApprovalPolicyOutput(
         RunTurnCommandDto command,
-        PatternAgentDefinitionDto agentDefinition,
+        WorkflowNodeDto agentDefinition,
         PreToolUseHookInput input)
     {
         string? toolName = Normalize(input.ToolName);
@@ -254,8 +254,8 @@ internal static class CopilotSessionHooks
             command.Tooling?.McpServers);
 
         bool requiresApproval = CopilotApprovalCoordinator.RequiresToolCallApproval(
-            command.Pattern.ApprovalPolicy,
-            agentDefinition.Id,
+            command.Workflow.Settings.ApprovalPolicy,
+            agentDefinition.GetAgentId(),
             toolName,
             autoApprovedToolName,
             mcpServerApprovalKey);

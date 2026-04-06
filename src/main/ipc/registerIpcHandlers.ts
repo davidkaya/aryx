@@ -37,12 +37,10 @@ import type {
   ResolveSessionUserInputInput,
   SaveLspProfileInput,
   SaveMcpServerInput,
-  SavePatternInput,
   SaveWorkflowInput,
   SaveWorkflowTemplateInput,
   SaveWorkspaceAgentInput,
   SendSessionMessageInput,
-  SetPatternFavoriteInput,
   SetProjectAgentProfileEnabledInput,
   SetSessionArchivedInput,
   SetSessionInteractionModeInput,
@@ -53,7 +51,6 @@ import type {
   UpdateSessionModelConfigInput,
   UpdateSessionApprovalSettingsInput,
   UpdateSessionToolingInput,
-  UpgradePatternToWorkflowInput,
 } from '@shared/contracts/ipc';
 import type { QuerySessionsInput } from '@shared/domain/sessionLibrary';
 import type { AppearanceTheme } from '@shared/domain/tooling';
@@ -114,11 +111,6 @@ export function registerIpcHandlers(
     (_event, input: SetProjectAgentProfileEnabledInput) =>
       service.setProjectAgentProfileEnabled(input.projectId, input.agentProfileId, input.enabled),
   );
-  ipcMain.handle(ipcChannels.savePattern, (_event, input: SavePatternInput) => service.savePattern(input.pattern));
-  ipcMain.handle(ipcChannels.deletePattern, (_event, patternId: string) => service.deletePattern(patternId));
-  ipcMain.handle(ipcChannels.setPatternFavorite, (_event, input: SetPatternFavoriteInput) =>
-    service.setPatternFavorite(input.patternId, input.isFavorite),
-  );
   ipcMain.handle(ipcChannels.saveWorkflow, (_event, input: SaveWorkflowInput) => service.saveWorkflow(input.workflow));
   ipcMain.handle(ipcChannels.saveWorkflowTemplate, (_event, input: SaveWorkflowTemplateInput) =>
     service.saveWorkflowTemplate(input.workflowId, input.options),
@@ -135,9 +127,6 @@ export function registerIpcHandlers(
   );
   ipcMain.handle(ipcChannels.importWorkflow, (_event, input: ImportWorkflowInput) =>
     service.importWorkflow(input.content, input.format, input.options),
-  );
-  ipcMain.handle(ipcChannels.upgradePatternToWorkflow, (_event, input: UpgradePatternToWorkflowInput) =>
-    service.upgradePatternToWorkflow(input.patternId, input.options),
   );
   ipcMain.handle(ipcChannels.setTheme, async (_event, theme: AppearanceTheme) => {
     const result = await service.setTheme(theme);
@@ -205,7 +194,7 @@ export function registerIpcHandlers(
       service.updateSessionApprovalSettings(input.sessionId, input.autoApprovedToolNames),
   );
   ipcMain.handle(ipcChannels.createSession, (_event, input: CreateSessionInput) =>
-    service.createSession(input.projectId, input.patternId),
+    service.createSession(input.projectId, input.workflowId),
   );
   ipcMain.handle(ipcChannels.createWorkflowSession, (_event, input: CreateWorkflowSessionInput) =>
     service.createWorkflowSession(input.projectId, input.workflowId),
@@ -321,7 +310,6 @@ export function registerIpcHandlers(
   );
   ipcMain.handle(ipcChannels.querySessions, (_event, input: QuerySessionsInput) => service.querySessions(input));
   ipcMain.handle(ipcChannels.selectProject, (_event, projectId?: string) => service.selectProject(projectId));
-  ipcMain.handle(ipcChannels.selectPattern, (_event, patternId?: string) => service.selectPattern(patternId));
   ipcMain.handle(ipcChannels.selectSession, (_event, sessionId?: string) => service.selectSession(sessionId));
   ipcMain.handle(ipcChannels.openAppDataFolder, () => service.openAppDataFolder());
   ipcMain.handle(ipcChannels.resetLocalWorkspace, () => service.resetLocalWorkspace());

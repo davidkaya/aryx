@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 
 import {
-  buildWorkflowExecutionPattern,
+  buildWorkflowExecutionDefinition,
   validateWorkflowDefinition,
   type WorkflowDefinition,
 } from '@shared/domain/workflow';
@@ -245,16 +245,16 @@ describe('workflow validation', () => {
     expect(issues.some((issue) => issue.message.includes('exactly one of workflowId or inlineWorkflow'))).toBe(true);
   });
 
-  test('builds a synthetic execution pattern from workflow agents', () => {
-    const pattern = buildWorkflowExecutionPattern(createWorkflow());
+  test('builds an execution definition from workflow agents', () => {
+    const execution = buildWorkflowExecutionDefinition(createWorkflow());
 
-    expect(pattern.id).toBe('workflow-1');
-    expect(pattern.agents).toHaveLength(1);
-    expect(pattern.agents[0]?.name).toBe('Primary Agent');
-    expect(pattern.graph?.nodes.map((node) => node.kind)).toEqual(['user-input', 'agent', 'user-output']);
+    expect(execution.id).toBe('workflow-1');
+    expect(execution.agents).toHaveLength(1);
+    expect(execution.agents[0]?.name).toBe('Primary Agent');
+    expect(execution.orchestrationMode).toBe('single');
   });
 
-  test('includes referenced sub-workflow agents when building execution patterns', () => {
+  test('includes referenced sub-workflow agents when building execution definitions', () => {
     const childWorkflow = createReferencedSubWorkflow();
     const workflow = createWorkflow();
     workflow.graph.nodes[1] = {
@@ -270,12 +270,12 @@ describe('workflow validation', () => {
     workflow.graph.edges[0] = { id: 'edge-start-sub', source: 'start', target: 'sub-workflow', kind: 'direct' };
     workflow.graph.edges[1] = { id: 'edge-sub-end', source: 'sub-workflow', target: 'end', kind: 'direct' };
 
-    const pattern = buildWorkflowExecutionPattern(workflow, {
-      resolveWorkflow: (workflowId) => workflowId === childWorkflow.id ? childWorkflow : undefined,
+    const execution = buildWorkflowExecutionDefinition(workflow, {
+      resolveWorkflow: (workflowId: string) => workflowId === childWorkflow.id ? childWorkflow : undefined,
     });
 
-    expect(pattern.mode).toBe('single');
-    expect(pattern.agents.map((agent) => agent.id)).toEqual(['agent-reviewer']);
+    expect(execution.orchestrationMode).toBe('single');
+    expect(execution.agents.map((agent) => agent.id)).toEqual(['agent-reviewer']);
   });
 
   test('accepts simple property and expression conditions', () => {

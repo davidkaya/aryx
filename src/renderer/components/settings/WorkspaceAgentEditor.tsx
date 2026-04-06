@@ -3,7 +3,7 @@ import { ModelSelect, ReasoningEffortSelect } from '@renderer/components/AgentCo
 import { findModel, type ModelDefinition } from '@shared/domain/models';
 import { resolveReasoningEffort } from '@shared/domain/models';
 import type { WorkspaceAgentDefinition } from '@shared/domain/workspaceAgent';
-import type { PatternDefinition } from '@shared/domain/pattern';
+import type { WorkflowDefinition } from '@shared/domain/workflow';
 import { findWorkspaceAgentUsages } from '@shared/domain/workspaceAgent';
 import { ToolingEditorShell } from './ToolingEditorShell';
 import { Link2, Workflow } from 'lucide-react';
@@ -21,7 +21,7 @@ export function WorkspaceAgentEditor({
   onSave,
   onDelete,
   availableModels,
-  patterns,
+  workflows,
 }: {
   agent: WorkspaceAgentDefinition;
   onChange: (agent: WorkspaceAgentDefinition) => void;
@@ -29,10 +29,10 @@ export function WorkspaceAgentEditor({
   onSave: () => Promise<void>;
   onDelete?: () => Promise<void>;
   availableModels: ReadonlyArray<ModelDefinition>;
-  patterns: PatternDefinition[];
+  workflows: WorkflowDefinition[];
 }) {
   const validationError = validateWorkspaceAgent(agent);
-  const usages = findWorkspaceAgentUsages(agent.id, patterns);
+  const usages = findWorkspaceAgentUsages(agent.id, workflows);
 
   return (
     <ToolingEditorShell
@@ -117,22 +117,22 @@ export function WorkspaceAgentEditor({
             {usages.map((usage) => (
               <div
                 className="flex items-center gap-2.5 border-b border-[var(--color-border)] px-3.5 py-2.5 last:border-b-0"
-                key={usage.patternId}
+                key={usage.workflowId}
               >
                 <Workflow className="size-3.5 shrink-0 text-[var(--color-text-muted)]" />
                 <span className="text-[13px] text-[var(--color-text-secondary)]">
-                  {usage.patternName}
+                  {usage.workflowName}
                 </span>
                 <Link2 className="ml-auto size-3 text-[var(--color-accent)]" />
               </div>
             ))}
           </div>
           <p className="text-[11px] text-[var(--color-text-muted)]">
-            Referenced by {usages.length} pattern{usages.length === 1 ? '' : 's'}.
-            Changes to this agent will affect all linked patterns.
-          </p>
-        </section>
-      )}
+             Referenced by {usages.length} workflow{usages.length === 1 ? '' : 's'}.
+             Changes to this agent will affect all linked workflows.
+           </p>
+         </section>
+       )}
     </ToolingEditorShell>
   );
 }

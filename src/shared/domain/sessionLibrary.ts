@@ -1,4 +1,3 @@
-import type { PatternDefinition } from '@shared/domain/pattern';
 import { isScratchpadProject, type ProjectRecord } from '@shared/domain/project';
 import type { ChatMessageAttachment } from '@shared/domain/attachment';
 import {
@@ -14,16 +13,16 @@ import {
   type SessionStatus,
 } from '@shared/domain/session';
 import type { WorkspaceState } from '@shared/domain/workspace';
-import { buildWorkflowExecutionPattern } from '@shared/domain/workflow';
+import type { WorkflowDefinition } from '@shared/domain/workflow';
 
-export type SessionQueryMatchField = 'title' | 'message' | 'project' | 'pattern';
+export type SessionQueryMatchField = 'title' | 'message' | 'project' | 'workflow';
 export type SessionWorkspaceKind = 'project' | 'scratchpad';
 
 export interface QuerySessionsInput {
   searchText?: string;
   statuses?: SessionStatus[];
   projectIds?: string[];
-  patternIds?: string[];
+  workflowIds?: string[];
   workspaceKinds?: SessionWorkspaceKind[];
   includeArchived?: boolean;
   onlyPinned?: boolean;
@@ -38,17 +37,17 @@ export interface SessionQueryResult {
 const fieldWeights: Record<SessionQueryMatchField, number> = {
   title: 12,
   project: 8,
-  pattern: 7,
+  workflow: 7,
   message: 4,
 };
 
-const orderedMatchFields: SessionQueryMatchField[] = ['title', 'message', 'project', 'pattern'];
+const orderedMatchFields: SessionQueryMatchField[] = ['title', 'message', 'project', 'workflow'];
 
 interface SessionSearchFields {
   title: string;
   message: string;
   project: string;
-  pattern: string;
+  workflow: string;
 }
 
 function normalizeSearchText(value: string): string {
@@ -68,18 +67,21 @@ function tokenizeSearchText(value?: string): string[] {
 function buildSearchFields(
   session: SessionRecord,
   project?: ProjectRecord,
-  pattern?: PatternDefinition,
+  workflow?: WorkflowDefinition,
 ): SessionSearchFields {
   return {
     title: normalizeSearchText(session.title),
     message: normalizeSearchText(session.messages.map((message) => message.content).join('\n')),
     project: normalizeSearchText([project?.name, project?.path].filter(Boolean).join('\n')),
-    pattern: normalizeSearchText(
+    workflow: normalizeSearchText(
       [
-        pattern?.name,
-        pattern?.description,
-        pattern?.mode,
-        ...(pattern?.agents.flatMap((agent) => [agent.name, agent.description]) ?? []),
+        workflow?.name,
+        workflow?.description,
+        workflow?.settings.orchestrationMode,
+        ...(workflow?.graph.nodes.flatMap((node) =>
+          node.kind === 'agent' && node.config.kind === 'agent'
+            ? [node.config.name, node.config.description]
+            : []) ?? []),
       ]
         .filter(Boolean)
         .join('\n'),
@@ -146,7 +148,7 @@ function matchesFilters(
     return false;
   }
 
-  if (input.patternIds && input.patternIds.length > 0 && !input.patternIds.includes(session.patternId)) {
+  if (input.workflowIds && input.workflowIds.length > 0 && !input.workflowIds.includes(session.workflowId)) {
     return false;
   }
 
@@ -280,7 +282,7 @@ export function duplicateSessionRecord(
 
 export function branchSessionRecord(
   session: SessionRecord,
-  pattern: PatternDefinition,
+  workflow: WorkflowDefinition,
   sessionId: string,
   messageId: string,
   branchedAt: string,
@@ -299,7 +301,7 @@ export function branchSessionRecord(
 
   return {
     ...createDerivedSessionRecord(session, sessionId, branchedAt),
-    title: resolveSessionTitle(session, pattern, branchedMessages),
+    title: resolveSessionTitle(session, workflow, branchedMessages),
     messages: branchedMessages,
     branchOrigin: createBranchOrigin(session, messageId, sourceMessageIndex, branchedAt, 'branch'),
   };
@@ -338,7 +340,7 @@ export function setSessionMessagePinnedRecord(
 
 export function regenerateSessionRecord(
   session: SessionRecord,
-  pattern: PatternDefinition,
+  workflow: WorkflowDefinition,
   sessionId: string,
   messageId: string,
   regeneratedAt: string,
@@ -373,7 +375,7 @@ export function regenerateSessionRecord(
 
   return {
     ...createDerivedSessionRecord(session, sessionId, regeneratedAt),
-    title: resolveSessionTitle(session, pattern, regeneratedMessages),
+    title: resolveSessionTitle(session, workflow, regeneratedMessages),
     messages: regeneratedMessages,
     branchOrigin: createBranchOrigin(session, messageId, sourceMessageIndex, regeneratedAt, 'regenerate'),
   };
@@ -381,7 +383,7 @@ export function regenerateSessionRecord(
 
 export function editAndResendSessionRecord(
   session: SessionRecord,
-  pattern: PatternDefinition,
+  workflow: WorkflowDefinition,
   sessionId: string,
   messageId: string,
   content: string,
@@ -410,7 +412,7 @@ export function editAndResendSessionRecord(
 
   return {
     ...createDerivedSessionRecord(session, sessionId, editedAt),
-    title: resolveSessionTitle(session, pattern, editedMessages),
+    title: resolveSessionTitle(session, workflow, editedMessages),
     messages: editedMessages,
     branchOrigin: createBranchOrigin(session, messageId, sourceMessageIndex, editedAt, 'edit-and-resend'),
   };
@@ -456,7 +458,6 @@ export function listPinnedMessages(workspace: WorkspaceState): PinnedMessageHit[
 
 export function querySessions(workspace: WorkspaceState, input: QuerySessionsInput): SessionQueryResult[] {
   const projectsById = new Map<string, ProjectRecord>(workspace.projects.map((project) => [project.id, project]));
-  const patternsById = new Map<string, PatternDefinition>(workspace.patterns.map((pattern) => [pattern.id, pattern]));
   const workflowsById = new Map(workspace.workflows.map((workflow) => [workflow.id, workflow]));
   const searchTokens = tokenizeSearchText(input.searchText);
 
@@ -471,13 +472,7 @@ export function querySessions(workspace: WorkspaceState, input: QuerySessionsInp
         buildSearchFields(
           session,
           projectsById.get(session.projectId),
-          patternsById.get(session.patternId)
-            ?? (session.workflowId
-              ? (() => {
-                const workflow = workflowsById.get(session.workflowId);
-                return workflow ? buildWorkflowExecutionPattern(workflow) : undefined;
-              })()
-              : undefined),
+          workflowsById.get(session.workflowId),
         ),
         searchTokens,
       );

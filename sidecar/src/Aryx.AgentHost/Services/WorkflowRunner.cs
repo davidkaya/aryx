@@ -8,12 +8,10 @@ internal sealed class WorkflowRunner
 {
     public Workflow BuildWorkflow(
         WorkflowDefinitionDto workflowDefinition,
-        PatternDefinitionDto patternDefinition,
         IReadOnlyList<AIAgent> agents,
         IReadOnlyList<WorkflowDefinitionDto>? workflowLibrary = null)
     {
         ArgumentNullException.ThrowIfNull(workflowDefinition);
-        ArgumentNullException.ThrowIfNull(patternDefinition);
         ArgumentNullException.ThrowIfNull(agents);
 
         Dictionary<string, WorkflowDefinitionDto> workflowLibraryMap = workflowLibrary?
@@ -22,9 +20,10 @@ internal sealed class WorkflowRunner
             .ToDictionary(group => group.Key, group => group.Last(), StringComparer.Ordinal)
             ?? new Dictionary<string, WorkflowDefinitionDto>(StringComparer.Ordinal);
 
-        Dictionary<string, AIAgent> agentMap = patternDefinition.Agents
-            .Zip(agents, (definition, agent) => (definition.Id, agent))
-            .ToDictionary(pair => pair.Id, pair => pair.agent, StringComparer.Ordinal);
+        List<string> agentIds = ResolveAgentIds(workflowDefinition, workflowLibraryMap);
+        Dictionary<string, AIAgent> agentMap = agentIds
+            .Zip(agents, (agentId, agent) => (agentId, agent))
+            .ToDictionary(pair => pair.agentId, pair => pair.agent, StringComparer.Ordinal);
 
         return BuildWorkflow(workflowDefinition, agentMap, workflowLibraryMap);
     }
@@ -221,6 +220,47 @@ internal sealed class WorkflowRunner
 
     private static string? NormalizeOptionalString(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static List<string> ResolveAgentIds(
+        WorkflowDefinitionDto workflowDefinition,
+        IReadOnlyDictionary<string, WorkflowDefinitionDto> workflowLibrary)
+    {
+        List<string> agentIds = [];
+        CollectAgentIds(workflowDefinition, workflowLibrary, agentIds, new HashSet<string>(StringComparer.Ordinal));
+        return agentIds;
+    }
+
+    private static void CollectAgentIds(
+        WorkflowDefinitionDto workflowDefinition,
+        IReadOnlyDictionary<string, WorkflowDefinitionDto> workflowLibrary,
+        List<string> agentIds,
+        ISet<string> visitedWorkflowIds)
+    {
+        string workflowKey = string.IsNullOrWhiteSpace(workflowDefinition.Id)
+            ? Guid.NewGuid().ToString("N")
+            : workflowDefinition.Id;
+        if (!visitedWorkflowIds.Add(workflowKey))
+        {
+            return;
+        }
+
+        foreach (WorkflowNodeDto node in workflowDefinition.Graph.Nodes)
+        {
+            if (string.Equals(node.Kind, "agent", StringComparison.OrdinalIgnoreCase))
+            {
+                agentIds.Add(!string.IsNullOrWhiteSpace(node.Config.Id) ? node.Config.Id : node.Id);
+                continue;
+            }
+
+            if (!string.Equals(node.Kind, "sub-workflow", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            WorkflowDefinitionDto subWorkflow = ResolveSubWorkflowDefinition(node, workflowLibrary);
+            CollectAgentIds(subWorkflow, workflowLibrary, agentIds, visitedWorkflowIds);
+        }
+    }
 
     private sealed record WorkflowNodeRoute(
         ExecutorBinding Entry,

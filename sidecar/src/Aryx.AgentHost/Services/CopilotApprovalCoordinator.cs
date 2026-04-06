@@ -67,7 +67,7 @@ internal sealed class CopilotApprovalCoordinator
 
     public async Task<PermissionRequestResult> RequestApprovalAsync(
         RunTurnCommandDto command,
-        PatternAgentDefinitionDto agent,
+        WorkflowNodeDto agent,
         PermissionRequest request,
         PermissionInvocation invocation,
         IReadOnlyDictionary<string, string> toolNamesByCallId,
@@ -88,7 +88,7 @@ internal sealed class CopilotApprovalCoordinator
 
     public async Task<PermissionRequestResult> RequestApprovalAsync(
         RunTurnCommandDto command,
-        PatternAgentDefinitionDto agent,
+        WorkflowNodeDto agent,
         PermissionRequest request,
         PermissionInvocation invocation,
         IReadOnlyDictionary<string, string> toolNamesByCallId,
@@ -108,7 +108,7 @@ internal sealed class CopilotApprovalCoordinator
         }
 
         if (IsToolApprovedForRequest(command.RequestId, approvalCacheKey)
-            || !RequiresToolCallApproval(command.Pattern.ApprovalPolicy, agent.Id, toolName, autoApprovedToolName, mcpServerApprovalKey))
+            || !RequiresToolCallApproval(command.Workflow.Settings.ApprovalPolicy, agent.GetAgentId(), toolName, autoApprovedToolName, mcpServerApprovalKey))
         {
             return CreateApprovalResult(PermissionRequestResultKind.Approved);
         }
@@ -149,7 +149,7 @@ internal sealed class CopilotApprovalCoordinator
 
     internal static ApprovalRequestedEventDto BuildPermissionApprovalEvent(
         RunTurnCommandDto command,
-        PatternAgentDefinitionDto agent,
+        WorkflowNodeDto agent,
         PermissionRequest request,
         PermissionInvocation invocation,
         string approvalId,
@@ -157,7 +157,8 @@ internal sealed class CopilotApprovalCoordinator
     {
         string permissionKind = ResolvePermissionKind(request, command.Tooling?.McpServers);
 
-        string agentName = string.IsNullOrWhiteSpace(agent.Name) ? agent.Id : agent.Name;
+        string agentId = agent.GetAgentId();
+        string agentName = agent.GetAgentName();
         string? sessionId = NormalizeOptionalString(invocation.SessionId);
         string? normalizedToolName = NormalizeOptionalString(toolName);
         string? requestedUrl = request is PermissionRequestUrl urlRequest
@@ -191,7 +192,7 @@ internal sealed class CopilotApprovalCoordinator
             SessionId = command.SessionId,
             ApprovalId = approvalId,
             ApprovalKind = ToolCallApprovalKind,
-            AgentId = NormalizeOptionalString(agent.Id),
+            AgentId = NormalizeOptionalString(agentId),
             AgentName = NormalizeOptionalString(agentName),
             ToolName = normalizedToolName,
             PermissionKind = permissionKind,
@@ -203,7 +204,7 @@ internal sealed class CopilotApprovalCoordinator
 
     internal static AgentActivityEventDto? BuildToolCallFileChangeActivity(
         RunTurnCommandDto command,
-        PatternAgentDefinitionDto agent,
+        WorkflowNodeDto agent,
         PermissionRequest request,
         string? toolName)
     {
@@ -218,14 +219,15 @@ internal sealed class CopilotApprovalCoordinator
             return null;
         }
 
-        string agentName = string.IsNullOrWhiteSpace(agent.Name) ? agent.Id : agent.Name;
+        string agentId = agent.GetAgentId();
+        string agentName = agent.GetAgentName();
         return new AgentActivityEventDto
         {
             Type = "agent-activity",
             RequestId = command.RequestId,
             SessionId = command.SessionId,
             ActivityType = ToolCallingActivityType,
-            AgentId = NormalizeOptionalString(agent.Id),
+            AgentId = NormalizeOptionalString(agentId),
             AgentName = NormalizeOptionalString(agentName),
             ToolName = NormalizeOptionalString(toolName),
             ToolCallId = NormalizeOptionalString(write.ToolCallId),

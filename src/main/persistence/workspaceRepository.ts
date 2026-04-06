@@ -1,8 +1,5 @@
 import { mkdir } from 'node:fs/promises';
 
-import { createBuiltinPatterns, resolvePatternGraph } from '@shared/domain/pattern';
-import type { PatternDefinition } from '@shared/domain/pattern';
-import { isScratchpadProject, mergeScratchpadProject } from '@shared/domain/project';
 import { normalizeDiscoveredToolingState } from '@shared/domain/discoveredTooling';
 import { normalizeProjectCustomizationState } from '@shared/domain/projectCustomization';
 import { normalizeSessionRunRecords } from '@shared/domain/runTimeline';
@@ -20,13 +17,18 @@ import {
   normalizeWorkflowTemplateDefinition,
   type WorkflowTemplateDefinition,
 } from '@shared/domain/workflowTemplate';
-import { normalizeWorkflowDefinition } from '@shared/domain/workflow';
+import {
+  createBuiltinWorkflows,
+  normalizeWorkflowDefinition,
+  type WorkflowDefinition,
+} from '@shared/domain/workflow';
 import {
   applyDefaultToolApprovalPolicy,
   normalizePendingApprovalState,
   normalizeSessionApprovalSettings,
 } from '@shared/domain/approval';
 import { createWorkspaceSeed, type WorkspaceState } from '@shared/domain/workspace';
+import { isScratchpadProject, mergeScratchpadProject } from '@shared/domain/project';
 import { nowIso } from '@shared/utils/ids';
 
 import {
@@ -36,31 +38,31 @@ import {
 } from '@main/persistence/appPaths';
 import { readJsonFile, writeJsonFile } from '@main/persistence/jsonStore';
 
-function mergePatterns(existingPatterns: PatternDefinition[], deletedBuiltinIds: string[]): PatternDefinition[] {
-  const builtinTimestamp = nowIso();
-  const builtinPatterns = createBuiltinPatterns(builtinTimestamp);
-  const builtinIds = new Set(builtinPatterns.map((pattern) => pattern.id));
-  const deletedSet = new Set(deletedBuiltinIds);
-  const existingMap = new Map(existingPatterns.map((pattern) => [pattern.id, pattern]));
+function mergeBuiltinWorkflows(existingWorkflows: WorkflowDefinition[]): WorkflowDefinition[] {
+  const builtinWorkflows = createBuiltinWorkflows(nowIso());
+  const builtinIds = new Set(builtinWorkflows.map((workflow) => workflow.id));
+  const existingMap = new Map(existingWorkflows.map((workflow) => [workflow.id, workflow]));
 
-  const mergedBuiltins = builtinPatterns
-    .filter((builtin) => !deletedSet.has(builtin.id))
-    .map((builtin) => {
+  const mergedBuiltins = builtinWorkflows.map((builtin) => {
     const existing = existingMap.get(builtin.id);
     if (!existing) {
       return builtin;
     }
 
-    return {
+    return normalizeWorkflowDefinition({
       ...existing,
-      availability: builtin.availability,
-      unavailabilityReason: builtin.unavailabilityReason,
-      mode: builtin.mode,
-    };
+      settings: {
+        ...existing.settings,
+        orchestrationMode: builtin.settings.orchestrationMode,
+      },
+    });
   });
 
-  const customPatterns = existingPatterns.filter((pattern) => !builtinIds.has(pattern.id));
-  return [...mergedBuiltins, ...customPatterns];
+  const customWorkflows = existingWorkflows
+    .filter((workflow) => !builtinIds.has(workflow.id))
+    .map(normalizeWorkflowDefinition);
+
+  return [...mergedBuiltins, ...customWorkflows];
 }
 
 function mergeWorkflowTemplates(existingTemplates: WorkflowTemplateDefinition[]): WorkflowTemplateDefinition[] {
@@ -73,6 +75,28 @@ function mergeWorkflowTemplates(existingTemplates: WorkflowTemplateDefinition[])
   return [...builtinTemplates, ...customTemplates];
 }
 
+function migrateLegacySessions(
+  sessions: SessionRecord[],
+  workflows: WorkflowDefinition[],
+): SessionRecord[] {
+  const workflowIds = new Set(workflows.map((workflow) => workflow.id));
+  const fallbackWorkflowId = workflows[0]?.id;
+
+  return sessions.flatMap((session) => {
+    const workflowId = session.workflowId && workflowIds.has(session.workflowId)
+      ? session.workflowId
+      : fallbackWorkflowId;
+    if (!workflowId) {
+      return [];
+    }
+
+    return [{
+      ...session,
+      workflowId,
+    }];
+  });
+}
+
 export class WorkspaceRepository {
   readonly filePath = getWorkspaceFilePath();
   readonly scratchpadPath = getScratchpadDirectoryPath();
@@ -80,7 +104,7 @@ export class WorkspaceRepository {
   async load(): Promise<WorkspaceState> {
     await mkdir(this.scratchpadPath, { recursive: true });
 
-    const stored = await readJsonFile<WorkspaceState>(this.filePath);
+    const stored = await readJsonFile<WorkspaceState & { patterns?: unknown[] }>(this.filePath);
     if (!stored) {
       const seededBase = createWorkspaceSeed();
       const projects = mergeScratchpadProject([], this.scratchpadPath);
@@ -101,50 +125,58 @@ export class WorkspaceRepository {
       })),
       this.scratchpadPath,
     );
-    const sessions = await Promise.all((stored.sessions ?? []).map(async (session): Promise<SessionRecord> => {
-      const normalizedSession: SessionRecord = {
-        ...session,
-        messages: (session.messages ?? []).map(normalizeChatMessageRecord),
-        branchOrigin: normalizeSessionBranchOrigin(session.branchOrigin),
-        runs: normalizeSessionRunRecords(session.runs),
-        tooling: normalizeSessionToolingSelection(session.tooling),
-        approvalSettings: normalizeSessionApprovalSettings(session.approvalSettings),
-        ...normalizePendingApprovalState({
-          pendingApproval: session.pendingApproval,
-          pendingApprovalQueue: session.pendingApprovalQueue,
-        }),
-      };
-      if (!isScratchpadProject(normalizedSession.projectId)) {
-        return normalizedSession;
-      }
 
-      const cwd = normalizedSession.cwd ?? getScratchpadSessionPath(normalizedSession.id);
-      await mkdir(cwd, { recursive: true });
-      return {
-        ...normalizedSession,
-        cwd,
-      };
-    }));
+    const workflows = mergeBuiltinWorkflows((stored.workflows ?? []).map(normalizeWorkflowDefinition))
+      .map((workflow) => ({
+        ...workflow,
+        settings: {
+          ...workflow.settings,
+          approvalPolicy: applyDefaultToolApprovalPolicy(workflow.settings.approvalPolicy),
+        },
+      }));
+
+    const sessions = migrateLegacySessions(
+      await Promise.all((stored.sessions ?? []).map(async (session): Promise<SessionRecord> => {
+        const normalizedSession: SessionRecord = {
+          ...session,
+          messages: (session.messages ?? []).map(normalizeChatMessageRecord),
+          branchOrigin: normalizeSessionBranchOrigin(session.branchOrigin),
+          runs: normalizeSessionRunRecords(session.runs),
+          tooling: normalizeSessionToolingSelection(session.tooling),
+          approvalSettings: normalizeSessionApprovalSettings(session.approvalSettings),
+          ...normalizePendingApprovalState({
+            pendingApproval: session.pendingApproval,
+            pendingApprovalQueue: session.pendingApprovalQueue,
+          }),
+        };
+        if (!isScratchpadProject(normalizedSession.projectId)) {
+          return normalizedSession;
+        }
+
+        const cwd = normalizedSession.cwd ?? getScratchpadSessionPath(normalizedSession.id);
+        await mkdir(cwd, { recursive: true });
+        return {
+          ...normalizedSession,
+          cwd,
+        };
+      })),
+      workflows,
+    );
+
     const settings = normalizeWorkspaceSettings(stored.settings);
-
-    const deletedBuiltinPatternIds = stored.deletedBuiltinPatternIds ?? [];
-
     const workspace: WorkspaceState = {
       ...stored,
-      patterns: mergePatterns(stored.patterns ?? [], deletedBuiltinPatternIds).map((pattern) => ({
-        ...pattern,
-        approvalPolicy: applyDefaultToolApprovalPolicy(pattern.approvalPolicy),
-        graph: resolvePatternGraph(pattern),
-      })),
-      workflows: (stored.workflows ?? []).map(normalizeWorkflowDefinition),
+      workflows,
       workflowTemplates: mergeWorkflowTemplates(stored.workflowTemplates ?? []),
       projects,
       sessions,
       settings,
-      deletedBuiltinPatternIds,
       selectedProjectId: projects.some((project) => project.id === stored.selectedProjectId)
         ? stored.selectedProjectId
         : projects[0]?.id,
+      selectedWorkflowId: workflows.some((workflow) => workflow.id === stored.selectedWorkflowId)
+        ? stored.selectedWorkflowId
+        : workflows[0]?.id,
       lastUpdatedAt: stored.lastUpdatedAt ?? nowIso(),
     };
 

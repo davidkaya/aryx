@@ -20,7 +20,7 @@ internal static class WorkflowRequestInfoInterpreter
         AgentIdentity? activeAgent,
         ConcurrentDictionary<string, string> toolNamesByCallId)
     {
-        RequestInterpretation interpretation = InterpretRequest(command.Pattern, requestInfo);
+        RequestInterpretation interpretation = InterpretRequest(command.Workflow, requestInfo);
         return interpretation switch
         {
             HandoffRequestInterpretation handoff =>
@@ -35,8 +35,8 @@ internal static class WorkflowRequestInfoInterpreter
         RunTurnCommandDto command,
         RequestInfoEvent requestInfo)
     {
-        return string.Equals(command.Pattern.Mode, "handoff", StringComparison.OrdinalIgnoreCase)
-            && InterpretRequest(command.Pattern, requestInfo) is UnknownRequestInterpretation;
+        return command.Workflow.IsOrchestrationMode("handoff")
+            && InterpretRequest(command.Workflow, requestInfo) is UnknownRequestInterpretation;
     }
 
     private static AgentActivityEventDto CreateHandoffActivity(
@@ -95,10 +95,10 @@ internal static class WorkflowRequestInfoInterpreter
     }
 
     private static RequestInterpretation InterpretRequest(
-        PatternDefinitionDto pattern,
+        WorkflowDefinitionDto workflow,
         RequestInfoEvent requestInfo)
     {
-        if (TryGetHandoffTarget(pattern, requestInfo, out AgentIdentity handoffAgent))
+        if (TryGetHandoffTarget(workflow, requestInfo, out AgentIdentity handoffAgent))
         {
             return new HandoffRequestInterpretation(handoffAgent);
         }
@@ -109,7 +109,7 @@ internal static class WorkflowRequestInfoInterpreter
     }
 
     private static bool TryGetHandoffTarget(
-        PatternDefinitionDto pattern,
+        WorkflowDefinitionDto workflow,
         RequestInfoEvent requestInfo,
         out AgentIdentity agent)
     {
@@ -128,7 +128,7 @@ internal static class WorkflowRequestInfoInterpreter
         }
 
         agent = AgentIdentityResolver.ResolveAgentIdentity(
-            pattern,
+            workflow,
             target.Id,
             target.Name);
         return !string.IsNullOrWhiteSpace(agent.AgentName);

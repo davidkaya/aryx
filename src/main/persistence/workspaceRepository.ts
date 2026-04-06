@@ -41,28 +41,12 @@ import { readJsonFile, writeJsonFile } from '@main/persistence/jsonStore';
 function mergeBuiltinWorkflows(existingWorkflows: WorkflowDefinition[]): WorkflowDefinition[] {
   const builtinWorkflows = createBuiltinWorkflows(nowIso());
   const builtinIds = new Set(builtinWorkflows.map((workflow) => workflow.id));
-  const existingMap = new Map(existingWorkflows.map((workflow) => [workflow.id, workflow]));
-
-  const mergedBuiltins = builtinWorkflows.map((builtin) => {
-    const existing = existingMap.get(builtin.id);
-    if (!existing) {
-      return builtin;
-    }
-
-    return normalizeWorkflowDefinition({
-      ...existing,
-      settings: {
-        ...existing.settings,
-        orchestrationMode: builtin.settings.orchestrationMode,
-      },
-    });
-  });
 
   const customWorkflows = existingWorkflows
     .filter((workflow) => !builtinIds.has(workflow.id))
     .map(normalizeWorkflowDefinition);
 
-  return [...mergedBuiltins, ...customWorkflows];
+  return [...builtinWorkflows, ...customWorkflows];
 }
 
 function mergeWorkflowTemplates(existingTemplates: WorkflowTemplateDefinition[]): WorkflowTemplateDefinition[] {

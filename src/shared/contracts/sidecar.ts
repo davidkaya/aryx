@@ -10,6 +10,14 @@ import type {
   WorkflowValidationIssue,
 } from '@shared/domain/workflow';
 
+export type {
+  GroupChatModeSettings,
+  GroupChatSelectionStrategy,
+  HandoffModeSettings,
+  HandoffToolCallFiltering,
+  OrchestrationModeSettings,
+} from '@shared/domain/workflow';
+
 export interface SidecarModeCapability {
   available: boolean;
   reason?: string;

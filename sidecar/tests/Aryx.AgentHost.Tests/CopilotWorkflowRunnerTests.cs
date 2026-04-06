@@ -27,6 +27,82 @@ public sealed class CopilotWorkflowRunnerTests
     }
 
     [Fact]
+    public void BuildWorkflowForCommand_UsesGroupChatBuilderForGroupChatMode()
+    {
+        RunTurnCommandDto command = CreateCommand(
+            "group-chat",
+            modeSettings: new OrchestrationModeSettingsDto
+            {
+                GroupChat = new GroupChatModeSettingsDto
+                {
+                    SelectionStrategy = "round-robin",
+                    MaxRounds = 6,
+                },
+            },
+            workflowName: "Collaborative Review",
+            workflowDescription: "Two agents collaborate under a group chat manager.",
+            agents:
+            [
+                CreateAgent("agent-group-writer", "Writer"),
+                CreateAgent("agent-group-reviewer", "Reviewer"),
+            ]);
+
+        Workflow workflow = CopilotWorkflowRunner.BuildWorkflowForCommand(
+            command,
+            [
+                CreateChatClientAgent("agent-group-writer", "Writer"),
+                CreateChatClientAgent("agent-group-reviewer", "Reviewer"),
+            ]);
+
+        Assert.Equal("Collaborative Review", workflow.Name);
+        Assert.Equal("Two agents collaborate under a group chat manager.", workflow.Description);
+    }
+
+    [Fact]
+    public async Task BuildWorkflowForCommand_UsesHandoffBuilderForHandoffMode()
+    {
+        RunTurnCommandDto command = CreateCommand(
+            "handoff",
+            modeSettings: new OrchestrationModeSettingsDto
+            {
+                Handoff = new HandoffModeSettingsDto
+                {
+                    TriageAgentNodeId = "agent-handoff-triage",
+                    ToolCallFiltering = "handoff-only",
+                },
+            },
+            agents:
+            [
+            CreateAgent("agent-handoff-triage", "Triage"),
+            CreateAgent("agent-handoff-runtime", "Runtime Specialist"),
+            ]);
+
+        Workflow workflow = CopilotWorkflowRunner.BuildWorkflowForCommand(
+            command,
+            [
+                CreateChatClientAgent("agent-handoff-triage", "Triage"),
+                CreateChatClientAgent("agent-handoff-runtime", "Runtime Specialist"),
+            ]);
+        ProtocolDescriptor descriptor = await workflow.DescribeProtocolAsync();
+
+        Assert.Contains(descriptor.Yields, candidate => candidate == typeof(List<ChatMessage>));
+    }
+
+    [Fact]
+    public async Task BuildWorkflowForCommand_UsesGraphWorkflowRunnerForGraphModes()
+    {
+        RunTurnCommandDto command = CreateGraphWorkflowCommand();
+        Workflow workflow = CopilotWorkflowRunner.BuildWorkflowForCommand(
+            command,
+            [
+                CreateChatClientAgent("agent-primary", "Primary Agent"),
+            ]);
+        ProtocolDescriptor descriptor = await workflow.DescribeProtocolAsync();
+
+        Assert.Contains(descriptor.Yields, candidate => candidate == typeof(List<ChatMessage>));
+    }
+
+    [Fact]
     public void SelectNewOutputMessages_SkipsFullTranscriptPrefix()
     {
         List<ChatMessage> inputMessages =
@@ -2064,6 +2140,16 @@ public sealed class CopilotWorkflowRunnerTests
         string orchestrationMode,
         params WorkflowNodeDto[] agents)
     {
+        return CreateCommand(orchestrationMode, modeSettings: null, workflowName: null, workflowDescription: null, agents);
+    }
+
+    private static RunTurnCommandDto CreateCommand(
+        string orchestrationMode,
+        OrchestrationModeSettingsDto? modeSettings = null,
+        string? workflowName = null,
+        string? workflowDescription = null,
+        params WorkflowNodeDto[] agents)
+    {
         return new RunTurnCommandDto
         {
             RequestId = "turn-1",
@@ -2071,7 +2157,8 @@ public sealed class CopilotWorkflowRunnerTests
             Workflow = new WorkflowDefinitionDto
             {
                 Id = $"workflow-{orchestrationMode}",
-                Name = $"Workflow {orchestrationMode}",
+                Name = workflowName ?? $"Workflow {orchestrationMode}",
+                Description = workflowDescription ?? string.Empty,
                 Graph = new WorkflowGraphDto
                 {
                     Nodes = [.. agents],
@@ -2079,6 +2166,64 @@ public sealed class CopilotWorkflowRunnerTests
                 Settings = new WorkflowSettingsDto
                 {
                     OrchestrationMode = orchestrationMode,
+                    ModeSettings = modeSettings,
+                },
+            },
+        };
+    }
+
+    private static RunTurnCommandDto CreateGraphWorkflowCommand()
+    {
+        return new RunTurnCommandDto
+        {
+            RequestId = "turn-graph",
+            SessionId = "session-graph",
+            Workflow = new WorkflowDefinitionDto
+            {
+                Id = "workflow-single",
+                Name = "Single Graph Workflow",
+                Description = "Uses the graph workflow runner.",
+                Graph = new WorkflowGraphDto
+                {
+                    Nodes =
+                    [
+                        new WorkflowNodeDto
+                        {
+                            Id = "start",
+                            Kind = "start",
+                            Label = "Start",
+                            Config = new WorkflowNodeConfigDto { Kind = "start" },
+                        },
+                        CreateAgent("agent-primary", "Primary Agent"),
+                        new WorkflowNodeDto
+                        {
+                            Id = "end",
+                            Kind = "end",
+                            Label = "End",
+                            Config = new WorkflowNodeConfigDto { Kind = "end" },
+                        },
+                    ],
+                    Edges =
+                    [
+                        new WorkflowEdgeDto
+                        {
+                            Id = "edge-start-agent",
+                            Source = "start",
+                            Target = "agent-primary",
+                            Kind = "direct",
+                        },
+                        new WorkflowEdgeDto
+                        {
+                            Id = "edge-agent-end",
+                            Source = "agent-primary",
+                            Target = "end",
+                            Kind = "direct",
+                        },
+                    ],
+                },
+                Settings = new WorkflowSettingsDto
+                {
+                    OrchestrationMode = "single",
                 },
             },
         };

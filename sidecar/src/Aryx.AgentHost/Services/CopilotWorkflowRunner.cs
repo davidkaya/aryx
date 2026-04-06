@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Text.Json;
 using Aryx.AgentHost.Contracts;
 using GitHub.Copilot.SDK;
+using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Agents.AI.Workflows.Checkpointing;
 using Microsoft.Agents.AI.Workflows.InProc;
@@ -84,7 +85,7 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
                 },
                 runCancellation.Token);
             ConfigureHookLifecycleEventSuppression(state, bundle);
-            Workflow workflow = _workflowRunner.BuildWorkflow(command.Workflow, bundle.Agents, command.WorkflowLibrary);
+            Workflow workflow = BuildWorkflowForCommand(command, bundle.Agents, _workflowRunner);
             List<ChatMessage> inputMessages = command.Messages.Select(WorkflowTranscriptProjector.ToChatMessage).ToList();
             WorkflowTranscriptProjector.AttachMessageMode(inputMessages, command.MessageMode);
 
@@ -147,6 +148,22 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
         }
     }
 
+    internal static Workflow BuildWorkflowForCommand(
+        RunTurnCommandDto command,
+        IReadOnlyList<AIAgent> agents,
+        WorkflowRunner? workflowRunner = null)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        ArgumentNullException.ThrowIfNull(agents);
+
+        return NormalizeOrchestrationMode(command.Workflow.Settings.OrchestrationMode) switch
+        {
+            "handoff" => CopilotAgentBundle.CreateHandoffWorkflow(command.Workflow, agents),
+            "group-chat" => CopilotAgentBundle.CreateGroupChatWorkflow(command.Workflow, agents),
+            _ => (workflowRunner ?? new WorkflowRunner()).BuildWorkflow(command.Workflow, agents, command.WorkflowLibrary),
+        };
+    }
+
     internal static FileSystemJsonCheckpointStore? CreateCheckpointStore(RunTurnCommandDto command)
     {
         if (!ShouldEnableWorkflowCheckpointing(command))
@@ -175,6 +192,11 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
 
         string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         return Path.Combine(localAppData, "Aryx", "workflow-checkpoints", command.SessionId, command.RequestId);
+    }
+
+    private static string? NormalizeOrchestrationMode(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim().ToLowerInvariant();
     }
 
     private static ValueTask<StreamingRun> OpenWorkflowRunAsync(

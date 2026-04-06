@@ -3,6 +3,25 @@ import type { ApprovalPolicy } from '@shared/domain/approval';
 
 export type ReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh';
 export type WorkflowOrchestrationMode = 'single' | 'sequential' | 'concurrent' | 'handoff' | 'group-chat';
+export type HandoffToolCallFiltering = 'none' | 'handoff-only' | 'all';
+export type GroupChatSelectionStrategy = 'round-robin';
+
+export interface HandoffModeSettings {
+  toolCallFiltering: HandoffToolCallFiltering;
+  returnToPrevious: boolean;
+  handoffInstructions?: string;
+  triageAgentNodeId?: string;
+}
+
+export interface GroupChatModeSettings {
+  selectionStrategy: GroupChatSelectionStrategy;
+  maxRounds: number;
+}
+
+export interface OrchestrationModeSettings {
+  handoff?: HandoffModeSettings;
+  groupChat?: GroupChatModeSettings;
+}
 
 export interface WorkflowAgentOverrides {
   name?: string;
@@ -54,6 +73,7 @@ export interface WorkflowSettings {
   checkpointing: WorkflowCheckpointSettings;
   executionMode: WorkflowExecutionMode;
   orchestrationMode?: WorkflowOrchestrationMode;
+  modeSettings?: OrchestrationModeSettings;
   maxIterations?: number;
   approvalPolicy?: ApprovalPolicy;
   stateScopes?: WorkflowStateScope[];
@@ -225,6 +245,92 @@ function normalizeWorkflowOrchestrationMode(
   }
 }
 
+function normalizeHandoffToolCallFiltering(
+  value?: HandoffToolCallFiltering,
+): HandoffToolCallFiltering {
+  switch (value) {
+    case 'none':
+    case 'handoff-only':
+    case 'all':
+      return value;
+    default:
+      return 'handoff-only';
+  }
+}
+
+function normalizeGroupChatSelectionStrategy(
+  value?: GroupChatSelectionStrategy,
+): GroupChatSelectionStrategy {
+  return value === 'round-robin' ? 'round-robin' : 'round-robin';
+}
+
+export function createDefaultModeSettings(
+  mode?: WorkflowOrchestrationMode,
+): OrchestrationModeSettings | undefined {
+  switch (mode) {
+    case 'handoff':
+      return {
+        handoff: {
+          toolCallFiltering: 'handoff-only',
+          returnToPrevious: false,
+        },
+      };
+    case 'group-chat':
+      return {
+        groupChat: {
+          selectionStrategy: 'round-robin',
+          maxRounds: 5,
+        },
+      };
+    default:
+      return undefined;
+  }
+}
+
+export function isGraphBasedMode(mode?: WorkflowOrchestrationMode): boolean {
+  return mode === 'single' || mode === 'sequential' || mode === 'concurrent';
+}
+
+export function isBuilderBasedMode(mode?: WorkflowOrchestrationMode): boolean {
+  return mode === 'handoff' || mode === 'group-chat';
+}
+
+function normalizeModeSettings(
+  mode: WorkflowOrchestrationMode | undefined,
+  modeSettings: OrchestrationModeSettings | undefined,
+  workflowMaxIterations: number | undefined,
+): OrchestrationModeSettings | undefined {
+  const defaults = createDefaultModeSettings(mode);
+  const handoffSource = modeSettings?.handoff ?? defaults?.handoff;
+  const groupChatSource = modeSettings?.groupChat ?? defaults?.groupChat;
+  const normalized: OrchestrationModeSettings = {};
+
+  if (handoffSource) {
+    normalized.handoff = {
+      toolCallFiltering: normalizeHandoffToolCallFiltering(handoffSource.toolCallFiltering),
+      returnToPrevious: handoffSource.returnToPrevious ?? false,
+      handoffInstructions: normalizeOptionalString(handoffSource.handoffInstructions),
+      triageAgentNodeId: normalizeOptionalString(handoffSource.triageAgentNodeId),
+    };
+  }
+
+  if (groupChatSource) {
+    const fallbackMaxRounds = workflowMaxIterations && workflowMaxIterations > 0
+      ? Math.round(workflowMaxIterations)
+      : (defaults?.groupChat?.maxRounds ?? 5);
+
+    normalized.groupChat = {
+      selectionStrategy: normalizeGroupChatSelectionStrategy(groupChatSource.selectionStrategy),
+      maxRounds:
+        typeof groupChatSource.maxRounds === 'number' && groupChatSource.maxRounds > 0
+          ? Math.round(groupChatSource.maxRounds)
+          : fallbackMaxRounds,
+    };
+  }
+
+  return normalized.handoff || normalized.groupChat ? normalized : undefined;
+}
+
 export function isReasoningEffort(value: string | undefined): value is ReasoningEffort {
   return reasoningEffortOptions.some((option) => option.value === value);
 }
@@ -330,6 +436,12 @@ function normalizeEdgeCondition(condition?: EdgeCondition): EdgeCondition | unde
 }
 
 export function normalizeWorkflowDefinition(workflow: WorkflowDefinition): WorkflowDefinition {
+  const normalizedOrchestrationMode = normalizeWorkflowOrchestrationMode(workflow.settings?.orchestrationMode);
+  const normalizedMaxIterations =
+    typeof workflow.settings?.maxIterations === 'number' && workflow.settings.maxIterations > 0
+      ? Math.round(workflow.settings.maxIterations)
+      : undefined;
+
   return {
     ...workflow,
     name: workflow.name.trim(),
@@ -363,11 +475,13 @@ export function normalizeWorkflowDefinition(workflow: WorkflowDefinition): Workf
         enabled: workflow.settings?.checkpointing?.enabled ?? false,
       },
       executionMode: workflow.settings?.executionMode === 'lockstep' ? 'lockstep' : 'off-thread',
-      orchestrationMode: normalizeWorkflowOrchestrationMode(workflow.settings?.orchestrationMode),
-      maxIterations:
-        typeof workflow.settings?.maxIterations === 'number' && workflow.settings.maxIterations > 0
-          ? Math.round(workflow.settings.maxIterations)
-          : undefined,
+      orchestrationMode: normalizedOrchestrationMode,
+      modeSettings: normalizeModeSettings(
+        normalizedOrchestrationMode,
+        workflow.settings?.modeSettings,
+        normalizedMaxIterations,
+      ),
+      maxIterations: normalizedMaxIterations,
       approvalPolicy: workflow.settings?.approvalPolicy,
       stateScopes: workflow.settings?.stateScopes?.map((scope) => ({
         name: scope.name.trim(),
@@ -577,6 +691,239 @@ function createAgentNode(
       model,
       reasoningEffort,
     },
+  };
+}
+
+function createScaffoldAgentLabel(mode: WorkflowOrchestrationMode, index: number): string {
+  if (mode === 'handoff') {
+    return index === 0 ? 'Triage Agent' : `Specialist ${index}`;
+  }
+
+  if (mode === 'group-chat') {
+    return index === 0 ? 'Writer' : index === 1 ? 'Reviewer' : `Participant ${index + 1}`;
+  }
+
+  return `Agent ${index + 1}`;
+}
+
+function createScaffoldAgentDescription(mode: WorkflowOrchestrationMode, index: number): string {
+  if (mode === 'handoff') {
+    return index === 0
+      ? 'Routes work to the right specialist.'
+      : `Handles specialist lane ${index}.`;
+  }
+
+  if (mode === 'group-chat') {
+    return index === 0
+      ? 'Produces the initial draft.'
+      : index === 1
+        ? 'Reviews and refines the draft.'
+        : `Contributes perspective ${index + 1}.`;
+  }
+
+  return `Handles step ${index + 1} in the workflow.`;
+}
+
+function createScaffoldAgentInstructions(mode: WorkflowOrchestrationMode, index: number): string {
+  if (mode === 'handoff') {
+    return index === 0
+      ? 'Triages each request and hands off to the best specialist when needed.'
+      : `Own the specialist response for lane ${index}.`;
+  }
+
+  if (mode === 'group-chat') {
+    return index === 0
+      ? 'Draft the first answer, then refine it based on peer feedback.'
+      : index === 1
+        ? 'Review the current draft and suggest concrete improvements.'
+        : `Build on the current draft with contribution ${index + 1}.`;
+  }
+
+  return `Complete step ${index + 1} of the workflow.`;
+}
+
+function createPlaceholderAgentNode(mode: WorkflowOrchestrationMode, index: number): WorkflowNode {
+  const id = mode === 'handoff'
+    ? index === 0 ? 'agent-handoff-triage' : `agent-handoff-specialist-${index}`
+    : mode === 'group-chat'
+      ? index === 0 ? 'agent-group-writer' : index === 1 ? 'agent-group-reviewer' : `agent-group-participant-${index + 1}`
+      : `agent-${index + 1}`;
+
+  return createAgentNode(
+    id,
+    createScaffoldAgentLabel(mode, index),
+    createScaffoldAgentDescription(mode, index),
+    createScaffoldAgentInstructions(mode, index),
+    builtinWorkflowModels.gpt54,
+    'medium',
+    0,
+    0,
+    index,
+  );
+}
+
+function cloneAgentNode(node: WorkflowNode, index: number, position: WorkflowPosition): WorkflowNode {
+  const label = node.label.trim() || (node.config.kind === 'agent' ? node.config.name : node.id);
+  return {
+    ...node,
+    id: node.id.trim(),
+    kind: 'agent',
+    label,
+    order: index,
+    position,
+    config: node.config.kind === 'agent'
+      ? {
+        ...node.config,
+        id: normalizeOptionalString(node.config.id) ?? node.id.trim(),
+        name: normalizeOptionalString(node.config.name) ?? label,
+      }
+      : createPlaceholderAgentNode('single', index).config,
+  };
+}
+
+function getMinimumAgentCountForMode(mode: WorkflowOrchestrationMode): number {
+  switch (mode) {
+    case 'single':
+      return 1;
+    case 'sequential':
+      return 2;
+    case 'concurrent':
+    case 'handoff':
+    case 'group-chat':
+      return 2;
+  }
+}
+
+function prepareScaffoldAgentNodes(
+  mode: WorkflowOrchestrationMode,
+  agentNodes?: WorkflowNode[],
+): WorkflowNode[] {
+  const existingAgentNodes = (agentNodes ?? [])
+    .filter((node) => node.kind === 'agent' && node.config.kind === 'agent')
+    .map((node) => normalizeWorkflowDefinition({
+      id: 'scaffold-normalizer',
+      name: 'scaffold-normalizer',
+      description: '',
+      createdAt: '',
+      updatedAt: '',
+      graph: { nodes: [node], edges: [] },
+      settings: {
+        checkpointing: { enabled: false },
+        executionMode: 'off-thread',
+      },
+    }).graph.nodes[0]!)
+    .filter((node): node is WorkflowNode => Boolean(node));
+
+  const desiredCount = Math.max(existingAgentNodes.length, getMinimumAgentCountForMode(mode));
+  const agents = existingAgentNodes.slice(0, desiredCount);
+
+  while (agents.length < desiredCount) {
+    agents.push(createPlaceholderAgentNode(mode, agents.length));
+  }
+
+  return agents;
+}
+
+export function scaffoldGraphForMode(
+  mode: WorkflowOrchestrationMode,
+  agentNodes?: WorkflowNode[],
+): WorkflowGraph {
+  const preparedAgents = prepareScaffoldAgentNodes(mode, agentNodes);
+
+  if (mode === 'single') {
+    const agent = cloneAgentNode(preparedAgents[0]!, 0, { x: 220, y: 0 });
+    return {
+      nodes: [createStartNode(0, 0), agent, createEndNode(440, 0)],
+      edges: [
+        createWorkflowEdge('edge-start-to-agent', 'start', agent.id),
+        createWorkflowEdge(`edge-${agent.id}-to-end`, agent.id, 'end'),
+      ],
+    };
+  }
+
+  if (mode === 'sequential') {
+    const agents = preparedAgents.map((node, index) => cloneAgentNode(node, index, { x: 220 + (index * 220), y: 0 }));
+    const edges = [
+      createWorkflowEdge(`edge-start-to-${agents[0]!.id}`, 'start', agents[0]!.id),
+      ...agents.slice(1).map((agent, index) =>
+        createWorkflowEdge(`edge-${agents[index]!.id}-to-${agent.id}`, agents[index]!.id, agent.id)),
+      createWorkflowEdge(`edge-${agents[agents.length - 1]!.id}-to-end`, agents[agents.length - 1]!.id, 'end'),
+    ];
+
+    return {
+      nodes: [createStartNode(0, 0), ...agents, createEndNode(220 + (agents.length * 220), 0)],
+      edges,
+    };
+  }
+
+  if (mode === 'concurrent') {
+    const centerY = ((preparedAgents.length - 1) * 120) / 2;
+    const agents = preparedAgents.map((node, index) =>
+      cloneAgentNode(node, index, { x: 260, y: (index * 120) - centerY }));
+
+    return {
+      nodes: [createStartNode(0, 0), ...agents, createEndNode(520, 0)],
+      edges: [
+        ...agents.map((agent) =>
+          createWorkflowEdge(`edge-start-to-${agent.id}`, 'start', agent.id, 'fan-out', {
+            fanOutConfig: { strategy: 'broadcast' },
+          })),
+        ...agents.map((agent) => createWorkflowEdge(`edge-${agent.id}-to-end`, agent.id, 'end', 'fan-in')),
+      ],
+    };
+  }
+
+  if (mode === 'handoff') {
+    const triage = cloneAgentNode(preparedAgents[0]!, 0, { x: 240, y: 120 });
+    const specialists = preparedAgents.slice(1).map((node, index) =>
+      cloneAgentNode(node, index + 1, { x: 520, y: index * 240 }));
+
+    return {
+      nodes: [createStartNode(0, 120), triage, ...specialists, createEndNode(800, 120)],
+      edges: [
+        createWorkflowEdge(`edge-start-to-${triage.id}`, 'start', triage.id),
+        createWorkflowEdge(`edge-${triage.id}-to-end`, triage.id, 'end'),
+        ...specialists.map((specialist) => createWorkflowEdge(`edge-${triage.id}-to-${specialist.id}`, triage.id, specialist.id)),
+        ...specialists.map((specialist) => createWorkflowEdge(`edge-${specialist.id}-to-${triage.id}`, specialist.id, triage.id, 'direct', {
+          isLoop: true,
+          maxIterations: 4,
+          condition: { type: 'always' },
+        })),
+        ...specialists.map((specialist) => createWorkflowEdge(`edge-${specialist.id}-to-end`, specialist.id, 'end')),
+      ],
+    };
+  }
+
+  const agents = preparedAgents.map((node, index) => cloneAgentNode(node, index, { x: 240 + (index * 240), y: 0 }));
+  return {
+    nodes: [createStartNode(0, 0), ...agents, createEndNode(240 + (agents.length * 240), 0)],
+    edges: [
+      createWorkflowEdge(`edge-start-to-${agents[0]!.id}`, 'start', agents[0]!.id),
+      ...agents.slice(1).map((agent, index) => createWorkflowEdge(
+        `edge-${agents[index]!.id}-to-${agent.id}`,
+        agents[index]!.id,
+        agent.id,
+        'direct',
+        {
+          isLoop: true,
+          maxIterations: 5,
+          condition: { type: 'always' },
+        },
+      )),
+      createWorkflowEdge(
+        `edge-${agents[agents.length - 1]!.id}-to-${agents[0]!.id}`,
+        agents[agents.length - 1]!.id,
+        agents[0]!.id,
+        'direct',
+        {
+          isLoop: true,
+          maxIterations: 5,
+          condition: { type: 'always' },
+          label: 'Loop',
+        },
+      ),
+      createWorkflowEdge(`edge-${agents[agents.length - 1]!.id}-to-end`, agents[agents.length - 1]!.id, 'end'),
+    ],
   };
 }
 
@@ -820,6 +1167,7 @@ export function createBuiltinWorkflows(timestamp: string): WorkflowDefinition[] 
         checkpointing: { enabled: true },
         executionMode: 'off-thread',
         orchestrationMode: 'handoff',
+        modeSettings: createDefaultModeSettings('handoff'),
         maxIterations: 4,
       },
     }, timestamp),
@@ -874,6 +1222,7 @@ export function createBuiltinWorkflows(timestamp: string): WorkflowDefinition[] 
         checkpointing: { enabled: false },
         executionMode: 'off-thread',
         orchestrationMode: 'group-chat',
+        modeSettings: createDefaultModeSettings('group-chat'),
         maxIterations: 5,
       },
     }, timestamp),
@@ -1175,6 +1524,254 @@ function validateExecutableNodeConfig(node: WorkflowNode, issues: WorkflowValida
       return;
     default:
       return;
+  }
+}
+
+function addModeShapeWarning(
+  issues: WorkflowValidationIssue[],
+  field: string,
+  message: string,
+  nodeId?: string,
+): void {
+  addIssue(issues, {
+    level: 'warning',
+    field,
+    nodeId,
+    message,
+  });
+}
+
+function createOutgoingEdgeMap(graph: WorkflowGraph): Map<string, WorkflowEdge[]> {
+  const outgoing = new Map<string, WorkflowEdge[]>();
+  for (const edge of graph.edges) {
+    const current = outgoing.get(edge.source);
+    if (current) {
+      current.push(edge);
+    } else {
+      outgoing.set(edge.source, [edge]);
+    }
+  }
+
+  return outgoing;
+}
+
+function createIncomingEdgeMap(graph: WorkflowGraph): Map<string, WorkflowEdge[]> {
+  const incoming = new Map<string, WorkflowEdge[]>();
+  for (const edge of graph.edges) {
+    const current = incoming.get(edge.target);
+    if (current) {
+      current.push(edge);
+    } else {
+      incoming.set(edge.target, [edge]);
+    }
+  }
+
+  return incoming;
+}
+
+function validateGraphModeCompatibility(
+  workflow: WorkflowDefinition,
+  issues: WorkflowValidationIssue[],
+): void {
+  const mode = workflow.settings.orchestrationMode;
+  if (!mode) {
+    return;
+  }
+
+  const agentNodes = resolveWorkflowAgentNodes(workflow);
+  const agentIds = new Set(agentNodes.map((node) => node.id));
+  const outgoing = createOutgoingEdgeMap(workflow.graph);
+  const incoming = createIncomingEdgeMap(workflow.graph);
+  const fanOutEdges = workflow.graph.edges.filter((edge) => edge.kind === 'fan-out');
+  const fanInEdges = workflow.graph.edges.filter((edge) => edge.kind === 'fan-in');
+  const nonAgentExecutableNodes = workflow.graph.nodes.filter((node) =>
+    node.kind !== 'start'
+    && node.kind !== 'end'
+    && node.kind !== 'agent');
+
+  switch (mode) {
+    case 'single': {
+      if (agentNodes.length !== 1) {
+        addIssue(issues, {
+          level: 'error',
+          field: 'settings.orchestrationMode',
+          message: 'Single mode requires exactly one agent node.',
+        });
+      }
+
+      if (fanOutEdges.length > 0 || fanInEdges.length > 0) {
+        addIssue(issues, {
+          level: 'error',
+          field: 'graph.edges.kind',
+          message: 'Single mode does not support fan-out or fan-in edges.',
+        });
+      }
+
+      if (nonAgentExecutableNodes.length > 0 || workflow.graph.nodes.length > 3 || workflow.graph.edges.length > 2) {
+        addModeShapeWarning(
+          issues,
+          'graph',
+          'Single mode works best with a simple start → agent → end graph.',
+        );
+      }
+
+      return;
+    }
+    case 'sequential': {
+      if (agentNodes.length === 0) {
+        addIssue(issues, {
+          level: 'error',
+          field: 'settings.orchestrationMode',
+          message: 'Sequential mode requires at least one agent node.',
+        });
+      }
+
+      if (fanOutEdges.length > 0 || fanInEdges.length > 0) {
+        addIssue(issues, {
+          level: 'error',
+          field: 'graph.edges.kind',
+          message: 'Sequential mode does not support fan-out or fan-in edges.',
+        });
+      }
+
+      const firstAgent = agentNodes[0];
+      const lastAgent = agentNodes[agentNodes.length - 1];
+      const isLinear = agentNodes.every((agent, index) => {
+        const incomingEdges = incoming.get(agent.id) ?? [];
+        const outgoingEdges = outgoing.get(agent.id) ?? [];
+
+        if (agentNodes.length === 1) {
+          return incomingEdges.some((edge) => edge.source === 'start')
+            && outgoingEdges.some((edge) => edge.target === 'end');
+        }
+
+        if (agent === firstAgent) {
+          return incomingEdges.some((edge) => edge.source === 'start')
+            && outgoingEdges.some((edge) => agentIds.has(edge.target));
+        }
+
+        if (agent === lastAgent) {
+          return incomingEdges.some((edge) => agentIds.has(edge.source))
+            && outgoingEdges.some((edge) => edge.target === 'end');
+        }
+
+        return incomingEdges.some((edge) => agentIds.has(edge.source))
+          && outgoingEdges.some((edge) => agentIds.has(edge.target));
+      });
+
+      if (!isLinear) {
+        addModeShapeWarning(
+          issues,
+          'graph.edges',
+          'Sequential mode works best with a linear start → agent … → end graph.',
+        );
+      }
+
+      return;
+    }
+    case 'concurrent': {
+      if (agentNodes.length === 0) {
+        addIssue(issues, {
+          level: 'error',
+          field: 'settings.orchestrationMode',
+          message: 'Concurrent mode requires at least one agent node.',
+        });
+      }
+
+      if (fanOutEdges.length === 0 || fanInEdges.length === 0) {
+        addIssue(issues, {
+          level: 'error',
+          field: 'graph.edges.kind',
+          message: 'Concurrent mode requires both fan-out and fan-in edges.',
+        });
+      }
+
+      const fanOutTargets = new Set(fanOutEdges.map((edge) => edge.target));
+      const fanInSources = new Set(fanInEdges.map((edge) => edge.source));
+      const missingJoin = [...fanOutTargets].some((target) => !fanInSources.has(target));
+      if (missingJoin) {
+        addModeShapeWarning(
+          issues,
+          'graph.edges.kind',
+          'Concurrent mode works best when every fan-out branch rejoins through a matching fan-in edge.',
+        );
+      }
+
+      return;
+    }
+    case 'handoff': {
+      if (agentNodes.length < 2) {
+        addIssue(issues, {
+          level: 'error',
+          field: 'settings.orchestrationMode',
+          message: 'Handoff mode requires at least two agent nodes.',
+        });
+        return;
+      }
+
+      const triageAgentNodeId = workflow.settings.modeSettings?.handoff?.triageAgentNodeId;
+      const triageAgent = triageAgentNodeId
+        ? agentNodes.find((node) => node.id === triageAgentNodeId)
+        : agentNodes[0];
+
+      if (triageAgentNodeId && !triageAgent) {
+        addIssue(issues, {
+          level: 'error',
+          field: 'settings.modeSettings.handoff.triageAgentNodeId',
+          message: `Handoff mode triage agent "${triageAgentNodeId}" must reference an agent node in the graph.`,
+        });
+        return;
+      }
+
+      const specialists = agentNodes.filter((node) => node.id !== triageAgent!.id);
+      const triageOutgoingSpecialistEdges = (outgoing.get(triageAgent!.id) ?? [])
+        .filter((edge) => agentIds.has(edge.target) && edge.target !== triageAgent!.id);
+      if (triageOutgoingSpecialistEdges.length === 0) {
+        addModeShapeWarning(
+          issues,
+          'graph.edges',
+          'Handoff mode works best when the triage agent has outgoing edges to specialist agents.',
+          triageAgent!.id,
+        );
+      }
+
+      for (const specialist of specialists) {
+        if (!canReachNode(workflow.graph, specialist.id, triageAgent!.id)) {
+          addModeShapeWarning(
+            issues,
+            'graph.edges',
+            `Handoff specialist "${specialist.label || specialist.id}" should have a return path back to the triage agent.`,
+            specialist.id,
+          );
+        }
+      }
+
+      return;
+    }
+    case 'group-chat': {
+      if (agentNodes.length < 2) {
+        addIssue(issues, {
+          level: 'error',
+          field: 'settings.orchestrationMode',
+          message: 'Group-chat mode requires at least two agent nodes.',
+        });
+      }
+
+      const hasLoopAmongAgents = workflow.graph.edges.some((edge) =>
+        agentIds.has(edge.source)
+        && agentIds.has(edge.target)
+        && (edge.isLoop === true || canReachNode(workflow.graph, edge.target, edge.source, edge.id)));
+
+      if (!hasLoopAmongAgents) {
+        addModeShapeWarning(
+          issues,
+          'graph.edges.isLoop',
+          'Group-chat mode works best when agent nodes form a loop for repeated turns.',
+        );
+      }
+
+      return;
+    }
   }
 }
 
@@ -1483,6 +2080,8 @@ export function validateWorkflowDefinition(workflow: WorkflowDefinition): Workfl
       });
     }
   }
+
+  validateGraphModeCompatibility(normalized, issues);
 
   return issues;
 }

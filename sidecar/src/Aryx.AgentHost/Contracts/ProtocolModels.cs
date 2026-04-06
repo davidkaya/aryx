@@ -111,11 +111,32 @@ public sealed class WorkflowStateScopeDto
     public IReadOnlyDictionary<string, JsonElement>? InitialValues { get; init; }
 }
 
+public sealed class HandoffModeSettingsDto
+{
+    public string ToolCallFiltering { get; init; } = "handoff-only";
+    public bool ReturnToPrevious { get; init; }
+    public string? HandoffInstructions { get; init; }
+    public string? TriageAgentNodeId { get; init; }
+}
+
+public sealed class GroupChatModeSettingsDto
+{
+    public string SelectionStrategy { get; init; } = "round-robin";
+    public int MaxRounds { get; init; } = 5;
+}
+
+public sealed class OrchestrationModeSettingsDto
+{
+    public HandoffModeSettingsDto? Handoff { get; init; }
+    public GroupChatModeSettingsDto? GroupChat { get; init; }
+}
+
 public sealed class WorkflowSettingsDto
 {
     public WorkflowCheckpointSettingsDto Checkpointing { get; init; } = new();
     public string ExecutionMode { get; init; } = "off-thread";
     public string? OrchestrationMode { get; init; }
+    public OrchestrationModeSettingsDto? ModeSettings { get; init; }
     public int? MaxIterations { get; init; }
     public ApprovalPolicyDto? ApprovalPolicy { get; init; }
     public IReadOnlyList<WorkflowStateScopeDto> StateScopes { get; init; } = [];

@@ -147,7 +147,7 @@ Workflows are shared application data, not renderer-only configuration. The same
 
 Each workflow persists an explicit graph-backed topology. Agent nodes carry stable ids, ordering, and layout metadata, while start/end, fan-out/fan-in, sub-workflow, function, and request-port nodes make execution structure visible in the saved contract.
 
-That graph is the execution contract for the sidecar: sequencing comes from saved edges, sub-workflow execution comes from referenced workflow graphs, and orchestration hints such as handoff or group-chat are carried as workflow settings rather than through a separate pattern domain.
+That graph remains the execution contract for the sidecar, but orchestration mode is now a first-class backend concept. Graph-based modes (`single`, `sequential`, `concurrent`) still execute directly from saved edges. Builder-based modes (`handoff`, `group-chat`) additionally persist mode-specific `settings.modeSettings` data for handoff filtering, triage selection, return behavior, and group-chat round limits, and the sidecar translates those settings into specialized Agent Framework workflow builders at run time.
 
 Workflow templates remain a first-class shared-domain contract. The shared layer owns workflow definitions, workflow template definitions, and workflow import/export helpers (YAML import/export plus Mermaid and DOT export). Built-in workflows seed workspace state directly, while built-in and custom templates let the main process create additional saved workflows without expanding the sidecar protocol.
 

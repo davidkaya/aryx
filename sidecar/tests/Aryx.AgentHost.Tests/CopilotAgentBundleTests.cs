@@ -159,6 +159,97 @@ public sealed class CopilotAgentBundleTests
     }
 
     [Fact]
+    public void CreateHandoffWorkflowBuilder_MapsConfiguredFilteringAndInstructions()
+    {
+        ChatClientAgent entryAgent = CreateChatClientAgent("agent-1", "Primary");
+
+        HandoffsWorkflowBuilder builder = CopilotAgentBundle.CreateHandoffWorkflowBuilder(
+            entryAgent,
+            new HandoffModeSettingsDto
+            {
+                ToolCallFiltering = "all",
+                ReturnToPrevious = true,
+                HandoffInstructions = "Use custom delegation guidance.",
+            });
+
+        FieldInfo filteringField = typeof(HandoffsWorkflowBuilder).GetField(
+            "_toolCallFilteringBehavior",
+            BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("Expected HandoffsWorkflowBuilder to expose a filtering field.");
+
+        Assert.Equal(HandoffToolCallFilteringBehavior.All, filteringField.GetValue(builder));
+        Assert.Equal("Use custom delegation guidance.", builder.HandoffInstructions);
+    }
+
+    [Fact]
+    public void CreateHandoffWorkflow_RejectsUnknownTriageNode()
+    {
+        WorkflowDefinitionDto workflow = CreateWorkflow(
+            "handoff",
+            2,
+            modeSettings: new OrchestrationModeSettingsDto
+            {
+                Handoff = new HandoffModeSettingsDto
+                {
+                    TriageAgentNodeId = "missing-agent",
+                },
+            });
+
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
+            CopilotAgentBundle.CreateHandoffWorkflow(workflow, CreateAgents(2)));
+
+        Assert.Contains("triage agent node", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void CreateGroupChatWorkflowBuilder_UsesConfiguredRoundsNameAndDescription()
+    {
+        WorkflowDefinitionDto workflow = CreateWorkflow(
+            "group-chat",
+            2,
+            modeSettings: new OrchestrationModeSettingsDto
+            {
+                GroupChat = new GroupChatModeSettingsDto
+                {
+                    SelectionStrategy = "round-robin",
+                    MaxRounds = 7,
+                },
+            },
+            name: "Round Robin Collaboration",
+            description: "Two agents iterate on a shared answer.");
+        IReadOnlyList<AIAgent> agents = CreateAgents(2);
+
+        GroupChatWorkflowBuilder builder = CopilotAgentBundle.CreateGroupChatWorkflowBuilder(workflow, agents);
+
+        FieldInfo managerFactoryField = typeof(GroupChatWorkflowBuilder).GetField(
+            "_managerFactory",
+            BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("Expected GroupChatWorkflowBuilder to expose a manager factory field.");
+        FieldInfo participantsField = typeof(GroupChatWorkflowBuilder).GetField(
+            "_participants",
+            BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("Expected GroupChatWorkflowBuilder to expose a participant field.");
+        FieldInfo nameField = typeof(GroupChatWorkflowBuilder).GetField(
+            "_name",
+            BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("Expected GroupChatWorkflowBuilder to expose a name field.");
+        FieldInfo descriptionField = typeof(GroupChatWorkflowBuilder).GetField(
+            "_description",
+            BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("Expected GroupChatWorkflowBuilder to expose a description field.");
+
+        Func<IReadOnlyList<AIAgent>, GroupChatManager> managerFactory =
+            Assert.IsType<Func<IReadOnlyList<AIAgent>, GroupChatManager>>(managerFactoryField.GetValue(builder));
+        RoundRobinGroupChatManager manager = Assert.IsType<RoundRobinGroupChatManager>(managerFactory(agents));
+        HashSet<AIAgent> participants = Assert.IsType<HashSet<AIAgent>>(participantsField.GetValue(builder));
+
+        Assert.Equal(7, manager.MaximumIterationCount);
+        Assert.Equal(2, participants.Count);
+        Assert.Equal("Round Robin Collaboration", Assert.IsType<string>(nameField.GetValue(builder)));
+        Assert.Equal("Two agents iterate on a shared answer.", Assert.IsType<string>(descriptionField.GetValue(builder)));
+    }
+
+    [Fact]
     public void CreateAgentHostOptions_UsesExpectedAryxDefaults()
     {
         AIAgentHostOptions options = CopilotAgentBundle.CreateAgentHostOptions();
@@ -538,12 +629,16 @@ public sealed class CopilotAgentBundleTests
     private static WorkflowDefinitionDto CreateWorkflow(
         string mode,
         int agentCount,
-        ApprovalPolicyDto? approvalPolicy = null)
+        ApprovalPolicyDto? approvalPolicy = null,
+        OrchestrationModeSettingsDto? modeSettings = null,
+        string? name = null,
+        string? description = null)
     {
         return new WorkflowDefinitionDto
         {
             Id = $"workflow-{mode}",
-            Name = $"Workflow {mode}",
+            Name = name ?? $"Workflow {mode}",
+            Description = description ?? string.Empty,
             Graph = new WorkflowGraphDto
             {
                 Nodes =
@@ -569,6 +664,7 @@ public sealed class CopilotAgentBundleTests
             {
                 OrchestrationMode = mode,
                 ApprovalPolicy = approvalPolicy,
+                ModeSettings = modeSettings,
             },
         };
     }

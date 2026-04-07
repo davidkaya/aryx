@@ -19,7 +19,8 @@ import type { ApprovalDecision } from '@shared/domain/approval';
 import type { InteractionMode, MessageMode } from '@shared/contracts/sidecar';
 import type { ChatMessageAttachment } from '@shared/domain/attachment';
 import { getAttachmentDisplayName, isImageAttachment } from '@shared/domain/attachment';
-import type { SessionUsageState } from '@renderer/lib/sessionActivity';
+import type { SessionUsageState, SessionActivityState } from '@renderer/lib/sessionActivity';
+import { summarizeSessionActivity } from '@renderer/lib/sessionActivity';
 import type { ActiveSubagent } from '@renderer/lib/subagentTracker';
 import {
   findModel,
@@ -55,6 +56,7 @@ interface ChatPaneProps {
   mcpProbingServerIds?: string[];
   runtimeTools?: ReadonlyArray<RuntimeToolDefinition>;
   sessionUsage?: SessionUsageState;
+  sessionActivity?: SessionActivityState;
   activeSubagents?: ReadonlyArray<ActiveSubagent>;
   terminalOpen?: boolean;
   terminalRunning?: boolean;
@@ -92,6 +94,7 @@ export function ChatPane({
   mcpProbingServerIds,
   runtimeTools,
   sessionUsage,
+  sessionActivity,
   activeSubagents,
   terminalOpen,
   terminalRunning,
@@ -133,20 +136,44 @@ export function ChatPane({
     const items: DisplayItem[] = [];
     let pendingThinking: ChatMessageRecord[] = [];
     let lastUserMessageId: string | undefined;
+    const messages = session.messages;
+    const busy = session.status === 'running';
 
-    for (const message of session.messages) {
+    for (let i = 0; i < messages.length; i++) {
+      const message = messages[i];
+      const isLast = i === messages.length - 1;
+
       if (message.messageKind === 'thinking') {
         pendingThinking.push(message);
-      } else {
-        if (pendingThinking.length > 0) {
-          const run = lastUserMessageId ? runsByTrigger.get(lastUserMessageId) : undefined;
-          items.push({ type: 'thinking-group', messages: pendingThinking, turnStartedAt: run?.startedAt });
-          pendingThinking = [];
-        }
-        items.push({ type: 'message', message });
-        if (message.role === 'user') {
-          lastUserMessageId = message.id;
-        }
+        continue;
+      }
+
+      // Optimistic thinking classification: fold a pending assistant
+      // message into the current thinking group when it immediately follows
+      // thinking messages during an active turn. This prevents the brief
+      // flash of content that occurs before a message-reclassified event
+      // arrives. Only the very last message qualifies — earlier messages
+      // have already been classified definitively.
+      if (
+        busy
+        && isLast
+        && pendingThinking.length > 0
+        && message.role === 'assistant'
+        && message.pending
+        && !message.messageKind
+      ) {
+        pendingThinking.push(message);
+        continue;
+      }
+
+      if (pendingThinking.length > 0) {
+        const run = lastUserMessageId ? runsByTrigger.get(lastUserMessageId) : undefined;
+        items.push({ type: 'thinking-group', messages: pendingThinking, turnStartedAt: run?.startedAt });
+        pendingThinking = [];
+      }
+      items.push({ type: 'message', message });
+      if (message.role === 'user') {
+        lastUserMessageId = message.id;
       }
     }
 
@@ -156,7 +183,7 @@ export function ChatPane({
     }
 
     return items;
-  }, [session.messages, session.runs]);
+  }, [session.messages, session.runs, session.status]);
 
   const lastThinkingGroupIndex = useMemo(() => {
     for (let i = displayItems.length - 1; i >= 0; i--) {
@@ -164,6 +191,19 @@ export function ChatPane({
     }
     return -1;
   }, [displayItems]);
+
+  // A thinking group is active when the session is running AND the group
+  // contains at least one pending message (currently streaming). This is
+  // more robust than relying purely on array position, which can be stale
+  // during reclassification gaps.
+  const isThinkingGroupActive = useCallback(
+    (group: { messages: ChatMessageRecord[] }, groupIndex: number): boolean => {
+      if (!isSessionBusy) return false;
+      if (groupIndex !== lastThinkingGroupIndex) return false;
+      return group.messages.some((m) => m.pending);
+    },
+    [isSessionBusy, lastThinkingGroupIndex],
+  );
 
   const lastAssistantId = useMemo(() => {
     for (let i = session.messages.length - 1; i >= 0; i--) {
@@ -423,7 +463,15 @@ export function ChatPane({
                 Awaiting your input
               </div>
             )}
-            {isSessionBusy && !pendingApproval && !pendingUserInput && <span className="size-2 animate-pulse rounded-full bg-[var(--color-accent-sky)]" />}
+            {isSessionBusy && !pendingApproval && !pendingUserInput && (() => {
+              const label = summarizeSessionActivity(sessionActivity);
+              return (
+                <div className="flex items-center gap-1.5 text-[12px] text-[var(--color-accent-sky)]">
+                  <span className="size-2 animate-pulse rounded-full bg-[var(--color-accent-sky)]" />
+                  <span className="transition-opacity duration-200">{label ?? 'Working…'}</span>
+                </div>
+              );
+            })()}
             {session.status === 'error' && (
               <div className="flex items-center gap-1.5 text-[12px] text-[var(--color-status-error)]">
                 <AlertCircle className="size-3.5" />
@@ -471,12 +519,11 @@ export function ChatPane({
             <div className="space-y-1">
               {displayItems.map((item, itemIndex) => {
                 if (item.type === 'thinking-group') {
-                  const isLastThinkingGroup = itemIndex === lastThinkingGroupIndex;
                   return (
                     <div key={`thinking-${item.messages[0].id}`} className="py-2">
                       <ThinkingProcess
                         messages={item.messages}
-                        isActive={isSessionBusy && isLastThinkingGroup}
+                        isActive={isThinkingGroupActive(item, itemIndex)}
                         turnStartedAt={item.turnStartedAt}
                       />
                     </div>

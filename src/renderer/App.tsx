@@ -25,6 +25,7 @@ import {
   pruneSessionUsage,
   pruneSessionRequestUsage,
   pruneTurnEventLogs,
+  purgeCompletedActivity,
   type SessionActivityMap,
   type SessionUsageMap,
   type SessionRequestUsageMap,
@@ -149,6 +150,7 @@ export default function App() {
   const [sessionRequestUsage, setSessionRequestUsage] = useState<SessionRequestUsageMap>({});
   const [turnEventLogs, setTurnEventLogs] = useState<TurnEventLogMap>({});
   const [activeSubagents, setActiveSubagents] = useState<ActiveSubagentMap>({});
+  const activityPurgeTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   const [showSettings, setShowSettings] = useState(false);
   const [settingsSection, setSettingsSection] = useState<SettingsSection>();
@@ -226,12 +228,35 @@ export default function App() {
       setSessionRequestUsage((current) => applyAssistantUsageEvent(current, event));
       setTurnEventLogs((current) => applyTurnEventLog(current, event));
       setActiveSubagents((current) => applySubagentEvent(current, event));
+
+      // Schedule purge of completed activity labels after grace period
+      if (event.kind === 'status' && event.status === 'idle') {
+        const existing = activityPurgeTimers.current.get(event.sessionId);
+        if (existing) clearTimeout(existing);
+        activityPurgeTimers.current.set(
+          event.sessionId,
+          setTimeout(() => {
+            setSessionActivities((current) => purgeCompletedActivity(current, event.sessionId));
+            activityPurgeTimers.current.delete(event.sessionId);
+          }, 1500),
+        );
+      }
+      // Cancel pending purge if a new run starts
+      if (event.kind === 'status' && event.status === 'running') {
+        const existing = activityPurgeTimers.current.get(event.sessionId);
+        if (existing) {
+          clearTimeout(existing);
+          activityPurgeTimers.current.delete(event.sessionId);
+        }
+      }
     });
 
     return () => {
       disposed = true;
       offWorkspace();
       offSessionEvent();
+      for (const timer of activityPurgeTimers.current.values()) clearTimeout(timer);
+      activityPurgeTimers.current.clear();
     };
   }, [api]);
 
@@ -705,6 +730,7 @@ export default function App() {
           runtimeTools={sidecarCapabilities?.runtimeTools}
           session={selectedSession}
           sessionUsage={usageForSession}
+          sessionActivity={activityForSession}
           activeSubagents={subagentsForSession}
           terminalOpen={bottomPanelOpen && bottomPanelTab === 'terminal'}
           terminalRunning={terminalRunning}

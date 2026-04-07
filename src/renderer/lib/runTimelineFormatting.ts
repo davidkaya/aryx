@@ -168,3 +168,68 @@ export function truncateContent(content: string | undefined, maxLength = 80): st
 export function findLatestRun(runs: readonly SessionRunRecord[]): SessionRunRecord | undefined {
   return runs.length > 0 ? runs[0] : undefined;
 }
+
+/* ── Agent-scoped event filtering ──────────────────────────── */
+
+/** Run-level events that are not scoped to any specific agent. */
+const RUN_LEVEL_EVENT_KINDS = new Set<RunTimelineEventKind>([
+  'run-started',
+  'run-completed',
+  'run-cancelled',
+  'run-failed',
+]);
+
+/**
+ * Filter run events to only those belonging to the given agents.
+ * When `agentNames` is undefined or empty (single-agent run), all events pass through.
+ * Run-level events (start/complete/fail) are excluded from agent-scoped panels
+ * because they represent the entire run, not a specific agent's work.
+ */
+export function filterEventsByAgent(
+  events: readonly RunTimelineEventRecord[],
+  agentNames: ReadonlySet<string> | undefined,
+): RunTimelineEventRecord[] {
+  if (!agentNames || agentNames.size === 0) return events.slice();
+
+  return events.filter((e) => {
+    if (RUN_LEVEL_EVENT_KINDS.has(e.kind)) return false;
+    if (e.kind === 'handoff') {
+      return (e.sourceAgentName != null && agentNames.has(e.sourceAgentName))
+        || (e.targetAgentName != null && agentNames.has(e.targetAgentName));
+    }
+    if (e.agentName) return agentNames.has(e.agentName);
+    return false;
+  });
+}
+
+/** Counts of different activity types within a set of run timeline events. */
+export interface ActivitySummary {
+  thinkingSteps: number;
+  toolCalls: number;
+  handoffs: number;
+  approvals: number;
+  hasError: boolean;
+}
+
+/**
+ * Summarize activity from thinking messages and (already-filtered) run events.
+ */
+export function summarizeActivity(
+  thinkingMessages: ReadonlyArray<{ content: string }>,
+  events: readonly RunTimelineEventRecord[],
+): ActivitySummary {
+  const thinkingSteps = thinkingMessages.filter((m) => m.content).length;
+  let toolCalls = 0;
+  let handoffs = 0;
+  let approvals = 0;
+  let hasError = false;
+
+  for (const e of events) {
+    if (e.kind === 'tool-call') toolCalls++;
+    else if (e.kind === 'handoff') handoffs++;
+    else if (e.kind === 'approval') approvals++;
+    else if (e.kind === 'run-failed') hasError = true;
+  }
+
+  return { thinkingSteps, toolCalls, handoffs, approvals, hasError };
+}

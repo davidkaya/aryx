@@ -16,7 +16,7 @@ import {
 import { useElapsedTimer } from '@renderer/hooks/useElapsedTimer';
 import { FileChangePreview } from '@renderer/components/chat/FileChangePreview';
 import { RunChangeSummaryCard } from '@renderer/components/chat/RunChangeSummaryCard';
-import { formatEventLabel, truncateContent } from '@renderer/lib/runTimelineFormatting';
+import { formatEventLabel, truncateContent, filterEventsByAgent, summarizeActivity, type ActivitySummary } from '@renderer/lib/runTimelineFormatting';
 import type { ChatMessageRecord } from '@shared/domain/session';
 import type { ProjectGitFileReference } from '@shared/domain/project';
 import type { RunTimelineEventRecord, SessionRunRecord } from '@shared/domain/runTimeline';
@@ -40,6 +40,10 @@ export interface TurnActivityPanelProps {
   isActive: boolean;
   turnStartedAt?: string;
   sessionId: string;
+  /** Agent names in this turn group — used to scope run events in multi-agent runs. */
+  agentNames?: ReadonlySet<string>;
+  /** True when this panel is the last one sharing a given run (controls git summary / discard). */
+  isLastRunPanel?: boolean;
   onDiscard?: (sessionId: string, runId: string, files?: ProjectGitFileReference[]) => Promise<unknown>;
   onOpenCommitComposer?: () => void;
 }
@@ -76,36 +80,6 @@ function buildActivityStream(
   });
 
   return items;
-}
-
-interface ActivitySummary {
-  thinkingSteps: number;
-  toolCalls: number;
-  handoffs: number;
-  approvals: number;
-  hasError: boolean;
-}
-
-function summarizeActivity(
-  thinkingMessages: ChatMessageRecord[],
-  run?: SessionRunRecord,
-): ActivitySummary {
-  const thinkingSteps = thinkingMessages.filter((m) => m.content).length;
-  let toolCalls = 0;
-  let handoffs = 0;
-  let approvals = 0;
-  let hasError = false;
-
-  if (run) {
-    for (const e of run.events) {
-      if (e.kind === 'tool-call') toolCalls++;
-      else if (e.kind === 'handoff') handoffs++;
-      else if (e.kind === 'approval') approvals++;
-      else if (e.kind === 'run-failed') hasError = true;
-    }
-  }
-
-  return { thinkingSteps, toolCalls, handoffs, approvals, hasError };
 }
 
 function formatSummaryParts(summary: ActivitySummary): string[] {
@@ -267,6 +241,8 @@ export function TurnActivityPanel({
   isActive,
   turnStartedAt,
   sessionId,
+  agentNames,
+  isLastRunPanel,
   onDiscard,
   onOpenCommitComposer,
 }: TurnActivityPanelProps) {
@@ -286,19 +262,43 @@ export function TurnActivityPanel({
 
   const toggle = useCallback(() => setExpanded((prev) => !prev), []);
 
+  // When the run is shared across multiple panels (multi-agent sequential),
+  // scope events to only those belonging to this panel's agents.
+  const scopedEvents = useMemo(
+    () => filterEventsByAgent(run?.events ?? [], agentNames),
+    [run?.events, agentNames],
+  );
+
+  // Derive per-agent timing from the scoped events when agent names are set
+  // (multi-agent run). For single-agent runs, use the run-level start time.
+  const effectiveTurnStartedAt = useMemo(() => {
+    if (!agentNames || agentNames.size === 0 || scopedEvents.length === 0) {
+      return turnStartedAt;
+    }
+    // Use the earliest scoped event as the start time for this agent's panel.
+    let earliest = turnStartedAt;
+    for (const e of scopedEvents) {
+      if (!earliest || e.occurredAt < earliest) {
+        earliest = e.occurredAt;
+        break; // events are already in insertion order (chronological)
+      }
+    }
+    return earliest;
+  }, [agentNames, scopedEvents, turnStartedAt]);
+
   const elapsed = useElapsedTimer(
-    thinkingMessages.length > 0 || run ? turnStartedAt : undefined,
+    thinkingMessages.length > 0 || run ? effectiveTurnStartedAt : undefined,
     isActive,
   );
 
   const summary = useMemo(
-    () => summarizeActivity(thinkingMessages, run),
-    [thinkingMessages, run],
+    () => summarizeActivity(thinkingMessages, scopedEvents),
+    [thinkingMessages, scopedEvents],
   );
 
   const activityStream = useMemo(
-    () => buildActivityStream(thinkingMessages, run?.events ?? []),
-    [thinkingMessages, run?.events],
+    () => buildActivityStream(thinkingMessages, scopedEvents),
+    [thinkingMessages, scopedEvents],
   );
 
   // Nothing to show — no thinking messages, no run, and not active
@@ -312,7 +312,8 @@ export function TurnActivityPanel({
   const isFailed = runStatus === 'error';
   const isCancelled = runStatus === 'cancelled';
   const isTerminated = isCompleted || isFailed || isCancelled;
-  const showGitSummary = run && isTerminated && run.postRunGitSummary && onDiscard;
+  // Only show git summary and discard on the last panel for a given run
+  const showGitSummary = run && isTerminated && run.postRunGitSummary && onDiscard && (isLastRunPanel !== false);
 
   // Build the summary label
   let summaryLabel: string;

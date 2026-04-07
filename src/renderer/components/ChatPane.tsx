@@ -46,7 +46,16 @@ import {
 
 type DisplayItem =
   | { type: 'message'; message: ChatMessageRecord }
-  | { type: 'turn-activity'; thinkingMessages: ChatMessageRecord[]; run?: SessionRunRecord; turnStartedAt?: string };
+  | {
+    type: 'turn-activity';
+    thinkingMessages: ChatMessageRecord[];
+    run?: SessionRunRecord;
+    turnStartedAt?: string;
+    /** Agent names in this turn group, derived from thinking message authors. Used to scope run events. */
+    agentNames?: ReadonlySet<string>;
+    /** True when this is the last turn-activity panel that shares a given run (controls git summary / discard). */
+    isLastRunPanel?: boolean;
+  };
 
 interface ChatPaneProps {
   project: ProjectRecord;
@@ -147,6 +156,15 @@ export function ChatPane({
     // can detect orphaned runs that need their own panel.
     const consumedRunIds = new Set<string>();
 
+    /** Collect unique author names from a batch of thinking messages. */
+    function collectAgentNames(msgs: ChatMessageRecord[]): Set<string> | undefined {
+      const names = new Set<string>();
+      for (const m of msgs) {
+        if (m.authorName) names.add(m.authorName);
+      }
+      return names.size > 0 ? names : undefined;
+    }
+
     for (let i = 0; i < messages.length; i++) {
       const message = messages[i];
       const isLast = i === messages.length - 1;
@@ -176,7 +194,13 @@ export function ChatPane({
       if (pendingThinking.length > 0) {
         const run = lastUserMessageId ? runsByTrigger.get(lastUserMessageId) : undefined;
         if (run) consumedRunIds.add(run.id);
-        items.push({ type: 'turn-activity', thinkingMessages: pendingThinking, run, turnStartedAt: run?.startedAt });
+        items.push({
+          type: 'turn-activity',
+          thinkingMessages: pendingThinking,
+          run,
+          turnStartedAt: run?.startedAt,
+          agentNames: collectAgentNames(pendingThinking),
+        });
         pendingThinking = [];
       }
       items.push({ type: 'message', message });
@@ -188,7 +212,13 @@ export function ChatPane({
     if (pendingThinking.length > 0) {
       const run = lastUserMessageId ? runsByTrigger.get(lastUserMessageId) : undefined;
       if (run) consumedRunIds.add(run.id);
-      items.push({ type: 'turn-activity', thinkingMessages: pendingThinking, run, turnStartedAt: run?.startedAt });
+      items.push({
+        type: 'turn-activity',
+        thinkingMessages: pendingThinking,
+        run,
+        turnStartedAt: run?.startedAt,
+        agentNames: collectAgentNames(pendingThinking),
+      });
     }
 
     // If the session is busy but no turn-activity was emitted for the
@@ -198,6 +228,22 @@ export function ChatPane({
       const activeRun = runsByTrigger.get(lastUserMessageId);
       if (activeRun && !consumedRunIds.has(activeRun.id)) {
         items.push({ type: 'turn-activity', thinkingMessages: [], run: activeRun, turnStartedAt: activeRun.startedAt });
+      }
+    }
+
+    // Tag the last turn-activity panel for each run so only it shows
+    // run-level metadata (git summary, discard button, etc.).
+    const lastPanelIndexByRunId = new Map<string, number>();
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.type === 'turn-activity' && item.run) {
+        lastPanelIndexByRunId.set(item.run.id, i);
+      }
+    }
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.type === 'turn-activity' && item.run) {
+        item.isLastRunPanel = lastPanelIndexByRunId.get(item.run.id) === i;
       }
     }
 
@@ -547,6 +593,8 @@ export function ChatPane({
                         isActive={isTurnActive(item, itemIndex)}
                         turnStartedAt={item.turnStartedAt}
                         sessionId={session.id}
+                        agentNames={item.agentNames}
+                        isLastRunPanel={item.isLastRunPanel}
                         onDiscard={onDiscardRunChanges}
                         onOpenCommitComposer={onOpenCommitComposer}
                       />

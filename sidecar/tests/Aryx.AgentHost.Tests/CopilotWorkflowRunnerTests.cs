@@ -946,6 +946,54 @@ public sealed class CopilotWorkflowRunnerTests
     }
 
     [Fact]
+    public async Task HandleWorkflowEventAsync_QueuesCompletedActivityForCompletedExecutor()
+    {
+        RunTurnCommandDto command = CreateApprovalCommand();
+        CopilotTurnExecutionState state = new(command);
+        WorkflowNodeDto primaryAgent = command.Workflow.GetAgentNodes()[0];
+
+        state.ObserveSessionEvent(
+            primaryAgent,
+            SessionEvent.FromJson(
+                """
+                {
+                  "type": "assistant.message_delta",
+                  "data": {
+                    "messageId": "msg-1",
+                    "deltaContent": "Working"
+                  },
+                  "id": "11111111-1111-1111-1111-111111111111",
+                  "timestamp": "2026-03-27T00:00:00Z"
+                }
+                """));
+        _ = state.DrainPendingEvents();
+
+        MethodInfo handleWorkflowEvent = typeof(CopilotWorkflowRunner).GetMethod(
+            "HandleWorkflowEventAsync",
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+        Task<bool> handleTask = (Task<bool>)handleWorkflowEvent.Invoke(
+            null,
+            [
+                command,
+                new ExecutorCompletedEvent("agent-1", null),
+                Array.Empty<ChatMessage>(),
+                state,
+                (Func<TurnDeltaEventDto, Task>)(_ => Task.CompletedTask),
+                (Func<SidecarEventDto, Task>)(_ => Task.CompletedTask),
+            ])!;
+
+        bool shouldEndTurn = await handleTask;
+
+        Assert.False(shouldEndTurn);
+        Assert.Null(state.ActiveAgent);
+
+        AgentActivityEventDto completed = Assert.Single(state.DrainPendingEvents().OfType<AgentActivityEventDto>());
+        Assert.Equal("completed", completed.ActivityType);
+        Assert.Equal("agent-1", completed.AgentId);
+        Assert.Equal("Primary", completed.AgentName);
+    }
+
+    [Fact]
     public async Task HandleWorkflowEventAsync_EmitsWorkflowWarningDiagnostic()
     {
         RunTurnCommandDto command = CreateApprovalCommand();

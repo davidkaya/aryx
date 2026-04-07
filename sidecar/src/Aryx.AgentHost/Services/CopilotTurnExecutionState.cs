@@ -54,6 +54,11 @@ internal sealed class CopilotTurnExecutionState
         }
     }
 
+    public void QueueCompletedActivity(AgentIdentity agent)
+    {
+        _pendingEvents.Enqueue(CreateCompletedActivity(agent));
+    }
+
     public void ApplyEvent(SidecarEventDto evt)
     {
         if (evt is AgentActivityEventDto activity
@@ -307,6 +312,19 @@ internal sealed class CopilotTurnExecutionState
             AgentName = agent.AgentName,
             ToolName = toolName,
             ToolCallId = toolCallId,
+        };
+    }
+
+    private AgentActivityEventDto CreateCompletedActivity(AgentIdentity agent)
+    {
+        return new AgentActivityEventDto
+        {
+            Type = "agent-activity",
+            RequestId = _command.RequestId,
+            SessionId = _command.SessionId,
+            ActivityType = "completed",
+            AgentId = agent.AgentId,
+            AgentName = agent.AgentName,
         };
     }
 

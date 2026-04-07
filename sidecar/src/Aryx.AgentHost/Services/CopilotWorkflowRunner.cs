@@ -375,6 +375,7 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
                 out AgentIdentity completedAgent))
             {
                 TraceHandoff(command, $"Executor completed: {completed.ExecutorId} -> {completedAgent.AgentName} ({completedAgent.AgentId}).");
+                state.QueueCompletedActivity(completedAgent);
                 state.ClearActiveAgentIfMatching(completedAgent);
             }
             else

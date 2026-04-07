@@ -95,6 +95,22 @@ public sealed class CopilotTurnExecutionStateTests
     }
 
     [Fact]
+    public void QueueCompletedActivity_QueuesCompletedAgentActivity()
+    {
+        RunTurnCommandDto command = CreateCommand();
+        CopilotTurnExecutionState state = new(command);
+
+        state.QueueCompletedActivity(new AgentIdentity("agent-1", "Primary"));
+
+        AgentActivityEventDto activity = Assert.Single(state.DrainPendingEvents().OfType<AgentActivityEventDto>());
+        Assert.Equal("completed", activity.ActivityType);
+        Assert.Equal("agent-1", activity.AgentId);
+        Assert.Equal("Primary", activity.AgentName);
+        Assert.Equal(command.RequestId, activity.RequestId);
+        Assert.Equal(command.SessionId, activity.SessionId);
+    }
+
+    [Fact]
     public void ObserveSessionEvent_AssistantMessageWithToolRequests_QueuesMessageReclassifiedEvent()
     {
         RunTurnCommandDto command = CreateCommand();

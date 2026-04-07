@@ -557,18 +557,12 @@ export default function App() {
 
   const handleCreateScratchpad = useCallback(() => {
     if (!workspace) return;
-    const singleWorkflows = workspace.workflows
-      .filter((w) => (w.settings.orchestrationMode ?? 'single') === 'single')
-      .sort((a, b) => {
-        if (a.isFavorite && !b.isFavorite) return -1;
-        if (!a.isFavorite && b.isFavorite) return 1;
-        return 0;
-      });
-
-    const defaultWorkflow = singleWorkflows[0];
-    if (defaultWorkflow) {
-      void api.createSession({ projectId: SCRATCHPAD_PROJECT_ID, workflowId: defaultWorkflow.id });
+    if (workspace.workflows.length <= 1) {
+      const wf = workspace.workflows[0];
+      if (wf) void api.createSession({ projectId: SCRATCHPAD_PROJECT_ID, workflowId: wf.id });
+      return;
     }
+    setWorkflowPickerProjectId(SCRATCHPAD_PROJECT_ID);
   }, [api, workspace]);
 
   /** Opens the workflow picker, or creates immediately if ≤1 workflow. */

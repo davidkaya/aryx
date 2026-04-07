@@ -273,17 +273,16 @@ export function TurnActivityPanel({
   const [expanded, setExpanded] = useState(false);
   const wasActiveRef = useRef(isActive);
 
-  // Auto-expand when the turn is active and activity appears.
+  // Auto-expand when the turn is active (run exists or thinking arrives).
   // Auto-collapse once the turn finishes.
   useEffect(() => {
-    const hasActivity = thinkingMessages.length > 0 || (run?.events.length ?? 0) > 0;
-    if (isActive && hasActivity) {
+    if (isActive && (thinkingMessages.length > 0 || run)) {
       setExpanded(true);
     } else if (wasActiveRef.current && !isActive) {
       setExpanded(false);
     }
     wasActiveRef.current = isActive;
-  }, [isActive, thinkingMessages.length, run?.events.length]);
+  }, [isActive, thinkingMessages.length, run]);
 
   const toggle = useCallback(() => setExpanded((prev) => !prev), []);
 
@@ -302,8 +301,8 @@ export function TurnActivityPanel({
     [thinkingMessages, run?.events],
   );
 
-  // Nothing to show yet
-  if (thinkingMessages.length === 0 && (!run || run.events.length === 0)) {
+  // Nothing to show — no thinking messages, no run, and not active
+  if (thinkingMessages.length === 0 && !run) {
     return null;
   }
 

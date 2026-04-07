@@ -143,6 +143,9 @@ export function ChatPane({
     let lastUserMessageId: string | undefined;
     const messages = session.messages;
     const busy = session.status === 'running';
+    // Track which runs have been attached to a turn-activity item so we
+    // can detect orphaned runs that need their own panel.
+    const consumedRunIds = new Set<string>();
 
     for (let i = 0; i < messages.length; i++) {
       const message = messages[i];
@@ -173,6 +176,7 @@ export function ChatPane({
 
       if (pendingThinking.length > 0) {
         const run = lastUserMessageId ? runsByTrigger.get(lastUserMessageId) : undefined;
+        if (run) consumedRunIds.add(run.id);
         items.push({ type: 'turn-activity', thinkingMessages: pendingThinking, run, turnStartedAt: run?.startedAt });
         pendingThinking = [];
       }
@@ -184,7 +188,18 @@ export function ChatPane({
 
     if (pendingThinking.length > 0) {
       const run = lastUserMessageId ? runsByTrigger.get(lastUserMessageId) : undefined;
+      if (run) consumedRunIds.add(run.id);
       items.push({ type: 'turn-activity', thinkingMessages: pendingThinking, run, turnStartedAt: run?.startedAt });
+    }
+
+    // If the session is busy but no turn-activity was emitted for the
+    // active run (thinking messages haven't been reclassified yet), inject
+    // one so the panel appears as soon as the run starts producing events.
+    if (lastUserMessageId) {
+      const activeRun = runsByTrigger.get(lastUserMessageId);
+      if (activeRun && !consumedRunIds.has(activeRun.id)) {
+        items.push({ type: 'turn-activity', thinkingMessages: [], run: activeRun, turnStartedAt: activeRun.startedAt });
+      }
     }
 
     return items;

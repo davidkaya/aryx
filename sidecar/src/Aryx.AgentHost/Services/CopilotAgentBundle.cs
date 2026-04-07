@@ -38,7 +38,6 @@ internal sealed class CopilotAgentBundle : IAsyncDisposable
     {
         List<IAsyncDisposable> disposables = [];
         List<AIAgent> agents = [];
-        CopilotClientOptions clientOptions = CopilotCliPathResolver.CreateClientOptions();
         ResolvedHookSet configuredHooks = await HookConfigLoader.LoadAsync(command.ProjectPath, cancellationToken)
             .ConfigureAwait(false);
         IHookCommandRunner hookCommandRunner = HookCommandRunner.Instance;
@@ -52,41 +51,47 @@ internal sealed class CopilotAgentBundle : IAsyncDisposable
             disposables.Add(toolingBundle);
         }
 
-        // Share a single CopilotClient across all agents to avoid spawning
-        // multiple CLI processes that race on token refresh during auto-login.
-        CopilotClient sharedClient = new(clientOptions);
-        await sharedClient.StartAsync(cancellationToken).ConfigureAwait(false);
-
         IReadOnlyList<WorkflowNodeDto> agentNodes = command.Workflow.GetAllAgentNodes(command.WorkflowLibrary);
-        foreach ((WorkflowNodeDto definition, int agentIndex) in agentNodes.Select((definition, index) => (definition, index)))
+
+        if (agentNodes.Count > 0)
         {
-            SessionConfig sessionConfig = CreateSessionConfig(
-                command,
-                definition,
-                agentIndex,
-                (request, invocation) => onPermissionRequest(definition, request, invocation),
-                (request, invocation) => onUserInputRequest(definition, request, invocation),
-                evt => onSessionEvent?.Invoke(definition, evt),
-                configuredHooks,
-                hookCommandRunner);
+            CopilotClientOptions clientOptions = CopilotCliPathResolver.CreateClientOptions();
 
-            ApplySessionTooling(sessionConfig, toolingBundle?.McpServers, toolingBundle?.Tools);
-            ApplyPromptInvocation(sessionConfig, command.PromptInvocation);
+            // Share a single CopilotClient across all agents to avoid spawning
+            // multiple CLI processes that race on token refresh during auto-login.
+            CopilotClient sharedClient = new(clientOptions);
+            await sharedClient.StartAsync(cancellationToken).ConfigureAwait(false);
 
-            AryxCopilotAgent agent = new(
-                sharedClient,
-                sessionConfig,
-                ownsClient: false,
-                id: definition.GetAgentId(),
-                name: definition.GetAgentName(),
-                description: NormalizeOptionalString(definition.Config.Description));
+            foreach ((WorkflowNodeDto definition, int agentIndex) in agentNodes.Select((definition, index) => (definition, index)))
+            {
+                SessionConfig sessionConfig = CreateSessionConfig(
+                    command,
+                    definition,
+                    agentIndex,
+                    (request, invocation) => onPermissionRequest(definition, request, invocation),
+                    (request, invocation) => onUserInputRequest(definition, request, invocation),
+                    evt => onSessionEvent?.Invoke(definition, evt),
+                    configuredHooks,
+                    hookCommandRunner);
 
-            agents.Add(agent);
-            disposables.Add(agent);
+                ApplySessionTooling(sessionConfig, toolingBundle?.McpServers, toolingBundle?.Tools);
+                ApplyPromptInvocation(sessionConfig, command.PromptInvocation);
+
+                AryxCopilotAgent agent = new(
+                    sharedClient,
+                    sessionConfig,
+                    ownsClient: false,
+                    id: definition.GetAgentId(),
+                    name: definition.GetAgentName(),
+                    description: NormalizeOptionalString(definition.Config.Description));
+
+                agents.Add(agent);
+                disposables.Add(agent);
+            }
+
+            // The bundle owns the shared client — disposed after all agents.
+            disposables.Add(sharedClient);
         }
-
-        // The bundle owns the shared client — disposed after all agents.
-        disposables.Add(sharedClient);
 
         CopilotAgentBundle bundle = new(agents, hasConfiguredHooks: !configuredHooks.IsEmpty);
         bundle._disposables.AddRange(disposables);

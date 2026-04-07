@@ -62,7 +62,7 @@ import Base from '../layouts/Base.astro';
           data-reveal-d="2"
         >
           Aryx gives you a persistent workspace to ask questions, connect real projects, orchestrate
-          multi-agent patterns, and keep ongoing AI work organized in one app.
+          multi-agent workflows, and keep ongoing AI work organized in one app.
         </p>
 
         <div
@@ -166,7 +166,7 @@ import Base from '../layouts/Base.astro';
           </div>
           <h3 class="mt-5 text-lg font-semibold text-warm-50">Agent Orchestration</h3>
           <p class="mt-2.5 text-sm leading-relaxed text-warm-300">
-            Go beyond one assistant. Create multi-agent patterns — sequential pipelines, concurrent
+            Go beyond one assistant. Create multi-agent workflows — sequential pipelines, concurrent
             exploration, handoff delegation, and group-chat collaboration.
           </p>
           <!-- Mini flow diagram -->
@@ -414,18 +414,18 @@ import Base from '../layouts/Base.astro';
               <svg class="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
             </div>
             <div>
-              <h4 class="text-sm font-medium text-warm-50">Run Timeline</h4>
-              <p class="mt-0.5 text-xs leading-relaxed text-warm-400">Structured history of tool calls, delegations, hooks, and context usage.</p>
+              <h4 class="text-sm font-medium text-warm-50">Turn Activity Panels</h4>
+              <p class="mt-0.5 text-xs leading-relaxed text-warm-400">Inline run timeline in each chat turn — tool calls, delegations, hooks, and context at a glance.</p>
             </div>
           </div>
-          <!-- Visual Pattern Editor -->
+          <!-- Workflow Designer -->
           <div class="group flex gap-3.5 rounded-xl px-3 py-2.5 transition hover:bg-card/60" data-reveal data-reveal-d="4">
             <div class="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-accent/[0.07] text-accent transition group-hover:bg-accent/[0.12]">
               <svg class="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z"></path></svg>
             </div>
             <div>
-              <h4 class="text-sm font-medium text-warm-50">Visual Pattern Editor</h4>
-              <p class="mt-0.5 text-xs leading-relaxed text-warm-400">Drag nodes, draw connections, and inspect each step in a graph view.</p>
+              <h4 class="text-sm font-medium text-warm-50">Workflow Designer</h4>
+              <p class="mt-0.5 text-xs leading-relaxed text-warm-400">Visual graph editor with conditional edges, loops, sub-workflows, and node inspection.</p>
             </div>
           </div>
           <!-- Copilot Customization -->
@@ -489,7 +489,7 @@ import Base from '../layouts/Base.astro';
             </div>
             <div>
               <h4 class="text-sm font-medium text-warm-50">Tool Approval Controls</h4>
-              <p class="mt-0.5 text-xs leading-relaxed text-warm-400">Fine-grained policies with pattern defaults and per-session overrides.</p>
+              <p class="mt-0.5 text-xs leading-relaxed text-warm-400">Fine-grained policies with workflow defaults and per-session overrides.</p>
             </div>
           </div>
           <!-- Integrated Terminal -->
@@ -548,8 +548,8 @@ import Base from '../layouts/Base.astro';
     </div>
   </section>
 
-  <!-- ═══════════════════════════════ Orchestration Patterns ═══════════════════════════════ -->
-  <section id="patterns" class="relative border-t border-border-subtle/50">
+  <!-- ═══════════════════════════════ Workflow Orchestration ═══════════════════════════════ -->
+  <section id="workflows" class="relative border-t border-border-subtle/50">
     <div class="mx-auto max-w-6xl px-6 py-24 md:py-32">
       <div class="mx-auto max-w-2xl text-center" data-reveal>
         <h2 class="text-3xl font-light tracking-tight text-warm-50 md:text-5xl">
@@ -558,7 +558,7 @@ import Base from '../layouts/Base.astro';
         </h2>
         <p class="mt-5 text-lg text-warm-300">
           Choose how agents collaborate — from simple one-on-one help to complex multi-agent
-          workflows. Save patterns and reuse them across projects.
+          workflows. Save workflows and reuse them across projects.
         </p>
       </div>
 
@@ -680,7 +680,56 @@ import Base from '../layouts/Base.astro';
         </div>
       </div>
 
-      <!-- Orchestration screenshot -->
+      <!-- Workflow Designer capabilities -->
+      <div class="mx-auto mt-20 max-w-5xl">
+        <div class="mb-10 flex items-center gap-4" data-reveal>
+          <div class="h-px w-8 bg-gradient-to-r from-brand to-brand/0"></div>
+          <h3 class="text-xs font-semibold uppercase tracking-[0.2em] text-brand">Workflow Designer</h3>
+          <div class="h-px flex-1 bg-border-subtle"></div>
+        </div>
+        <div class="grid gap-x-8 gap-y-6 sm:grid-cols-2 lg:grid-cols-4">
+          <!-- Visual Graph Editor -->
+          <div class="group flex gap-3.5 rounded-xl px-3 py-2.5 transition hover:bg-card/60" data-reveal data-reveal-d="1">
+            <div class="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-brand/[0.07] text-brand transition group-hover:bg-brand/[0.12]">
+              <svg class="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z"></path></svg>
+            </div>
+            <div>
+              <h4 class="text-sm font-medium text-warm-50">Visual Graph Editor</h4>
+              <p class="mt-0.5 text-xs leading-relaxed text-warm-400">Drag agent nodes, draw connections, and inspect each step on an interactive canvas.</p>
+            </div>
+          </div>
+          <!-- 8 Workflow Templates -->
+          <div class="group flex gap-3.5 rounded-xl px-3 py-2.5 transition hover:bg-card/60" data-reveal data-reveal-d="2">
+            <div class="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-accent/[0.07] text-accent transition group-hover:bg-accent/[0.12]">
+              <svg class="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+            </div>
+            <div>
+              <h4 class="text-sm font-medium text-warm-50">Rich Templates</h4>
+              <p class="mt-0.5 text-xs leading-relaxed text-warm-400">Eight hand-crafted templates — code review, research, triage, content creation, debates, and more.</p>
+            </div>
+          </div>
+          <!-- Conditional Edges & Loops -->
+          <div class="group flex gap-3.5 rounded-xl px-3 py-2.5 transition hover:bg-card/60" data-reveal data-reveal-d="3">
+            <div class="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-brand/[0.07] text-brand transition group-hover:bg-brand/[0.12]">
+              <svg class="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+            </div>
+            <div>
+              <h4 class="text-sm font-medium text-warm-50">Conditions &amp; Loops</h4>
+              <p class="mt-0.5 text-xs leading-relaxed text-warm-400">Add conditional edges and iteration limits to build workflows that branch and repeat.</p>
+            </div>
+          </div>
+          <!-- Sub-workflows -->
+          <div class="group flex gap-3.5 rounded-xl px-3 py-2.5 transition hover:bg-card/60" data-reveal data-reveal-d="4">
+            <div class="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-accent/[0.07] text-accent transition group-hover:bg-accent/[0.12]">
+              <svg class="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+            </div>
+            <div>
+              <h4 class="text-sm font-medium text-warm-50">Sub-Workflows</h4>
+              <p class="mt-0.5 text-xs leading-relaxed text-warm-400">Nest workflows inside workflows and navigate between levels with breadcrumbs.</p>
+            </div>
+          </div>
+        </div>
+      </div>
       <div class="mx-auto mt-16 max-w-5xl" data-reveal>
         <div
           class="rounded-2xl border border-border bg-card/60 p-1.5 shadow-2xl shadow-black/40 ring-1 ring-white/[0.04]"
@@ -698,7 +747,7 @@ import Base from '../layouts/Base.astro';
           </div>
         </div>
         <p class="mt-4 text-center text-sm text-warm-400">
-          Multi-agent runs stay visible in one workspace while patterns stay reusable across
+          Multi-agent runs stay visible in one workspace while workflows stay reusable across
           projects.
         </p>
       </div>
@@ -767,10 +816,10 @@ import Base from '../layouts/Base.astro';
               3
             </div>
             <div class="pt-1">
-              <h3 class="text-base font-semibold text-warm-50">Pick a Pattern</h3>
+              <h3 class="text-base font-semibold text-warm-50">Pick a Workflow</h3>
               <p class="mt-2 text-sm leading-relaxed text-warm-300">
-                Choose a single-agent chat for direct help, or select a multi-agent orchestration
-                pattern for more structured workflows.
+                Choose a single-agent chat for direct help, or select a multi-agent workflow
+                for more structured orchestration.
               </p>
             </div>
           </div>
@@ -842,7 +891,7 @@ import Base from '../layouts/Base.astro';
         <span class="hidden text-warm-700 md:inline">·</span>
         <div class="flex items-center gap-2">
           <span class="text-warm-600">◇</span>
-          Graph Pattern Editor
+          Workflow Designer
         </div>
         <span class="hidden text-warm-700 md:inline">·</span>
         <div class="flex items-center gap-2">

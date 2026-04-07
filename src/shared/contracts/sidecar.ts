@@ -290,6 +290,7 @@ export interface AgentActivityEvent {
   sourceAgentName?: string;
   toolName?: string;
   toolCallId?: string;
+  toolArguments?: Record<string, unknown>;
   fileChanges?: ToolCallFileChangePreview[];
 }
 

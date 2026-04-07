@@ -2543,6 +2543,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
           sourceAgentName: event.sourceAgentName,
           toolName: event.toolName,
           toolCallId: event.toolCallId,
+          toolArguments: event.toolArguments,
           fileChanges: event.fileChanges,
         }));
     }
@@ -2563,6 +2564,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
       sourceAgentName: event.sourceAgentName,
       toolName: event.toolName,
       toolCallId: event.toolCallId,
+      toolArguments: event.toolArguments,
       fileChanges: event.fileChanges,
     });
   }

@@ -241,6 +241,9 @@ export function ConditionEditor({ condition, onChange, disabled }: ConditionEdit
           <option value="message-type">Message Type</option>
           <option value="expression">Expression</option>
         </select>
+        <p className="text-[11px] leading-relaxed text-[var(--color-text-muted)]">
+          Determines when this edge fires. Use property rules or expressions to create conditional branches.
+        </p>
       </label>
 
       {condition?.type === 'property' && (

@@ -101,12 +101,17 @@ export function RequestPortInspector({
       />
 
       {/* Port ID */}
-      <InputField
-        label="Port ID"
-        onChange={(v) => patchConfig({ portId: v })}
-        placeholder="Unique port identifier"
-        value={config.portId}
-      />
+      <div className="space-y-1.5">
+        <InputField
+          label="Port ID"
+          onChange={(v) => patchConfig({ portId: v })}
+          placeholder="Unique port identifier"
+          value={config.portId}
+        />
+        <p className="text-[11px] leading-relaxed text-[var(--color-text-muted)]">
+          Unique identifier used to target this port from parent workflows or external callers.
+        </p>
+      </div>
 
       {/* Request Type */}
       <div className="space-y-1.5">

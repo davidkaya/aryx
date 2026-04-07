@@ -691,6 +691,9 @@ function WorkflowSettingsPanel({
             <option value="off-thread">Off-thread</option>
             <option value="lockstep">Lockstep</option>
           </select>
+          <p className="text-[11px] leading-relaxed text-[var(--color-text-muted)]">
+            Off-thread executes in the background without blocking. Lockstep waits for each step to finish before proceeding.
+          </p>
         </label>
 
         <label className="block space-y-1.5">
@@ -712,6 +715,9 @@ function WorkflowSettingsPanel({
             type="number"
             value={workflow.settings.maxIterations ?? ''}
           />
+          <p className="text-[11px] leading-relaxed text-[var(--color-text-muted)]">
+            Safety limit on total step executions to prevent runaway loops.
+          </p>
         </label>
 
         <div className="col-span-2 flex items-center justify-between rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-1)] px-4 py-3">
@@ -790,9 +796,14 @@ function WorkflowSettingsPanel({
         {/* State Scopes */}
         <div className="col-span-2 space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-[12px] font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
-              State Scopes
-            </span>
+            <div>
+              <span className="text-[12px] font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
+                State Scopes
+              </span>
+              <p className="mt-0.5 text-[11px] leading-relaxed text-[var(--color-text-muted)]">
+                Named containers for shared state that persists across workflow steps.
+              </p>
+            </div>
             <button
               className="flex size-6 items-center justify-center rounded-md text-[var(--color-text-muted)] transition-all duration-200 hover:bg-[var(--color-accent)]/10 hover:text-[var(--color-accent)]"
               onClick={() => {

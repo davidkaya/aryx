@@ -134,25 +134,35 @@ export function InvokeFunctionInspector({
       />
 
       {/* Result variable */}
-      <InputField
-        label="Result Variable"
-        onChange={(v) => patchConfig({ resultVariable: v || undefined })}
-        placeholder="e.g. Local.result"
-        value={config.resultVariable ?? ''}
-      />
+      <div className="space-y-1.5">
+        <InputField
+          label="Result Variable"
+          onChange={(v) => patchConfig({ resultVariable: v || undefined })}
+          placeholder="e.g. Local.result"
+          value={config.resultVariable ?? ''}
+        />
+        <p className="text-[11px] leading-relaxed text-[var(--color-text-muted)]">
+          State path where the return value is stored for use in subsequent steps.
+        </p>
+      </div>
 
       {/* Require approval */}
-      <label className="flex items-center justify-between">
-        <span className="text-[12px] font-medium text-[var(--color-text-secondary)]">
-          Require Approval
-        </span>
-        <input
-          checked={config.requireApproval === true}
-          className="size-4 accent-[var(--color-accent)]"
-          onChange={(e) => patchConfig({ requireApproval: e.target.checked || undefined })}
-          type="checkbox"
-        />
-      </label>
+      <div className="space-y-1">
+        <label className="flex items-center justify-between">
+          <span className="text-[12px] font-medium text-[var(--color-text-secondary)]">
+            Require Approval
+          </span>
+          <input
+            checked={config.requireApproval === true}
+            className="size-4 accent-[var(--color-accent)]"
+            onChange={(e) => patchConfig({ requireApproval: e.target.checked || undefined })}
+            type="checkbox"
+          />
+        </label>
+        <p className="text-[11px] leading-relaxed text-[var(--color-text-muted)]">
+          Pause and require human confirmation before invoking this function.
+        </p>
+      </div>
 
       {/* Arguments editor */}
       <div className="space-y-1.5">

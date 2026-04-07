@@ -155,12 +155,17 @@ function AgentNodeInspector({
           }}
           value={config.model}
         />
-        <ReasoningEffortSelect
-          label="Reasoning"
-          onChange={(value) => patchConfig({ reasoningEffort: value })}
-          supportedEfforts={getSupportedReasoningEfforts(model)}
-          value={config.reasoningEffort}
-        />
+        <div className="space-y-1.5">
+          <ReasoningEffortSelect
+            label="Reasoning"
+            onChange={(value) => patchConfig({ reasoningEffort: value })}
+            supportedEfforts={getSupportedReasoningEfforts(model)}
+            value={config.reasoningEffort}
+          />
+          <p className="text-[11px] leading-relaxed text-[var(--color-text-muted)]">
+            Controls how much the model reasons before responding. Higher values produce more careful, thorough answers.
+          </p>
+        </div>
       </div>
     </div>
   );
@@ -290,27 +295,35 @@ function EdgeInspector({
           <option value="fan-out">Fan-out</option>
           <option value="fan-in">Fan-in</option>
         </select>
+        <p className="text-[11px] leading-relaxed text-[var(--color-text-muted)]">
+          Direct connects nodes sequentially. Fan-out splits into parallel branches. Fan-in waits for all branches to complete.
+        </p>
       </label>
 
       {/* Loop controls */}
       <div className="space-y-2.5">
-        <label className="flex items-center justify-between">
-          <span className="text-[12px] font-medium text-[var(--color-text-secondary)]">
-            Loop Edge
-          </span>
-          <input
-            checked={edge.isLoop === true}
-            className="size-4 accent-[var(--color-accent)]"
-            onChange={(e) => {
-              if (e.target.checked) {
-                onEdgeChange(edge.id, { isLoop: true, maxIterations: edge.maxIterations ?? 10 });
-              } else {
-                onEdgeChange(edge.id, { isLoop: undefined, maxIterations: undefined });
-              }
-            }}
-            type="checkbox"
-          />
-        </label>
+        <div className="space-y-1">
+          <label className="flex items-center justify-between">
+            <span className="text-[12px] font-medium text-[var(--color-text-secondary)]">
+              Loop Edge
+            </span>
+            <input
+              checked={edge.isLoop === true}
+              className="size-4 accent-[var(--color-accent)]"
+              onChange={(e) => {
+                if (e.target.checked) {
+                  onEdgeChange(edge.id, { isLoop: true, maxIterations: edge.maxIterations ?? 10 });
+                } else {
+                  onEdgeChange(edge.id, { isLoop: undefined, maxIterations: undefined });
+                }
+              }}
+              type="checkbox"
+            />
+          </label>
+          <p className="text-[11px] leading-relaxed text-[var(--color-text-muted)]">
+            Creates an iterative cycle, re-executing the path between these nodes up to a set limit.
+          </p>
+        </div>
         {edge.isLoop && (
           <label className="block space-y-1.5">
             <span className="text-[11px] text-[var(--color-text-muted)]">Max Iterations</span>

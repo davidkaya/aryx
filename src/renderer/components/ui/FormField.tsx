@@ -3,10 +3,12 @@ import type { ReactNode } from 'react';
 export function FormField({
   label,
   required,
+  description,
   children,
 }: {
   label: string;
   required?: boolean;
+  description?: string;
   children: ReactNode;
 }) {
   return (
@@ -16,6 +18,9 @@ export function FormField({
         {required && <span className="ml-1 text-[var(--color-status-warning)]">*</span>}
       </span>
       {children}
+      {description && (
+        <p className="mt-1.5 text-[11px] leading-relaxed text-[var(--color-text-muted)]">{description}</p>
+      )}
     </label>
   );
 }

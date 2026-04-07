@@ -211,7 +211,7 @@ function HandoffSettingsPanel({
         </span>
       </div>
 
-      <FormField label="Triage Agent">
+      <FormField label="Triage Agent" description="The entry-point agent that receives requests and decides which specialist to hand off to.">
         <SelectInput
           value={settings.triageAgentNodeId ?? ''}
           options={triageOptions}
@@ -219,7 +219,7 @@ function HandoffSettingsPanel({
         />
       </FormField>
 
-      <FormField label="Tool-Call Filtering">
+      <FormField label="Tool-Call Filtering" description="Controls which tools each agent can see and invoke during handoff routing.">
         <SelectInput
           value={settings.toolCallFiltering}
           options={filteringOptions}
@@ -237,7 +237,7 @@ function HandoffSettingsPanel({
         </button>
       </div>
 
-      <FormField label="Custom Handoff Instructions">
+      <FormField label="Custom Handoff Instructions" description="Additional guidance given to agents when performing handoffs between specialists.">
         <textarea
           className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-2 text-[13px] text-[var(--color-text-primary)] outline-none transition-all duration-200 placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-border-glow)] focus:shadow-[0_0_0_1px_rgba(36,92,249,0.15),0_0_12px_rgba(36,92,249,0.08)]"
           rows={3}
@@ -268,7 +268,7 @@ function GroupChatSettingsPanel({
         </span>
       </div>
 
-      <FormField label="Selection Strategy">
+      <FormField label="Selection Strategy" description="Determines which agent speaks next in each conversation turn.">
         <div className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3.5 py-2.5">
           <Repeat className="size-3.5 text-[var(--color-text-muted)]" />
           <span className="text-[13px] text-[var(--color-text-primary)]">Round Robin</span>
@@ -276,7 +276,7 @@ function GroupChatSettingsPanel({
         </div>
       </FormField>
 
-      <FormField label="Max Rounds">
+      <FormField label="Max Rounds" description="Maximum number of conversation turns across all agents before the group chat terminates.">
         <input
           type="number"
           min={1}

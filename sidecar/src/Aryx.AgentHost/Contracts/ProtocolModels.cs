@@ -456,6 +456,7 @@ public sealed class AgentActivityEventDto : SidecarEventDto
     public string? SourceAgentName { get; init; }
     public string? ToolName { get; init; }
     public string? ToolCallId { get; init; }
+    public IReadOnlyDictionary<string, object?>? ToolArguments { get; init; }
     public IReadOnlyList<ToolCallFileChangeDto>? FileChanges { get; init; }
 }
 

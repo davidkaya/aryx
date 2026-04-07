@@ -15,6 +15,7 @@ import {
 
 import { useElapsedTimer } from '@renderer/hooks/useElapsedTimer';
 import { FileChangePreview } from '@renderer/components/chat/FileChangePreview';
+import { ToolCallDetailPanel } from '@renderer/components/chat/ToolCallDetailPanel';
 import { RunChangeSummaryCard } from '@renderer/components/chat/RunChangeSummaryCard';
 import { formatEventLabel, truncateContent, filterEventsByAgent, summarizeActivity, type ActivitySummary } from '@renderer/lib/runTimelineFormatting';
 import type { ChatMessageRecord } from '@shared/domain/session';
@@ -184,6 +185,11 @@ function ActivityTimelineEventRow({ event }: { event: RunTimelineEventRecord }) 
           <p className="mt-0.5 text-[11px] leading-snug text-[var(--color-status-error)]/80">
             {truncateContent(event.error, 120)}
           </p>
+        )}
+
+        {/* Tool call argument details */}
+        {event.kind === 'tool-call' && (
+          <ToolCallDetailPanel toolName={event.toolName} toolArguments={event.toolArguments} />
         )}
 
         {/* File change preview for tool-call events */}

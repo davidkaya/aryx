@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using Aryx.AgentHost.Contracts;
@@ -15,7 +16,11 @@ public sealed class WorkflowRequestInfoInterpreterTests
     {
         ConcurrentDictionary<string, string> toolNamesByCallId = new(StringComparer.Ordinal);
         RequestInfoEvent requestInfo = CreateRequestInfoEvent(
-            new FunctionCallContent("call-1", "view", new Dictionary<string, object?>()));
+            new FunctionCallContent("call-1", "view", new Dictionary<string, object?>
+            {
+                ["path"] = @"C:\workspace\file.txt",
+                ["viewRange"] = new object[] { 10, 25 },
+            }));
 
         AgentActivityEventDto? activity = WorkflowRequestInfoInterpreter.TryCreateActivityFromRequest(
             CreateSingleAgentCommand(),
@@ -28,6 +33,9 @@ public sealed class WorkflowRequestInfoInterpreterTests
         Assert.Equal("agent-1", activity.AgentId);
         Assert.Equal("Primary", activity.AgentName);
         Assert.Equal("view", activity.ToolName);
+        Assert.NotNull(activity.ToolArguments);
+        Assert.Equal(@"C:\workspace\file.txt", activity.ToolArguments["path"]);
+        Assert.Equal([10, 25], Assert.IsAssignableFrom<IReadOnlyList<object?>>(activity.ToolArguments["viewRange"]));
         Assert.Equal("view", toolNamesByCallId["call-1"]);
     }
 
@@ -36,7 +44,15 @@ public sealed class WorkflowRequestInfoInterpreterTests
     {
         ConcurrentDictionary<string, string> toolNamesByCallId = new(StringComparer.Ordinal);
         RequestInfoEvent requestInfo = CreateRequestInfoEvent(
-            CreateMcpToolCall("call-1", "git.status", "Git MCP"));
+            CreateMcpToolCall(
+                "call-1",
+                "git.status",
+                "Git MCP",
+                new Dictionary<string, object?>
+                {
+                    ["path"] = @"C:\workspace",
+                    ["includeIgnored"] = true,
+                }));
 
         AgentActivityEventDto? activity = WorkflowRequestInfoInterpreter.TryCreateActivityFromRequest(
             CreateSingleAgentCommand(),
@@ -47,6 +63,9 @@ public sealed class WorkflowRequestInfoInterpreterTests
         Assert.NotNull(activity);
         Assert.Equal("tool-calling", activity.ActivityType);
         Assert.Equal("git.status", activity.ToolName);
+        Assert.NotNull(activity.ToolArguments);
+        Assert.Equal(@"C:\workspace", activity.ToolArguments["path"]);
+        Assert.Equal(true, activity.ToolArguments["includeIgnored"]);
         Assert.Equal("git.status", toolNamesByCallId["call-1"]);
     }
 
@@ -54,7 +73,8 @@ public sealed class WorkflowRequestInfoInterpreterTests
     public void TryCreateActivityFromRequest_MapsCodeInterpreterCallsToSyntheticToolName()
     {
         ConcurrentDictionary<string, string> toolNamesByCallId = new(StringComparer.Ordinal);
-        RequestInfoEvent requestInfo = CreateRequestInfoEvent(CreateCodeInterpreterToolCall("call-1"));
+        RequestInfoEvent requestInfo = CreateRequestInfoEvent(
+            CreateCodeInterpreterToolCall("call-1", "print('hello')"));
 
         AgentActivityEventDto? activity = WorkflowRequestInfoInterpreter.TryCreateActivityFromRequest(
             CreateSingleAgentCommand(),
@@ -65,6 +85,10 @@ public sealed class WorkflowRequestInfoInterpreterTests
         Assert.NotNull(activity);
         Assert.Equal("tool-calling", activity.ActivityType);
         Assert.Equal("code interpreter", activity.ToolName);
+        Assert.NotNull(activity.ToolArguments);
+        Assert.Equal(
+            ["print('hello')"],
+            Assert.IsAssignableFrom<IReadOnlyList<object?>>(activity.ToolArguments["inputs"]));
         Assert.Equal("code interpreter", toolNamesByCallId["call-1"]);
     }
 
@@ -83,7 +107,53 @@ public sealed class WorkflowRequestInfoInterpreterTests
         Assert.NotNull(activity);
         Assert.Equal("tool-calling", activity.ActivityType);
         Assert.Equal("image generation", activity.ToolName);
+        Assert.Null(activity.ToolArguments);
         Assert.Empty(toolNamesByCallId);
+    }
+
+    [Fact]
+    public void TryCreateActivityFromRequest_LeavesToolArgumentsNullWhenFunctionCallHasNoUsableArguments()
+    {
+        ConcurrentDictionary<string, string> toolNamesByCallId = new(StringComparer.Ordinal);
+        RequestInfoEvent requestInfo = CreateRequestInfoEvent(
+            new FunctionCallContent("call-1", "view", new Dictionary<string, object?>
+            {
+                ["empty"] = "   ",
+                ["missing"] = null,
+            }));
+
+        AgentActivityEventDto? activity = WorkflowRequestInfoInterpreter.TryCreateActivityFromRequest(
+            CreateSingleAgentCommand(),
+            requestInfo,
+            new AgentIdentity("agent-1", "Primary"),
+            toolNamesByCallId);
+
+        Assert.NotNull(activity);
+        Assert.Null(activity.ToolArguments);
+    }
+
+    [Fact]
+    public void TryCreateActivityFromRequest_TruncatesOversizedToolArgumentValues()
+    {
+        ConcurrentDictionary<string, string> toolNamesByCallId = new(StringComparer.Ordinal);
+        RequestInfoEvent requestInfo = CreateRequestInfoEvent(
+            new FunctionCallContent(
+                "call-1",
+                "powershell",
+                new Dictionary<string, object?>
+                {
+                    ["command"] = new string('x', 4001),
+                }));
+
+        AgentActivityEventDto? activity = WorkflowRequestInfoInterpreter.TryCreateActivityFromRequest(
+            CreateSingleAgentCommand(),
+            requestInfo,
+            new AgentIdentity("agent-1", "Primary"),
+            toolNamesByCallId);
+
+        Assert.NotNull(activity);
+        Assert.NotNull(activity.ToolArguments);
+        Assert.Equal("[truncated]", activity.ToolArguments["command"]);
     }
 
     [Fact]
@@ -242,22 +312,50 @@ public sealed class WorkflowRequestInfoInterpreterTests
         return new RequestInfoEvent(request);
     }
 
-    private static object CreateCodeInterpreterToolCall(string callId)
+    private static object CreateCodeInterpreterToolCall(string callId, params string[] inputs)
     {
         Type type = Type.GetType(
             "Microsoft.Extensions.AI.CodeInterpreterToolCallContent, Microsoft.Extensions.AI.Abstractions",
             throwOnError: true)!;
         object instance = Activator.CreateInstance(type)!;
         type.GetProperty("CallId")!.SetValue(instance, callId);
+        if (inputs.Length > 0)
+        {
+            Type aiContentType = Type.GetType(
+                "Microsoft.Extensions.AI.AIContent, Microsoft.Extensions.AI.Abstractions",
+                throwOnError: true)!;
+            Type textContentType = Type.GetType(
+                "Microsoft.Extensions.AI.TextContent, Microsoft.Extensions.AI.Abstractions",
+                throwOnError: true)!;
+            IList values = (IList)Activator.CreateInstance(typeof(List<>).MakeGenericType(aiContentType))!;
+            foreach (string input in inputs)
+            {
+                object textContent = Activator.CreateInstance(textContentType, input)!;
+                values.Add(textContent);
+            }
+
+            type.GetProperty("Inputs")!.SetValue(instance, values);
+        }
+
         return instance;
     }
 
-    private static object CreateMcpToolCall(string callId, string toolName, string serverName)
+    private static object CreateMcpToolCall(
+        string callId,
+        string toolName,
+        string serverName,
+        IReadOnlyDictionary<string, object?>? arguments = null)
     {
         Type type = Type.GetType(
             "Microsoft.Extensions.AI.McpServerToolCallContent, Microsoft.Extensions.AI.Abstractions",
             throwOnError: true)!;
-        return Activator.CreateInstance(type, callId, toolName, serverName)!;
+        object instance = Activator.CreateInstance(type, callId, toolName, serverName)!;
+        if (arguments is not null)
+        {
+            type.GetProperty("Arguments")!.SetValue(instance, arguments);
+        }
+
+        return instance;
     }
 
     private static object CreateImageGenerationToolCall()

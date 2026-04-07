@@ -46,6 +46,7 @@ export interface SessionEventRecord {
   sourceAgentName?: string;
   toolName?: string;
   toolCallId?: string;
+  toolArguments?: Record<string, unknown>;
   fileChanges?: ToolCallFileChangePreview[];
   run?: SessionRunRecord;
   error?: string;

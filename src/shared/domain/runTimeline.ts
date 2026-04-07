@@ -60,6 +60,7 @@ export interface RunTimelineEventRecord {
   targetAgentName?: string;
   toolName?: string;
   toolCallId?: string;
+  toolArguments?: Record<string, unknown>;
   fileChanges?: ToolCallFileChangePreview[];
   approvalId?: string;
   approvalKind?: ApprovalCheckpointKind;
@@ -120,6 +121,7 @@ export interface AppendRunActivityEventInput {
   sourceAgentName?: string;
   toolName?: string;
   toolCallId?: string;
+  toolArguments?: Record<string, unknown>;
   fileChanges?: ToolCallFileChangePreview[];
 }
 
@@ -824,6 +826,7 @@ export function appendRunActivityEvent(
         agentName: agent.agentName ?? existingEvent?.agentName,
         toolName: normalizeOptionalString(input.toolName) ?? existingEvent?.toolName,
         toolCallId,
+        toolArguments: input.toolArguments ?? existingEvent?.toolArguments,
         fileChanges: mergeToolCallFileChanges(existingEvent?.fileChanges, input.fileChanges),
       };
       return existingIndex >= 0

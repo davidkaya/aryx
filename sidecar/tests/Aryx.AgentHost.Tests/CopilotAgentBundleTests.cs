@@ -12,6 +12,24 @@ namespace Aryx.AgentHost.Tests;
 public sealed class CopilotAgentBundleTests
 {
     [Fact]
+    public void GetAllAgentNodes_IncludesReferencedSubworkflowAgentsInTraversalOrder()
+    {
+        WorkflowDefinitionDto childWorkflow = CreateSubworkflowChild(
+            "child-workflow",
+            CreateAgentNode("agent-child-1", "Child Agent 1"),
+            CreateAgentNode("agent-child-2", "Child Agent 2"));
+        WorkflowDefinitionDto parentWorkflow = CreateSubworkflowParent(
+            CreateAgentNode("agent-parent", "Parent Agent"),
+            workflowId: childWorkflow.Id);
+
+        IReadOnlyList<WorkflowNodeDto> agentNodes = parentWorkflow.GetAllAgentNodes([childWorkflow]);
+
+        Assert.Equal(
+            ["agent-parent", "agent-child-1", "agent-child-2"],
+            agentNodes.Select(node => node.GetAgentId()).ToArray());
+    }
+
+    [Fact]
     public void ApplySessionTooling_MapsMcpServersAndToolsOntoTheSessionConfig()
     {
         SessionConfig sessionConfig = new()
@@ -665,6 +683,108 @@ public sealed class CopilotAgentBundleTests
                 OrchestrationMode = mode,
                 ApprovalPolicy = approvalPolicy,
                 ModeSettings = modeSettings,
+            },
+        };
+    }
+
+    private static WorkflowDefinitionDto CreateSubworkflowParent(
+        WorkflowNodeDto directAgent,
+        string? workflowId = null,
+        WorkflowDefinitionDto? inlineWorkflow = null)
+    {
+        return new WorkflowDefinitionDto
+        {
+            Id = "parent-workflow",
+            Name = "Parent Workflow",
+            Graph = new WorkflowGraphDto
+            {
+                Nodes =
+                [
+                    new WorkflowNodeDto
+                    {
+                        Id = "start",
+                        Kind = "start",
+                        Label = "Start",
+                        Config = new WorkflowNodeConfigDto { Kind = "start" },
+                    },
+                    directAgent,
+                    new WorkflowNodeDto
+                    {
+                        Id = "sub-workflow",
+                        Kind = "sub-workflow",
+                        Label = "Nested Workflow",
+                        Config = new WorkflowNodeConfigDto
+                        {
+                            Kind = "sub-workflow",
+                            WorkflowId = workflowId,
+                            InlineWorkflow = inlineWorkflow,
+                        },
+                    },
+                    new WorkflowNodeDto
+                    {
+                        Id = "end",
+                        Kind = "end",
+                        Label = "End",
+                        Config = new WorkflowNodeConfigDto { Kind = "end" },
+                    },
+                ],
+            },
+            Settings = new WorkflowSettingsDto
+            {
+                OrchestrationMode = "sequential",
+            },
+        };
+    }
+
+    private static WorkflowDefinitionDto CreateSubworkflowChild(string id, params WorkflowNodeDto[] agentNodes)
+    {
+        return new WorkflowDefinitionDto
+        {
+            Id = id,
+            Name = "Child Workflow",
+            Graph = new WorkflowGraphDto
+            {
+                Nodes =
+                [
+                    new WorkflowNodeDto
+                    {
+                        Id = "start",
+                        Kind = "start",
+                        Label = "Start",
+                        Config = new WorkflowNodeConfigDto { Kind = "start" },
+                    },
+                    .. agentNodes,
+                    new WorkflowNodeDto
+                    {
+                        Id = "end",
+                        Kind = "end",
+                        Label = "End",
+                        Config = new WorkflowNodeConfigDto { Kind = "end" },
+                    },
+                ],
+            },
+            Settings = new WorkflowSettingsDto
+            {
+                OrchestrationMode = "sequential",
+            },
+        };
+    }
+
+    private static WorkflowNodeDto CreateAgentNode(string id, string name)
+    {
+        return new WorkflowNodeDto
+        {
+            Id = id,
+            Kind = "agent",
+            Label = name,
+            Config = new WorkflowNodeConfigDto
+            {
+                Kind = "agent",
+                Id = id,
+                Name = name,
+                Description = $"{name} description.",
+                Instructions = "Help.",
+                Model = "gpt-5.4",
             },
         };
     }

@@ -57,7 +57,7 @@ internal sealed class CopilotAgentBundle : IAsyncDisposable
         CopilotClient sharedClient = new(clientOptions);
         await sharedClient.StartAsync(cancellationToken).ConfigureAwait(false);
 
-        IReadOnlyList<WorkflowNodeDto> agentNodes = command.Workflow.GetAgentNodes();
+        IReadOnlyList<WorkflowNodeDto> agentNodes = command.Workflow.GetAllAgentNodes(command.WorkflowLibrary);
         foreach ((WorkflowNodeDto definition, int agentIndex) in agentNodes.Select((definition, index) => (definition, index)))
         {
             SessionConfig sessionConfig = CreateSessionConfig(

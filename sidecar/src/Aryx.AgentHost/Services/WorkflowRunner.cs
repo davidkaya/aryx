@@ -171,7 +171,7 @@ internal sealed class WorkflowRunner
 
         if (string.Equals(node.Kind, "sub-workflow", StringComparison.OrdinalIgnoreCase))
         {
-            WorkflowDefinitionDto subWorkflowDefinition = ResolveSubWorkflowDefinition(node, workflowLibrary);
+            WorkflowDefinitionDto subWorkflowDefinition = node.ResolveSubWorkflowDefinition(workflowLibrary);
             Workflow subWorkflow = BuildWorkflow(subWorkflowDefinition, agentMap, workflowLibrary);
             return new WorkflowNodeRoute(subWorkflow.BindAsExecutor(node.Id));
         }
@@ -196,25 +196,6 @@ internal sealed class WorkflowRunner
         return new WorkflowNodeRoute(entry, exit, [(entry, portBinding), (portBinding, exit)]);
     }
 
-    private static WorkflowDefinitionDto ResolveSubWorkflowDefinition(
-        WorkflowNodeDto node,
-        IReadOnlyDictionary<string, WorkflowDefinitionDto> workflowLibrary)
-    {
-        if (node.Config.InlineWorkflow is not null)
-        {
-            return node.Config.InlineWorkflow;
-        }
-
-        if (!string.IsNullOrWhiteSpace(node.Config.WorkflowId)
-            && workflowLibrary.TryGetValue(node.Config.WorkflowId, out WorkflowDefinitionDto? workflow))
-        {
-            return workflow;
-        }
-
-        throw new InvalidOperationException(
-            $"Sub-workflow node \"{node.Id}\" references unknown workflow \"{node.Config.WorkflowId}\".");
-    }
-
     private static string NormalizeRequired(string? value, string errorMessage)
         => NormalizeOptionalString(value) ?? throw new InvalidOperationException(errorMessage);
 
@@ -225,41 +206,9 @@ internal sealed class WorkflowRunner
         WorkflowDefinitionDto workflowDefinition,
         IReadOnlyDictionary<string, WorkflowDefinitionDto> workflowLibrary)
     {
-        List<string> agentIds = [];
-        CollectAgentIds(workflowDefinition, workflowLibrary, agentIds, new HashSet<string>(StringComparer.Ordinal));
-        return agentIds;
-    }
-
-    private static void CollectAgentIds(
-        WorkflowDefinitionDto workflowDefinition,
-        IReadOnlyDictionary<string, WorkflowDefinitionDto> workflowLibrary,
-        List<string> agentIds,
-        ISet<string> visitedWorkflowIds)
-    {
-        string workflowKey = string.IsNullOrWhiteSpace(workflowDefinition.Id)
-            ? Guid.NewGuid().ToString("N")
-            : workflowDefinition.Id;
-        if (!visitedWorkflowIds.Add(workflowKey))
-        {
-            return;
-        }
-
-        foreach (WorkflowNodeDto node in workflowDefinition.Graph.Nodes)
-        {
-            if (string.Equals(node.Kind, "agent", StringComparison.OrdinalIgnoreCase))
-            {
-                agentIds.Add(!string.IsNullOrWhiteSpace(node.Config.Id) ? node.Config.Id : node.Id);
-                continue;
-            }
-
-            if (!string.Equals(node.Kind, "sub-workflow", StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            WorkflowDefinitionDto subWorkflow = ResolveSubWorkflowDefinition(node, workflowLibrary);
-            CollectAgentIds(subWorkflow, workflowLibrary, agentIds, visitedWorkflowIds);
-        }
+        return workflowDefinition.GetAllAgentNodes(workflowLibrary)
+            .Select(node => node.GetAgentId())
+            .ToList();
     }
 
     private sealed record WorkflowNodeRoute(

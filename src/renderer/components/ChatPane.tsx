@@ -157,15 +157,14 @@ export function ChatPane({
       }
 
       // Optimistic thinking classification: fold a pending assistant
-      // message into the current thinking group when it immediately follows
-      // thinking messages during an active turn. This prevents the brief
-      // flash of content that occurs before a message-reclassified event
-      // arrives. Only the very last message qualifies — earlier messages
-      // have already been classified definitively.
+      // message into the current activity group when it immediately follows
+      // thinking messages during an active turn, OR when it's the very last
+      // message and no kind has been assigned yet. This prevents the brief
+      // flash where content renders as a full chat message before the
+      // message-reclassified event arrives.
       if (
         busy
         && isLast
-        && pendingThinking.length > 0
         && message.role === 'assistant'
         && message.pending
         && !message.messageKind

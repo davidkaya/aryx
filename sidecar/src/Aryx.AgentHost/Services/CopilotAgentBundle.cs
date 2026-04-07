@@ -52,12 +52,14 @@ internal sealed class CopilotAgentBundle : IAsyncDisposable
             disposables.Add(toolingBundle);
         }
 
+        // Share a single CopilotClient across all agents to avoid spawning
+        // multiple CLI processes that race on token refresh during auto-login.
+        CopilotClient sharedClient = new(clientOptions);
+        await sharedClient.StartAsync(cancellationToken).ConfigureAwait(false);
+
         IReadOnlyList<WorkflowNodeDto> agentNodes = command.Workflow.GetAgentNodes();
         foreach ((WorkflowNodeDto definition, int agentIndex) in agentNodes.Select((definition, index) => (definition, index)))
         {
-            CopilotClient client = new(clientOptions);
-            await client.StartAsync(cancellationToken).ConfigureAwait(false);
-
             SessionConfig sessionConfig = CreateSessionConfig(
                 command,
                 definition,
@@ -72,9 +74,9 @@ internal sealed class CopilotAgentBundle : IAsyncDisposable
             ApplyPromptInvocation(sessionConfig, command.PromptInvocation);
 
             AryxCopilotAgent agent = new(
-                client,
+                sharedClient,
                 sessionConfig,
-                ownsClient: true,
+                ownsClient: false,
                 id: definition.GetAgentId(),
                 name: definition.GetAgentName(),
                 description: NormalizeOptionalString(definition.Config.Description));
@@ -82,6 +84,9 @@ internal sealed class CopilotAgentBundle : IAsyncDisposable
             agents.Add(agent);
             disposables.Add(agent);
         }
+
+        // The bundle owns the shared client — disposed after all agents.
+        disposables.Add(sharedClient);
 
         CopilotAgentBundle bundle = new(agents, hasConfiguredHooks: !configuredHooks.IsEmpty);
         bundle._disposables.AddRange(disposables);

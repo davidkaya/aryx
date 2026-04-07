@@ -153,6 +153,43 @@ public sealed class WorkflowValidatorTests
     }
 
     [Fact]
+    public void Validate_AcceptsLoopWithAlwaysConditionAndMaxIterations()
+    {
+        WorkflowDefinitionDto workflow = CreateWorkflow();
+        workflow = new WorkflowDefinitionDto
+        {
+            Id = workflow.Id,
+            Name = workflow.Name,
+            Settings = workflow.Settings,
+            Graph = new WorkflowGraphDto
+            {
+                Nodes = workflow.Graph.Nodes,
+                Edges =
+                [
+                    .. workflow.Graph.Edges,
+                    new WorkflowEdgeDto
+                    {
+                        Id = "edge-loop",
+                        Source = "agent",
+                        Target = "agent",
+                        Kind = "direct",
+                        IsLoop = true,
+                        MaxIterations = 5,
+                        Condition = new EdgeConditionDto
+                        {
+                            Type = "always",
+                        },
+                    },
+                ],
+            },
+        };
+
+        IReadOnlyList<WorkflowValidationIssueDto> issues = _validator.Validate(workflow);
+
+        Assert.DoesNotContain(issues, issue => issue.Level == "error");
+    }
+
+    [Fact]
     public void Validate_AcceptsPhase4ExecutableNodeKinds()
     {
         WorkflowDefinitionDto codeWorkflow = CreateSingleNodeWorkflow(

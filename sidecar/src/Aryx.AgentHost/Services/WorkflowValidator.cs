@@ -320,13 +320,14 @@ public sealed class WorkflowValidator
                 });
             }
 
-            if (edge.Condition is null || string.Equals(edge.Condition.Type, "always", StringComparison.OrdinalIgnoreCase))
+            if ((edge.Condition is null || string.Equals(edge.Condition.Type, "always", StringComparison.OrdinalIgnoreCase))
+                && (edge.MaxIterations is null || edge.MaxIterations < 1))
             {
                 issues.Add(new WorkflowValidationIssueDto
                 {
                     Field = "graph.edges.condition",
                     EdgeId = edge.Id,
-                    Message = "Loop edges require a non-default condition so the loop can terminate.",
+                    Message = "Loop edges require either a non-default condition or a maxIterations cap so the loop can terminate.",
                 });
             }
 

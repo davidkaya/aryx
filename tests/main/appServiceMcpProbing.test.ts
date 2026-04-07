@@ -70,25 +70,26 @@ function createService(workspace: WorkspaceState): {
   service: InstanceType<typeof AryxAppService>;
   snapshots: WorkspaceState[];
 } {
-  const service = new AryxAppService();
-  const internals = service as unknown as Record<string, unknown>;
   const snapshots: WorkspaceState[] = [];
+  const service = new AryxAppService({
+    probeMcpServers: (async (
+      servers: Array<{ id: string }>,
+      _tokenLookup?: (serverUrl: string) => string | undefined,
+      onResult?: (result: MockProbeResult) => void | Promise<void>,
+    ) => {
+      probeCalls.push(servers.map((server) => server.id));
+      for (const result of probeResults) {
+        await onResult?.(result);
+      }
+      return probeResults;
+    }) as never,
+  });
+  const internals = service as unknown as Record<string, unknown>;
 
   internals.loadWorkspace = async () => workspace;
   internals.persistAndBroadcast = async (nextWorkspace: WorkspaceState) => {
     snapshots.push(cloneWorkspaceState(nextWorkspace));
     return nextWorkspace;
-  };
-  internals.probeMcpServers = async (
-    servers: Array<{ id: string }>,
-    _tokenLookup?: (serverUrl: string) => string | undefined,
-    onResult?: (result: MockProbeResult) => void | Promise<void>,
-  ) => {
-    probeCalls.push(servers.map((server) => server.id));
-    for (const result of probeResults) {
-      await onResult?.(result);
-    }
-    return probeResults;
   };
 
   return { service, snapshots };

@@ -32,9 +32,7 @@ import {
 import {
   buildWorkflowExecutionDefinition,
   isReasoningEffort,
-  normalizeWorkflowDefinition,
   resolveWorkflowAgentNodes,
-  validateWorkflowDefinition,
   type ReasoningEffort,
   type WorkflowDefinition,
   type WorkflowReference,
@@ -47,8 +45,6 @@ import {
 } from '@shared/domain/workflowSerialization';
 import {
   applyWorkflowTemplate,
-  createWorkflowTemplateFromWorkflow,
-  normalizeWorkflowTemplateDefinition,
   type WorkflowTemplateCategory,
   type WorkflowTemplateDefinition,
 } from '@shared/domain/workflowTemplate';
@@ -79,15 +75,11 @@ import {
 import {
   applyDefaultToolApprovalPolicy,
   approvalPolicyRequiresCheckpoint,
-  dequeuePendingApprovalState,
-  enqueuePendingApprovalState,
   listPendingApprovals,
   normalizeApprovalPolicy,
   normalizeSessionApprovalSettings,
   pruneApprovalPolicyTools,
   pruneSessionApprovalSettings,
-  resolveApprovalToolKey,
-  resolvePendingApproval,
   type ApprovalDecision,
   type PendingApprovalMessageRecord,
   type PendingApprovalRecord,
@@ -180,7 +172,22 @@ import {
 import { getStoredToken } from '@main/services/mcpTokenStore';
 import { performMcpOAuthFlow, requiresOAuth } from '@main/services/mcpOAuthService';
 import { probeServers, type McpProbeResult } from '@main/services/mcpToolProber';
+import {
+  DiscoveredToolingSyncService,
+  type DiscoveredToolingResolution,
+} from '@main/services/discoveredToolingSyncService';
+import {
+  ApprovalCoordinator,
+} from '@main/services/approvalCoordinator';
+import {
+  CheckpointRecoveryManager,
+  type WorkflowCheckpointRecoveryState,
+} from '@main/services/checkpointRecoveryManager';
+import { GitContextManager } from '@main/services/gitContextManager';
+import { McpProbeManager } from '@main/services/mcpProbeManager';
 import { PtyManager } from '@main/services/ptyManager';
+import { SessionTurnExecutor } from '@main/services/sessionTurnExecutor';
+import { WorkflowManager } from '@main/services/workflowManager';
 
 const { dialog, shell } = electron;
 
@@ -191,28 +198,17 @@ type AppServiceEvents = {
   'terminal-exit': [TerminalExitInfo];
 };
 
-type PendingApprovalHandle = {
-  sessionId: string;
-  requestId: string;
-  resolve: (decision: ApprovalDecision, alwaysApprove?: boolean) => void | Promise<void>;
+export type AppServiceDeps = {
+  workspaceRepository: WorkspaceRepository;
+  sidecar: SidecarClient;
+  secretStore: SecretStore;
+  gitService: GitService;
+  configScanner: ConfigScannerRegistry;
+  customizationScanner: ProjectCustomizationScanner;
+  projectCustomizationWatcher: ProjectCustomizationWatcher;
+  probeMcpServers: typeof probeServers;
+  ptyManager: PtyManager;
 };
-
-type PendingUserInputHandle = {
-  sessionId: string;
-  requestId: string;
-  resolve: (answer: string, wasFreeform: boolean) => void | Promise<void>;
-};
-
-type WorkflowCheckpointRecoveryState = {
-  workflowSessionId: string;
-  checkpointId: string;
-  storePath: string;
-  stepNumber: number;
-  sessionMessages: ChatMessageRecord[];
-  runEvents: RunTimelineEventRecord[];
-};
-
-type DiscoveredToolingResolution = 'accept' | 'dismiss';
 
 function equalStringArrays(left?: readonly string[], right?: readonly string[]): boolean {
   const normalizedLeft = left ?? [];
@@ -292,19 +288,23 @@ const GIT_REFRESH_DEBOUNCE_MS = 750;
 const GIT_REFRESH_INTERVAL_MS = 60_000;
 
 export class AryxAppService extends EventEmitter<AppServiceEvents> {
-  private readonly workspaceRepository = new WorkspaceRepository();
-  private readonly sidecar = new SidecarClient();
-  private readonly secretStore = new SecretStore();
-  private readonly gitService = new GitService();
-  private readonly configScanner = new ConfigScannerRegistry();
-  private readonly customizationScanner = new ProjectCustomizationScanner();
-  private readonly projectCustomizationWatcher = new ProjectCustomizationWatcher((projectId) =>
-    this.handleProjectCustomizationWatcherChange(projectId));
-  private readonly probeMcpServers = probeServers;
-  private readonly ptyManager = new PtyManager();
-  private readonly pendingApprovalHandles = new Map<string, PendingApprovalHandle>();
-  private readonly pendingUserInputHandles = new Map<string, PendingUserInputHandle>();
-  private readonly workflowCheckpointRecoveries = new Map<string, WorkflowCheckpointRecoveryState>();
+  private readonly workspaceRepository: WorkspaceRepository;
+  private readonly sidecar: SidecarClient;
+  private readonly secretStore: SecretStore;
+  private readonly gitService: GitService;
+  private readonly configScanner: ConfigScannerRegistry;
+  private readonly customizationScanner: ProjectCustomizationScanner;
+  private readonly projectCustomizationWatcher: ProjectCustomizationWatcher;
+  private readonly probeMcpServers: typeof probeServers;
+  private readonly ptyManager: PtyManager;
+  private readonly workflowManager: WorkflowManager;
+  private readonly mcpProbeManager: McpProbeManager;
+  private readonly discoveredToolingSyncService: DiscoveredToolingSyncService;
+  private readonly gitContextManager: GitContextManager;
+  private readonly approvalCoordinator: ApprovalCoordinator;
+  private readonly checkpointRecoveryManager: CheckpointRecoveryManager;
+  private readonly sessionTurnExecutor: SessionTurnExecutor;
+  private readonly workflowCheckpointRecoveries: Map<string, WorkflowCheckpointRecoveryState>;
   private workspace?: WorkspaceState;
   private sidecarCapabilities?: SidecarCapabilities;
   private sidecarCapabilitiesPromise?: Promise<SidecarCapabilities>;
@@ -318,8 +318,137 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
   private runningProjectGitRefresh?: Promise<void>;
   private customizationWatcherUpdateQueue = Promise.resolve();
 
-  constructor() {
+  constructor(deps: Partial<AppServiceDeps> = {}) {
     super();
+
+    this.workspaceRepository = deps.workspaceRepository ?? new WorkspaceRepository();
+    this.sidecar = deps.sidecar ?? new SidecarClient();
+    this.secretStore = deps.secretStore ?? new SecretStore();
+    this.gitService = deps.gitService ?? new GitService();
+    this.configScanner = deps.configScanner ?? new ConfigScannerRegistry();
+    this.customizationScanner = deps.customizationScanner ?? new ProjectCustomizationScanner();
+    this.projectCustomizationWatcher = deps.projectCustomizationWatcher
+      ?? new ProjectCustomizationWatcher((projectId) => this.handleProjectCustomizationWatcherChange(projectId));
+    this.probeMcpServers = deps.probeMcpServers ?? probeServers;
+    this.ptyManager = deps.ptyManager ?? new PtyManager();
+    this.workflowManager = new WorkflowManager();
+    this.mcpProbeManager = new McpProbeManager({
+      loadWorkspace: () => this.loadWorkspace(),
+      persistWorkspace: async (workspace) => {
+        await this.persistAndBroadcast(workspace);
+      },
+      probeMcpServers: this.probeMcpServers,
+      tokenLookup: (serverUrl) => getStoredToken(serverUrl)?.accessToken,
+      performMcpOAuthFlow,
+      requiresOAuth,
+    });
+    this.discoveredToolingSyncService = new DiscoveredToolingSyncService({
+      configScanner: this.configScanner,
+      customizationScanner: this.customizationScanner,
+      projectCustomizationWatcher: this.projectCustomizationWatcher,
+      loadWorkspace: () => this.loadWorkspace(),
+      persistWorkspace: async (workspace) => {
+        await this.persistAndBroadcast(workspace);
+      },
+    });
+    this.gitContextManager = new GitContextManager({
+      gitService: this.gitService,
+      loadWorkspace: () => this.loadWorkspace(),
+      persistWorkspace: (workspace) => this.persistAndBroadcast(workspace),
+      requireProject: (workspace, projectId) => this.requireProject(workspace, projectId),
+      requireSession: (workspace, sessionId) => this.requireSession(workspace, sessionId),
+      requireSessionRun: (session, runId) => this.requireSessionRun(session, runId),
+      syncProjectDiscoveredTooling: (workspace, project) => this.syncProjectDiscoveredTooling(workspace, project),
+      syncProjectCustomization: (project) => this.syncProjectCustomization(project),
+      pruneUnavailableSessionToolingSelections: (workspace) => this.pruneUnavailableSessionToolingSelections(workspace),
+      pruneUnavailableApprovalTools: (workspace) => this.pruneUnavailableApprovalTools(workspace),
+      updateSessionRun: (session, requestId, updater) => this.updateSessionRun(session, requestId, updater),
+      emitRunUpdated: (sessionId, occurredAt, run) => this.emitRunUpdated(sessionId, occurredAt, run),
+    });
+    this.approvalCoordinator = new ApprovalCoordinator({
+      requireSession: (workspace, sessionId) => this.requireSession(workspace, sessionId),
+      persistWorkspace: (workspace) => this.persistAndBroadcast(workspace),
+      updateSessionRun: (session, requestId, updater) => this.updateSessionRun(session, requestId, updater),
+      emitRunUpdated: (sessionId, occurredAt, run) => this.emitRunUpdated(sessionId, occurredAt, run),
+      emitSessionEvent: (event) => this.emitSessionEvent(event),
+      failSessionRunRecord: (run, failedAt, error) => failSessionRunRecord(run, failedAt, error),
+      upsertRunApprovalEvent: (run, approval) => upsertRunApprovalEvent(run, approval),
+    });
+    this.checkpointRecoveryManager = new CheckpointRecoveryManager({
+      persistWorkspace: async (workspace) => {
+        await this.persistAndBroadcast(workspace);
+      },
+      emitRunUpdated: (sessionId, occurredAt, run) => this.emitRunUpdated(sessionId, occurredAt, run),
+      updateSessionRun: (session, requestId, updater) => this.updateSessionRun(session, requestId, updater),
+      setSessionPendingApprovalState: (session, state) => this.approvalCoordinator.setSessionPendingApprovalState(session, state),
+      pendingApprovalHandles: this.approvalCoordinator.pendingApprovalHandles,
+      pendingUserInputHandles: this.approvalCoordinator.pendingUserInputHandles,
+    });
+    this.sessionTurnExecutor = new SessionTurnExecutor({
+      saveWorkspace: async (workspace) => {
+        await this.workspaceRepository.save(workspace);
+      },
+      persistWorkspace: (workspace) => this.persistAndBroadcast(workspace),
+      requireSession: (workspace, sessionId) => this.requireSession(workspace, sessionId),
+      resolveSessionWorkflow: (workspace, session) => this.resolveSessionWorkflow(workspace, session),
+      updateSessionRun: (session, requestId, updater) => this.updateSessionRun(session, requestId, updater),
+      emitRunUpdated: (sessionId, occurredAt, run) => this.emitRunUpdated(sessionId, occurredAt, run),
+      emitSessionEvent: (event) => this.emitSessionEvent(event),
+      rejectPendingApprovals: (session, failedAt, error) => this.rejectPendingApprovals(session, failedAt, error),
+      buildRunTurnToolingConfig: (workspace, session) => this.buildRunTurnToolingConfig(workspace, session),
+      runSidecarTurnWithCheckpointRecovery: (
+        workspace,
+        session,
+        requestId,
+        createCommand,
+        onDelta,
+        onActivity,
+        onApproval,
+        onUserInput,
+        onMcpOAuthRequired,
+        onExitPlanMode,
+        onMessageReclassified,
+        onTurnScopedEvent,
+      ) => this.runSidecarTurnWithCheckpointRecovery(
+        workspace,
+        session,
+        requestId,
+        createCommand,
+        onDelta,
+        onActivity,
+        onApproval,
+        onUserInput,
+        onMcpOAuthRequired,
+        onExitPlanMode,
+        onMessageReclassified,
+        onTurnScopedEvent,
+      ),
+      handleApprovalRequested: (workspace, sessionId, requestId, approval, resolve) =>
+        this.handleApprovalRequested(workspace, sessionId, requestId, approval, resolve),
+      handleUserInputRequested: (workspace, sessionId, requestId, event, resolve) =>
+        this.handleUserInputRequested(workspace, sessionId, requestId, event, resolve),
+      handleMcpOAuthRequired: (workspace, sessionId, event) =>
+        this.handleMcpOAuthRequired(workspace, sessionId, event),
+      handleExitPlanModeRequested: (workspace, sessionId, event) =>
+        this.handleExitPlanModeRequested(workspace, sessionId, event),
+      handleTurnScopedEvent: (workspace, sessionId, event) =>
+        this.handleTurnScopedEvent(workspace, sessionId, event),
+      sidecarResolveApproval: (approvalId, decision, alwaysApprove) =>
+        this.sidecar.resolveApproval(approvalId, decision, alwaysApprove),
+      sidecarResolveUserInput: (userInputId, answer, wasFreeform) =>
+        this.sidecar.resolveUserInput(userInputId, answer, wasFreeform),
+      captureWorkingTreeSnapshot: (projectPath, scannedAt) =>
+        this.gitService.captureWorkingTreeSnapshot(projectPath, scannedAt),
+      captureWorkingTreeBaseline: (projectPath, snapshot) =>
+        this.gitService.captureWorkingTreeBaseline(projectPath, snapshot),
+      refreshSessionRunGitSummary: (session, project, requestId, occurredAt) =>
+        this.refreshSessionRunGitSummary(session, project, requestId, occurredAt),
+      cleanupWorkflowCheckpointRecovery: (requestId) =>
+        this.cleanupWorkflowCheckpointRecovery(requestId),
+      scheduleProjectGitRefresh: (projectId) => this.scheduleProjectGitRefresh(projectId),
+      loadAvailableModelCatalog: () => this.loadAvailableModelCatalog(),
+    });
+    this.workflowCheckpointRecoveries = this.checkpointRecoveryManager.recoveries;
 
     this.ptyManager.on('data', (data) => {
       this.emit('terminal-data', data);
@@ -390,14 +519,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
   }
 
   async dispose(): Promise<void> {
-    if (this.projectGitRefreshTimer) {
-      clearTimeout(this.projectGitRefreshTimer);
-      this.projectGitRefreshTimer = undefined;
-    }
-    if (this.periodicProjectGitRefreshTimer) {
-      clearInterval(this.periodicProjectGitRefreshTimer);
-      this.periodicProjectGitRefreshTimer = undefined;
-    }
+    this.gitContextManager.dispose();
     this.projectCustomizationWatcher.dispose();
     this.ptyManager.dispose();
     await this.sidecar.dispose();
@@ -409,22 +531,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
   }
 
   scheduleProjectGitRefresh(projectId?: string): void {
-    if (projectId) {
-      this.pendingProjectGitRefreshIds.add(projectId);
-    } else {
-      this.pendingRefreshAllProjects = true;
-      this.pendingProjectGitRefreshIds.clear();
-    }
-
-    if (this.projectGitRefreshTimer) {
-      clearTimeout(this.projectGitRefreshTimer);
-    }
-
-    this.projectGitRefreshTimer = setTimeout(() => {
-      this.projectGitRefreshTimer = undefined;
-      void this.flushScheduledProjectGitRefresh();
-    }, GIT_REFRESH_DEBOUNCE_MS);
-    this.projectGitRefreshTimer.unref?.();
+    this.gitContextManager.scheduleProjectGitRefresh(projectId);
   }
 
   async openAppDataFolder(): Promise<void> {
@@ -523,11 +630,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     resolution: DiscoveredToolingResolution,
   ): Promise<WorkspaceState> {
     const workspace = await this.loadWorkspace();
-    workspace.settings.discoveredUserTooling = applyDiscoveredMcpServerStatus(
-      workspace.settings.discoveredUserTooling,
-      serverIds,
-      this.resolveDiscoveredToolingStatus(resolution),
-    );
+    this.discoveredToolingSyncService.resolveWorkspaceDiscoveredTooling(workspace, serverIds, resolution);
 
     this.pruneUnavailableSessionToolingSelections(workspace);
     await this.pruneUnavailableApprovalTools(workspace);
@@ -545,7 +648,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
   async rescanProjectConfigs(projectId: string): Promise<WorkspaceState> {
     const workspace = await this.loadWorkspace();
     const project = this.requireProject(workspace, projectId);
-    await this.syncProjectDiscoveredTooling(workspace, project);
+    await this.discoveredToolingSyncService.syncProjectDiscoveredTooling(workspace, project);
     this.pruneUnavailableSessionToolingSelections(workspace);
     await this.pruneUnavailableApprovalTools(workspace);
     const result = await this.persistAndBroadcast(workspace);
@@ -560,8 +663,8 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
   async rescanProjectCustomization(projectId: string): Promise<WorkspaceState> {
     const workspace = await this.loadWorkspace();
     const project = this.requireProject(workspace, projectId);
-    await this.syncProjectCustomization(project);
-    await this.syncProjectCustomizationWatchers(workspace);
+    await this.discoveredToolingSyncService.syncProjectCustomization(project);
+    await this.discoveredToolingSyncService.syncProjectCustomizationWatchers(workspace);
     return this.persistAndBroadcast(workspace);
   }
 
@@ -587,11 +690,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
   ): Promise<WorkspaceState> {
     const workspace = await this.loadWorkspace();
     const project = this.requireProject(workspace, projectId);
-    project.discoveredTooling = applyDiscoveredMcpServerStatus(
-      project.discoveredTooling,
-      serverIds,
-      this.resolveDiscoveredToolingStatus(resolution),
-    );
+    this.discoveredToolingSyncService.resolveProjectDiscoveredTooling(project, serverIds, resolution);
 
     this.pruneUnavailableSessionToolingSelections(workspace);
     await this.pruneUnavailableApprovalTools(workspace);
@@ -608,28 +707,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
 
   async saveWorkflow(workflow: WorkflowDefinition): Promise<WorkspaceState> {
     const workspace = await this.loadWorkspace();
-    const normalizedWorkflow = normalizeWorkflowDefinition(workflow);
-    const issues = validateWorkflowDefinition(normalizedWorkflow).filter((issue) => issue.level === 'error');
-    if (issues.length > 0) {
-      throw new Error(issues[0].message);
-    }
-
-    const existingIndex = workspace.workflows.findIndex((current) => current.id === workflow.id);
-    const candidate: WorkflowDefinition = {
-      ...normalizedWorkflow,
-      isFavorite: workflow.isFavorite ?? workspace.workflows[existingIndex]?.isFavorite,
-      createdAt: existingIndex >= 0 ? workspace.workflows[existingIndex].createdAt : nowIso(),
-      updatedAt: nowIso(),
-    };
-    this.validateWorkflowReferences(workspace, candidate);
-
-    if (existingIndex >= 0) {
-      workspace.workflows[existingIndex] = candidate;
-    } else {
-      workspace.workflows.push(candidate);
-    }
-
-    workspace.selectedWorkflowId = candidate.id;
+    this.workflowManager.saveWorkflow(workspace, workflow);
     return this.persistAndBroadcast(workspace);
   }
 
@@ -643,26 +721,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     },
   ): Promise<WorkspaceState> {
     const workspace = await this.loadWorkspace();
-    const workflow = this.requireWorkflow(workspace, workflowId);
-    const candidate = createWorkflowTemplateFromWorkflow(workflow, options);
-    const existingIndex = workspace.workflowTemplates.findIndex((template) => template.id === candidate.id);
-    const existingTemplate = existingIndex >= 0 ? workspace.workflowTemplates[existingIndex] : undefined;
-    if (existingTemplate?.source === 'builtin') {
-      throw new Error(`Workflow template "${candidate.id}" is reserved by a built-in template.`);
-    }
-
-    const normalizedCandidate: WorkflowTemplateDefinition = normalizeWorkflowTemplateDefinition({
-      ...candidate,
-      createdAt: existingTemplate?.createdAt ?? candidate.createdAt,
-      updatedAt: nowIso(),
-    });
-
-    if (existingIndex >= 0) {
-      workspace.workflowTemplates[existingIndex] = normalizedCandidate;
-    } else {
-      workspace.workflowTemplates.push(normalizedCandidate);
-    }
-
+    this.workflowManager.saveWorkflowTemplate(workspace, workflowId, options);
     return this.persistAndBroadcast(workspace);
   }
 
@@ -675,21 +734,13 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     },
   ): Promise<WorkspaceState> {
     const workspace = await this.loadWorkspace();
-    const template = this.requireWorkflowTemplate(workspace, templateId);
-    const workflowId = options?.workflowId?.trim()
-      || this.createUniqueWorkflowId(workspace, template.workflow.id);
-    const workflow = applyWorkflowTemplate(template, {
-      ...options,
-      workflowId,
-    });
-
-    return this.saveWorkflow(workflow);
+    this.workflowManager.createWorkflowFromTemplate(workspace, templateId, options);
+    return this.persistAndBroadcast(workspace);
   }
 
   async exportWorkflow(workflowId: string, format: WorkflowExportFormat): Promise<WorkflowExportResult> {
     const workspace = await this.loadWorkspace();
-    const workflow = this.requireWorkflow(workspace, workflowId);
-    return exportWorkflowDefinition(workflow, format);
+    return this.workflowManager.exportWorkflow(workspace, workflowId, format);
   }
 
   async importWorkflow(
@@ -697,15 +748,17 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     format: 'yaml' | 'json',
     options?: { save?: boolean },
   ): Promise<{ workflow: WorkflowDefinition; workspace?: WorkspaceState }> {
-    const workflow = importWorkflowDefinition(content, format);
+    const workflow = this.workflowManager.importWorkflow(content, format);
     if (!options?.save) {
       return { workflow };
     }
 
-    const workspace = await this.saveWorkflow(workflow);
+    const workspace = await this.loadWorkspace();
+    this.workflowManager.saveWorkflow(workspace, workflow);
+    const persistedWorkspace = await this.persistAndBroadcast(workspace);
     return {
       workflow,
-      workspace,
+      workspace: persistedWorkspace,
     };
   }
 
@@ -789,29 +842,13 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
 
   async deleteWorkflow(workflowId: string): Promise<WorkspaceState> {
     const workspace = await this.loadWorkspace();
-    const workflow = this.requireWorkflow(workspace, workflowId);
-    const references = this.listWorkflowReferencesInWorkspace(workspace, workflowId)
-      .filter((reference) => reference.referencingWorkflowId !== workflowId);
-    if (references.length > 0) {
-      const blockingReference = references[0];
-      throw new Error(
-        `Workflow "${workflow.name}" cannot be deleted because workflow "${blockingReference.referencingWorkflowName}" references it from node "${blockingReference.nodeLabel}".`,
-      );
-    }
-
-    workspace.workflows = workspace.workflows.filter((workflow) => workflow.id !== workflowId);
-
-    if (workspace.selectedWorkflowId === workflowId) {
-      workspace.selectedWorkflowId = workspace.workflows[0]?.id;
-    }
-
+    this.workflowManager.deleteWorkflow(workspace, workflowId);
     return this.persistAndBroadcast(workspace);
   }
 
   async listWorkflowReferences(workflowId: string): Promise<WorkflowReference[]> {
     const workspace = await this.loadWorkspace();
-    this.requireWorkflow(workspace, workflowId);
-    return this.listWorkflowReferencesInWorkspace(workspace, workflowId);
+    return this.workflowManager.listWorkflowReferences(workspace, workflowId);
   }
 
   async saveMcpServer(server: McpServerDefinition): Promise<WorkspaceState> {
@@ -1284,103 +1321,13 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
   ): Promise<WorkspaceState> {
     const workspace = await this.loadWorkspace();
     const session = this.requireSession(workspace, sessionId);
-    const approval = session.pendingApproval;
-    if (!approval || approval.id !== approvalId) {
-      const queuedApproval = session.pendingApprovalQueue?.some((candidate) => candidate.id === approvalId);
-      if (queuedApproval) {
-        throw new Error(
-          approval
-            ? `Approval "${approvalId}" is queued behind "${approval.id}" for session "${sessionId}". Resolve the active approval first.`
-            : `Approval "${approvalId}" is queued but not active for session "${sessionId}".`,
-        );
-      }
-
-      throw new Error(`Approval "${approvalId}" is not pending for session "${sessionId}".`);
-    }
-
-    const handle = this.pendingApprovalHandles.get(approvalId);
-    if (!handle || handle.sessionId !== sessionId) {
-      throw new Error(`Approval "${approvalId}" is no longer active. Restart the run and try again.`);
-    }
-
-    const resolvedAt = nowIso();
-    const resolvedApproval = resolvePendingApproval(approval, decision, resolvedAt);
-    this.setSessionPendingApprovalState(session, dequeuePendingApprovalState(session, approvalId));
-    session.updatedAt = resolvedAt;
-
-    const approvalKey = resolveApprovalToolKey(approval.toolName, approval.permissionKind);
-    if (decision === 'approved' && alwaysApprove && approvalKey) {
-      const existing = session.approvalSettings?.autoApprovedToolNames ?? [];
-      if (!existing.includes(approvalKey)) {
-        session.approvalSettings = { autoApprovedToolNames: [...existing, approvalKey] };
-      }
-    }
-
-    const updatedRun = this.updateSessionRun(session, handle.requestId, (run) =>
-      upsertRunApprovalEvent(run, resolvedApproval));
-
-    // Auto-resolve queued approvals that share the same category key.
-    // When the user approves "read", all pending view/grep/glob calls resolve too.
-    const cascadeHandles: PendingApprovalHandle[] = [];
-    if (decision === 'approved' && approvalKey && approval.kind === 'tool-call') {
-      for (const queued of listPendingApprovals(session)) {
-        if (queued.id === approvalId) continue;
-        const queuedKey = resolveApprovalToolKey(queued.toolName, queued.permissionKind);
-        if (queuedKey !== approvalKey) continue;
-
-        const queuedHandle = this.pendingApprovalHandles.get(queued.id);
-        if (!queuedHandle || queuedHandle.sessionId !== sessionId) continue;
-
-        const cascadeResolved = resolvePendingApproval(queued, 'approved', resolvedAt);
-        this.setSessionPendingApprovalState(session, dequeuePendingApprovalState(session, queued.id));
-        this.updateSessionRun(session, queuedHandle.requestId, (run) =>
-          upsertRunApprovalEvent(run, cascadeResolved));
-        this.pendingApprovalHandles.delete(queued.id);
-        cascadeHandles.push(queuedHandle);
-      }
-    }
-
-    const result = await this.persistAndBroadcast(workspace);
-    if (updatedRun) {
-      this.emitRunUpdated(sessionId, resolvedAt, updatedRun);
-    }
-
-    this.pendingApprovalHandles.delete(approvalId);
-
-    try {
-      await Promise.resolve(handle.resolve(decision, alwaysApprove));
-      for (const cascaded of cascadeHandles) {
-        await Promise.resolve(cascaded.resolve('approved', alwaysApprove));
-      }
-    } catch (error) {
-      const failedAt = nowIso();
-      this.rejectPendingApprovals(
-        session,
-        failedAt,
-        'Queued approval was cancelled because the run failed before it could resume.',
-      );
-      session.status = 'error';
-      session.lastError = error instanceof Error ? error.message : String(error);
-      session.updatedAt = failedAt;
-
-      const failedRun = this.updateSessionRun(session, handle.requestId, (run) =>
-        failSessionRunRecord(run, failedAt, session.lastError ?? 'Unknown error.'));
-
-      this.emitSessionEvent({
-        sessionId,
-        kind: 'error',
-        occurredAt: failedAt,
-        error: session.lastError,
-      });
-      if (failedRun) {
-        this.emitRunUpdated(sessionId, failedAt, failedRun);
-      }
-
-      await this.persistAndBroadcast(workspace);
-      throw error;
-    }
-
-    return result;
+    return this.approvalCoordinator.resolveSessionApproval(
+      workspace,
+      session.id,
+      approvalId,
+      decision,
+      alwaysApprove,
+    );
   }
 
   async resolveSessionUserInput(
@@ -1390,50 +1337,13 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     wasFreeform: boolean,
   ): Promise<WorkspaceState> {
     const workspace = await this.loadWorkspace();
-    const session = this.requireSession(workspace, sessionId);
-    const pending = session.pendingUserInput;
-    if (!pending || pending.id !== userInputId) {
-      throw new Error(`User input "${userInputId}" is not pending for session "${sessionId}".`);
-    }
-
-    const handle = this.pendingUserInputHandles.get(userInputId);
-    if (!handle || handle.sessionId !== sessionId) {
-      throw new Error(`User input "${userInputId}" is no longer active. Restart the run and try again.`);
-    }
-
-    const answeredAt = nowIso();
-    session.pendingUserInput = {
-      ...pending,
-      status: 'answered',
+    return this.approvalCoordinator.resolveSessionUserInput(
+      workspace,
+      sessionId,
+      userInputId,
       answer,
-      answeredAt,
-    };
-    session.updatedAt = answeredAt;
-
-    const result = await this.persistAndBroadcast(workspace);
-    this.pendingUserInputHandles.delete(userInputId);
-
-    try {
-      await Promise.resolve(handle.resolve(answer, wasFreeform));
-      session.pendingUserInput = undefined;
-      await this.persistAndBroadcast(workspace);
-    } catch (error) {
-      session.status = 'error';
-      session.lastError = error instanceof Error ? error.message : String(error);
-      session.updatedAt = nowIso();
-
-      this.emitSessionEvent({
-        sessionId,
-        kind: 'error',
-        occurredAt: session.updatedAt,
-        error: session.lastError,
-      });
-
-      await this.persistAndBroadcast(workspace);
-      throw error;
-    }
-
-    return result;
+      wasFreeform,
+    );
   }
 
   async updateSessionModelConfig(
@@ -1561,47 +1471,8 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     tooling: WorkspaceToolingSettings,
     selection: SessionToolingSelection,
   ): Promise<void> {
-    const httpServers = selection.enabledMcpServerIds
-      .map((id) => tooling.mcpServers.find((s) => s.id === id))
-      .filter((s): s is McpServerDefinition => !!s && s.transport !== 'local')
-      .filter((s) => s.transport === 'http' || s.transport === 'sse');
-
-    if (httpServers.length === 0) {
-      return;
-    }
-
-    console.log(`[aryx oauth] Probing ${httpServers.length} HTTP MCP server(s) for OAuth requirements…`);
-
-    for (const server of httpServers) {
-      if (server.transport === 'local') continue;
-      const existingToken = getStoredToken(server.url);
-      if (existingToken) {
-        console.log(`[aryx oauth] Skipping ${server.name} — token already stored`);
-        continue;
-      }
-
-      try {
-        const needsAuth = await requiresOAuth(server.url);
-        if (!needsAuth) {
-          console.log(`[aryx oauth] ${server.name} does not require OAuth`);
-          continue;
-        }
-
-        console.log(`[aryx oauth] ${server.name} requires OAuth — starting flow…`);
-        const result = await performMcpOAuthFlow({ serverUrl: server.url });
-
-        if (result.success) {
-          console.log(`[aryx oauth] ${server.name} authenticated successfully`);
-          void this.reprobeServerByUrl(server.url).catch((error) => {
-            console.error('[aryx mcp-probe] re-probe after auth failed:', error);
-          });
-        } else {
-          console.warn(`[aryx oauth] Proactive auth failed for ${server.name}: ${result.error}`);
-        }
-      } catch (err) {
-        console.warn(`[aryx oauth] Proactive auth probe failed for ${server.name}:`, err);
-      }
-    }
+    void sessionId;
+    await this.mcpProbeManager.probeAndAuthenticateHttpMcpServers(tooling, selection);
   }
 
   private async runPreparedSessionTurn(
@@ -1618,168 +1489,14 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
       attachments?: ChatMessageAttachment[];
     },
   ): Promise<void> {
-    const workspaceKind = isScratchpadProject(project) ? 'scratchpad' : 'project';
-    const { occurredAt, requestId, triggerMessageId, messageMode, attachments } = options;
-    const promptInvocation = this.resolveRunTurnPromptInvocation(session, triggerMessageId);
-    const workflowForTurn = await this.applyPromptInvocationToWorkflow(effectiveWorkflow, promptInvocation);
-    const interactionMode: InteractionMode = isPlanPromptInvocation(promptInvocation)
-      ? 'plan'
-      : session.interactionMode ?? 'interactive';
-    const runWorkingDirectory = session.cwd ?? project.path;
-    const preRunGitSnapshot = workspaceKind === 'project'
-      ? await this.gitService.captureWorkingTreeSnapshot(runWorkingDirectory, occurredAt)
-      : undefined;
-    const preRunGitBaselineFiles = workspaceKind === 'project' && preRunGitSnapshot
-      ? await this.gitService.captureWorkingTreeBaseline(runWorkingDirectory, preRunGitSnapshot)
-      : undefined;
-    if (workspaceKind === 'project' && project.git?.status === 'ready' && !preRunGitSnapshot) {
-      console.warn(`[aryx git] Failed to capture pre-run git snapshot for project "${project.id}".`);
-    }
-
-    session.title = resolveSessionTitle(session, workflowForTurn, session.messages);
-    session.status = 'running';
-    session.lastError = undefined;
-    session.pendingPlanReview = undefined;
-    session.pendingMcpAuth = undefined;
-    session.updatedAt = occurredAt;
-    session.runs = [
-      createSessionRunRecord({
-        requestId,
-        project,
-        workingDirectory: runWorkingDirectory,
-        workspaceKind,
-        workflow: workflowForTurn,
-        triggerMessageId,
-        startedAt: occurredAt,
-        preRunGitSnapshot,
-        preRunGitBaselineFiles,
-      }),
-      ...session.runs,
-    ];
-
-    await this.persistAndBroadcast(workspace);
-    this.emitSessionEvent({
-      sessionId: session.id,
-      kind: 'status',
-      status: 'running',
-      occurredAt,
-    });
-
-    try {
-      const createRunTurnCommand = (
-        resumeFromCheckpoint?: WorkflowCheckpointResume,
-      ): RunTurnCommand => ({
-        type: 'run-turn',
-        requestId,
-        sessionId: session.id,
-        projectPath: runWorkingDirectory,
-        workspaceKind,
-        mode: interactionMode,
-        messageMode,
-        projectInstructions,
-        workflow: workflowForTurn,
-        workflowLibrary: workspace.workflows,
-        messages: session.messages,
-        attachments: attachments?.length ? attachments : undefined,
-        promptInvocation,
-        tooling: this.buildRunTurnToolingConfig(workspace, session),
-        resumeFromCheckpoint,
-      });
-
-      const responseMessages = await this.runSidecarTurnWithCheckpointRecovery(
-        workspace,
-        session,
-        requestId,
-        createRunTurnCommand,
-        async (event) => {
-          await this.applyTurnDelta(workspace, session.id, requestId, event);
-        },
-        async (event) => {
-          await this.applyAgentActivity(workspace, session.id, requestId, event);
-        },
-        async (event) => {
-          await this.handleApprovalRequested(workspace, session.id, requestId, event, (decision, alwaysApprove) =>
-            this.sidecar.resolveApproval(event.approvalId, decision, alwaysApprove));
-        },
-        async (event) => {
-          await this.handleUserInputRequested(workspace, session.id, requestId, event, (answer, wasFreeform) =>
-            this.sidecar.resolveUserInput(event.userInputId, answer, wasFreeform));
-        },
-        async (event) => {
-          await this.handleMcpOAuthRequired(workspace, session.id, event);
-        },
-        async (event) => {
-          await this.handleExitPlanModeRequested(workspace, session.id, event);
-        },
-        async (event) => {
-          await this.applyMessageReclassified(workspace, session.id, event);
-        },
-        async (event) => {
-          await this.handleTurnScopedEvent(workspace, session.id, event);
-        },
-      );
-
-      await this.awaitFinalResponseApproval(workspace, session.id, requestId, workflowForTurn, responseMessages);
-      this.finalizeTurn(workspace, session.id, requestId, responseMessages);
-      if (workspaceKind === 'project') {
-        const completedRun = await this.refreshSessionRunGitSummary(session, project, requestId, nowIso());
-        if (completedRun) {
-          this.emitRunUpdated(session.id, nowIso(), completedRun);
-        }
-      }
-      await this.persistAndBroadcast(workspace);
-      await this.cleanupWorkflowCheckpointRecovery(requestId);
-      if (workspaceKind === 'project') {
-        this.scheduleProjectGitRefresh(project.id);
-      }
-    } catch (error) {
-      if (error instanceof TurnCancelledError) {
-        this.finalizeCancelledTurn(workspace, session, requestId);
-        if (workspaceKind === 'project') {
-          const cancelledRun = await this.refreshSessionRunGitSummary(session, project, requestId, nowIso());
-          if (cancelledRun) {
-            this.emitRunUpdated(session.id, nowIso(), cancelledRun);
-          }
-        }
-        await this.persistAndBroadcast(workspace);
-        await this.cleanupWorkflowCheckpointRecovery(requestId);
-        if (workspaceKind === 'project') {
-          this.scheduleProjectGitRefresh(project.id);
-        }
-        return;
-      }
-
-      const failedAt = nowIso();
-      session.status = 'error';
-      session.lastError = error instanceof Error ? error.message : String(error);
-      session.updatedAt = failedAt;
-
-      const failedRun = this.updateSessionRun(session, requestId, (run) =>
-        failSessionRunRecord(run, failedAt, session.lastError ?? 'Unknown error.'));
-
-      this.emitSessionEvent({
-        sessionId: session.id,
-        kind: 'error',
-        occurredAt: failedAt,
-        error: session.lastError,
-      });
-      if (failedRun) {
-        this.emitRunUpdated(session.id, failedAt, failedRun);
-      }
-
-      if (workspaceKind === 'project') {
-        const summarizedRun = await this.refreshSessionRunGitSummary(session, project, requestId, failedAt);
-        if (summarizedRun) {
-          this.emitRunUpdated(session.id, failedAt, summarizedRun);
-        }
-      }
-
-      await this.persistAndBroadcast(workspace);
-      await this.cleanupWorkflowCheckpointRecovery(requestId);
-      if (workspaceKind === 'project') {
-        this.scheduleProjectGitRefresh(project.id);
-      }
-    }
+    await this.sessionTurnExecutor.runPreparedSessionTurn(
+      workspace,
+      session,
+      project,
+      effectiveWorkflow,
+      projectInstructions,
+      options,
+    );
   }
 
   async updateSessionTooling(
@@ -1863,22 +1580,18 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
   }
 
   async refreshProjectGitContext(projectId?: string): Promise<WorkspaceState> {
-    return this.refreshProjectGitContexts(projectId ? [projectId] : undefined);
+    return this.gitContextManager.refreshProjectGitContext(projectId);
   }
 
   async getProjectGitDetails(projectId: string, commitLimit = 20): Promise<ProjectGitDetails> {
-    const workspace = await this.loadWorkspace();
-    const project = this.requireProject(workspace, projectId);
-    return this.gitService.describeProjectGitDetails(project.path, nowIso(), commitLimit);
+    return this.gitContextManager.getProjectGitDetails(projectId, commitLimit);
   }
 
   async getProjectGitFilePreview(
     projectId: string,
     file: ProjectGitFileReference,
   ): Promise<ProjectGitDiffPreview | undefined> {
-    const workspace = await this.loadWorkspace();
-    const project = this.requireProject(workspace, projectId);
-    return this.gitService.getWorkingTreeFilePreview(project.path, file);
+    return this.gitContextManager.getProjectGitFilePreview(projectId, file);
   }
 
   async discardSessionRunGitChanges(
@@ -1886,52 +1599,17 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     runId: string,
     files?: ProjectGitFileReference[],
   ): Promise<WorkspaceState> {
-    const workspace = await this.loadWorkspace();
-    const session = this.requireSession(workspace, sessionId);
-    const project = this.requireProject(workspace, session.projectId);
-    const run = this.requireSessionRun(session, runId);
-    if (run.workspaceKind !== 'project') {
-      throw new Error('Run change review is only available for project-backed sessions.');
-    }
-
-    if (!run.postRunGitSummary) {
-      throw new Error('This run does not have any tracked git changes to discard.');
-    }
-
-    await this.gitService.discardRunChanges(
-      this.resolveRunWorkingDirectory(session, project, run),
-      {
-        summary: run.postRunGitSummary,
-        preRunBaselineFiles: run.preRunGitBaselineFiles,
-        files,
-      },
-    );
-
-    await this.refreshProjectGitContexts([project.id]);
-    const refreshedWorkspace = await this.loadWorkspace();
-    const refreshedSession = this.requireSession(refreshedWorkspace, sessionId);
-    const refreshedProject = this.requireProject(refreshedWorkspace, refreshedSession.projectId);
-    const nextRun = await this.refreshSessionRunGitSummary(
-      refreshedSession,
-      refreshedProject,
-      run.requestId,
-      nowIso(),
-    );
-    if (nextRun) {
-      this.emitRunUpdated(refreshedSession.id, nowIso(), nextRun);
-    }
-
-    return this.persistAndBroadcast(refreshedWorkspace);
+    return this.gitContextManager.discardSessionRunGitChanges(sessionId, runId, files);
   }
 
   async stageProjectGitFiles(projectId: string, files: ProjectGitFileReference[]): Promise<WorkspaceState> {
-    return this.runProjectGitMutation(projectId, async (project) => {
+    return this.gitContextManager.runProjectGitMutation(projectId, async (project) => {
       await this.gitService.stageFiles(project.path, files);
     });
   }
 
   async unstageProjectGitFiles(projectId: string, files: ProjectGitFileReference[]): Promise<WorkspaceState> {
-    return this.runProjectGitMutation(projectId, async (project) => {
+    return this.gitContextManager.runProjectGitMutation(projectId, async (project) => {
       await this.gitService.unstageFiles(project.path, files);
     });
   }
@@ -1964,7 +1642,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     files?: ProjectGitFileReference[],
     push = false,
   ): Promise<WorkspaceState> {
-    return this.runProjectGitMutation(projectId, async (project) => {
+    return this.gitContextManager.runProjectGitMutation(projectId, async (project) => {
       if (files && files.length > 0) {
         await this.gitService.stageFiles(project.path, files);
       }
@@ -1977,19 +1655,19 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
   }
 
   async pushProjectGit(projectId: string): Promise<WorkspaceState> {
-    return this.runProjectGitMutation(projectId, async (project) => {
+    return this.gitContextManager.runProjectGitMutation(projectId, async (project) => {
       await this.gitService.push(project.path);
     });
   }
 
   async fetchProjectGit(projectId: string): Promise<WorkspaceState> {
-    return this.runProjectGitMutation(projectId, async (project) => {
+    return this.gitContextManager.runProjectGitMutation(projectId, async (project) => {
       await this.gitService.fetch(project.path);
     });
   }
 
   async pullProjectGit(projectId: string, rebase = false): Promise<WorkspaceState> {
-    return this.runProjectGitMutation(projectId, async (project) => {
+    return this.gitContextManager.runProjectGitMutation(projectId, async (project) => {
       await this.gitService.pull(project.path, rebase);
     });
   }
@@ -2000,54 +1678,25 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     startPoint?: string,
     checkout = true,
   ): Promise<WorkspaceState> {
-    return this.runProjectGitMutation(projectId, async (project) => {
+    return this.gitContextManager.runProjectGitMutation(projectId, async (project) => {
       await this.gitService.createBranch(project.path, name, startPoint, checkout);
     });
   }
 
   async switchProjectGitBranch(projectId: string, name: string): Promise<WorkspaceState> {
-    return this.runProjectGitMutation(projectId, async (project) => {
+    return this.gitContextManager.runProjectGitMutation(projectId, async (project) => {
       await this.gitService.switchBranch(project.path, name);
     });
   }
 
   async deleteProjectGitBranch(projectId: string, name: string, force = false): Promise<WorkspaceState> {
-    return this.runProjectGitMutation(projectId, async (project) => {
+    return this.gitContextManager.runProjectGitMutation(projectId, async (project) => {
       await this.gitService.deleteBranch(project.path, name, force);
     });
   }
 
   private async refreshProjectGitContexts(projectIds?: readonly string[]): Promise<WorkspaceState> {
-    const workspace = await this.loadWorkspace();
-    const projects = projectIds?.length
-      ? projectIds.map((currentProjectId) => this.requireProject(workspace, currentProjectId))
-      : workspace.projects;
-
-    let didRefreshGit = false;
-    let didSyncProjectTooling = false;
-    let didSyncProjectCustomization = false;
-    for (const project of projects) {
-      didRefreshGit = await this.refreshGitContextForProject(project) || didRefreshGit;
-      didSyncProjectTooling = await this.syncProjectDiscoveredTooling(workspace, project) || didSyncProjectTooling;
-      didSyncProjectCustomization = await this.syncProjectCustomization(project) || didSyncProjectCustomization;
-    }
-
-    const didPruneSelections = didSyncProjectTooling
-      ? this.pruneUnavailableSessionToolingSelections(workspace)
-      : false;
-    const didPruneApprovalTools = didSyncProjectTooling
-      ? await this.pruneUnavailableApprovalTools(workspace)
-      : false;
-
-    return (
-      didRefreshGit
-      || didSyncProjectTooling
-      || didSyncProjectCustomization
-      || didPruneSelections
-      || didPruneApprovalTools
-    )
-      ? this.persistAndBroadcast(workspace)
-      : workspace;
+    return this.gitContextManager.refreshProjectGitContexts(projectIds);
   }
 
   async selectProject(projectId?: string): Promise<WorkspaceState> {
@@ -2109,7 +1758,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     project: ProjectRecord,
     run: SessionRunRecord,
   ): string {
-    return run.workingDirectory ?? session.cwd ?? run.projectPath ?? project.path;
+    return this.gitContextManager.resolveRunWorkingDirectory(session, project, run);
   }
 
   private async refreshSessionRunGitSummary(
@@ -2118,36 +1767,14 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     requestId: string,
     occurredAt: string,
   ): Promise<SessionRunRecord | undefined> {
-    const run = session.runs.find((candidate) => candidate.requestId === requestId);
-    if (!run || run.workspaceKind !== 'project' || !run.preRunGitSnapshot) {
-      return undefined;
-    }
-
-    const summary = await this.gitService.computeRunChangeSummary(
-      this.resolveRunWorkingDirectory(session, project, run),
-      {
-        generatedAt: occurredAt,
-        preRunSnapshot: run.preRunGitSnapshot,
-        preRunBaselineFiles: run.preRunGitBaselineFiles,
-      },
-    );
-
-    return this.updateSessionRun(session, requestId, (currentRun) =>
-      setSessionRunGitSummary(currentRun, summary));
+    return this.gitContextManager.refreshSessionRunGitSummary(session, project, requestId, occurredAt);
   }
 
   private async runProjectGitMutation(
     projectId: string,
     mutation: (project: ProjectRecord) => Promise<void>,
   ): Promise<WorkspaceState> {
-    const workspace = await this.loadWorkspace();
-    const project = this.requireProject(workspace, projectId);
-    if (isScratchpadProject(project)) {
-      throw new Error('Git operations are not available for the Scratchpad project.');
-    }
-
-    await mutation(project);
-    return this.refreshProjectGitContexts([project.id]);
+    return this.gitContextManager.runProjectGitMutation(projectId, mutation);
   }
 
   private resolveTerminalWorkingDirectory(workspace: WorkspaceState): string {
@@ -2170,224 +1797,69 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
   }
 
   private async refreshGitContextForProject(project: ProjectRecord): Promise<boolean> {
-    if (isScratchpadProject(project)) {
-      if (!project.git) {
-        return false;
-      }
-
-      project.git = undefined;
-      return true;
-    }
-
-    project.git = await this.gitService.describeProject(project.path);
-    return true;
+    const beforeGit = JSON.stringify(project.git);
+    await this.gitContextManager.refreshProjectGitContext(project.id);
+    return JSON.stringify(project.git) !== beforeGit;
   }
 
   private startPeriodicProjectGitRefresh(): void {
-    if (this.didStartPeriodicProjectGitRefresh) {
-      return;
-    }
-
-    this.didStartPeriodicProjectGitRefresh = true;
-    this.periodicProjectGitRefreshTimer = setInterval(() => {
-      this.scheduleProjectGitRefresh();
-    }, GIT_REFRESH_INTERVAL_MS);
-    this.periodicProjectGitRefreshTimer.unref?.();
+    this.gitContextManager.startPeriodicProjectGitRefresh();
   }
 
   private stopPeriodicProjectGitRefresh(): void {
-    if (this.periodicProjectGitRefreshTimer) {
-      clearInterval(this.periodicProjectGitRefreshTimer);
-      this.periodicProjectGitRefreshTimer = undefined;
-    }
-    this.didStartPeriodicProjectGitRefresh = false;
+    this.gitContextManager.stopPeriodicProjectGitRefresh();
   }
 
   private async flushScheduledProjectGitRefresh(): Promise<void> {
-    if (this.runningProjectGitRefresh) {
-      return;
-    }
-
-    const projectIds = this.pendingRefreshAllProjects
-      ? undefined
-      : [...this.pendingProjectGitRefreshIds];
-    this.pendingRefreshAllProjects = false;
-    this.pendingProjectGitRefreshIds.clear();
-
-    this.runningProjectGitRefresh = this.refreshProjectGitContexts(projectIds).then(
-      () => undefined,
-      (error) => {
-        console.error('[aryx git]', error);
-      },
-    );
-
-    try {
-      await this.runningProjectGitRefresh;
-    } finally {
-      this.runningProjectGitRefresh = undefined;
-      if (this.pendingRefreshAllProjects || this.pendingProjectGitRefreshIds.size > 0) {
-        this.scheduleProjectGitRefresh();
-      }
-    }
+    await this.gitContextManager.flushScheduledProjectGitRefresh();
   }
 
   private requireWorkflowTemplate(workspace: WorkspaceState, templateId: string): WorkflowTemplateDefinition {
-    const template = workspace.workflowTemplates.find((current) => current.id === templateId);
-    if (!template) {
-      throw new Error(`Workflow template "${templateId}" was not found.`);
-    }
-
-    return template;
+    return this.workflowManager.requireWorkflowTemplate(workspace, templateId);
   }
 
   private requireWorkflow(workspace: WorkspaceState, workflowId: string): WorkflowDefinition {
-    const workflow = workspace.workflows.find((current) => current.id === workflowId);
-    if (!workflow) {
-      throw new Error(`Workflow "${workflowId}" was not found.`);
-    }
-
-    return workflow;
+    return this.workflowManager.requireWorkflow(workspace, workflowId);
   }
 
   private createUniqueWorkflowId(workspace: WorkspaceState, sourceId: string): string {
-    const normalizedSourceId = this.normalizeIdentifier(sourceId, 'workflow');
-    const existingIds = new Set(workspace.workflows.map((workflow) => workflow.id));
-    if (!existingIds.has(normalizedSourceId)) {
-      return normalizedSourceId;
-    }
-
-    let suffix = 2;
-    while (existingIds.has(`${normalizedSourceId}-${suffix}`)) {
-      suffix += 1;
-    }
-
-    return `${normalizedSourceId}-${suffix}`;
+    return this.workflowManager.createUniqueWorkflowId(workspace, sourceId);
   }
 
   private normalizeIdentifier(value: string, fallbackPrefix: string): string {
-    const normalized = value
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '');
-
-    return normalized || createId(fallbackPrefix);
+    return this.workflowManager.normalizeIdentifier(value, fallbackPrefix);
   }
 
   private resolveSessionWorkflow(
     workspace: WorkspaceState,
     session: SessionRecord,
   ): WorkflowDefinition {
-    return this.requireWorkflow(workspace, session.workflowId);
+    return this.workflowManager.resolveSessionWorkflow(workspace, session);
   }
 
   private buildResolvedExecutionWorkflow(
     workspace: WorkspaceState,
     workflow: WorkflowDefinition,
   ): WorkflowDefinition {
-    return normalizeWorkflowDefinition({
-      ...workflow,
-      settings: {
-        ...workflow.settings,
-        approvalPolicy: applyDefaultToolApprovalPolicy(workflow.settings.approvalPolicy),
-      },
-    });
+    return this.workflowManager.buildResolvedExecutionWorkflow(workspace, workflow);
   }
 
   private createWorkflowResolutionOptions(workspace: WorkspaceState) {
-    return {
-      resolveWorkflow: (workflowId: string) => workspace.workflows.find((candidate) => candidate.id === workflowId),
-    };
+    return this.workflowManager.createWorkflowResolutionOptions(workspace);
   }
 
   private validateWorkflowReferences(
     workspace: WorkspaceState,
     workflow: WorkflowDefinition,
   ): void {
-    const workflowLibrary = new Map<string, WorkflowDefinition>();
-    for (const candidate of workspace.workflows) {
-      if (candidate.id !== workflow.id) {
-        workflowLibrary.set(candidate.id, candidate);
-      }
-    }
-    workflowLibrary.set(workflow.id, workflow);
-
-    const visitWorkflow = (
-      currentWorkflow: WorkflowDefinition,
-      path: string[],
-      visitedInlineWorkflows: Set<WorkflowDefinition>,
-    ): void => {
-      for (const node of currentWorkflow.graph.nodes) {
-        if (node.kind !== 'sub-workflow' || node.config.kind !== 'sub-workflow') {
-          continue;
-        }
-
-        const { inlineWorkflow, workflowId } = node.config;
-        if (workflowId) {
-          const referencedWorkflow = workflowLibrary.get(workflowId);
-          if (!referencedWorkflow) {
-            throw new Error(
-              `Sub-workflow node "${node.label || node.id}" references unknown workflow "${workflowId}".`,
-            );
-          }
-
-          if (path.includes(workflowId)) {
-            throw new Error(
-              `Saving workflow "${workflow.name}" would create a circular sub-workflow reference: ${[...path, workflowId].join(' -> ')}.`,
-            );
-          }
-
-          visitWorkflow(referencedWorkflow, [...path, workflowId], visitedInlineWorkflows);
-        }
-
-        if (inlineWorkflow && !visitedInlineWorkflows.has(inlineWorkflow)) {
-          visitedInlineWorkflows.add(inlineWorkflow);
-          visitWorkflow(inlineWorkflow, path, visitedInlineWorkflows);
-        }
-      }
-    };
-
-    visitWorkflow(workflow, [workflow.id], new Set<WorkflowDefinition>());
+    this.workflowManager.validateWorkflowReferences(workspace, workflow);
   }
 
   private listWorkflowReferencesInWorkspace(
     workspace: WorkspaceState,
     workflowId: string,
   ): WorkflowReference[] {
-    const references: WorkflowReference[] = [];
-
-    const visitWorkflow = (
-      referencingWorkflow: WorkflowDefinition,
-      currentWorkflow: WorkflowDefinition,
-      visitedInlineWorkflows: Set<WorkflowDefinition>,
-    ): void => {
-      for (const node of currentWorkflow.graph.nodes) {
-        if (node.kind !== 'sub-workflow' || node.config.kind !== 'sub-workflow') {
-          continue;
-        }
-
-        const { inlineWorkflow, workflowId: referencedWorkflowId } = node.config;
-        if (referencedWorkflowId === workflowId) {
-          references.push({
-            referencingWorkflowId: referencingWorkflow.id,
-            referencingWorkflowName: referencingWorkflow.name,
-            nodeId: node.id,
-            nodeLabel: node.label || node.id,
-          });
-        }
-
-        if (inlineWorkflow && !visitedInlineWorkflows.has(inlineWorkflow)) {
-          visitedInlineWorkflows.add(inlineWorkflow);
-          visitWorkflow(referencingWorkflow, inlineWorkflow, visitedInlineWorkflows);
-        }
-      }
-    };
-
-    for (const referencingWorkflow of workspace.workflows) {
-      visitWorkflow(referencingWorkflow, referencingWorkflow, new Set<WorkflowDefinition>());
-    }
-
-    return references;
+    return this.workflowManager.listWorkflowReferencesInWorkspace(workspace, workflowId);
   }
 
   private requireSession(workspace: WorkspaceState, sessionId: string): SessionRecord {
@@ -2739,57 +2211,17 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     approval: ApprovalRequestedEvent | PendingApprovalRecord,
     resolve: (decision: ApprovalDecision, alwaysApprove?: boolean) => void | Promise<void>,
   ): Promise<void> {
-    const session = this.requireSession(workspace, sessionId);
-    const pendingApproval =
-      'type' in approval ? this.createPendingApprovalFromSidecarEvent(approval) : approval;
-
-    this.setSessionPendingApprovalState(session, enqueuePendingApprovalState(session, pendingApproval));
-    session.updatedAt = pendingApproval.requestedAt;
-
-    const updatedRun = this.updateSessionRun(session, requestId, (run) =>
-      upsertRunApprovalEvent(run, pendingApproval));
-
-    this.pendingApprovalHandles.set(pendingApproval.id, {
-      sessionId,
-      requestId,
-      resolve,
-    });
-
-    await this.persistAndBroadcast(workspace);
-    if (updatedRun) {
-      this.emitRunUpdated(sessionId, pendingApproval.requestedAt, updatedRun);
-    }
+    await this.approvalCoordinator.handleApprovalRequested(workspace, sessionId, requestId, approval, resolve);
   }
 
   private async handleUserInputRequested(
     workspace: WorkspaceState,
     sessionId: string,
-    _requestId: string,
+    requestId: string,
     event: UserInputRequestedEvent,
     resolve: (answer: string, wasFreeform: boolean) => void | Promise<void>,
   ): Promise<void> {
-    const session = this.requireSession(workspace, sessionId);
-    const requestedAt = nowIso();
-
-    session.pendingUserInput = {
-      id: event.userInputId,
-      status: 'pending',
-      agentId: event.agentId,
-      agentName: event.agentName,
-      question: event.question,
-      choices: event.choices,
-      allowFreeform: event.allowFreeform ?? true,
-      requestedAt,
-    };
-    session.updatedAt = requestedAt;
-
-    this.pendingUserInputHandles.set(event.userInputId, {
-      sessionId,
-      requestId: _requestId,
-      resolve,
-    });
-
-    await this.persistAndBroadcast(workspace);
+    await this.approvalCoordinator.handleUserInputRequested(workspace, sessionId, requestId, event, resolve);
   }
 
   private async handleExitPlanModeRequested(
@@ -2797,23 +2229,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     sessionId: string,
     event: ExitPlanModeRequestedEvent,
   ): Promise<void> {
-    const session = this.requireSession(workspace, sessionId);
-    const requestedAt = nowIso();
-
-    session.pendingPlanReview = {
-      id: event.exitPlanId,
-      status: 'pending',
-      agentId: event.agentId,
-      agentName: event.agentName,
-      summary: event.summary,
-      planContent: event.planContent,
-      actions: event.actions,
-      recommendedAction: event.recommendedAction,
-      requestedAt,
-    };
-    session.updatedAt = requestedAt;
-
-    await this.persistAndBroadcast(workspace);
+    await this.approvalCoordinator.handleExitPlanModeRequested(workspace, sessionId, event);
   }
 
   private async handleMcpOAuthRequired(
@@ -2821,24 +2237,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     sessionId: string,
     event: McpOauthRequiredEvent,
   ): Promise<void> {
-    const session = this.requireSession(workspace, sessionId);
-    const requestedAt = nowIso();
-
-    session.pendingMcpAuth = {
-      id: event.oauthRequestId,
-      status: 'pending',
-      agentId: event.agentId,
-      agentName: event.agentName,
-      serverName: event.serverName,
-      serverUrl: event.serverUrl,
-      staticClientConfig: event.staticClientConfig
-        ? { clientId: event.staticClientConfig.clientId, publicClient: event.staticClientConfig.publicClient }
-        : undefined,
-      requestedAt,
-    };
-    session.updatedAt = requestedAt;
-
-    await this.persistAndBroadcast(workspace);
+    await this.approvalCoordinator.handleMcpOAuthRequired(workspace, sessionId, event);
   }
 
   private handleTurnScopedEvent(
@@ -2984,38 +2383,23 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     onMessageReclassified: (event: MessageReclassifiedEvent) => void | Promise<void>,
     onTurnScopedEvent: (event: TurnScopedEvent) => void | Promise<void>,
   ): Promise<ChatMessageRecord[]> {
-    const invokeTurn = (resumeFromCheckpoint?: WorkflowCheckpointResume) => this.sidecar.runTurn(
-      createCommand(resumeFromCheckpoint),
-      onDelta,
-      onActivity,
-      onApproval,
-      onUserInput,
-      onMcpOAuthRequired,
-      onExitPlanMode,
-      onMessageReclassified,
-      onTurnScopedEvent,
+    return this.checkpointRecoveryManager.runSidecarTurnWithCheckpointRecovery(
+      workspace,
+      session,
+      requestId,
+      (resumeFromCheckpoint?: WorkflowCheckpointResume) => this.sidecar.runTurn(
+        createCommand(resumeFromCheckpoint),
+        onDelta,
+        onActivity,
+        onApproval,
+        onUserInput,
+        onMcpOAuthRequired,
+        onExitPlanMode,
+        onMessageReclassified,
+        onTurnScopedEvent,
+      ),
+      isUnexpectedSidecarTerminationError,
     );
-
-    try {
-      return await invokeTurn();
-    } catch (error) {
-      const recovery = this.workflowCheckpointRecoveries.get(requestId);
-      if (!isUnexpectedSidecarTerminationError(error) || !recovery) {
-        throw error;
-      }
-
-      const restoredRun = this.restoreWorkflowCheckpointRecovery(session, requestId, recovery);
-      await this.persistAndBroadcast(workspace);
-      if (restoredRun) {
-        this.emitRunUpdated(session.id, session.updatedAt, restoredRun);
-      }
-
-      return invokeTurn({
-        workflowSessionId: recovery.workflowSessionId,
-        checkpointId: recovery.checkpointId,
-        storePath: recovery.storePath,
-      });
-    }
   }
 
   private recordWorkflowCheckpointRecovery(
@@ -3023,14 +2407,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     run: SessionRunRecord,
     event: WorkflowCheckpointSavedEvent,
   ): void {
-    this.workflowCheckpointRecoveries.set(event.requestId, {
-      workflowSessionId: event.workflowSessionId,
-      checkpointId: event.checkpointId,
-      storePath: event.storePath,
-      stepNumber: event.stepNumber,
-      sessionMessages: structuredClone(session.messages),
-      runEvents: structuredClone(run.events),
-    });
+    this.checkpointRecoveryManager.recordWorkflowCheckpointRecovery(session, run, event);
   }
 
   private restoreWorkflowCheckpointRecovery(
@@ -3038,65 +2415,19 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     requestId: string,
     recovery: WorkflowCheckpointRecoveryState,
   ): SessionRunRecord | undefined {
-    session.messages = structuredClone(recovery.sessionMessages);
-    session.status = 'running';
-    session.lastError = undefined;
-    session.updatedAt = nowIso();
-    this.clearPendingRunState(session, requestId);
-
-    return this.updateSessionRun(session, requestId, (run) => ({
-      ...run,
-      events: structuredClone(recovery.runEvents),
-    }));
+    return this.checkpointRecoveryManager.restoreWorkflowCheckpointRecovery(session, requestId, recovery);
   }
 
   private clearPendingRunState(session: SessionRecord, requestId: string): void {
-    this.setSessionPendingApprovalState(session, {});
-    session.pendingUserInput = undefined;
-    session.pendingPlanReview = undefined;
-    session.pendingMcpAuth = undefined;
-
-    for (const [approvalId, handle] of this.pendingApprovalHandles.entries()) {
-      if (handle.sessionId === session.id && handle.requestId === requestId) {
-        this.pendingApprovalHandles.delete(approvalId);
-      }
-    }
-
-    for (const [userInputId, handle] of this.pendingUserInputHandles.entries()) {
-      if (handle.sessionId === session.id && handle.requestId === requestId) {
-        this.pendingUserInputHandles.delete(userInputId);
-      }
-    }
+    this.checkpointRecoveryManager.clearPendingRunState(session, requestId);
   }
 
   private async cleanupWorkflowCheckpointRecovery(requestId: string): Promise<void> {
-    const recovery = this.workflowCheckpointRecoveries.get(requestId);
-    this.workflowCheckpointRecoveries.delete(requestId);
-    if (!recovery) {
-      return;
-    }
-
-    try {
-      await rm(recovery.storePath, { recursive: true, force: true });
-    } catch (error) {
-      console.warn('[aryx workflow-checkpoint] Failed to clean checkpoint store:', error);
-    }
+    await this.checkpointRecoveryManager.cleanupWorkflowCheckpointRecovery(requestId);
   }
 
   private createPendingApprovalFromSidecarEvent(event: ApprovalRequestedEvent): PendingApprovalRecord {
-    return {
-      id: event.approvalId,
-      kind: event.approvalKind,
-      status: 'pending',
-      requestedAt: nowIso(),
-      agentId: event.agentId,
-      agentName: event.agentName,
-      toolName: event.toolName,
-      permissionKind: event.permissionKind,
-      title: event.title,
-      detail: event.detail,
-      permissionDetail: event.permissionDetail,
-    };
+    return this.approvalCoordinator.createPendingApprovalFromSidecarEvent(event);
   }
 
   private setSessionPendingApprovalState(
@@ -3106,8 +2437,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
       pendingApprovalQueue?: PendingApprovalRecord[];
     },
   ): void {
-    session.pendingApproval = state.pendingApproval;
-    session.pendingApprovalQueue = state.pendingApprovalQueue;
+    this.approvalCoordinator.setSessionPendingApprovalState(session, state);
   }
 
   private rejectPendingApprovals(
@@ -3115,23 +2445,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     failedAt: string,
     error: string,
   ): string[] {
-    const requestIds = new Set<string>();
-
-    for (const pendingApproval of listPendingApprovals(session)) {
-      const requestId = this.findApprovalRequestId(session, pendingApproval.id);
-      const rejectedApproval = resolvePendingApproval(pendingApproval, 'rejected', failedAt, error);
-
-      if (requestId) {
-        requestIds.add(requestId);
-        this.updateSessionRun(session, requestId, (run) =>
-          upsertRunApprovalEvent(run, rejectedApproval));
-      }
-
-      this.pendingApprovalHandles.delete(pendingApproval.id);
-    }
-
-    this.setSessionPendingApprovalState(session, {});
-    return [...requestIds];
+    return this.approvalCoordinator.rejectPendingApprovals(session, failedAt, error);
   }
 
   private async awaitFinalResponseApproval(
@@ -3235,151 +2549,31 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     session: SessionRecord,
     workspaceAgents: ReadonlyArray<WorkspaceAgentDefinition>,
   ): Promise<WorkflowDefinition> {
-    const resolvedWorkflow = resolveWorkspaceWorkflowAgents(workflow, workspaceAgents);
-    const workflowWithSessionConfig = session.sessionModelConfig
-      ? applySessionModelConfig(resolvedWorkflow, session)
-      : resolvedWorkflow;
-    const workflowWithApprovalSettings = applySessionApprovalSettings(workflowWithSessionConfig, session);
-
-    const modelCatalog = await this.loadAvailableModelCatalog();
-    return normalizeWorkflowModels(workflowWithApprovalSettings, modelCatalog);
+    return this.sessionTurnExecutor.buildEffectiveWorkflow(workflow, session, workspaceAgents);
   }
 
   private async applyPromptInvocationToWorkflow(
     workflow: WorkflowDefinition,
     promptInvocation?: ProjectPromptInvocation,
   ): Promise<WorkflowDefinition> {
-    const requestedModel = promptInvocation?.model?.trim();
-    if (!requestedModel) {
-      return workflow;
-    }
-
-    const modelCatalog = await this.loadAvailableModelCatalog();
-    const resolvedModel = findModelByReference(requestedModel, modelCatalog);
-    const effectiveModelId = resolvedModel?.id ?? requestedModel;
-
-    let didChange = false;
-    const nodes = workflow.graph.nodes.map((node) => {
-      if (node.kind !== 'agent' || node.config.kind !== 'agent') {
-        return node;
-      }
-
-      const agent = node.config;
-      // When overriding the model, re-normalize reasoning effort for the target model.
-      // If the target model's reasoning capabilities are unknown (supportedReasoningEfforts
-      // is undefined — common for dynamically-discovered models), strip reasoning effort
-      // entirely to avoid sending it to a model that may not support it.
-      let reasoningEffort: ReasoningEffort | undefined;
-      if (resolvedModel?.supportedReasoningEfforts) {
-        reasoningEffort = resolveReasoningEffort(resolvedModel, agent.reasoningEffort);
-      } else {
-        reasoningEffort = undefined;
-      }
-
-      if (agent.model === effectiveModelId && agent.reasoningEffort === reasoningEffort) {
-        return node;
-      }
-
-      didChange = true;
-      return {
-        ...node,
-        config: {
-          ...agent,
-          model: effectiveModelId,
-          reasoningEffort,
-        },
-      };
-    });
-
-    return didChange
-      ? {
-        ...workflow,
-        graph: {
-          ...workflow.graph,
-          nodes,
-        },
-      }
-      : workflow;
+    return this.sessionTurnExecutor.applyPromptInvocationToWorkflow(workflow, promptInvocation);
   }
 
   private applyProjectCustomizationToWorkflow(
     workflow: WorkflowDefinition,
     project: ProjectRecord,
   ): WorkflowDefinition {
-    if (isScratchpadProject(project)) {
-      return workflow;
-    }
-
-    const projectCustomAgents = this.buildProjectCustomAgents(project.customization);
-    if (projectCustomAgents.length === 0) {
-      return workflow;
-    }
-
-    const primaryAgentNode = resolveWorkflowAgentNodes(workflow)[0];
-    if (!primaryAgentNode || primaryAgentNode.config.kind !== 'agent') {
-      return workflow;
-    }
-
-    const existingCustomAgents = primaryAgentNode.config.copilot?.customAgents ?? [];
-    const existingAgentNames = new Set(existingCustomAgents.map((agent) => agent.name.toLowerCase()));
-    const mergedCustomAgents = [
-      ...existingCustomAgents,
-      ...projectCustomAgents.filter((agent) => !existingAgentNames.has(agent.name.toLowerCase())),
-    ];
-
-    return {
-      ...workflow,
-      graph: {
-        ...workflow.graph,
-        nodes: workflow.graph.nodes.map((node) => {
-          if (node.id !== primaryAgentNode.id || node.kind !== 'agent' || node.config.kind !== 'agent') {
-            return node;
-          }
-
-          return {
-            ...node,
-            config: {
-              ...node.config,
-              copilot: {
-                ...node.config.copilot,
-                customAgents: mergedCustomAgents,
-              },
-            },
-          };
-        }),
-      },
-    };
+    return this.sessionTurnExecutor.applyProjectCustomizationToWorkflow(workflow, project);
   }
 
   private buildProjectCustomAgents(
     customization?: ProjectCustomizationState,
   ): RunTurnCustomAgentConfig[] {
-    return listEnabledProjectAgentProfiles(customization).map((profile) => this.mapProjectAgentProfile(profile));
+    return this.sessionTurnExecutor.buildProjectCustomAgents(customization);
   }
 
   private mapProjectAgentProfile(profile: ProjectAgentProfile): RunTurnCustomAgentConfig {
-    const customAgent: RunTurnCustomAgentConfig = {
-      name: profile.name,
-      prompt: profile.prompt,
-    };
-
-    if (profile.displayName) {
-      customAgent.displayName = profile.displayName;
-    }
-
-    if (profile.description) {
-      customAgent.description = profile.description;
-    }
-
-    if (profile.tools) {
-      customAgent.tools = profile.tools;
-    }
-
-    if (profile.infer !== undefined) {
-      customAgent.infer = profile.infer;
-    }
-
-    return customAgent;
+    return this.sessionTurnExecutor.mapProjectAgentProfile(profile);
   }
 
   private async listKnownApprovalToolNames(
@@ -3451,128 +2645,48 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
   }
 
   private async syncUserDiscoveredTooling(workspace: WorkspaceState): Promise<boolean> {
-    const nextState = await this.configScanner.scanUser(workspace.settings.discoveredUserTooling);
-    if (this.equalDiscoveredToolingState(workspace.settings.discoveredUserTooling, nextState)) {
-      return false;
-    }
-
-    workspace.settings.discoveredUserTooling = nextState;
-    return true;
+    return this.discoveredToolingSyncService.syncUserDiscoveredTooling(workspace);
   }
 
   private async syncProjectCustomizationWatchers(workspace: WorkspaceState): Promise<void> {
-    await this.projectCustomizationWatcher.syncProjects(
-      workspace.projects
-        .filter((project) => !isScratchpadProject(project))
-        .map((project) => ({
-          id: project.id,
-          path: project.path,
-        })),
-    );
+    await this.discoveredToolingSyncService.syncProjectCustomizationWatchers(workspace);
   }
 
   private resolveRunTurnPromptInvocation(
     session: SessionRecord,
     triggerMessageId: string,
   ): ProjectPromptInvocation | undefined {
-    const triggerMessage = session.messages.find((message) => message.id === triggerMessageId);
-    return normalizeProjectPromptInvocation(triggerMessage?.promptInvocation);
+    return this.sessionTurnExecutor.resolveRunTurnPromptInvocation(session, triggerMessageId);
   }
 
   private async handleProjectCustomizationWatcherChange(projectId: string): Promise<void> {
-    await this.enqueueCustomizationWatcherUpdate(async () => {
-      const workspace = await this.loadWorkspace();
-      const project = workspace.projects.find((candidate) => candidate.id === projectId);
-      await this.syncProjectCustomizationWatchers(workspace);
-
-      if (!project || isScratchpadProject(project)) {
-        return;
-      }
-
-      const didSyncProjectCustomization = await this.syncProjectCustomization(project);
-      await this.syncProjectCustomizationWatchers(workspace);
-      if (didSyncProjectCustomization) {
-        await this.persistAndBroadcast(workspace);
-      }
-    });
+    await this.discoveredToolingSyncService.handleProjectCustomizationWatcherChange(projectId);
   }
 
   private enqueueCustomizationWatcherUpdate(task: () => Promise<void>): Promise<void> {
-    const scheduledTask = this.customizationWatcherUpdateQueue.then(task, task);
-    this.customizationWatcherUpdateQueue = scheduledTask.then(
-      () => undefined,
-      () => undefined,
-    );
-    return scheduledTask;
+    return task();
   }
 
   private async syncProjectCustomization(project: ProjectRecord): Promise<boolean> {
-    if (isScratchpadProject(project)) {
-      if (!project.customization || this.equalProjectCustomizationState(project.customization, undefined)) {
-        return false;
-      }
-
-      project.customization = undefined;
-      return true;
-    }
-
-    const nextState = await this.customizationScanner.scanProject(project.path, project.customization);
-    if (this.equalProjectCustomizationState(project.customization, nextState)) {
-      return false;
-    }
-
-    project.customization = nextState;
-    return true;
+    return this.discoveredToolingSyncService.syncProjectCustomization(project);
   }
 
   private async syncProjectDiscoveredTooling(
     workspace: WorkspaceState,
     project: ProjectRecord,
   ): Promise<boolean> {
-    if (isScratchpadProject(project)) {
-      if (!project.discoveredTooling || this.equalDiscoveredToolingState(project.discoveredTooling, undefined)) {
-        return false;
-      }
-
-      project.discoveredTooling = undefined;
-      return true;
-    }
-
-    const nextState = await this.configScanner.scanProject(
-      project.id,
-      project.path,
-      project.discoveredTooling,
-    );
-    if (this.equalDiscoveredToolingState(project.discoveredTooling, nextState)) {
-      return false;
-    }
-
-    project.discoveredTooling = nextState;
-    return true;
+    return this.discoveredToolingSyncService.syncProjectDiscoveredTooling(workspace, project);
   }
 
   private async probeAllAcceptedMcpServers(workspace: WorkspaceState): Promise<void> {
-    const targets = [
-      ...this.listAcceptedDiscoveredServerDefinitions(
-        workspace,
-        (server) => !server.probedTools || server.probedTools.length === 0,
-      ),
-      ...workspace.settings.tooling.mcpServers.filter(
-        (server) => server.tools.length === 0 && (!server.probedTools || server.probedTools.length === 0),
-      ),
-    ];
-
-    await this.probeWorkspaceMcpServers(workspace, targets);
+    await this.mcpProbeManager.probeAllAcceptedMcpServers(workspace);
   }
 
   private async probeDiscoveredMcpServersFromState(
     workspace: WorkspaceState,
     state?: DiscoveredToolingState,
   ): Promise<void> {
-    const targets = listAcceptedDiscoveredMcpServers(state)
-      .filter((server) => !server.probedTools || server.probedTools.length === 0)
-      .map((server) => this.discoveredServerToDefinition(server));
-    await this.probeWorkspaceMcpServers(workspace, targets);
+    await this.mcpProbeManager.probeDiscoveredMcpServersFromState(workspace, state);
   }
 
   private async probeDiscoveredMcpServers(
@@ -3580,46 +2694,14 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     state: DiscoveredToolingState | undefined,
     serverIds: ReadonlyArray<string>,
   ): Promise<void> {
-    const targets = listAcceptedDiscoveredMcpServers(state)
-      .filter((server) => serverIds.includes(server.id))
-      .map((server) => this.discoveredServerToDefinition(server));
-    await this.probeWorkspaceMcpServers(workspace, targets);
+    await this.mcpProbeManager.probeDiscoveredMcpServers(workspace, state, serverIds);
   }
 
   private async probeWorkspaceMcpServers(
     workspace: WorkspaceState,
     targets: ReadonlyArray<McpServerDefinition>,
   ): Promise<void> {
-    const uniqueTargets = [...new Map(targets.map((server) => [server.id, server])).values()];
-    if (uniqueTargets.length === 0) {
-      return;
-    }
-
-    const targetIds = uniqueTargets.map((server) => server.id);
-    const tokenLookup = (url: string) => getStoredToken(url)?.accessToken;
-    await this.enqueueMcpProbeUpdate(async () => {
-      if (this.addMcpProbingServerIds(workspace, targetIds)) {
-        await this.persistAndBroadcast(workspace);
-      }
-    });
-
-    try {
-      await this.probeMcpServers(uniqueTargets, tokenLookup, (result) =>
-        this.enqueueMcpProbeUpdate(async () => {
-          const didUpdateProbing = this.removeMcpProbingServerIds(workspace, [result.serverId]);
-          const didApplyResult = this.applyMcpProbeResult(workspace, result);
-          if (didUpdateProbing || didApplyResult) {
-            await this.persistAndBroadcast(workspace);
-          }
-        }),
-      );
-    } finally {
-      await this.enqueueMcpProbeUpdate(async () => {
-        if (this.removeMcpProbingServerIds(workspace, targetIds)) {
-          await this.persistAndBroadcast(workspace);
-        }
-      });
-    }
+    await this.mcpProbeManager.probeWorkspaceMcpServers(workspace, targets);
   }
 
   /**
@@ -3627,61 +2709,26 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
    * succeeds, so their tools appear in the approval pill without restart.
    */
   private async reprobeServerByUrl(serverUrl: string): Promise<void> {
-    const workspace = await this.loadWorkspace();
-
-    // Collect matching servers from manual config and discovered tooling
-    const targets: McpServerDefinition[] = [];
-
-    for (const server of workspace.settings.tooling.mcpServers) {
-      if (server.transport !== 'local' && server.url === serverUrl) {
-        targets.push(server);
-      }
-    }
-
-    const allDiscovered = [
-      ...(workspace.settings.discoveredUserTooling?.mcpServers ?? []),
-      ...workspace.projects.flatMap((p) => p.discoveredTooling?.mcpServers ?? []),
-    ];
-    for (const server of allDiscovered) {
-      if (server.status === 'accepted' && server.transport !== 'local' && server.url === serverUrl) {
-        targets.push(this.discoveredServerToDefinition(server));
-      }
-    }
-
-    await this.probeWorkspaceMcpServers(workspace, targets);
+    await this.mcpProbeManager.reprobeServerByUrl(serverUrl);
   }
 
   private listAcceptedDiscoveredServerDefinitions(
     workspace: WorkspaceState,
     predicate?: (server: DiscoveredMcpServer) => boolean,
   ): McpServerDefinition[] {
-    const definitions: McpServerDefinition[] = [];
-
-    for (const state of this.listDiscoveredToolingStates(workspace)) {
-      for (const server of listAcceptedDiscoveredMcpServers(state)) {
-        if (predicate && !predicate(server)) {
-          continue;
-        }
-        definitions.push(this.discoveredServerToDefinition(server));
-      }
-    }
-
-    return definitions;
+    return this.mcpProbeManager.listAcceptedDiscoveredServerDefinitions(workspace, predicate);
   }
 
   private listDiscoveredToolingStates(workspace: WorkspaceState): Array<DiscoveredToolingState | undefined> {
-    return [
-      workspace.settings.discoveredUserTooling,
-      ...workspace.projects.map((project) => project.discoveredTooling),
-    ];
+    return this.mcpProbeManager.listDiscoveredToolingStates(workspace);
   }
 
   private addMcpProbingServerIds(workspace: WorkspaceState, serverIds: ReadonlyArray<string>): boolean {
-    return this.updateMcpProbingServerIds(workspace, serverIds, 'add');
+    return this.mcpProbeManager.addMcpProbingServerIds(workspace, serverIds);
   }
 
   private removeMcpProbingServerIds(workspace: WorkspaceState, serverIds: ReadonlyArray<string>): boolean {
-    return this.updateMcpProbingServerIds(workspace, serverIds, 'remove');
+    return this.mcpProbeManager.removeMcpProbingServerIds(workspace, serverIds);
   }
 
   private updateMcpProbingServerIds(
@@ -3689,92 +2736,19 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     serverIds: ReadonlyArray<string>,
     operation: 'add' | 'remove',
   ): boolean {
-    const next = new Set(workspace.mcpProbingServerIds ?? []);
-    const before = next.size;
-
-    for (const serverId of serverIds) {
-      if (operation === 'add') {
-        next.add(serverId);
-      } else {
-        next.delete(serverId);
-      }
-    }
-
-    if (next.size === before) {
-      return false;
-    }
-
-    if (next.size === 0) {
-      delete workspace.mcpProbingServerIds;
-    } else {
-      workspace.mcpProbingServerIds = [...next];
-    }
-
-    return true;
+    return this.mcpProbeManager.updateMcpProbingServerIds(workspace, serverIds, operation);
   }
 
   private applyMcpProbeResult(workspace: WorkspaceState, result: McpProbeResult): boolean {
-    if (result.status !== 'success' || result.tools.length === 0) {
-      return false;
-    }
-
-    let changed = false;
-
-    for (const server of workspace.settings.tooling.mcpServers) {
-      if (server.id !== result.serverId) {
-        continue;
-      }
-      server.probedTools = result.tools;
-      changed = true;
-    }
-
-    for (const state of this.listDiscoveredToolingStates(workspace)) {
-      for (const server of state?.mcpServers ?? []) {
-        if (server.id !== result.serverId) {
-          continue;
-        }
-        server.probedTools = result.tools;
-        changed = true;
-      }
-    }
-
-    return changed;
+    return this.mcpProbeManager.applyMcpProbeResult(workspace, result);
   }
 
   private async enqueueMcpProbeUpdate(update: () => Promise<void>): Promise<void> {
-    const next = this.mcpProbeUpdateQueue.then(update, update);
-    this.mcpProbeUpdateQueue = next.catch(() => undefined);
-    await next;
+    await update();
   }
 
   private discoveredServerToDefinition(server: DiscoveredMcpServer): McpServerDefinition {
-    if (server.transport === 'local') {
-      return {
-        id: server.id,
-        name: server.name,
-        transport: 'local',
-        command: server.command,
-        args: [...server.args],
-        cwd: server.cwd,
-        env: server.env ? { ...server.env } : undefined,
-        tools: [...server.tools],
-        timeoutMs: server.timeoutMs,
-        createdAt: nowIso(),
-        updatedAt: nowIso(),
-      };
-    }
-
-    return {
-      id: server.id,
-      name: server.name,
-      transport: server.transport,
-      url: server.url,
-      headers: server.headers ? { ...server.headers } : undefined,
-      tools: [...server.tools],
-      timeoutMs: server.timeoutMs,
-      createdAt: nowIso(),
-      updatedAt: nowIso(),
-    };
+    return this.mcpProbeManager.discoveredServerToDefinition(server);
   }
 
   private pruneUnavailableSessionToolingSelections(workspace: WorkspaceState): boolean {
@@ -3808,34 +2782,21 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
   private resolveDiscoveredToolingStatus(
     resolution: DiscoveredToolingResolution,
   ): Exclude<DiscoveredToolingStatus, 'pending'> {
-    return resolution === 'accept' ? 'accepted' : 'dismissed';
+    return this.discoveredToolingSyncService.resolveDiscoveredToolingStatus(resolution);
   }
 
   private equalDiscoveredToolingState(
     left?: DiscoveredToolingState,
     right?: DiscoveredToolingState,
   ): boolean {
-    const stripRuntime = (servers: DiscoveredMcpServer[]) =>
-      servers.map(({ probedTools: _, ...rest }) => rest);
-    return JSON.stringify(stripRuntime(normalizeDiscoveredToolingState(left).mcpServers))
-      === JSON.stringify(stripRuntime(normalizeDiscoveredToolingState(right).mcpServers));
+    return this.discoveredToolingSyncService.equalDiscoveredToolingState(left, right);
   }
 
   private equalProjectCustomizationState(
     left?: ProjectCustomizationState,
     right?: ProjectCustomizationState,
   ): boolean {
-    const normalizedLeft = normalizeProjectCustomizationState(left);
-    const normalizedRight = normalizeProjectCustomizationState(right);
-    return JSON.stringify({
-      instructions: normalizedLeft.instructions,
-      agentProfiles: normalizedLeft.agentProfiles,
-      promptFiles: normalizedLeft.promptFiles,
-    }) === JSON.stringify({
-      instructions: normalizedRight.instructions,
-      agentProfiles: normalizedRight.agentProfiles,
-      promptFiles: normalizedRight.promptFiles,
-    });
+    return this.discoveredToolingSyncService.equalProjectCustomizationState(left, right);
   }
 
   private updateSessionRun(
@@ -3894,7 +2855,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
       }
 
       if (session.pendingUserInput) {
-        this.pendingUserInputHandles.delete(session.pendingUserInput.id);
+        this.approvalCoordinator.pendingUserInputHandles.delete(session.pendingUserInput.id);
         session.pendingUserInput = undefined;
       }
 
@@ -3912,13 +2873,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
   }
 
   private findApprovalRequestId(session: SessionRecord, approvalId: string): string | undefined {
-    const matchingRun = session.runs.find((run) =>
-      run.events.some((event) => event.kind === 'approval' && event.approvalId === approvalId));
-    if (matchingRun) {
-      return matchingRun.requestId;
-    }
-
-    return session.runs.find((run) => run.status === 'running')?.requestId;
+    return this.approvalCoordinator.findApprovalRequestId(session, approvalId);
   }
 
   private async loadSidecarCapabilities(forceRefresh = false): Promise<SidecarCapabilities> {

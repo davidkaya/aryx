@@ -183,7 +183,19 @@ function createService(
     runTurn?: (command: RunTurnCommand) => Promise<[]>;
   },
 ): InstanceType<typeof AryxAppService> {
-  const service = new AryxAppService();
+  const service = new AryxAppService({
+    gitService: {
+      captureWorkingTreeSnapshot: async (projectPath: string, scannedAt: string) => {
+        options?.onCaptureSnapshot?.(projectPath, scannedAt);
+        return options?.snapshot;
+      },
+      captureWorkingTreeBaseline: async () => [],
+      computeRunChangeSummary: async (projectPath: string) => {
+        options?.onComputeRunSummary?.(projectPath);
+        return options?.runSummary;
+      },
+    } as never,
+  });
   const internals = service as unknown as Record<string, unknown>;
   internals.loadWorkspace = async () => {
     internals.workspace = workspace;
@@ -216,32 +228,10 @@ function createService(
         computeRunChangeSummary: (projectPath: string) => Promise<ProjectGitRunChangeSummary | undefined>;
       };
     }
-  ).sidecar = {
+    ).sidecar = {
     runTurn: async (command) => options?.runTurn ? options.runTurn(command) : [],
     resolveApproval: async () => undefined,
     resolveUserInput: async () => undefined,
-  };
-  (
-    service as unknown as {
-      gitService: {
-        captureWorkingTreeSnapshot: (
-          projectPath: string,
-          scannedAt: string,
-        ) => Promise<ProjectGitWorkingTreeSnapshot | undefined>;
-        captureWorkingTreeBaseline: () => Promise<[]>;
-        computeRunChangeSummary: (projectPath: string) => Promise<ProjectGitRunChangeSummary | undefined>;
-      };
-    }
-  ).gitService = {
-    captureWorkingTreeSnapshot: async (projectPath, scannedAt) => {
-      options?.onCaptureSnapshot?.(projectPath, scannedAt);
-      return options?.snapshot;
-    },
-    captureWorkingTreeBaseline: async () => [],
-    computeRunChangeSummary: async (projectPath) => {
-      options?.onComputeRunSummary?.(projectPath);
-      return options?.runSummary;
-    },
   };
 
   return service;

@@ -1,5 +1,5 @@
 import { useMemo, type ReactNode } from 'react';
-import { Activity, AlertTriangle, ArrowRight, BarChart3, CheckCircle2, Clock, Cog, ShieldAlert, Sparkles, Users, Zap } from 'lucide-react';
+import { Activity, AlertTriangle, ArrowRight, BarChart3, CheckCircle2, Cog, ShieldAlert, Sparkles, Users, Zap } from 'lucide-react';
 
 import {
   buildAgentActivityRows,
@@ -15,10 +15,8 @@ import {
   type SessionRequestUsageState,
   type TurnEventLog,
 } from '@renderer/lib/sessionActivity';
-import { RunTimeline } from '@renderer/components/RunTimeline';
 import { inferProvider } from '@shared/domain/models';
 import { resolveWorkflowAgentNodes, type AgentNodeConfig, type WorkflowDefinition, type WorkflowOrchestrationMode } from '@shared/domain/workflow';
-import type { ProjectGitFileReference } from '@shared/domain/project';
 import type { SessionRecord } from '@shared/domain/session';
 import { ProviderIcon } from './ProviderIcons';
 
@@ -208,9 +206,6 @@ function formatTurnEventTimestamp(iso: string): string {
 
 interface ActivityPanelProps {
   activity?: SessionActivityState;
-  onJumpToMessage?: (messageId: string) => void;
-  onDiscard?: (sessionId: string, runId: string, files?: ProjectGitFileReference[]) => Promise<unknown>;
-  onOpenCommitComposer?: () => void;
   workflow: WorkflowDefinition;
   session: SessionRecord;
   sessionRequestUsage?: SessionRequestUsageState;
@@ -219,9 +214,6 @@ interface ActivityPanelProps {
 
 export function ActivityPanel({
   activity,
-  onJumpToMessage,
-  onDiscard,
-  onOpenCommitComposer,
   workflow,
   session,
   sessionRequestUsage,
@@ -345,27 +337,6 @@ export function ActivityPanel({
             </div>
           </div>
         )}
-
-        {/* ── Run timeline section ─────────────────────────── */}
-        <div className="mb-4">
-          <SectionHeader>
-            <Clock className="size-3" />
-            <span>Timeline</span>
-            {session.runs.length > 0 && (
-              <span className="font-mono rounded-full bg-[var(--color-surface-2)] px-1.5 py-0.5 text-[9px] tabular-nums text-[var(--color-text-muted)]">
-                {session.runs.length}
-              </span>
-            )}
-          </SectionHeader>
-
-          <RunTimeline
-            onDiscard={onDiscard}
-            onJumpToMessage={onJumpToMessage}
-            onOpenCommitComposer={onOpenCommitComposer}
-            runs={session.runs}
-            sessionId={session.id}
-          />
-        </div>
 
         {/* ── Turn events section ─────────────────────────── */}
         {turnEvents && turnEvents.length > 0 && (

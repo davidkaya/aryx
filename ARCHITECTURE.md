@@ -177,7 +177,7 @@ Each user turn becomes a **run**. A run is more than the final assistant output;
 - success or failure
 - optional git baselines and post-run change summaries for project-backed execution
 
-That run model is what enables the activity panel and historical timeline instead of forcing the user to infer execution from message text alone.
+That run model is what enables the inline turn activity panel instead of forcing the user to infer execution from message text alone.
 
 ## Communication model
 
@@ -309,7 +309,7 @@ This lets the application treat tooling as reusable workspace capability while s
 
 Project-backed sessions can carry repository context such as branch and dirty state, while scratchpad sessions omit git context but still support MCP, LSP, and runtime tooling. Scratchpad execution uses a per-session working directory instead of a single shared scratchpad folder, so file-based context and generated artifacts stay scoped to the active scratchpad session. Both session kinds share the same tooling selection and approval model. This keeps the architecture grounded in real codebases without forcing every conversation to be project-heavy, while still letting scratchpad sessions leverage configured tools when useful.
 
-For git-backed projects, the renderer surfaces three specialized components. `RunChangeSummaryCard` appears inline in the run timeline after each completed run, showing the files changed during that run with per-file diff previews, origin attribution (run-created vs. pre-existing), and selective discard actions. `CommitComposer` is a slide-over panel for staging files, editing an AI-suggested commit message, selecting a conventional commit type, and committing (with optional push). `GitPanel` is embedded in the tabbed bottom panel (alongside the terminal) and provides branch management, push/pull/fetch network operations, working-tree change inspection, and recent commit history. The bottom panel uses a shared resize handle and tab bar so the terminal and git views coexist without competing for screen real estate. All git write operations flow through IPC to the main process; the renderer never runs git commands directly.
+For git-backed projects, the renderer surfaces three specialized components. `RunChangeSummaryCard` appears inline in the turn activity panel after each completed run, showing the files changed during that run with per-file diff previews, origin attribution (run-created vs. pre-existing), and selective discard actions. `CommitComposer` is a slide-over panel for staging files, editing an AI-suggested commit message, selecting a conventional commit type, and committing (with optional push). `GitPanel` is embedded in the tabbed bottom panel (alongside the terminal) and provides branch management, push/pull/fetch network operations, working-tree change inspection, and recent commit history. The bottom panel uses a shared resize handle and tab bar so the terminal and git views coexist without competing for screen real estate. All git write operations flow through IPC to the main process; the renderer never runs git commands directly.
 
 ### Execution observability
 
@@ -318,7 +318,7 @@ The architecture treats execution as observable by design:
 - partial output is streamed
 - agent activity is surfaced
 - turn-scoped lifecycle events (sub-agent, hook, skill, compaction, usage) are streamed
-- runs are persisted as timeline history
+- runs are surfaced inline as collapsible turn activity panels
 - failures are represented explicitly
 
 This improves trust and debuggability, especially for multi-agent workflows.

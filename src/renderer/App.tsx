@@ -737,14 +737,13 @@ export default function App() {
           gitPanelOpen={bottomPanelOpen && bottomPanelTab === 'git'}
           gitDirty={gitDirty}
           toolingSettings={chatToolingSettings ?? workspace.settings.tooling}
+          onDiscardRunChanges={handleDiscardRunChanges}
+          onOpenCommitComposer={handleOpenCommitComposer}
         />
     );
     detailPanel = (
       <ActivityPanel
         activity={activityForSession}
-        onDiscard={handleDiscardRunChanges}
-        onJumpToMessage={jumpToMessage}
-        onOpenCommitComposer={handleOpenCommitComposer}
         workflow={workflowForSession}
         session={selectedSession}
         sessionRequestUsage={requestUsageForSession}

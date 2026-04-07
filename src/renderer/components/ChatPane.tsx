@@ -12,7 +12,7 @@ import { UserInputBanner } from '@renderer/components/chat/UserInputBanner';
 import { InlineApprovalPill, InlineGitPill, InlineModelPill, InlineTerminalPill, InlineThinkingPill, InlineToolsPill } from '@renderer/components/chat/InlinePills';
 import { InlinePromptPill, type ArmedPrompt } from '@renderer/components/chat/InlinePromptPill';
 import { ThinkingDots } from '@renderer/components/chat/ThinkingDots';
-import { ThinkingProcess } from '@renderer/components/chat/ThinkingProcess';
+import { TurnActivityPanel } from '@renderer/components/chat/TurnActivityPanel';
 import { SubagentActivityList } from '@renderer/components/chat/SubagentActivityCard';
 import { getAssistantMessagePhase } from '@renderer/lib/messagePhase';
 import type { ApprovalDecision } from '@shared/domain/approval';
@@ -29,8 +29,9 @@ import {
   type ModelDefinition,
 } from '@shared/domain/models';
 import { resolveWorkflowAgentNodes, type AgentNodeConfig, type ReasoningEffort, type WorkflowDefinition } from '@shared/domain/workflow';
-import { isScratchpadProject, type ProjectRecord } from '@shared/domain/project';
+import { isScratchpadProject, type ProjectGitFileReference, type ProjectRecord } from '@shared/domain/project';
 import { resolveSessionToolingSelection, type ChatMessageRecord, type SessionBranchOriginAction, type SessionRecord } from '@shared/domain/session';
+import type { SessionRunRecord } from '@shared/domain/runTimeline';
 import type { ProjectPromptInvocation } from '@shared/domain/projectCustomization';
 import {
   countApprovedToolsInGroups,
@@ -45,7 +46,7 @@ import {
 
 type DisplayItem =
   | { type: 'message'; message: ChatMessageRecord }
-  | { type: 'thinking-group'; messages: ChatMessageRecord[]; turnStartedAt?: string };
+  | { type: 'turn-activity'; thinkingMessages: ChatMessageRecord[]; run?: SessionRunRecord; turnStartedAt?: string };
 
 interface ChatPaneProps {
   project: ProjectRecord;
@@ -82,6 +83,8 @@ interface ChatPaneProps {
   onPinMessage?: (messageId: string, isPinned: boolean) => void;
   onRegenerateMessage?: (messageId: string) => void;
   onEditAndResendMessage?: (messageId: string, content: string) => void;
+  onDiscardRunChanges?: (sessionId: string, runId: string, files?: ProjectGitFileReference[]) => Promise<unknown>;
+  onOpenCommitComposer?: () => void;
   branchOriginLabel?: string;
 }
 
@@ -117,6 +120,8 @@ export function ChatPane({
   onPinMessage,
   onRegenerateMessage,
   onEditAndResendMessage,
+  onDiscardRunChanges,
+  onOpenCommitComposer,
   branchOriginLabel,
 }: ChatPaneProps) {
   const [hasComposerContent, setHasComposerContent] = useState(false);
@@ -168,7 +173,7 @@ export function ChatPane({
 
       if (pendingThinking.length > 0) {
         const run = lastUserMessageId ? runsByTrigger.get(lastUserMessageId) : undefined;
-        items.push({ type: 'thinking-group', messages: pendingThinking, turnStartedAt: run?.startedAt });
+        items.push({ type: 'turn-activity', thinkingMessages: pendingThinking, run, turnStartedAt: run?.startedAt });
         pendingThinking = [];
       }
       items.push({ type: 'message', message });
@@ -179,30 +184,31 @@ export function ChatPane({
 
     if (pendingThinking.length > 0) {
       const run = lastUserMessageId ? runsByTrigger.get(lastUserMessageId) : undefined;
-      items.push({ type: 'thinking-group', messages: pendingThinking, turnStartedAt: run?.startedAt });
+      items.push({ type: 'turn-activity', thinkingMessages: pendingThinking, run, turnStartedAt: run?.startedAt });
     }
 
     return items;
   }, [session.messages, session.runs, session.status]);
 
-  const lastThinkingGroupIndex = useMemo(() => {
+  const lastTurnActivityIndex = useMemo(() => {
     for (let i = displayItems.length - 1; i >= 0; i--) {
-      if (displayItems[i].type === 'thinking-group') return i;
+      if (displayItems[i].type === 'turn-activity') return i;
     }
     return -1;
   }, [displayItems]);
 
-  // A thinking group is active when the session is running AND the group
-  // contains at least one pending message (currently streaming). This is
-  // more robust than relying purely on array position, which can be stale
-  // during reclassification gaps.
-  const isThinkingGroupActive = useCallback(
-    (group: { messages: ChatMessageRecord[] }, groupIndex: number): boolean => {
+  // A turn activity panel is active when the session is running AND the
+  // group contains at least one pending message (currently streaming) or
+  // the associated run is still running.
+  const isTurnActive = useCallback(
+    (item: DisplayItem & { type: 'turn-activity' }, itemIndex: number): boolean => {
       if (!isSessionBusy) return false;
-      if (groupIndex !== lastThinkingGroupIndex) return false;
-      return group.messages.some((m) => m.pending);
+      if (itemIndex !== lastTurnActivityIndex) return false;
+      const hasStreamingMessage = item.thinkingMessages.some((m) => m.pending);
+      const runStillRunning = item.run?.status === 'running';
+      return hasStreamingMessage || !!runStillRunning;
     },
-    [isSessionBusy, lastThinkingGroupIndex],
+    [isSessionBusy, lastTurnActivityIndex],
   );
 
   const lastAssistantId = useMemo(() => {
@@ -518,13 +524,17 @@ export function ChatPane({
             )}
             <div className="space-y-1">
               {displayItems.map((item, itemIndex) => {
-                if (item.type === 'thinking-group') {
+                if (item.type === 'turn-activity') {
                   return (
-                    <div key={`thinking-${item.messages[0].id}`} className="py-2">
-                      <ThinkingProcess
-                        messages={item.messages}
-                        isActive={isThinkingGroupActive(item, itemIndex)}
+                    <div key={`activity-${item.thinkingMessages[0]?.id ?? item.run?.id ?? itemIndex}`} className="py-2">
+                      <TurnActivityPanel
+                        thinkingMessages={item.thinkingMessages}
+                        run={item.run}
+                        isActive={isTurnActive(item, itemIndex)}
                         turnStartedAt={item.turnStartedAt}
+                        sessionId={session.id}
+                        onDiscard={onDiscardRunChanges}
+                        onOpenCommitComposer={onOpenCommitComposer}
                       />
                     </div>
                   );

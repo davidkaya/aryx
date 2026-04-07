@@ -639,17 +639,28 @@ body {
   animation: update-banner-in 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* ── Thinking process section ────────────────────────────────── */
+/* ── Turn activity panel ─────────────────────────────────────── */
 
-@keyframes thinking-process-in {
+@keyframes turn-activity-in {
   from {
     opacity: 0;
     transform: translateY(-4px);
   }
 }
 
-.thinking-process-enter {
-  animation: thinking-process-in 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+.turn-activity-enter {
+  animation: turn-activity-in 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes turn-activity-row-in {
+  from {
+    opacity: 0;
+    transform: translateX(-6px);
+  }
+}
+
+.turn-activity-row {
+  animation: turn-activity-row-in 0.15s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 /* ── Respect reduced motion ──────────────────────────────────── */
@@ -665,7 +676,8 @@ body {
   .session-item-enter,
   .banner-slide-enter,
   .update-banner-enter,
-  .thinking-process-enter {
+  .turn-activity-enter,
+  .turn-activity-row {
     animation: none;
   }
 }

@@ -12,6 +12,8 @@ internal static class WorkflowRequestInfoInterpreter
     private const string ToolCallingActivityType = "tool-calling";
     private const string CodeInterpreterToolName = "code interpreter";
     private const string ImageGenerationToolName = "image generation";
+    private const int MaxToolArgumentValueLength = 4000;
+    private const string TruncatedToolArgumentValue = "[truncated]";
     private static readonly JsonSerializerOptions JsonOptions = JsonSerialization.CreateWebOptions();
 
     public static AgentActivityEventDto? TryCreateActivityFromRequest(
@@ -80,6 +82,7 @@ internal static class WorkflowRequestInfoInterpreter
             AgentName = activeAgent.AgentName,
             ToolName = tool.ToolName,
             ToolCallId = tool.ToolCallId,
+            ToolArguments = tool.ToolArguments,
         };
     }
 
@@ -103,8 +106,8 @@ internal static class WorkflowRequestInfoInterpreter
             return new HandoffRequestInterpretation(handoffAgent);
         }
 
-        return TryGetToolRequestInfo(requestInfo, out string toolName, out string? toolCallId)
-            ? new ToolRequestInterpretation(toolName, toolCallId)
+        return TryGetToolRequestInfo(requestInfo, out string toolName, out string? toolCallId, out IReadOnlyDictionary<string, object?>? toolArguments)
+            ? new ToolRequestInterpretation(toolName, toolCallId, toolArguments)
             : new UnknownRequestInterpretation();
     }
 
@@ -137,33 +140,38 @@ internal static class WorkflowRequestInfoInterpreter
     private static bool TryGetToolRequestInfo(
         RequestInfoEvent requestInfo,
         out string toolName,
-        out string? toolCallId)
+        out string? toolCallId,
+        out IReadOnlyDictionary<string, object?>? toolArguments)
     {
-        return TryGetStableToolRequestInfo(requestInfo.Request.Data, out toolName, out toolCallId)
-            || TryGetEvaluationToolRequestInfo(requestInfo.Request.Data, out toolName, out toolCallId);
+        return TryGetStableToolRequestInfo(requestInfo.Request.Data, out toolName, out toolCallId, out toolArguments)
+            || TryGetEvaluationToolRequestInfo(requestInfo.Request.Data, out toolName, out toolCallId, out toolArguments);
     }
 
     private static bool TryGetStableToolRequestInfo(
         PortableValue requestData,
         out string toolName,
-        out string? toolCallId)
+        out string? toolCallId,
+        out IReadOnlyDictionary<string, object?>? toolArguments)
     {
         if (requestData.Is<FunctionCallContent>(out FunctionCallContent? functionCall))
         {
             toolName = NormalizeOptionalString(functionCall.Name) ?? "function";
             toolCallId = NormalizeOptionalString(functionCall.CallId);
+            toolArguments = NormalizeToolArguments(functionCall.Arguments);
             return true;
         }
 
         toolName = string.Empty;
         toolCallId = null;
+        toolArguments = null;
         return false;
     }
 
     private static bool TryGetEvaluationToolRequestInfo(
         PortableValue requestData,
         out string toolName,
-        out string? toolCallId)
+        out string? toolCallId,
+        out IReadOnlyDictionary<string, object?>? toolArguments)
     {
         if (requestData.Is<McpServerToolCallContent>(out McpServerToolCallContent? mcpToolCall))
         {
@@ -171,6 +179,7 @@ internal static class WorkflowRequestInfoInterpreter
                 ?? NormalizeOptionalString(mcpToolCall.ServerName)
                 ?? string.Empty;
             toolCallId = NormalizeOptionalString(mcpToolCall.CallId);
+            toolArguments = NormalizeToolArguments(mcpToolCall.Arguments);
             return toolName.Length > 0;
         }
 
@@ -178,6 +187,7 @@ internal static class WorkflowRequestInfoInterpreter
         {
             toolName = CodeInterpreterToolName;
             toolCallId = NormalizeOptionalString(codeInterpreterToolCall.CallId);
+            toolArguments = NormalizeCodeInterpreterToolArguments(codeInterpreterToolCall);
             return true;
         }
 
@@ -185,12 +195,194 @@ internal static class WorkflowRequestInfoInterpreter
         {
             toolName = ImageGenerationToolName;
             toolCallId = null;
+            toolArguments = null;
             return true;
         }
 
         toolName = string.Empty;
         toolCallId = null;
+        toolArguments = null;
         return false;
+    }
+
+    private static IReadOnlyDictionary<string, object?>? NormalizeToolArguments(
+        IEnumerable<KeyValuePair<string, object?>>? arguments)
+    {
+        if (arguments is null)
+        {
+            return null;
+        }
+
+        Dictionary<string, object?> normalized = new(StringComparer.Ordinal);
+        foreach (KeyValuePair<string, object?> argument in arguments)
+        {
+            string? key = NormalizeOptionalString(argument.Key);
+            if (key is null)
+            {
+                continue;
+            }
+
+            object? value = NormalizeToolArgumentValue(argument.Value);
+            if (value is null)
+            {
+                continue;
+            }
+
+            normalized[key] = value;
+        }
+
+        return normalized.Count > 0 ? normalized : null;
+    }
+
+    private static IReadOnlyDictionary<string, object?>? NormalizeCodeInterpreterToolArguments(
+        CodeInterpreterToolCallContent codeInterpreterToolCall)
+    {
+        IList<AIContent>? rawInputs = codeInterpreterToolCall.Inputs;
+        if (rawInputs is not { Count: > 0 })
+        {
+            return null;
+        }
+
+        List<object?> inputs = [];
+        foreach (AIContent input in rawInputs)
+        {
+            object? normalized = input switch
+            {
+                TextContent text => NormalizeToolArgumentValue(text.Text),
+                _ => BuildAiContentFallbackValue(input),
+            };
+
+            if (normalized is not null)
+            {
+                inputs.Add(normalized);
+            }
+        }
+
+        return inputs.Count > 0
+            ? new Dictionary<string, object?>(StringComparer.Ordinal)
+            {
+                ["inputs"] = inputs,
+            }
+            : null;
+    }
+
+    private static object? NormalizeToolArgumentValue(object? value)
+    {
+        return value switch
+        {
+            null => null,
+            string text => NormalizeToolArgumentText(text),
+            JsonElement element => NormalizeToolArgumentElement(element),
+            bool boolean => boolean,
+            byte number => number,
+            sbyte number => number,
+            short number => number,
+            ushort number => number,
+            int number => number,
+            uint number => number,
+            long number => number,
+            ulong number => number,
+            float number => number,
+            double number => number,
+            decimal number => number,
+            AIContent content => BuildAiContentFallbackValue(content),
+            IEnumerable<KeyValuePair<string, object?>> dictionary => NormalizeToolArguments(dictionary),
+            IEnumerable<object?> sequence => NormalizeToolArgumentSequence(sequence),
+            _ => NormalizeUnknownToolArgumentValue(value),
+        };
+    }
+
+    private static object? NormalizeToolArgumentElement(JsonElement element)
+    {
+        return element.ValueKind switch
+        {
+            JsonValueKind.Null or JsonValueKind.Undefined => null,
+            JsonValueKind.String => NormalizeToolArgumentText(element.GetString()),
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            JsonValueKind.Number => element.Deserialize<object?>(JsonOptions),
+            JsonValueKind.Object => NormalizeToolArgumentObject(element),
+            JsonValueKind.Array => NormalizeToolArgumentArray(element),
+            _ => NormalizeToolArgumentText(element.GetRawText()),
+        };
+    }
+
+    private static IReadOnlyDictionary<string, object?>? NormalizeToolArgumentObject(JsonElement element)
+    {
+        Dictionary<string, object?> normalized = new(StringComparer.Ordinal);
+        foreach (JsonProperty property in element.EnumerateObject())
+        {
+            string? key = NormalizeOptionalString(property.Name);
+            if (key is null)
+            {
+                continue;
+            }
+
+            object? value = NormalizeToolArgumentElement(property.Value);
+            if (value is not null)
+            {
+                normalized[key] = value;
+            }
+        }
+
+        return normalized.Count > 0 ? normalized : null;
+    }
+
+    private static IReadOnlyList<object?>? NormalizeToolArgumentArray(JsonElement element)
+    {
+        List<object?> normalized = [];
+        foreach (JsonElement item in element.EnumerateArray())
+        {
+            object? value = NormalizeToolArgumentElement(item);
+            if (value is not null)
+            {
+                normalized.Add(value);
+            }
+        }
+
+        return normalized.Count > 0 ? normalized : null;
+    }
+
+    private static IReadOnlyList<object?>? NormalizeToolArgumentSequence(IEnumerable<object?> sequence)
+    {
+        List<object?> normalized = [];
+        foreach (object? item in sequence)
+        {
+            object? value = NormalizeToolArgumentValue(item);
+            if (value is not null)
+            {
+                normalized.Add(value);
+            }
+        }
+
+        return normalized.Count > 0 ? normalized : null;
+    }
+
+    private static object? NormalizeUnknownToolArgumentValue(object value)
+    {
+        string json = JsonSerializer.Serialize(value, value.GetType(), JsonOptions);
+        using JsonDocument document = JsonDocument.Parse(json);
+        return NormalizeToolArgumentElement(document.RootElement);
+    }
+
+    private static IReadOnlyDictionary<string, object?> BuildAiContentFallbackValue(AIContent content)
+    {
+        return new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["type"] = content.GetType().Name,
+        };
+    }
+
+    private static string? NormalizeToolArgumentText(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        return value.Length > MaxToolArgumentValueLength
+            ? TruncatedToolArgumentValue
+            : value;
     }
 
     private static string? NormalizeOptionalString(string? value)
@@ -208,7 +400,10 @@ internal static class WorkflowRequestInfoInterpreter
 
     private sealed record HandoffRequestInterpretation(AgentIdentity TargetAgent) : RequestInterpretation;
 
-    private sealed record ToolRequestInterpretation(string ToolName, string? ToolCallId) : RequestInterpretation;
+    private sealed record ToolRequestInterpretation(
+        string ToolName,
+        string? ToolCallId,
+        IReadOnlyDictionary<string, object?>? ToolArguments) : RequestInterpretation;
 
     private sealed record UnknownRequestInterpretation : RequestInterpretation;
 }

@@ -166,21 +166,21 @@ function clearActiveSessionActivity(
     return current;
   }
 
+  // Transition active entries to 'completed' instead of removing them.
+  // The UI layer uses a grace timer to eventually clear these.
   let changed = false;
   const nextSessionActivity = Object.fromEntries(
-    Object.entries(sessionActivity).filter(([, activity]) => {
-      const keep = !isAgentActivityActive(activity);
-      changed ||= !keep;
-      return keep;
+    Object.entries(sessionActivity).map(([key, activity]) => {
+      if (isAgentActivityActive(activity)) {
+        changed = true;
+        return [key, { ...activity, activityType: 'completed' as const }];
+      }
+      return [key, activity];
     }),
   );
 
   if (!changed) {
     return current;
-  }
-
-  if (Object.keys(nextSessionActivity).length === 0) {
-    return removeSessionActivity(current, sessionId);
   }
 
   return {
@@ -465,6 +465,60 @@ export function pruneSessionRequestUsage(
 }
 
 /* ── Formatting helpers ─────────────────────────────────────── */
+
+/**
+ * Remove all completed activity entries for a session.
+ * Called after the UI grace period to finish clearing stale labels.
+ */
+export function purgeCompletedActivity(
+  current: SessionActivityMap,
+  sessionId: string,
+): SessionActivityMap {
+  const sessionActivity = current[sessionId];
+  if (!sessionActivity) return current;
+
+  const nextSessionActivity = Object.fromEntries(
+    Object.entries(sessionActivity).filter(([, a]) => !isAgentActivityCompleted(a)),
+  );
+
+  if (Object.keys(nextSessionActivity).length === Object.keys(sessionActivity).length) {
+    return current;
+  }
+
+  if (Object.keys(nextSessionActivity).length === 0) {
+    return removeSessionActivity(current, sessionId);
+  }
+
+  return { ...current, [sessionId]: nextSessionActivity };
+}
+
+/**
+ * Returns a single summary label for the most relevant activity in a session.
+ * Prefers active states (thinking → tool-calling → handoff) over completed.
+ */
+export function summarizeSessionActivity(
+  sessionActivity: SessionActivityState | undefined,
+): string | undefined {
+  if (!sessionActivity) return undefined;
+
+  const entries = Object.values(sessionActivity);
+  if (entries.length === 0) return undefined;
+
+  // Prefer the first active entry by priority
+  const active = entries.find((a) => a.activityType === 'thinking')
+    ?? entries.find((a) => a.activityType === 'tool-calling')
+    ?? entries.find((a) => a.activityType === 'handoff');
+
+  if (active) {
+    return formatAgentActivityLabel(active);
+  }
+
+  // If everything is completed, show that
+  const completed = entries.find((a) => a.activityType === 'completed');
+  if (completed) return 'Completed';
+
+  return undefined;
+}
 
 export function formatTokenCount(tokens: number): string {
   if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(1)}M`;

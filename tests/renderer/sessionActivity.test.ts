@@ -13,6 +13,8 @@ import {
   isAgentActivityCompleted,
   pruneSessionActivities,
   pruneSessionRequestUsage,
+  purgeCompletedActivity,
+  summarizeSessionActivity,
   type SessionActivityMap,
   type SessionRequestUsageMap,
 } from '@renderer/lib/sessionActivity';
@@ -202,6 +204,7 @@ describe('session activity helpers', () => {
       },
     };
 
+    // Active agents transition to 'completed' on idle (grace period before purge)
     expect(
       applySessionEventActivity(current, {
         sessionId: 'session-1',
@@ -214,6 +217,11 @@ describe('session activity helpers', () => {
         architect: {
           agentId: 'architect',
           agentName: 'Architect',
+          activityType: 'completed',
+        },
+        reviewer: {
+          agentId: 'reviewer',
+          agentName: 'Reviewer',
           activityType: 'completed',
         },
       },
@@ -236,6 +244,7 @@ describe('session activity helpers', () => {
       },
     };
 
+    // Active agents transition to 'completed' on cancel (grace period before purge)
     expect(
       applySessionEventActivity(current, {
         sessionId: 'session-1',
@@ -263,6 +272,11 @@ describe('session activity helpers', () => {
         architect: {
           agentId: 'architect',
           agentName: 'Architect',
+          activityType: 'completed',
+        },
+        reviewer: {
+          agentId: 'reviewer',
+          agentName: 'Reviewer',
           activityType: 'completed',
         },
       },
@@ -384,6 +398,92 @@ describe('session activity helpers', () => {
     expect(pruneSessionActivities(current, ['session-2'])).toEqual({
       'session-2': current['session-2'],
     });
+  });
+
+  test('purgeCompletedActivity removes completed entries after grace period', () => {
+    const current: SessionActivityMap = {
+      'session-1': {
+        architect: {
+          agentId: 'architect',
+          agentName: 'Architect',
+          activityType: 'completed',
+        },
+        reviewer: {
+          agentId: 'reviewer',
+          agentName: 'Reviewer',
+          activityType: 'completed',
+        },
+      },
+    };
+
+    const result = purgeCompletedActivity(current, 'session-1');
+    expect(result['session-1']).toBeUndefined();
+  });
+
+  test('purgeCompletedActivity is a no-op when nothing is completed', () => {
+    const current: SessionActivityMap = {
+      'session-1': {
+        architect: {
+          agentId: 'architect',
+          agentName: 'Architect',
+          activityType: 'thinking',
+        },
+      },
+    };
+    expect(purgeCompletedActivity(current, 'session-1')).toBe(current);
+  });
+
+  test('summarizeSessionActivity returns the most relevant label', () => {
+    expect(summarizeSessionActivity(undefined)).toBeUndefined();
+    expect(summarizeSessionActivity({})).toBeUndefined();
+
+    expect(
+      summarizeSessionActivity({
+        architect: {
+          agentId: 'architect',
+          agentName: 'Architect',
+          activityType: 'thinking',
+        },
+      }),
+    ).toBe('Thinking…');
+
+    expect(
+      summarizeSessionActivity({
+        architect: {
+          agentId: 'architect',
+          agentName: 'Architect',
+          activityType: 'tool-calling',
+          toolName: 'bash',
+        },
+      }),
+    ).toBe('Using bash…');
+
+    // Thinking takes priority over tool-calling
+    expect(
+      summarizeSessionActivity({
+        architect: {
+          agentId: 'architect',
+          agentName: 'Architect',
+          activityType: 'thinking',
+        },
+        reviewer: {
+          agentId: 'reviewer',
+          agentName: 'Reviewer',
+          activityType: 'tool-calling',
+          toolName: 'read_file',
+        },
+      }),
+    ).toBe('Thinking…');
+
+    expect(
+      summarizeSessionActivity({
+        architect: {
+          agentId: 'architect',
+          agentName: 'Architect',
+          activityType: 'completed',
+        },
+      }),
+    ).toBe('Completed');
   });
 });
 

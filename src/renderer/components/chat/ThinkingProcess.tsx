@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Brain, ChevronDown, ChevronRight } from 'lucide-react';
 
+import { useElapsedTimer } from '@renderer/hooks/useElapsedTimer';
 import type { ChatMessageRecord } from '@shared/domain/session';
 
 interface ThinkingProcessProps {
@@ -26,24 +27,22 @@ export function ThinkingProcess({ messages, isActive, turnStartedAt }: ThinkingP
 
   const toggle = useCallback(() => setExpanded((prev) => !prev), []);
 
-  const elapsed = useMemo(() => {
-    if (!turnStartedAt || messages.length === 0) return undefined;
-    const start = new Date(turnStartedAt).getTime();
-    const lastMessage = messages[messages.length - 1];
-    const end = isActive ? Date.now() : new Date(lastMessage.createdAt).getTime();
-    const seconds = Math.max(0, Math.round((end - start) / 1000));
-    if (seconds < 2) return undefined;
-    return seconds >= 60 ? `${Math.floor(seconds / 60)}m ${seconds % 60}s` : `${seconds}s`;
-  }, [turnStartedAt, messages, isActive]);
+  const elapsed = useElapsedTimer(
+    messages.length > 0 ? turnStartedAt : undefined,
+    isActive,
+  );
 
   if (messages.length === 0) {
     return null;
   }
 
-  const stepCount = messages.length;
+  // Don't count empty pending messages (optimistically folded in) toward step count
+  const stepCount = messages.filter((m) => m.content).length;
   const summaryParts: string[] = [];
   if (elapsed) summaryParts.push(`${elapsed}`);
-  summaryParts.push(`${stepCount} ${stepCount === 1 ? 'step' : 'steps'}`);
+  if (stepCount > 0) {
+    summaryParts.push(`${stepCount} ${stepCount === 1 ? 'step' : 'steps'}`);
+  }
 
   return (
     <div className="thinking-process-enter mb-2 overflow-hidden rounded-lg border border-[var(--color-border)]/50 bg-[var(--color-surface-1)]/60">
@@ -86,6 +85,11 @@ export function ThinkingProcess({ messages, isActive, turnStartedAt }: ThinkingP
 
 function ThinkingStep({ message }: { message: ChatMessageRecord }) {
   const preview = useMemo(() => truncatePreview(message.content, 180), [message.content]);
+
+  // Pending message folded into thinking group with no content yet
+  if (message.pending && !message.content) {
+    return null;
+  }
 
   return (
     <div className="flex gap-2 text-[12px] leading-relaxed">

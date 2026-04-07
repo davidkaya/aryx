@@ -742,57 +742,6 @@ function WorkflowSettingsPanel({
           </button>
         </div>
 
-        {/* Telemetry */}
-        <div className="col-span-2 flex items-center justify-between rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-1)] px-4 py-3">
-          <div>
-            <div className="text-[13px] font-medium text-[var(--color-text-primary)]">OpenTelemetry</div>
-            <p className="text-[12px] text-[var(--color-text-muted)]">Export telemetry data via OpenTelemetry</p>
-          </div>
-          <button
-            className="cursor-pointer"
-            onClick={() =>
-              onChange({
-                ...workflow,
-                settings: {
-                  ...workflow.settings,
-                  telemetry: {
-                    ...workflow.settings.telemetry,
-                    openTelemetry: !workflow.settings.telemetry?.openTelemetry,
-                  },
-                },
-              })
-            }
-            type="button"
-          >
-            <ToggleSwitch enabled={workflow.settings.telemetry?.openTelemetry === true} />
-          </button>
-        </div>
-
-        <div className="col-span-2 flex items-center justify-between rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-1)] px-4 py-3">
-          <div>
-            <div className="text-[13px] font-medium text-[var(--color-text-primary)]">Filter Sensitive Data</div>
-            <p className="text-[12px] text-[var(--color-text-muted)]">Redact sensitive information from telemetry</p>
-          </div>
-          <button
-            className="cursor-pointer"
-            onClick={() =>
-              onChange({
-                ...workflow,
-                settings: {
-                  ...workflow.settings,
-                  telemetry: {
-                    ...workflow.settings.telemetry,
-                    sensitiveData: !workflow.settings.telemetry?.sensitiveData,
-                  },
-                },
-              })
-            }
-            type="button"
-          >
-            <ToggleSwitch enabled={workflow.settings.telemetry?.sensitiveData === true} />
-          </button>
-        </div>
-
         {/* State Scopes */}
         <div className="col-span-2 space-y-3">
           <div className="flex items-center justify-between">

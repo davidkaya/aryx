@@ -442,7 +442,7 @@ export function normalizeWorkflowDefinition(workflow: WorkflowDefinition): Workf
       ? Math.round(workflow.settings.maxIterations)
       : undefined;
 
-  return {
+  const normalized: WorkflowDefinition = {
     ...workflow,
     name: workflow.name.trim(),
     description: workflow.description.trim(),
@@ -496,6 +496,8 @@ export function normalizeWorkflowDefinition(workflow: WorkflowDefinition): Workf
         : undefined,
     },
   };
+
+  return syncBuilderModeEdgeIterations(normalized);
 }
 
 export function resolveWorkflowAgentNodes(workflow: WorkflowDefinition): WorkflowNode[] {
@@ -824,11 +826,23 @@ function prepareScaffoldAgentNodes(
   return agents;
 }
 
+export interface ScaffoldGraphOptions {
+  agentNodes?: WorkflowNode[];
+  settings?: WorkflowSettings;
+}
+
+const defaultHandoffLoopIterations = 4;
+const defaultGroupChatLoopIterations = 5;
+
 export function scaffoldGraphForMode(
   mode: WorkflowOrchestrationMode,
-  agentNodes?: WorkflowNode[],
+  agentNodesOrOptions?: WorkflowNode[] | ScaffoldGraphOptions,
 ): WorkflowGraph {
-  const preparedAgents = prepareScaffoldAgentNodes(mode, agentNodes);
+  const options: ScaffoldGraphOptions = Array.isArray(agentNodesOrOptions)
+    ? { agentNodes: agentNodesOrOptions }
+    : (agentNodesOrOptions ?? {});
+
+  const preparedAgents = prepareScaffoldAgentNodes(mode, options.agentNodes);
 
   if (mode === 'single') {
     const agent = cloneAgentNode(preparedAgents[0]!, 0, { x: 220, y: 0 });
@@ -874,6 +888,7 @@ export function scaffoldGraphForMode(
   }
 
   if (mode === 'handoff') {
+    const loopIterations = options.settings?.maxIterations ?? defaultHandoffLoopIterations;
     const triage = cloneAgentNode(preparedAgents[0]!, 0, { x: 240, y: 120 });
     const specialists = preparedAgents.slice(1).map((node, index) =>
       cloneAgentNode(node, index + 1, { x: 520, y: index * 240 }));
@@ -885,12 +900,12 @@ export function scaffoldGraphForMode(
         createWorkflowEdge(`edge-${triage.id}-to-end`, triage.id, 'end'),
         ...specialists.map((specialist) => createWorkflowEdge(`edge-${triage.id}-to-${specialist.id}`, triage.id, specialist.id, 'direct', {
           isLoop: true,
-          maxIterations: 4,
+          maxIterations: loopIterations,
           condition: { type: 'always' },
         })),
         ...specialists.map((specialist) => createWorkflowEdge(`edge-${specialist.id}-to-${triage.id}`, specialist.id, triage.id, 'direct', {
           isLoop: true,
-          maxIterations: 4,
+          maxIterations: loopIterations,
           condition: { type: 'always' },
         })),
         ...specialists.map((specialist) => createWorkflowEdge(`edge-${specialist.id}-to-end`, specialist.id, 'end')),
@@ -898,6 +913,9 @@ export function scaffoldGraphForMode(
     };
   }
 
+  const loopIterations = options.settings?.modeSettings?.groupChat?.maxRounds
+    ?? options.settings?.maxIterations
+    ?? defaultGroupChatLoopIterations;
   const agents = preparedAgents.map((node, index) => cloneAgentNode(node, index, { x: 240 + (index * 240), y: 0 }));
   return {
     nodes: [createStartNode(0, 0), ...agents, createEndNode(240 + (agents.length * 240), 0)],
@@ -910,7 +928,7 @@ export function scaffoldGraphForMode(
         'direct',
         {
           isLoop: true,
-          maxIterations: 5,
+          maxIterations: loopIterations,
           condition: { type: 'always' },
         },
       )),
@@ -921,13 +939,46 @@ export function scaffoldGraphForMode(
         'direct',
         {
           isLoop: true,
-          maxIterations: 5,
+          maxIterations: loopIterations,
           condition: { type: 'always' },
           label: 'Loop',
         },
       ),
       createWorkflowEdge(`edge-${agents[agents.length - 1]!.id}-to-end`, agents[agents.length - 1]!.id, 'end'),
     ],
+  };
+}
+
+/**
+ * For builder-based modes (handoff, group-chat), synchronize loop edge maxIterations
+ * with the authoritative mode settings. The backend ignores edge maxIterations for these
+ * modes, so the edges are visual only and should reflect the actual runtime limit.
+ */
+export function syncBuilderModeEdgeIterations(workflow: WorkflowDefinition): WorkflowDefinition {
+  const mode = workflow.settings.orchestrationMode;
+  if (!isBuilderBasedMode(mode)) {
+    return workflow;
+  }
+
+  const loopIterations = mode === 'group-chat'
+    ? (workflow.settings.modeSettings?.groupChat?.maxRounds ?? workflow.settings.maxIterations ?? defaultGroupChatLoopIterations)
+    : (workflow.settings.maxIterations ?? defaultHandoffLoopIterations);
+
+  const hasStaleEdge = workflow.graph.edges.some(
+    (edge) => edge.isLoop && edge.maxIterations !== loopIterations,
+  );
+  if (!hasStaleEdge) {
+    return workflow;
+  }
+
+  return {
+    ...workflow,
+    graph: {
+      ...workflow.graph,
+      edges: workflow.graph.edges.map((edge) =>
+        edge.isLoop ? { ...edge, maxIterations: loopIterations } : edge,
+      ),
+    },
   };
 }
 

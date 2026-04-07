@@ -13,9 +13,11 @@ import type {
   WorkflowEdge,
   WorkflowNode,
   WorkflowNodeConfig,
+  WorkflowOrchestrationMode,
   WorkflowValidationIssue,
   AgentNodeConfig,
 } from '@shared/domain/workflow';
+import { isBuilderBasedMode } from '@shared/domain/workflow';
 import { ModelSelect, ReasoningEffortSelect } from '@renderer/components/AgentConfigFields';
 import { InvokeFunctionInspector } from '@renderer/components/workflow/InvokeFunctionInspector';
 import { ConditionEditor } from '@renderer/components/workflow/ConditionEditor';
@@ -251,16 +253,19 @@ function PlaceholderNodeInspector({
 
 function EdgeInspector({
   edge,
+  orchestrationMode,
   validationIssues,
   onEdgeChange,
   onEdgeRemove,
 }: {
   edge: WorkflowEdge;
+  orchestrationMode?: WorkflowOrchestrationMode;
   validationIssues?: WorkflowValidationIssue[];
   onEdgeChange: (edgeId: string, patch: Partial<WorkflowEdge>) => void;
   onEdgeRemove: (edgeId: string) => void;
 }) {
   const isFanIn = edge.kind === 'fan-in';
+  const builderMode = isBuilderBasedMode(orchestrationMode);
   const edgeIssues = validationIssues?.filter((i) => i.edgeId === edge.id) ?? [];
 
   const handleConditionChange = useCallback(
@@ -310,6 +315,7 @@ function EdgeInspector({
             <input
               checked={edge.isLoop === true}
               className="size-4 accent-[var(--color-accent)]"
+              disabled={builderMode}
               onChange={(e) => {
                 if (e.target.checked) {
                   onEdgeChange(edge.id, { isLoop: true, maxIterations: edge.maxIterations ?? 10 });
@@ -321,14 +327,17 @@ function EdgeInspector({
             />
           </label>
           <p className="text-[11px] leading-relaxed text-[var(--color-text-muted)]">
-            Creates an iterative cycle, re-executing the path between these nodes up to a set limit.
+            {builderMode
+              ? 'Loop edges are managed by the orchestration mode settings.'
+              : 'Creates an iterative cycle, re-executing the path between these nodes up to a set limit.'}
           </p>
         </div>
         {edge.isLoop && (
           <label className="block space-y-1.5">
             <span className="text-[11px] text-[var(--color-text-muted)]">Max Iterations</span>
             <input
-              className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-1)] px-3 py-1.5 text-[12px] text-[var(--color-text-primary)] outline-none transition focus:border-[var(--color-accent)]/50"
+              className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-1)] px-3 py-1.5 text-[12px] text-[var(--color-text-primary)] outline-none transition focus:border-[var(--color-accent)]/50 disabled:opacity-60"
+              disabled={builderMode}
               min={1}
               onChange={(e) => {
                 const raw = parseInt(e.target.value, 10);
@@ -339,6 +348,11 @@ function EdgeInspector({
               type="number"
               value={edge.maxIterations ?? 10}
             />
+            {builderMode && (
+              <p className="text-[11px] text-[var(--color-text-muted)]">
+                Derived from the {orchestrationMode === 'group-chat' ? 'Max Rounds' : 'Max Iterations'} setting.
+              </p>
+            )}
           </label>
         )}
       </div>
@@ -414,6 +428,7 @@ export function WorkflowGraphInspector({
       <div className="p-4">
         <EdgeInspector
           edge={selectedEdge}
+          orchestrationMode={workflow.settings.orchestrationMode}
           onEdgeChange={onEdgeChange}
           onEdgeRemove={onEdgeRemove}
           validationIssues={validationIssues}

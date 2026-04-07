@@ -640,3 +640,110 @@ describe('workflow validation', () => {
     expect(groupChatWorkflow?.settings.modeSettings).toEqual(createDefaultModeSettings('group-chat'));
   });
 });
+
+describe('built-in workflow consistency', () => {
+  const builtinWorkflows = createBuiltinWorkflows(TIMESTAMP);
+
+  test('all built-in workflows pass validation without errors', () => {
+    for (const workflow of builtinWorkflows) {
+      const issues = validateWorkflowDefinition(workflow);
+      const errors = issues.filter((i) => i.level === 'error');
+      expect(errors).toEqual([]);
+    }
+  });
+
+  test('all built-in workflows are stable under normalization', () => {
+    for (const workflow of builtinWorkflows) {
+      const normalized = normalizeWorkflowDefinition(workflow);
+      expect(normalized.graph.edges).toEqual(workflow.graph.edges);
+      expect(normalized.settings).toEqual(workflow.settings);
+    }
+  });
+
+  test('group-chat workflow has consistent maxIterations across settings and edges', () => {
+    const workflow = builtinWorkflows.find((w) => w.settings.orchestrationMode === 'group-chat')!;
+    const maxRounds = workflow.settings.modeSettings!.groupChat!.maxRounds;
+    const maxIterations = workflow.settings.maxIterations;
+
+    expect(maxIterations).toBeDefined();
+    expect(maxRounds).toBe(maxIterations!);
+
+    const loopEdges = workflow.graph.edges.filter((e) => e.isLoop);
+    expect(loopEdges.length).toBeGreaterThan(0);
+    for (const edge of loopEdges) {
+      expect(edge.maxIterations).toBe(maxRounds);
+    }
+  });
+
+  test('handoff workflow has consistent maxIterations across settings and edges', () => {
+    const workflow = builtinWorkflows.find((w) => w.settings.orchestrationMode === 'handoff')!;
+    const maxIterations = workflow.settings.maxIterations;
+
+    const loopEdges = workflow.graph.edges.filter((e) => e.isLoop);
+    expect(loopEdges.length).toBeGreaterThan(0);
+    for (const edge of loopEdges) {
+      expect(edge.maxIterations).toBe(maxIterations);
+    }
+  });
+
+  test('scaffoldGraphForMode respects provided settings for group-chat', () => {
+    const graph = scaffoldGraphForMode('group-chat', {
+      settings: {
+        checkpointing: { enabled: false },
+        executionMode: 'off-thread',
+        orchestrationMode: 'group-chat',
+        modeSettings: { groupChat: { selectionStrategy: 'round-robin', maxRounds: 12 } },
+        maxIterations: 12,
+      },
+    });
+
+    const loopEdges = graph.edges.filter((e) => e.isLoop);
+    expect(loopEdges.length).toBeGreaterThan(0);
+    for (const edge of loopEdges) {
+      expect(edge.maxIterations).toBe(12);
+    }
+  });
+
+  test('scaffoldGraphForMode respects provided settings for handoff', () => {
+    const graph = scaffoldGraphForMode('handoff', {
+      settings: {
+        checkpointing: { enabled: false },
+        executionMode: 'off-thread',
+        orchestrationMode: 'handoff',
+        maxIterations: 8,
+      },
+    });
+
+    const loopEdges = graph.edges.filter((e) => e.isLoop);
+    expect(loopEdges.length).toBeGreaterThan(0);
+    for (const edge of loopEdges) {
+      expect(edge.maxIterations).toBe(8);
+    }
+  });
+
+  test('normalizeWorkflowDefinition syncs loop edge maxIterations for group-chat', () => {
+    const workflow = createBuiltinWorkflows(TIMESTAMP).find((w) => w.settings.orchestrationMode === 'group-chat')!;
+    const modified: WorkflowDefinition = {
+      ...workflow,
+      settings: {
+        ...workflow.settings,
+        maxIterations: 10,
+        modeSettings: {
+          groupChat: { selectionStrategy: 'round-robin', maxRounds: 10 },
+        },
+      },
+    };
+
+    const normalized = normalizeWorkflowDefinition(modified);
+    const loopEdges = normalized.graph.edges.filter((e) => e.isLoop);
+    for (const edge of loopEdges) {
+      expect(edge.maxIterations).toBe(10);
+    }
+  });
+
+  test('normalizeWorkflowDefinition does not modify loop edges for graph-based modes', () => {
+    const workflow = createBuiltinWorkflows(TIMESTAMP).find((w) => w.settings.orchestrationMode === 'sequential')!;
+    const normalized = normalizeWorkflowDefinition(workflow);
+    expect(normalized.graph.edges).toEqual(workflow.graph.edges);
+  });
+});

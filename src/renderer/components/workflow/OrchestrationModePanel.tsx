@@ -23,6 +23,7 @@ import {
   isBuilderBasedMode,
   isGraphBasedMode,
   scaffoldGraphForMode,
+  syncBuilderModeEdgeIterations,
 } from '@shared/domain/workflow';
 import { FormField, InfoCallout, SelectInput, ToggleSwitch } from '@renderer/components/ui';
 
@@ -332,23 +333,30 @@ export function OrchestrationModePanel({
   const applyModeChange = useCallback(
     (newMode: WorkflowOrchestrationMode, restructure: boolean) => {
       const modeSettings = createDefaultModeSettings(newMode);
-      const base: WorkflowDefinition = {
-        ...workflow,
-        settings: {
-          ...workflow.settings,
-          orchestrationMode: newMode,
-          modeSettings: modeSettings
-            ? { ...workflow.settings.modeSettings, ...modeSettings }
-            : workflow.settings.modeSettings,
-        },
+      const mergedSettings = {
+        ...workflow.settings,
+        orchestrationMode: newMode,
+        modeSettings: modeSettings
+          ? { ...workflow.settings.modeSettings, ...modeSettings }
+          : workflow.settings.modeSettings,
       };
+
+      // Sync maxIterations from mode-specific settings for builder-based modes
+      if (newMode === 'group-chat' && modeSettings?.groupChat) {
+        mergedSettings.maxIterations = modeSettings.groupChat.maxRounds;
+      }
+
+      const base: WorkflowDefinition = { ...workflow, settings: mergedSettings };
 
       if (restructure) {
         const existingAgents = workflow.graph.nodes.filter((n) => n.kind === 'agent');
-        const newGraph = scaffoldGraphForMode(newMode, existingAgents.length > 0 ? existingAgents : undefined);
+        const newGraph = scaffoldGraphForMode(newMode, {
+          agentNodes: existingAgents.length > 0 ? existingAgents : undefined,
+          settings: mergedSettings,
+        });
         onChange({ ...base, graph: newGraph });
       } else {
-        onChange(base);
+        onChange(syncBuilderModeEdgeIterations(base));
       }
     },
     [workflow, onChange],
@@ -387,13 +395,15 @@ export function OrchestrationModePanel({
 
   const handleGroupChatChange = useCallback(
     (groupChat: GroupChatModeSettings) => {
-      onChange({
+      const updated: WorkflowDefinition = {
         ...workflow,
         settings: {
           ...workflow.settings,
           modeSettings: { ...workflow.settings.modeSettings, groupChat },
+          maxIterations: groupChat.maxRounds,
         },
-      });
+      };
+      onChange(syncBuilderModeEdgeIterations(updated));
     },
     [workflow, onChange],
   );

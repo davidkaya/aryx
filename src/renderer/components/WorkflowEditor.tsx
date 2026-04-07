@@ -13,7 +13,7 @@ import type {
   SubWorkflowConfig,
   WorkflowStateScope,
 } from '@shared/domain/workflow';
-import { validateWorkflowDefinition } from '@shared/domain/workflow';
+import { validateWorkflowDefinition, isBuilderBasedMode, syncBuilderModeEdgeIterations } from '@shared/domain/workflow';
 import { createId } from '@shared/utils/ids';
 import { ToggleSwitch } from '@renderer/components/ui';
 
@@ -703,13 +703,30 @@ function WorkflowSettingsPanel({
             min={1}
             onChange={(e) => {
               const raw = parseInt(e.target.value, 10);
-              onChange({
+              const maxIterations = Number.isNaN(raw) ? undefined : raw;
+              const updated: WorkflowDefinition = {
                 ...workflow,
                 settings: {
                   ...workflow.settings,
-                  maxIterations: Number.isNaN(raw) ? undefined : raw,
+                  maxIterations,
+                  ...(workflow.settings.orchestrationMode === 'group-chat' && maxIterations !== undefined
+                    ? {
+                      modeSettings: {
+                        ...workflow.settings.modeSettings,
+                        groupChat: {
+                          ...(workflow.settings.modeSettings?.groupChat ?? { selectionStrategy: 'round-robin' as const }),
+                          maxRounds: maxIterations,
+                        },
+                      },
+                    }
+                    : {}),
                 },
-              });
+              };
+              onChange(
+                isBuilderBasedMode(workflow.settings.orchestrationMode)
+                  ? syncBuilderModeEdgeIterations(updated)
+                  : updated,
+              );
             }}
             placeholder="e.g. 5"
             type="number"

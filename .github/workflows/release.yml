@@ -40,7 +40,7 @@ jobs:
       - name: Set up .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 9.0.x
+          dotnet-version: 10.0.x
 
       - name: Install Linux native dependencies
         if: runner.os == 'Linux'
@@ -115,7 +115,7 @@ jobs:
       - name: Set up .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 9.0.x
+          dotnet-version: 10.0.x
 
       - name: Install Linux native dependencies
         if: runner.os == 'Linux'

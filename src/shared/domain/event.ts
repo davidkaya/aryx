@@ -8,7 +8,13 @@ import type {
   WorkflowDiagnosticSeverity,
 } from '@shared/contracts/sidecar';
 
-export type SessionActivityType = 'thinking' | 'tool-calling' | 'handoff' | 'completed';
+export type SessionActivityType =
+  | 'thinking'
+  | 'tool-calling'
+  | 'handoff'
+  | 'completed'
+  | 'subworkflow-started'
+  | 'subworkflow-completed';
 
 export type SessionEventKind =
   | 'status'
@@ -42,6 +48,8 @@ export interface SessionEventRecord {
   activityType?: SessionActivityType;
   agentId?: string;
   agentName?: string;
+  subworkflowNodeId?: string;
+  subworkflowName?: string;
   sourceAgentId?: string;
   sourceAgentName?: string;
   toolName?: string;

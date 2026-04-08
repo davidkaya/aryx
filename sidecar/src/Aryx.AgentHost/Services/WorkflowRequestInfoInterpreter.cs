@@ -23,7 +23,7 @@ internal static class WorkflowRequestInfoInterpreter
         ConcurrentDictionary<string, string> toolNamesByCallId,
         ConcurrentDictionary<string, bool> toolCallHasArgumentsById)
     {
-        RequestInterpretation interpretation = InterpretRequest(command.Workflow, requestInfo);
+        RequestInterpretation interpretation = InterpretRequest(command, requestInfo);
         return interpretation switch
         {
             HandoffRequestInterpretation handoff =>
@@ -39,7 +39,7 @@ internal static class WorkflowRequestInfoInterpreter
         RequestInfoEvent requestInfo)
     {
         return command.Workflow.IsOrchestrationMode("handoff")
-            && InterpretRequest(command.Workflow, requestInfo) is UnknownRequestInterpretation;
+            && InterpretRequest(command, requestInfo) is UnknownRequestInterpretation;
     }
 
     private static AgentActivityEventDto CreateHandoffActivity(
@@ -55,6 +55,8 @@ internal static class WorkflowRequestInfoInterpreter
             ActivityType = HandoffActivityType,
             AgentId = handoffAgent.AgentId,
             AgentName = handoffAgent.AgentName,
+            SubworkflowNodeId = handoffAgent.Subworkflow?.SubworkflowNodeId,
+            SubworkflowName = handoffAgent.Subworkflow?.SubworkflowName,
             SourceAgentId = activeAgent?.AgentId,
             SourceAgentName = activeAgent?.AgentName,
         };
@@ -88,6 +90,8 @@ internal static class WorkflowRequestInfoInterpreter
             ActivityType = ToolCallingActivityType,
             AgentId = activeAgent.AgentId,
             AgentName = activeAgent.AgentName,
+            SubworkflowNodeId = activeAgent.Subworkflow?.SubworkflowNodeId,
+            SubworkflowName = activeAgent.Subworkflow?.SubworkflowName,
             ToolName = tool.ToolName,
             ToolCallId = tool.ToolCallId,
             ToolArguments = tool.ToolArguments,
@@ -109,10 +113,10 @@ internal static class WorkflowRequestInfoInterpreter
     }
 
     private static RequestInterpretation InterpretRequest(
-        WorkflowDefinitionDto workflow,
+        RunTurnCommandDto command,
         RequestInfoEvent requestInfo)
     {
-        if (TryGetHandoffTarget(workflow, requestInfo, out AgentIdentity handoffAgent))
+        if (TryGetHandoffTarget(command, requestInfo, out AgentIdentity handoffAgent))
         {
             return new HandoffRequestInterpretation(handoffAgent);
         }
@@ -123,7 +127,7 @@ internal static class WorkflowRequestInfoInterpreter
     }
 
     private static bool TryGetHandoffTarget(
-        WorkflowDefinitionDto workflow,
+        RunTurnCommandDto command,
         RequestInfoEvent requestInfo,
         out AgentIdentity agent)
     {
@@ -142,7 +146,8 @@ internal static class WorkflowRequestInfoInterpreter
         }
 
         agent = AgentIdentityResolver.ResolveAgentIdentity(
-            workflow,
+            command.Workflow,
+            command.WorkflowLibrary,
             target.Id,
             target.Name);
         return !string.IsNullOrWhiteSpace(agent.AgentName);

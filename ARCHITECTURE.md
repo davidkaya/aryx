@@ -220,6 +220,8 @@ This protocol boundary keeps the AI execution runtime replaceable and prevents t
 
 The protocol also carries **turn-scoped lifecycle events** alongside output deltas. These events let the UI visualize execution internals without the main process having to interpret AI workflow semantics:
 
+- **Workflow activity events**: agent activity records preserve agent, tool, and optional sub-workflow context (`subworkflowNodeId`, `subworkflowName`) so the UI can distinguish root-level activity from nested execution without rebuilding workflow ancestry in Electron
+- **Sub-workflow lifecycle events**: `subworkflow-started` and `subworkflow-completed` are emitted when nested workflow executors begin and finish, so the Activity panel can surface sub-workflow groups as first-class runtime activity
 - **Sub-agent events**: started, completed, failed, selected, deselected — surfaced when custom agents are defined
 - **Skill invocation events**: emitted when an agent-side skill is triggered
 - **Message reclassification events**: let the sidecar retroactively mark a streamed assistant message as `thinking` once the SDK confirms that message requested tool work, so the UI can separate intermediate planning chatter from the final response without sacrificing live streaming
@@ -318,8 +320,8 @@ For git-backed projects, the renderer surfaces three specialized components. `Ru
 The architecture treats execution as observable by design:
 
 - partial output is streamed
-- agent activity is surfaced
-- turn-scoped lifecycle events (sub-agent, hook, skill, compaction, usage) are streamed
+- agent activity is surfaced with optional sub-workflow context
+- turn-scoped lifecycle events (sub-agent, sub-workflow, hook, skill, compaction, usage) are streamed
 - runs are surfaced inline as collapsible turn activity panels
 - failures are represented explicitly
 

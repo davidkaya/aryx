@@ -745,6 +745,7 @@ export default function App() {
       <ActivityPanel
         activity={activityForSession}
         workflow={workflowForSession}
+        workflows={workspace?.workflows}
         session={selectedSession}
         sessionRequestUsage={requestUsageForSession}
         turnEvents={turnEventsForSession}

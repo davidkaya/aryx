@@ -297,13 +297,20 @@ public class AgentWorkflowTurnRunner : ITurnWorkflowRunner
     {
         if (evt is ExecutorInvokedEvent invoked)
         {
-            if (AgentIdentityResolver.TryResolveKnownAgentIdentity(
-                command.Workflow,
-                invoked.ExecutorId,
-                out AgentIdentity invokedAgent))
+            if (state.TryResolveKnownAgentIdentity(invoked.ExecutorId, out AgentIdentity invokedAgent))
             {
                 TraceHandoff(command, $"Executor invoked: {invoked.ExecutorId} -> {invokedAgent.AgentName} ({invokedAgent.AgentId}).");
                 await state.EmitThinkingIfNeeded(invokedAgent, onEvent).ConfigureAwait(false);
+            }
+            else if (state.TryCreateSubworkflowLifecycleActivity(
+                         "subworkflow-started",
+                         invoked.ExecutorId,
+                         out AgentActivityEventDto subworkflowStarted))
+            {
+                TraceHandoff(
+                    command,
+                    $"Sub-workflow executor invoked: {invoked.ExecutorId} -> {subworkflowStarted.SubworkflowName ?? subworkflowStarted.SubworkflowNodeId ?? "<unknown>"}.");
+                await EmitActivityAsync(command, state, subworkflowStarted, onEvent).ConfigureAwait(false);
             }
             else
             {
@@ -355,15 +362,21 @@ public class AgentWorkflowTurnRunner : ITurnWorkflowRunner
 
         if (evt is ExecutorCompletedEvent completed)
         {
-            if (AgentIdentityResolver.TryResolveObservedAgentIdentity(
-                command.Workflow,
-                completed.ExecutorId,
-                state.ActiveAgent,
-                out AgentIdentity completedAgent))
+            if (state.TryResolveObservedAgentIdentity(completed.ExecutorId, state.ActiveAgent, out AgentIdentity completedAgent))
             {
                 TraceHandoff(command, $"Executor completed: {completed.ExecutorId} -> {completedAgent.AgentName} ({completedAgent.AgentId}).");
                 state.QueueCompletedActivity(completedAgent);
                 state.ClearActiveAgentIfMatching(completedAgent);
+            }
+            else if (state.TryCreateSubworkflowLifecycleActivity(
+                         "subworkflow-completed",
+                         completed.ExecutorId,
+                         out AgentActivityEventDto subworkflowCompleted))
+            {
+                TraceHandoff(
+                    command,
+                    $"Sub-workflow executor completed: {completed.ExecutorId} -> {subworkflowCompleted.SubworkflowName ?? subworkflowCompleted.SubworkflowNodeId ?? "<unknown>"}.");
+                await EmitActivityAsync(command, state, subworkflowCompleted, onEvent).ConfigureAwait(false);
             }
             else
             {
@@ -470,11 +483,10 @@ public class AgentWorkflowTurnRunner : ITurnWorkflowRunner
             updateAgent = observedMessageAgent;
             authorName = observedMessageAgent.AgentName;
         }
-        else if (AgentIdentityResolver.TryResolveObservedAgentIdentity(
-            command.Workflow,
-            update.ExecutorId,
-            state.ActiveAgent,
-            out AgentIdentity resolvedUpdateAgent))
+        else if (state.TryResolveObservedAgentIdentity(
+                     update.ExecutorId,
+                     state.ActiveAgent,
+                     out AgentIdentity resolvedUpdateAgent))
         {
             updateAgent = resolvedUpdateAgent;
             authorName = resolvedUpdateAgent.AgentName;
@@ -545,11 +557,12 @@ public class AgentWorkflowTurnRunner : ITurnWorkflowRunner
             && !string.IsNullOrWhiteSpace(activity.AgentId)
             && !string.IsNullOrWhiteSpace(activity.AgentName))
         {
+            AgentIdentity promotedAgent = state.ResolveAgentIdentity(activity.AgentId, activity.AgentName);
             TraceHandoff(
                 command,
-                $"Promoting handoff target to thinking: {activity.AgentName} ({activity.AgentId}).");
+                $"Promoting handoff target to thinking: {promotedAgent.AgentName} ({promotedAgent.AgentId}).");
             await state.EmitThinkingIfNeeded(
-                new AgentIdentity(activity.AgentId, activity.AgentName),
+                promotedAgent,
                 onEvent).ConfigureAwait(false);
         }
     }
@@ -593,8 +606,7 @@ public class AgentWorkflowTurnRunner : ITurnWorkflowRunner
         {
             case ExecutorFailedEvent executorFailed:
             {
-                AgentIdentity? agent = AgentIdentityResolver.TryResolveObservedAgentIdentity(
-                    command.Workflow,
+                AgentIdentity? agent = state.TryResolveObservedAgentIdentity(
                     executorFailed.ExecutorId,
                     state.ActiveAgent,
                     out AgentIdentity resolvedAgent)

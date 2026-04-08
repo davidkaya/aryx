@@ -247,6 +247,54 @@ public sealed class WorkflowRequestInfoInterpreterTests
     }
 
     [Fact]
+    public void TryCreateActivityFromRequest_IncludesSubworkflowContextForToolCallingAgent()
+    {
+        var tracking = CreateToolTracking();
+        RequestInfoEvent requestInfo = CreateRequestInfoEvent(
+            new FunctionCallContent("call-1", "view", new Dictionary<string, object?>
+            {
+                ["path"] = @"C:\workspace\file.txt",
+            }));
+
+        AgentActivityEventDto? activity = WorkflowRequestInfoInterpreter.TryCreateActivityFromRequest(
+            CreateSingleAgentCommand(),
+            requestInfo,
+            new AgentIdentity(
+                "agent-reviewer",
+                "Reviewer",
+                new SubworkflowContext("subworkflow-review", "Review Lane")),
+            tracking.ToolNamesByCallId,
+            tracking.ToolCallHasArgumentsById);
+
+        Assert.NotNull(activity);
+        Assert.Equal("tool-calling", activity.ActivityType);
+        Assert.Equal("subworkflow-review", activity.SubworkflowNodeId);
+        Assert.Equal("Review Lane", activity.SubworkflowName);
+    }
+
+    [Fact]
+    public void TryCreateActivityFromRequest_ResolvesReferencedSubworkflowContextForHandoffTargets()
+    {
+        var tracking = CreateToolTracking();
+        RequestInfoEvent requestInfo = CreateRequestInfoEvent(
+            CreateHandoffTarget("agent-handoff-ux", "UX Specialist"));
+
+        AgentActivityEventDto? activity = WorkflowRequestInfoInterpreter.TryCreateActivityFromRequest(
+            CreateHandoffCommandWithReferencedSubworkflow(),
+            requestInfo,
+            new AgentIdentity("agent-handoff-triage", "Triage"),
+            tracking.ToolNamesByCallId,
+            tracking.ToolCallHasArgumentsById);
+
+        Assert.NotNull(activity);
+        Assert.Equal("handoff", activity.ActivityType);
+        Assert.Equal("agent-handoff-ux", activity.AgentId);
+        Assert.Equal("UX Specialist", activity.AgentName);
+        Assert.Equal("subworkflow-review", activity.SubworkflowNodeId);
+        Assert.Equal("Review Lane", activity.SubworkflowName);
+    }
+
+    [Fact]
     public void RequiresUserInputTurnBoundary_ReturnsTrueForUnhandledHandoffRequests()
     {
         RequestInfoEvent requestInfo = CreateRequestInfoEvent(new
@@ -341,24 +389,56 @@ public sealed class WorkflowRequestInfoInterpreterTests
             CreateAgent("agent-handoff-ux", "UX Specialist"),
         ]);
 
+    private static RunTurnCommandDto CreateHandoffCommandWithReferencedSubworkflow()
+    {
+        WorkflowDefinitionDto nestedWorkflow = new()
+        {
+            Id = "nested-review-workflow",
+            Name = "Nested Review Workflow",
+            Graph = new WorkflowGraphDto
+            {
+                Nodes =
+                [
+                    CreateAgent("agent-handoff-ux", "UX Specialist"),
+                ],
+            },
+            Settings = new WorkflowSettingsDto
+            {
+                OrchestrationMode = "single",
+            },
+        };
+
+        return CreateCommand(
+            "handoff",
+            [
+                CreateAgent("agent-handoff-triage", "Triage"),
+                CreateSubworkflow("subworkflow-review", "Review Lane", workflowId: nestedWorkflow.Id),
+            ],
+            workflowLibrary: [nestedWorkflow]);
+    }
+
     private static (
         ConcurrentDictionary<string, string> ToolNamesByCallId,
         ConcurrentDictionary<string, bool> ToolCallHasArgumentsById) CreateToolTracking()
         => (new(StringComparer.Ordinal), new(StringComparer.Ordinal));
 
-    private static RunTurnCommandDto CreateCommand(string orchestrationMode, IReadOnlyList<WorkflowNodeDto> agents)
+    private static RunTurnCommandDto CreateCommand(
+        string orchestrationMode,
+        IReadOnlyList<WorkflowNodeDto> nodes,
+        IReadOnlyList<WorkflowDefinitionDto>? workflowLibrary = null)
     {
         return new RunTurnCommandDto
         {
             RequestId = "turn-1",
             SessionId = "session-1",
+            WorkflowLibrary = workflowLibrary ?? [],
             Workflow = new WorkflowDefinitionDto
             {
                 Id = $"{orchestrationMode}-workflow",
                 Name = "Workflow",
                 Graph = new WorkflowGraphDto
                 {
-                    Nodes = [.. agents],
+                    Nodes = [.. nodes],
                 },
                 Settings = new WorkflowSettingsDto
                 {
@@ -382,6 +462,26 @@ public sealed class WorkflowRequestInfoInterpreterTests
                 Name = name,
                 Model = "gpt-5.4",
                 Instructions = "Help with the request.",
+            },
+        };
+    }
+
+    private static WorkflowNodeDto CreateSubworkflow(
+        string id,
+        string label,
+        string? workflowId = null,
+        WorkflowDefinitionDto? inlineWorkflow = null)
+    {
+        return new WorkflowNodeDto
+        {
+            Id = id,
+            Kind = "sub-workflow",
+            Label = label,
+            Config = new WorkflowNodeConfigDto
+            {
+                Kind = "sub-workflow",
+                WorkflowId = workflowId,
+                InlineWorkflow = inlineWorkflow,
             },
         };
     }

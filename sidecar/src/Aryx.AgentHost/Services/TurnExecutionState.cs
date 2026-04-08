@@ -7,6 +7,8 @@ namespace Aryx.AgentHost.Services;
 internal class TurnExecutionState
 {
     private readonly RunTurnCommandDto _command;
+    private readonly IReadOnlyDictionary<string, WorkflowDefinitionDto> _workflowLibrary;
+    private readonly IReadOnlyDictionary<string, SubworkflowContext> _agentSubworkflowIndex;
     private readonly HashSet<string> _startedAgents = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _reclassifiedMessageIds = new(StringComparer.Ordinal);
     private readonly ConcurrentQueue<SidecarEventDto> _pendingEvents = new();
@@ -19,6 +21,8 @@ internal class TurnExecutionState
     public TurnExecutionState(RunTurnCommandDto command)
     {
         _command = command;
+        _workflowLibrary = WorkflowDefinitionExtensions.CreateWorkflowLibraryMap(command.WorkflowLibrary);
+        _agentSubworkflowIndex = AgentIdentityResolver.BuildAgentSubworkflowIndex(command.Workflow, _workflowLibrary);
     }
 
     public ConcurrentDictionary<string, string> ToolNamesByCallId { get; } = new(StringComparer.Ordinal);
@@ -32,6 +36,59 @@ internal class TurnExecutionState
     public bool HasPendingExitPlanModeRequest { get; private set; }
 
     public bool SuppressHookLifecycleEvents { get; set; }
+
+    public AgentIdentity ResolveAgentIdentity(string? agentId, string? agentName)
+    {
+        return AgentIdentityResolver.ResolveAgentIdentity(
+            _command.Workflow,
+            _workflowLibrary,
+            agentId,
+            agentName,
+            _agentSubworkflowIndex);
+    }
+
+    public bool TryResolveKnownAgentIdentity(string? agentIdentifier, out AgentIdentity agent)
+    {
+        return AgentIdentityResolver.TryResolveKnownAgentIdentity(
+            _command.Workflow,
+            _workflowLibrary,
+            agentIdentifier,
+            _agentSubworkflowIndex,
+            out agent);
+    }
+
+    public bool TryResolveObservedAgentIdentity(
+        string? agentIdentifier,
+        AgentIdentity? fallbackAgent,
+        out AgentIdentity agent)
+    {
+        return AgentIdentityResolver.TryResolveObservedAgentIdentity(
+            _command.Workflow,
+            _workflowLibrary,
+            agentIdentifier,
+            fallbackAgent,
+            _agentSubworkflowIndex,
+            out agent);
+    }
+
+    public bool TryCreateSubworkflowLifecycleActivity(
+        string activityType,
+        string? executorId,
+        out AgentActivityEventDto activity)
+    {
+        activity = default!;
+        if (!AgentIdentityResolver.TryResolveSubworkflowContext(
+                _command.Workflow,
+                _workflowLibrary,
+                executorId,
+                out SubworkflowContext subworkflow))
+        {
+            return false;
+        }
+
+        activity = CreateSubworkflowActivity(activityType, subworkflow);
+        return true;
+    }
 
     public async Task EmitThinkingIfNeeded(
         AgentIdentity agent,
@@ -67,14 +124,13 @@ internal class TurnExecutionState
             && !string.IsNullOrWhiteSpace(activity.AgentId)
             && !string.IsNullOrWhiteSpace(activity.AgentName))
         {
-            ActiveAgent = new AgentIdentity(activity.AgentId, activity.AgentName);
+            ActiveAgent = ResolveAgentIdentity(activity.AgentId, activity.AgentName);
         }
     }
 
     public void ObserveSessionEvent(WorkflowNodeDto agentDefinition, ProviderSessionEvent sessionEvent)
     {
-        AgentIdentity agent = AgentIdentityResolver.ResolveAgentIdentity(
-            _command.Workflow,
+        AgentIdentity agent = ResolveAgentIdentity(
             agentDefinition.GetAgentId(),
             agentDefinition.GetAgentName());
 
@@ -313,6 +369,8 @@ internal class TurnExecutionState
             ActivityType = "thinking",
             AgentId = agent.AgentId,
             AgentName = agent.AgentName,
+            SubworkflowNodeId = agent.Subworkflow?.SubworkflowNodeId,
+            SubworkflowName = agent.Subworkflow?.SubworkflowName,
         };
     }
 
@@ -335,6 +393,8 @@ internal class TurnExecutionState
             ActivityType = "tool-calling",
             AgentId = agent.AgentId,
             AgentName = agent.AgentName,
+            SubworkflowNodeId = agent.Subworkflow?.SubworkflowNodeId,
+            SubworkflowName = agent.Subworkflow?.SubworkflowName,
             ToolName = toolName,
             ToolCallId = toolCallId,
             ToolArguments = toolArguments,
@@ -351,6 +411,23 @@ internal class TurnExecutionState
             ActivityType = "completed",
             AgentId = agent.AgentId,
             AgentName = agent.AgentName,
+            SubworkflowNodeId = agent.Subworkflow?.SubworkflowNodeId,
+            SubworkflowName = agent.Subworkflow?.SubworkflowName,
+        };
+    }
+
+    private AgentActivityEventDto CreateSubworkflowActivity(
+        string activityType,
+        SubworkflowContext subworkflow)
+    {
+        return new AgentActivityEventDto
+        {
+            Type = "agent-activity",
+            RequestId = _command.RequestId,
+            SessionId = _command.SessionId,
+            ActivityType = activityType,
+            SubworkflowNodeId = subworkflow.SubworkflowNodeId,
+            SubworkflowName = subworkflow.SubworkflowName,
         };
     }
 

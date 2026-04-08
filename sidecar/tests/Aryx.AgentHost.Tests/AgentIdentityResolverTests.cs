@@ -115,19 +115,86 @@ public sealed class AgentIdentityResolverTests
         Assert.Equal("UX Specialist", agent.AgentName);
     }
 
+    [Fact]
+    public void TryResolveKnownAgentIdentity_ResolvesReferencedSubworkflowAgentWithContext()
+    {
+        WorkflowDefinitionDto nestedWorkflow = CreateWorkflow(
+            "nested-review-workflow",
+            [
+                CreateAgent("agent-reviewer", "Reviewer"),
+            ],
+            orchestrationMode: "single");
+        WorkflowDefinitionDto workflow = CreateWorkflow(
+            "parent-workflow",
+            [
+                CreateSubworkflow("subworkflow-review", "Review Lane", workflowId: nestedWorkflow.Id),
+            ],
+            orchestrationMode: "single");
+
+        bool resolved = AgentIdentityResolver.TryResolveKnownAgentIdentity(
+            workflow,
+            [nestedWorkflow],
+            "Reviewer_agent_reviewer",
+            out AgentIdentity agent);
+
+        Assert.True(resolved);
+        Assert.Equal("agent-reviewer", agent.AgentId);
+        Assert.Equal("Reviewer", agent.AgentName);
+        Assert.Equal("subworkflow-review", agent.Subworkflow?.SubworkflowNodeId);
+        Assert.Equal("Review Lane", agent.Subworkflow?.SubworkflowName);
+    }
+
+    [Fact]
+    public void BuildAgentSubworkflowIndex_UsesImmediateNestedSubworkflowContext()
+    {
+        WorkflowDefinitionDto innerWorkflow = CreateWorkflow(
+            "inner-workflow",
+            [
+                CreateAgent("agent-inner-reviewer", "Inner Reviewer"),
+            ],
+            orchestrationMode: "single");
+        WorkflowDefinitionDto outerWorkflow = CreateWorkflow(
+            "outer-workflow",
+            [
+                CreateSubworkflow("subworkflow-inner", "Inner Review", inlineWorkflow: innerWorkflow),
+            ],
+            orchestrationMode: "single");
+        WorkflowDefinitionDto workflow = CreateWorkflow(
+            "parent-workflow",
+            [
+                CreateSubworkflow("subworkflow-outer", "Outer Review", inlineWorkflow: outerWorkflow),
+            ],
+            orchestrationMode: "single");
+
+        IReadOnlyDictionary<string, SubworkflowContext> index =
+            AgentIdentityResolver.BuildAgentSubworkflowIndex(workflow);
+
+        Assert.True(index.TryGetValue("agent-inner-reviewer", out SubworkflowContext subworkflow));
+        Assert.Equal("subworkflow-inner", subworkflow.SubworkflowNodeId);
+        Assert.Equal("Inner Review", subworkflow.SubworkflowName);
+    }
+
     private static WorkflowDefinitionDto CreateWorkflow(
-        IReadOnlyList<WorkflowNodeDto> agents,
+        IReadOnlyList<WorkflowNodeDto> nodes,
+        string orchestrationMode = "concurrent")
+    {
+        return CreateWorkflow($"{orchestrationMode}-workflow", nodes, orchestrationMode);
+    }
+
+    private static WorkflowDefinitionDto CreateWorkflow(
+        string id,
+        IReadOnlyList<WorkflowNodeDto> nodes,
         string orchestrationMode = "concurrent")
     {
         return new WorkflowDefinitionDto
         {
-            Id = $"{orchestrationMode}-workflow",
+            Id = id,
             Name = "Workflow",
             Graph = new WorkflowGraphDto
             {
                 Nodes =
                 [
-                    .. agents,
+                    .. nodes,
                 ],
             },
             Settings = new WorkflowSettingsDto
@@ -151,6 +218,26 @@ public sealed class AgentIdentityResolverTests
                 Name = name,
                 Model = "gpt-5.4",
                 Instructions = "Help with the request.",
+            },
+        };
+    }
+
+    private static WorkflowNodeDto CreateSubworkflow(
+        string id,
+        string label,
+        string? workflowId = null,
+        WorkflowDefinitionDto? inlineWorkflow = null)
+    {
+        return new WorkflowNodeDto
+        {
+            Id = id,
+            Kind = "sub-workflow",
+            Label = label,
+            Config = new WorkflowNodeConfigDto
+            {
+                Kind = "sub-workflow",
+                WorkflowId = workflowId,
+                InlineWorkflow = inlineWorkflow,
             },
         };
     }

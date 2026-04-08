@@ -60,6 +60,40 @@ public sealed class CopilotTurnExecutionStateTests
     }
 
     [Fact]
+    public void ObserveSessionEvent_AssistantMessageDelta_ForNestedAgent_IncludesSubworkflowContext()
+    {
+        RunTurnCommandDto command = CreateCommandWithReferencedSubworkflow();
+        CopilotTurnExecutionState state = new(command);
+        WorkflowDefinitionDto nestedWorkflow = Assert.Single(command.WorkflowLibrary!);
+        WorkflowNodeDto nestedAgent = Assert.Single(nestedWorkflow.GetAgentNodes());
+
+        state.ObserveSessionEvent(
+            nestedAgent,
+            SessionEvent.FromJson(
+                """
+                {
+                  "type": "assistant.message_delta",
+                  "data": {
+                    "messageId": "msg-nested-1",
+                    "deltaContent": "Reviewing"
+                  },
+                  "id": "7ef95d90-7ee7-45e2-ac38-cf749caf4f69",
+                  "timestamp": "2026-03-27T00:00:00Z"
+                }
+                """));
+
+        AgentActivityEventDto activity = Assert.Single(state.DrainPendingEvents().OfType<AgentActivityEventDto>());
+        Assert.Equal("thinking", activity.ActivityType);
+        Assert.Equal("agent-reviewer", activity.AgentId);
+        Assert.Equal("Reviewer", activity.AgentName);
+        Assert.Equal("subworkflow-review", activity.SubworkflowNodeId);
+        Assert.Equal("Review Lane", activity.SubworkflowName);
+        Assert.True(state.ActiveAgent.HasValue);
+        Assert.Equal("subworkflow-review", state.ActiveAgent.Value.Subworkflow?.SubworkflowNodeId);
+        Assert.Equal("Review Lane", state.ActiveAgent.Value.Subworkflow?.SubworkflowName);
+    }
+
+    [Fact]
     public void ObserveSessionEvent_ToolExecutionStart_TracksToolNameByCallIdAndQueuesToolActivity()
     {
         RunTurnCommandDto command = CreateCommand();
@@ -743,6 +777,80 @@ public sealed class CopilotTurnExecutionStateTests
                 {
                     OrchestrationMode = "single",
                 },
+            },
+        };
+    }
+
+    private static RunTurnCommandDto CreateCommandWithReferencedSubworkflow()
+    {
+        WorkflowDefinitionDto nestedWorkflow = CreateWorkflow(
+            "nested-review-workflow",
+            [
+                CreateAgent("agent-reviewer", "Reviewer"),
+            ]);
+
+        return new RunTurnCommandDto
+        {
+            RequestId = "turn-1",
+            SessionId = "session-1",
+            WorkflowLibrary = [nestedWorkflow],
+            Workflow = CreateWorkflow(
+                "workflow-parent",
+                [
+                    CreateSubworkflow("subworkflow-review", "Review Lane", workflowId: nestedWorkflow.Id),
+                ]),
+        };
+    }
+
+    private static WorkflowDefinitionDto CreateWorkflow(string id, IReadOnlyList<WorkflowNodeDto> nodes)
+    {
+        return new WorkflowDefinitionDto
+        {
+            Id = id,
+            Name = "Execution State Workflow",
+            Graph = new WorkflowGraphDto
+            {
+                Nodes = [.. nodes],
+            },
+            Settings = new WorkflowSettingsDto
+            {
+                OrchestrationMode = "single",
+            },
+        };
+    }
+
+    private static WorkflowNodeDto CreateAgent(string id, string name)
+    {
+        return new WorkflowNodeDto
+        {
+            Id = id,
+            Kind = "agent",
+            Label = name,
+            Config = new WorkflowNodeConfigDto
+            {
+                Kind = "agent",
+                Id = id,
+                Name = name,
+                Model = "gpt-5.4",
+                Instructions = "Help with the request.",
+            },
+        };
+    }
+
+    private static WorkflowNodeDto CreateSubworkflow(
+        string id,
+        string label,
+        string? workflowId = null)
+    {
+        return new WorkflowNodeDto
+        {
+            Id = id,
+            Kind = "sub-workflow",
+            Label = label,
+            Config = new WorkflowNodeConfigDto
+            {
+                Kind = "sub-workflow",
+                WorkflowId = workflowId,
             },
         };
     }

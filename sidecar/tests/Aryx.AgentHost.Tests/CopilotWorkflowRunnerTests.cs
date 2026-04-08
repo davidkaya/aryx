@@ -1053,6 +1053,78 @@ public sealed class CopilotWorkflowRunnerTests
     }
 
     [Fact]
+    public async Task HandleWorkflowEventAsync_EmitsSubworkflowStartedActivityForSubworkflowExecutor()
+    {
+        RunTurnCommandDto command = CreateReferencedSubworkflowCommand();
+        CopilotTurnExecutionState state = new(command);
+        List<AgentActivityEventDto> activities = [];
+
+        MethodInfo handleWorkflowEvent = typeof(CopilotWorkflowRunner).GetMethod(
+            "HandleWorkflowEventAsync",
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+        Task<bool> handleTask = (Task<bool>)handleWorkflowEvent.Invoke(
+            null,
+            [
+                command,
+                new ExecutorInvokedEvent("subworkflow-review", null!),
+                Array.Empty<ChatMessage>(),
+                state,
+                (Func<TurnDeltaEventDto, Task>)(_ => Task.CompletedTask),
+                (Func<SidecarEventDto, Task>)(sidecarEvent =>
+                {
+                    activities.Add(Assert.IsType<AgentActivityEventDto>(sidecarEvent));
+                    return Task.CompletedTask;
+                }),
+            ])!;
+
+        bool shouldEndTurn = await handleTask;
+
+        Assert.False(shouldEndTurn);
+        AgentActivityEventDto activity = Assert.Single(activities);
+        Assert.Equal("subworkflow-started", activity.ActivityType);
+        Assert.Null(activity.AgentId);
+        Assert.Null(activity.AgentName);
+        Assert.Equal("subworkflow-review", activity.SubworkflowNodeId);
+        Assert.Equal("Review Lane", activity.SubworkflowName);
+    }
+
+    [Fact]
+    public async Task HandleWorkflowEventAsync_EmitsSubworkflowCompletedActivityForSubworkflowExecutor()
+    {
+        RunTurnCommandDto command = CreateReferencedSubworkflowCommand();
+        CopilotTurnExecutionState state = new(command);
+        List<AgentActivityEventDto> activities = [];
+
+        MethodInfo handleWorkflowEvent = typeof(CopilotWorkflowRunner).GetMethod(
+            "HandleWorkflowEventAsync",
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+        Task<bool> handleTask = (Task<bool>)handleWorkflowEvent.Invoke(
+            null,
+            [
+                command,
+                new ExecutorCompletedEvent("subworkflow-review", null),
+                Array.Empty<ChatMessage>(),
+                state,
+                (Func<TurnDeltaEventDto, Task>)(_ => Task.CompletedTask),
+                (Func<SidecarEventDto, Task>)(sidecarEvent =>
+                {
+                    activities.Add(Assert.IsType<AgentActivityEventDto>(sidecarEvent));
+                    return Task.CompletedTask;
+                }),
+            ])!;
+
+        bool shouldEndTurn = await handleTask;
+
+        Assert.False(shouldEndTurn);
+        AgentActivityEventDto activity = Assert.Single(activities);
+        Assert.Equal("subworkflow-completed", activity.ActivityType);
+        Assert.Null(activity.AgentId);
+        Assert.Null(activity.AgentName);
+        Assert.Equal("subworkflow-review", activity.SubworkflowNodeId);
+        Assert.Equal("Review Lane", activity.SubworkflowName);
+    }
+
+    [Fact]
     public async Task HandleWorkflowEventAsync_EmitsWorkflowWarningDiagnostic()
     {
         RunTurnCommandDto command = CreateApprovalCommand();
@@ -2243,11 +2315,37 @@ public sealed class CopilotWorkflowRunnerTests
         };
     }
 
+    private static WorkflowNodeDto CreateSubworkflow(
+        string id,
+        string label,
+        string? workflowId = null,
+        WorkflowDefinitionDto? inlineWorkflow = null)
+    {
+        return new WorkflowNodeDto
+        {
+            Id = id,
+            Kind = "sub-workflow",
+            Label = label,
+            Config = new WorkflowNodeConfigDto
+            {
+                Kind = "sub-workflow",
+                WorkflowId = workflowId,
+                InlineWorkflow = inlineWorkflow,
+            },
+        };
+    }
+
     private static RunTurnCommandDto CreateCommand(
         string orchestrationMode,
         params WorkflowNodeDto[] agents)
     {
-        return CreateCommand(orchestrationMode, modeSettings: null, workflowName: null, workflowDescription: null, agents);
+        return CreateCommand(
+            orchestrationMode,
+            modeSettings: null,
+            workflowName: null,
+            workflowDescription: null,
+            workflowLibrary: null,
+            agents: agents);
     }
 
     private static RunTurnCommandDto CreateCommand(
@@ -2255,12 +2353,14 @@ public sealed class CopilotWorkflowRunnerTests
         OrchestrationModeSettingsDto? modeSettings = null,
         string? workflowName = null,
         string? workflowDescription = null,
+        IReadOnlyList<WorkflowDefinitionDto>? workflowLibrary = null,
         params WorkflowNodeDto[] agents)
     {
         return new RunTurnCommandDto
         {
             RequestId = "turn-1",
             SessionId = "session-1",
+            WorkflowLibrary = workflowLibrary ?? [],
             Workflow = new WorkflowDefinitionDto
             {
                 Id = $"workflow-{orchestrationMode}",
@@ -2334,6 +2434,35 @@ public sealed class CopilotWorkflowRunnerTests
                 },
             },
         };
+    }
+
+    private static RunTurnCommandDto CreateReferencedSubworkflowCommand()
+    {
+        WorkflowDefinitionDto nestedWorkflow = new()
+        {
+            Id = "nested-review-workflow",
+            Name = "Nested Review Workflow",
+            Graph = new WorkflowGraphDto
+            {
+                Nodes =
+                [
+                    CreateAgent("agent-reviewer", "Reviewer"),
+                ],
+            },
+            Settings = new WorkflowSettingsDto
+            {
+                OrchestrationMode = "single",
+            },
+        };
+
+        return CreateCommand(
+            "single",
+            workflowName: "Parent Workflow",
+            workflowLibrary: [nestedWorkflow],
+            agents:
+            [
+                CreateSubworkflow("subworkflow-review", "Review Lane", workflowId: nestedWorkflow.Id),
+            ]);
     }
 
     private static RunTurnCommandDto CreateHandoffCommand()

@@ -271,7 +271,13 @@ export interface MessageReclassifiedEvent {
   newKind: 'thinking';
 }
 
-export type AgentActivityType = 'thinking' | 'tool-calling' | 'handoff' | 'completed';
+export type AgentActivityType =
+  | 'thinking'
+  | 'tool-calling'
+  | 'handoff'
+  | 'completed'
+  | 'subworkflow-started'
+  | 'subworkflow-completed';
 
 export interface ToolCallFileChangePreview {
   path: string;
@@ -286,6 +292,8 @@ export interface AgentActivityEvent {
   activityType: AgentActivityType;
   agentId?: string;
   agentName?: string;
+  subworkflowNodeId?: string;
+  subworkflowName?: string;
   sourceAgentId?: string;
   sourceAgentName?: string;
   toolName?: string;

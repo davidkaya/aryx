@@ -1,4 +1,4 @@
-import type { AgentNodeConfig } from '@shared/domain/workflow';
+import type { AgentNodeConfig, WorkflowAgentHierarchy, WorkflowOrchestrationMode } from '@shared/domain/workflow';
 import type { SessionEventRecord } from '@shared/domain/event';
 import type { QuotaSnapshot, WorkflowDiagnosticKind, WorkflowDiagnosticSeverity } from '@shared/contracts/sidecar';
 
@@ -8,6 +8,8 @@ export interface AgentActivityState {
   activityType?: SessionEventRecord['activityType'];
   toolName?: string;
   toolArguments?: Record<string, unknown>;
+  subworkflowNodeId?: string;
+  subworkflowName?: string;
 }
 
 export interface SessionUsageState {
@@ -31,9 +33,14 @@ export function applySessionEventActivity(
   event: SessionEventRecord,
 ): SessionActivityMap {
   if (event.kind === 'agent-activity') {
-    const agentKey = resolveAgentKey(event);
+    const isSubworkflowLifecycle =
+      event.activityType === 'subworkflow-started' || event.activityType === 'subworkflow-completed';
+    const agentKey = isSubworkflowLifecycle
+      ? event.subworkflowNodeId?.trim()
+      : resolveAgentKey(event);
+
     if (!agentKey) {
-      console.warn('[aryx activity] Dropping agent-activity event without agentId/agentName.', event);
+      console.warn('[aryx activity] Dropping agent-activity event without key.', event);
       return current;
     }
 
@@ -43,10 +50,12 @@ export function applySessionEventActivity(
         ...(current[event.sessionId] ?? {}),
         [agentKey]: {
           agentId: event.agentId ?? agentKey,
-          agentName: event.agentName?.trim() || event.agentId?.trim() || agentKey,
+          agentName: event.agentName?.trim() || event.subworkflowName?.trim() || event.agentId?.trim() || agentKey,
           activityType: event.activityType,
           toolName: event.toolName,
           toolArguments: event.toolArguments,
+          subworkflowNodeId: event.subworkflowNodeId,
+          subworkflowName: event.subworkflowName,
         },
       },
     };
@@ -144,6 +153,88 @@ export function isAgentActivityActive(activity: AgentActivityState | undefined):
 
 export function isAgentActivityCompleted(activity: AgentActivityState | undefined): boolean {
   return activity?.activityType === 'completed';
+}
+
+export type SubWorkflowGroupStatus = 'idle' | 'running' | 'completed';
+
+export interface SubWorkflowActivityGroup {
+  nodeId: string;
+  name: string;
+  workflowId?: string;
+  orchestrationMode: WorkflowOrchestrationMode;
+  status: SubWorkflowGroupStatus;
+  agents: AgentActivityRow[];
+}
+
+export interface GroupedActivityRows {
+  topLevelAgents: AgentActivityRow[];
+  subWorkflows: SubWorkflowActivityGroup[];
+}
+
+function resolveSubWorkflowGroupStatus(
+  agents: AgentActivityRow[],
+  lifecycleEntry: AgentActivityState | undefined,
+): SubWorkflowGroupStatus {
+  if (lifecycleEntry?.activityType === 'subworkflow-completed') return 'completed';
+  if (lifecycleEntry?.activityType === 'subworkflow-started') return 'running';
+  if (agents.some((a) => isAgentActivityActive(a.activity))) return 'running';
+  if (agents.some((a) => isAgentActivityCompleted(a.activity))) return 'completed';
+  return 'idle';
+}
+
+export function buildGroupedActivityRows(
+  current: SessionActivityState | undefined,
+  hierarchy: WorkflowAgentHierarchy,
+): GroupedActivityRows {
+  const topLevelAgents = buildAgentActivityRows(current, hierarchy.topLevelAgents);
+  const subWorkflows: SubWorkflowActivityGroup[] = hierarchy.subWorkflows.map((sub) => {
+    const agents = buildAgentActivityRows(current, sub.agents);
+    const lifecycleEntry = current?.[sub.nodeId];
+
+    return {
+      nodeId: sub.nodeId,
+      name: sub.workflowName || sub.nodeLabel,
+      workflowId: sub.workflowId,
+      orchestrationMode: sub.orchestrationMode,
+      status: resolveSubWorkflowGroupStatus(agents, lifecycleEntry),
+      agents,
+    };
+  });
+
+  // Pick up agents that arrived via activity events with a subworkflowNodeId
+  // but whose sub-workflow isn't in the statically-resolved hierarchy (e.g.
+  // a referenced workflow that couldn't be resolved at design time).
+  if (current) {
+    const knownKeys = new Set([
+      ...topLevelAgents.map((a) => a.key),
+      ...subWorkflows.flatMap((sw) => [sw.nodeId, ...sw.agents.map((a) => a.key)]),
+    ]);
+
+    const dynamicGroups = new Map<string, { name: string; agents: AgentActivityRow[] }>();
+    for (const [key, state] of Object.entries(current)) {
+      if (knownKeys.has(key)) continue;
+      if (!state.subworkflowNodeId) continue;
+      if (state.activityType === 'subworkflow-started' || state.activityType === 'subworkflow-completed') continue;
+
+      const group = dynamicGroups.get(state.subworkflowNodeId)
+        ?? { name: state.subworkflowName ?? state.subworkflowNodeId, agents: [] };
+      group.agents.push({ key, agentName: state.agentName, activity: state });
+      dynamicGroups.set(state.subworkflowNodeId, group);
+    }
+
+    for (const [nodeId, group] of dynamicGroups) {
+      const lifecycleEntry = current[nodeId];
+      subWorkflows.push({
+        nodeId,
+        name: group.name,
+        orchestrationMode: 'sequential',
+        status: resolveSubWorkflowGroupStatus(group.agents, lifecycleEntry),
+        agents: group.agents,
+      });
+    }
+  }
+
+  return { topLevelAgents, subWorkflows };
 }
 
 function removeSessionActivity(
@@ -280,6 +371,26 @@ function formatDiagnosticLabel(
 
 function formatTurnEventEntry(event: SessionEventRecord): TurnEventEntry | undefined {
   switch (event.kind) {
+    case 'agent-activity': {
+      if (event.activityType === 'subworkflow-started') {
+        return {
+          kind: event.kind,
+          occurredAt: event.occurredAt,
+          label: `Sub-workflow started: ${event.subworkflowName ?? event.subworkflowNodeId ?? 'unknown'}`,
+          phase: 'start',
+        };
+      }
+      if (event.activityType === 'subworkflow-completed') {
+        return {
+          kind: event.kind,
+          occurredAt: event.occurredAt,
+          label: `Sub-workflow completed: ${event.subworkflowName ?? event.subworkflowNodeId ?? 'unknown'}`,
+          phase: 'end',
+          success: true,
+        };
+      }
+      return undefined;
+    }
     case 'subagent':
       return {
         kind: event.kind,

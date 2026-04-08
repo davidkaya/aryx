@@ -736,4 +736,322 @@ describe('workflow diagnostic turn events', () => {
     const entries = result['session-1']!;
     expect(entries[0].label).toBe('Workflow warning');
   });
+
+  test('formats subworkflow-started lifecycle event', () => {
+    const result = applyTurnEventLog({}, {
+      sessionId: 'session-1',
+      kind: 'agent-activity',
+      occurredAt: '2026-03-23T00:00:00.000Z',
+      activityType: 'subworkflow-started',
+      subworkflowNodeId: 'data-pipeline',
+      subworkflowName: 'Data Pipeline',
+    });
+    const entries = result['session-1']!;
+    expect(entries).toHaveLength(1);
+    expect(entries[0].label).toBe('Sub-workflow started: Data Pipeline');
+    expect(entries[0].phase).toBe('start');
+  });
+
+  test('formats subworkflow-completed lifecycle event', () => {
+    const result = applyTurnEventLog({}, {
+      sessionId: 'session-1',
+      kind: 'agent-activity',
+      occurredAt: '2026-03-23T00:00:00.000Z',
+      activityType: 'subworkflow-completed',
+      subworkflowNodeId: 'data-pipeline',
+      subworkflowName: 'Data Pipeline',
+    });
+    const entries = result['session-1']!;
+    expect(entries).toHaveLength(1);
+    expect(entries[0].label).toBe('Sub-workflow completed: Data Pipeline');
+    expect(entries[0].phase).toBe('end');
+    expect(entries[0].success).toBe(true);
+  });
+});
+
+/* ── Sub-workflow grouping tests ───────────────────────────── */
+
+import {
+  buildGroupedActivityRows,
+  type SubWorkflowActivityGroup,
+} from '@renderer/lib/sessionActivity';
+import {
+  resolveWorkflowAgentHierarchy,
+  type SubWorkflowGroupDescriptor,
+  type WorkflowAgentHierarchy,
+} from '@shared/domain/workflow';
+
+describe('sub-workflow activity grouping', () => {
+  function makeWorkflow(overrides?: Partial<WorkflowDefinition>): WorkflowDefinition {
+    return {
+      id: 'wf-1',
+      name: 'Test Workflow',
+      description: 'A test workflow.',
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+      settings: { orchestrationMode: 'sequential', checkpointing: { enabled: false }, executionMode: 'off-thread' },
+      graph: {
+        nodes: [
+          { id: 'start', kind: 'start', label: 'Start', position: { x: 0, y: 0 }, config: { kind: 'start' } },
+          { id: 'agent-a', kind: 'agent', label: 'Agent A', position: { x: 100, y: 0 }, order: 1, config: { kind: 'agent', id: 'agent-a', name: 'Agent A', description: '', instructions: '', model: 'gpt-5.4' } },
+          { id: 'end', kind: 'end', label: 'End', position: { x: 200, y: 0 }, config: { kind: 'end' } },
+        ],
+        edges: [
+          { id: 'e1', source: 'start', target: 'agent-a', kind: 'direct' },
+          { id: 'e2', source: 'agent-a', target: 'end', kind: 'direct' },
+        ],
+      },
+      ...overrides,
+    };
+  }
+
+  function makeSubWorkflow(): WorkflowDefinition {
+    return makeWorkflow({
+      id: 'sub-wf-1',
+      name: 'Sub Pipeline',
+      graph: {
+        nodes: [
+          { id: 'start', kind: 'start', label: 'Start', position: { x: 0, y: 0 }, config: { kind: 'start' } },
+          { id: 'inner-agent', kind: 'agent', label: 'Inner Agent', position: { x: 100, y: 0 }, order: 1, config: { kind: 'agent', id: 'inner-agent', name: 'Inner Agent', description: '', instructions: '', model: 'gpt-5.4' } },
+          { id: 'inner-agent-2', kind: 'agent', label: 'Inner Agent 2', position: { x: 200, y: 0 }, order: 2, config: { kind: 'agent', id: 'inner-agent-2', name: 'Inner Agent 2', description: '', instructions: '', model: 'gpt-5.4' } },
+          { id: 'end', kind: 'end', label: 'End', position: { x: 300, y: 0 }, config: { kind: 'end' } },
+        ],
+        edges: [
+          { id: 'e1', source: 'start', target: 'inner-agent', kind: 'direct' },
+          { id: 'e2', source: 'inner-agent', target: 'inner-agent-2', kind: 'direct' },
+          { id: 'e3', source: 'inner-agent-2', target: 'end', kind: 'direct' },
+        ],
+      },
+    });
+  }
+
+  test('flat workflow produces no sub-workflow groups', () => {
+    const workflow = makeWorkflow();
+    const hierarchy = resolveWorkflowAgentHierarchy(workflow);
+    const result = buildGroupedActivityRows(undefined, hierarchy);
+
+    expect(result.topLevelAgents).toHaveLength(1);
+    expect(result.topLevelAgents[0].agentName).toBe('Agent A');
+    expect(result.subWorkflows).toHaveLength(0);
+  });
+
+  test('workflow with inline sub-workflow produces grouped agents', () => {
+    const subWf = makeSubWorkflow();
+    const workflow = makeWorkflow({
+      graph: {
+        nodes: [
+          { id: 'start', kind: 'start', label: 'Start', position: { x: 0, y: 0 }, config: { kind: 'start' } },
+          { id: 'agent-a', kind: 'agent', label: 'Agent A', position: { x: 100, y: 0 }, order: 1, config: { kind: 'agent', id: 'agent-a', name: 'Agent A', description: '', instructions: '', model: 'gpt-5.4' } },
+          { id: 'sub-node', kind: 'sub-workflow', label: 'Sub Pipeline', position: { x: 200, y: 0 }, order: 2, config: { kind: 'sub-workflow', inlineWorkflow: subWf } },
+          { id: 'end', kind: 'end', label: 'End', position: { x: 300, y: 0 }, config: { kind: 'end' } },
+        ],
+        edges: [
+          { id: 'e1', source: 'start', target: 'agent-a', kind: 'direct' },
+          { id: 'e2', source: 'agent-a', target: 'sub-node', kind: 'direct' },
+          { id: 'e3', source: 'sub-node', target: 'end', kind: 'direct' },
+        ],
+      },
+    });
+
+    const hierarchy = resolveWorkflowAgentHierarchy(workflow);
+    expect(hierarchy.topLevelAgents).toHaveLength(1);
+    expect(hierarchy.subWorkflows).toHaveLength(1);
+    expect(hierarchy.subWorkflows[0].workflowName).toBe('Sub Pipeline');
+    expect(hierarchy.subWorkflows[0].agents).toHaveLength(2);
+
+    const result = buildGroupedActivityRows(undefined, hierarchy);
+    expect(result.topLevelAgents).toHaveLength(1);
+    expect(result.subWorkflows).toHaveLength(1);
+    expect(result.subWorkflows[0].agents).toHaveLength(2);
+    expect(result.subWorkflows[0].status).toBe('idle');
+  });
+
+  test('sub-workflow group status reflects agent activity', () => {
+    const subWf = makeSubWorkflow();
+    const workflow = makeWorkflow({
+      graph: {
+        nodes: [
+          { id: 'start', kind: 'start', label: 'Start', position: { x: 0, y: 0 }, config: { kind: 'start' } },
+          { id: 'sub-node', kind: 'sub-workflow', label: 'Pipeline', position: { x: 100, y: 0 }, config: { kind: 'sub-workflow', inlineWorkflow: subWf } },
+          { id: 'end', kind: 'end', label: 'End', position: { x: 200, y: 0 }, config: { kind: 'end' } },
+        ],
+        edges: [
+          { id: 'e1', source: 'start', target: 'sub-node', kind: 'direct' },
+          { id: 'e2', source: 'sub-node', target: 'end', kind: 'direct' },
+        ],
+      },
+    });
+
+    const hierarchy = resolveWorkflowAgentHierarchy(workflow);
+
+    // Running: when lifecycle event says 'subworkflow-started'
+    const runningActivity = {
+      'sub-node': { agentId: 'sub-node', agentName: 'Pipeline', activityType: 'subworkflow-started' as const },
+      'inner-agent': { agentId: 'inner-agent', agentName: 'Inner Agent', activityType: 'thinking' as const },
+    };
+    const running = buildGroupedActivityRows(runningActivity, hierarchy);
+    expect(running.subWorkflows[0].status).toBe('running');
+
+    // Completed: when lifecycle event says 'subworkflow-completed'
+    const completedActivity = {
+      'sub-node': { agentId: 'sub-node', agentName: 'Pipeline', activityType: 'subworkflow-completed' as const },
+      'inner-agent': { agentId: 'inner-agent', agentName: 'Inner Agent', activityType: 'completed' as const },
+    };
+    const completed = buildGroupedActivityRows(completedActivity, hierarchy);
+    expect(completed.subWorkflows[0].status).toBe('completed');
+  });
+
+  test('sub-workflow group derives running status from active agents', () => {
+    const subWf = makeSubWorkflow();
+    const workflow = makeWorkflow({
+      graph: {
+        nodes: [
+          { id: 'start', kind: 'start', label: 'Start', position: { x: 0, y: 0 }, config: { kind: 'start' } },
+          { id: 'sub-node', kind: 'sub-workflow', label: 'Pipeline', position: { x: 100, y: 0 }, config: { kind: 'sub-workflow', inlineWorkflow: subWf } },
+          { id: 'end', kind: 'end', label: 'End', position: { x: 200, y: 0 }, config: { kind: 'end' } },
+        ],
+        edges: [
+          { id: 'e1', source: 'start', target: 'sub-node', kind: 'direct' },
+          { id: 'e2', source: 'sub-node', target: 'end', kind: 'direct' },
+        ],
+      },
+    });
+
+    const hierarchy = resolveWorkflowAgentHierarchy(workflow);
+
+    // No lifecycle event, but agent is active — derive running status
+    const activity = {
+      'inner-agent': { agentId: 'inner-agent', agentName: 'Inner Agent', activityType: 'thinking' as const },
+    };
+    const result = buildGroupedActivityRows(activity, hierarchy);
+    expect(result.subWorkflows[0].status).toBe('running');
+  });
+
+  test('referenced sub-workflow resolves via options', () => {
+    const subWf = makeSubWorkflow();
+    const workflow = makeWorkflow({
+      graph: {
+        nodes: [
+          { id: 'start', kind: 'start', label: 'Start', position: { x: 0, y: 0 }, config: { kind: 'start' } },
+          { id: 'sub-node', kind: 'sub-workflow', label: 'Ref Pipeline', position: { x: 100, y: 0 }, config: { kind: 'sub-workflow', workflowId: 'sub-wf-1' } },
+          { id: 'end', kind: 'end', label: 'End', position: { x: 200, y: 0 }, config: { kind: 'end' } },
+        ],
+        edges: [
+          { id: 'e1', source: 'start', target: 'sub-node', kind: 'direct' },
+          { id: 'e2', source: 'sub-node', target: 'end', kind: 'direct' },
+        ],
+      },
+    });
+
+    const hierarchy = resolveWorkflowAgentHierarchy(workflow, {
+      resolveWorkflow: (id) => (id === 'sub-wf-1' ? subWf : undefined),
+    });
+    expect(hierarchy.subWorkflows).toHaveLength(1);
+    expect(hierarchy.subWorkflows[0].agents).toHaveLength(2);
+    expect(hierarchy.subWorkflows[0].workflowId).toBe('sub-wf-1');
+  });
+
+  test('dynamic grouping picks up unresolved sub-workflow agents from activity', () => {
+    const workflow = makeWorkflow(); // flat workflow, no sub-workflow nodes
+    const hierarchy = resolveWorkflowAgentHierarchy(workflow);
+
+    // Activity events arrive with subworkflowNodeId for agents not in the hierarchy
+    const activity = {
+      'agent-a': { agentId: 'agent-a', agentName: 'Agent A', activityType: 'thinking' as const },
+      'dynamic-agent': {
+        agentId: 'dynamic-agent',
+        agentName: 'Dynamic Agent',
+        activityType: 'tool-calling' as const,
+        subworkflowNodeId: 'dynamic-sub',
+        subworkflowName: 'Dynamic Sub',
+        toolName: 'search',
+      },
+    };
+    const result = buildGroupedActivityRows(activity, hierarchy);
+    expect(result.topLevelAgents).toHaveLength(1);
+    expect(result.subWorkflows).toHaveLength(1);
+    expect(result.subWorkflows[0].nodeId).toBe('dynamic-sub');
+    expect(result.subWorkflows[0].name).toBe('Dynamic Sub');
+    expect(result.subWorkflows[0].agents).toHaveLength(1);
+    expect(result.subWorkflows[0].agents[0].agentName).toBe('Dynamic Agent');
+    expect(result.subWorkflows[0].status).toBe('running');
+  });
+});
+
+describe('sub-workflow activity event handling', () => {
+  test('stores subworkflow-started lifecycle event keyed by subworkflowNodeId', () => {
+    const event: SessionEventRecord = {
+      sessionId: 'session-1',
+      kind: 'agent-activity',
+      occurredAt: '2026-03-23T00:00:00.000Z',
+      activityType: 'subworkflow-started',
+      subworkflowNodeId: 'pipeline-node',
+      subworkflowName: 'Data Pipeline',
+    };
+
+    const result = applySessionEventActivity({}, event);
+    expect(result['session-1']).toBeDefined();
+    expect(result['session-1']!['pipeline-node']).toEqual({
+      agentId: 'pipeline-node',
+      agentName: 'Data Pipeline',
+      activityType: 'subworkflow-started',
+      subworkflowNodeId: 'pipeline-node',
+      subworkflowName: 'Data Pipeline',
+    });
+  });
+
+  test('stores subworkflow-completed lifecycle event replacing started', () => {
+    const startEvent: SessionEventRecord = {
+      sessionId: 'session-1',
+      kind: 'agent-activity',
+      occurredAt: '2026-03-23T00:00:00.000Z',
+      activityType: 'subworkflow-started',
+      subworkflowNodeId: 'pipeline-node',
+      subworkflowName: 'Data Pipeline',
+    };
+    const completeEvent: SessionEventRecord = {
+      sessionId: 'session-1',
+      kind: 'agent-activity',
+      occurredAt: '2026-03-23T00:00:01.000Z',
+      activityType: 'subworkflow-completed',
+      subworkflowNodeId: 'pipeline-node',
+      subworkflowName: 'Data Pipeline',
+    };
+
+    let state = applySessionEventActivity({}, startEvent);
+    state = applySessionEventActivity(state, completeEvent);
+    expect(state['session-1']!['pipeline-node']?.activityType).toBe('subworkflow-completed');
+  });
+
+  test('propagates subworkflow context on regular agent activity events', () => {
+    const event: SessionEventRecord = {
+      sessionId: 'session-1',
+      kind: 'agent-activity',
+      occurredAt: '2026-03-23T00:00:00.000Z',
+      activityType: 'thinking',
+      agentId: 'inner-agent',
+      agentName: 'Inner Agent',
+      subworkflowNodeId: 'pipeline-node',
+      subworkflowName: 'Data Pipeline',
+    };
+
+    const result = applySessionEventActivity({}, event);
+    const agentState = result['session-1']!['inner-agent'];
+    expect(agentState).toBeDefined();
+    expect(agentState.subworkflowNodeId).toBe('pipeline-node');
+    expect(agentState.subworkflowName).toBe('Data Pipeline');
+  });
+
+  test('drops lifecycle event without subworkflowNodeId', () => {
+    const event: SessionEventRecord = {
+      sessionId: 'session-1',
+      kind: 'agent-activity',
+      occurredAt: '2026-03-23T00:00:00.000Z',
+      activityType: 'subworkflow-started',
+      // No subworkflowNodeId
+    };
+
+    const result = applySessionEventActivity({}, event);
+    expect(result['session-1']).toBeUndefined();
+  });
 });

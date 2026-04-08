@@ -675,7 +675,7 @@ export class SessionTurnExecutor {
     const session = this.requireSession(workspace, sessionId);
     const activityType = event.activityType;
     let nextRun: SessionRunRecord | undefined;
-    if (activityType !== 'completed') {
+    if (activityType === 'thinking' || activityType === 'tool-calling' || activityType === 'handoff') {
       nextRun = this.updateSessionRun(session, requestId, (run) =>
         appendRunActivityEvent(run, {
           activityType,
@@ -703,6 +703,8 @@ export class SessionTurnExecutor {
       activityType: event.activityType,
       agentId: event.agentId,
       agentName: event.agentName,
+      subworkflowNodeId: event.subworkflowNodeId,
+      subworkflowName: event.subworkflowName,
       sourceAgentId: event.sourceAgentId,
       sourceAgentName: event.sourceAgentName,
       toolName: event.toolName,

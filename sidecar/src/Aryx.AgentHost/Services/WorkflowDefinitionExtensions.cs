@@ -45,6 +45,12 @@ internal static class WorkflowDefinitionExtensions
         return string.Equals(node.Kind, "agent", StringComparison.OrdinalIgnoreCase);
     }
 
+    public static bool IsSubWorkflowNode(this WorkflowNodeDto node)
+    {
+        ArgumentNullException.ThrowIfNull(node);
+        return string.Equals(node.Kind, "sub-workflow", StringComparison.OrdinalIgnoreCase);
+    }
+
     public static string GetAgentId(this WorkflowNodeDto node)
     {
         ArgumentNullException.ThrowIfNull(node);
@@ -85,6 +91,67 @@ internal static class WorkflowDefinitionExtensions
         ArgumentException.ThrowIfNullOrWhiteSpace(mode);
 
         return string.Equals(workflow.Settings.OrchestrationMode, mode, StringComparison.OrdinalIgnoreCase);
+    }
+
+    public static WorkflowNodeDto? FindSubWorkflowNode(
+        this WorkflowDefinitionDto workflow,
+        string? nodeId,
+        IReadOnlyList<WorkflowDefinitionDto>? workflowLibrary = null)
+    {
+        ArgumentNullException.ThrowIfNull(workflow);
+        string? normalizedNodeId = NormalizeOptionalString(nodeId);
+        if (normalizedNodeId is null)
+        {
+            return null;
+        }
+
+        return FindSubWorkflowNode(
+            workflow,
+            normalizedNodeId,
+            CreateWorkflowLibraryMap(workflowLibrary),
+            new HashSet<string>(StringComparer.Ordinal),
+            new HashSet<WorkflowDefinitionDto>(ReferenceEqualityComparer.Instance));
+    }
+
+    internal static WorkflowNodeDto? FindSubWorkflowNode(
+        this WorkflowDefinitionDto workflow,
+        string? nodeId,
+        IReadOnlyDictionary<string, WorkflowDefinitionDto>? workflowLibrary)
+    {
+        ArgumentNullException.ThrowIfNull(workflow);
+        string? normalizedNodeId = NormalizeOptionalString(nodeId);
+        if (normalizedNodeId is null)
+        {
+            return null;
+        }
+
+        return FindSubWorkflowNode(
+            workflow,
+            normalizedNodeId,
+            workflowLibrary ?? EmptyWorkflowLibrary,
+            new HashSet<string>(StringComparer.Ordinal),
+            new HashSet<WorkflowDefinitionDto>(ReferenceEqualityComparer.Instance));
+    }
+
+    internal static string GetSubworkflowDisplayName(
+        this WorkflowNodeDto node,
+        IReadOnlyDictionary<string, WorkflowDefinitionDto>? workflowLibrary)
+    {
+        ArgumentNullException.ThrowIfNull(node);
+
+        WorkflowDefinitionDto? resolvedWorkflow = null;
+        if (node.Config.InlineWorkflow is not null)
+        {
+            resolvedWorkflow = node.Config.InlineWorkflow;
+        }
+        else if (!string.IsNullOrWhiteSpace(node.Config.WorkflowId)
+                 && workflowLibrary is not null
+                 && workflowLibrary.TryGetValue(node.Config.WorkflowId, out WorkflowDefinitionDto? workflow))
+        {
+            resolvedWorkflow = workflow;
+        }
+
+        return FirstNonBlank(node.Label, resolvedWorkflow?.Name, node.Config.WorkflowId, node.Id) ?? "sub-workflow";
     }
 
     private static readonly IReadOnlyDictionary<string, WorkflowDefinitionDto> EmptyWorkflowLibrary =
@@ -128,7 +195,55 @@ internal static class WorkflowDefinitionExtensions
         }
     }
 
-    private static Dictionary<string, WorkflowDefinitionDto> CreateWorkflowLibraryMap(
+    private static WorkflowNodeDto? FindSubWorkflowNode(
+        WorkflowDefinitionDto workflowDefinition,
+        string nodeId,
+        IReadOnlyDictionary<string, WorkflowDefinitionDto> workflowLibrary,
+        ISet<string> visitedWorkflowIds,
+        ISet<WorkflowDefinitionDto> visitedAnonymousWorkflows)
+    {
+        string? workflowId = NormalizeOptionalString(workflowDefinition.Id);
+        if (workflowId is not null)
+        {
+            if (!visitedWorkflowIds.Add(workflowId))
+            {
+                return null;
+            }
+        }
+        else if (!visitedAnonymousWorkflows.Add(workflowDefinition))
+        {
+            return null;
+        }
+
+        foreach (WorkflowNodeDto node in workflowDefinition.Graph.Nodes)
+        {
+            if (!node.IsSubWorkflowNode())
+            {
+                continue;
+            }
+
+            if (string.Equals(node.Id, nodeId, StringComparison.OrdinalIgnoreCase))
+            {
+                return node;
+            }
+
+            WorkflowDefinitionDto subWorkflow = node.ResolveSubWorkflowDefinition(workflowLibrary);
+            WorkflowNodeDto? match = FindSubWorkflowNode(
+                subWorkflow,
+                nodeId,
+                workflowLibrary,
+                visitedWorkflowIds,
+                visitedAnonymousWorkflows);
+            if (match is not null)
+            {
+                return match;
+            }
+        }
+
+        return null;
+    }
+
+    internal static Dictionary<string, WorkflowDefinitionDto> CreateWorkflowLibraryMap(
         IReadOnlyList<WorkflowDefinitionDto>? workflowLibrary)
     {
         return workflowLibrary?

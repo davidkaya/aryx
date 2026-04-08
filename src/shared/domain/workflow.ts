@@ -536,6 +536,68 @@ export function resolveWorkflowAgents(workflow: WorkflowDefinition): AgentNodeCo
   });
 }
 
+export interface SubWorkflowGroupDescriptor {
+  nodeId: string;
+  nodeLabel: string;
+  workflowId?: string;
+  workflowName: string;
+  orchestrationMode: WorkflowOrchestrationMode;
+  agents: AgentNodeConfig[];
+}
+
+export interface WorkflowAgentHierarchy {
+  topLevelAgents: AgentNodeConfig[];
+  subWorkflows: SubWorkflowGroupDescriptor[];
+}
+
+export function resolveWorkflowAgentHierarchy(
+  workflow: WorkflowDefinition,
+  options?: WorkflowResolutionOptions,
+): WorkflowAgentHierarchy {
+  const topLevelAgents = resolveWorkflowAgents(workflow);
+  const subWorkflows: SubWorkflowGroupDescriptor[] = [];
+
+  const subWorkflowNodes = workflow.graph.nodes
+    .filter((node): node is WorkflowNode & { config: SubWorkflowConfig } => node.kind === 'sub-workflow')
+    .slice()
+    .sort((a, b) => {
+      const orderA = a.order ?? Number.MAX_SAFE_INTEGER;
+      const orderB = b.order ?? Number.MAX_SAFE_INTEGER;
+      if (orderA !== orderB) return orderA - orderB;
+      return a.label.localeCompare(b.label);
+    });
+
+  for (const node of subWorkflowNodes) {
+    const subWorkflowDef = resolveSubWorkflowDefinition(node, options);
+    if (!subWorkflowDef) continue;
+
+    const agents = resolveWorkflowAgents(subWorkflowDef);
+    const mode = inferWorkflowOrchestrationMode(subWorkflowDef, options);
+
+    subWorkflows.push({
+      nodeId: node.id,
+      nodeLabel: node.label,
+      workflowId: node.config.workflowId,
+      workflowName: subWorkflowDef.name || node.label,
+      orchestrationMode: mode,
+      agents,
+    });
+  }
+
+  return { topLevelAgents, subWorkflows };
+}
+
+function resolveSubWorkflowDefinition(
+  node: WorkflowNode & { config: SubWorkflowConfig },
+  options?: WorkflowResolutionOptions,
+): WorkflowDefinition | undefined {
+  if (node.config.inlineWorkflow) return node.config.inlineWorkflow;
+  if (node.config.workflowId && options?.resolveWorkflow) {
+    return options.resolveWorkflow(node.config.workflowId);
+  }
+  return undefined;
+}
+
 function hasWorkflowExecutionFanEdges(
   workflow: WorkflowDefinition,
   options?: WorkflowResolutionOptions,

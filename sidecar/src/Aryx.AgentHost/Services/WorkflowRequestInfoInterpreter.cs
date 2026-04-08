@@ -205,6 +205,26 @@ internal static class WorkflowRequestInfoInterpreter
         return false;
     }
 
+    public static IReadOnlyDictionary<string, object?>? NormalizeRawToolArguments(object? rawArguments)
+    {
+        return rawArguments switch
+        {
+            null => null,
+            JsonElement { ValueKind: JsonValueKind.Object } element => NormalizeToolArgumentObject(element),
+            IEnumerable<KeyValuePair<string, object?>> dictionary => NormalizeToolArguments(dictionary),
+            _ => NormalizeRawToolArgumentsViaJson(rawArguments),
+        };
+    }
+
+    private static IReadOnlyDictionary<string, object?>? NormalizeRawToolArgumentsViaJson(object value)
+    {
+        string json = JsonSerializer.Serialize(value, value.GetType(), JsonOptions);
+        using JsonDocument document = JsonDocument.Parse(json);
+        return document.RootElement.ValueKind == JsonValueKind.Object
+            ? NormalizeToolArgumentObject(document.RootElement)
+            : null;
+    }
+
     private static IReadOnlyDictionary<string, object?>? NormalizeToolArguments(
         IEnumerable<KeyValuePair<string, object?>>? arguments)
     {

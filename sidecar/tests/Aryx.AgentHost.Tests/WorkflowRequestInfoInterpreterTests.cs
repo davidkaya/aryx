@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
+using System.Text.Json;
 using Aryx.AgentHost.Contracts;
 using Aryx.AgentHost.Services;
 using Microsoft.Agents.AI;
@@ -253,6 +254,35 @@ public sealed class WorkflowRequestInfoInterpreterTests
             requestInfo);
 
         Assert.False(requiresBoundary);
+    }
+
+    [Fact]
+    public void NormalizeRawToolArguments_JsonElement_ExtractsArguments()
+    {
+        using JsonDocument doc = JsonDocument.Parse("""{"path":"/src/main.ts","view_range":[10,20]}""");
+        JsonElement element = doc.RootElement.Clone();
+
+        IReadOnlyDictionary<string, object?>? result = WorkflowRequestInfoInterpreter.NormalizeRawToolArguments(element);
+
+        Assert.NotNull(result);
+        Assert.Equal("/src/main.ts", result["path"]);
+        IReadOnlyList<object?> viewRange = Assert.IsAssignableFrom<IReadOnlyList<object?>>(result["view_range"]);
+        Assert.Equal(2, viewRange.Count);
+    }
+
+    [Fact]
+    public void NormalizeRawToolArguments_Null_ReturnsNull()
+    {
+        Assert.Null(WorkflowRequestInfoInterpreter.NormalizeRawToolArguments(null));
+    }
+
+    [Fact]
+    public void NormalizeRawToolArguments_EmptyObject_ReturnsNull()
+    {
+        using JsonDocument doc = JsonDocument.Parse("{}");
+        JsonElement element = doc.RootElement.Clone();
+
+        Assert.Null(WorkflowRequestInfoInterpreter.NormalizeRawToolArguments(element));
     }
 
     private static RunTurnCommandDto CreateSingleAgentCommand()

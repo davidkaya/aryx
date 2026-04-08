@@ -68,14 +68,31 @@ public sealed class CopilotTurnExecutionStateTests
         state.ObserveSessionEvent(
             command.Workflow.GetAgentNodes()[0],
             SessionEvent.FromJson(
-                """{"type":"tool.execution_start","data":{"toolCallId":"tool-call-1","toolName":"view"},"id":"33333333-3333-3333-3333-333333333333","timestamp":"2026-03-27T00:00:00Z"}"""));
+                """{"type":"tool.execution_start","data":{"toolCallId":"tool-call-1","toolName":"view","arguments":{"path":"/src/main.ts","view_range":[10,20]}},"id":"33333333-3333-3333-3333-333333333333","timestamp":"2026-03-27T00:00:00Z"}"""));
 
         AgentActivityEventDto toolActivity = Assert.Single(state.DrainPendingEvents().OfType<AgentActivityEventDto>());
         Assert.Equal("tool-calling", toolActivity.ActivityType);
         Assert.Equal("view", toolActivity.ToolName);
         Assert.Equal("tool-call-1", toolActivity.ToolCallId);
+        Assert.NotNull(toolActivity.ToolArguments);
+        Assert.Equal("/src/main.ts", toolActivity.ToolArguments["path"]);
         Assert.True(state.ToolNamesByCallId.TryGetValue("tool-call-1", out string? toolName));
         Assert.Equal("view", toolName);
+    }
+
+    [Fact]
+    public void ObserveSessionEvent_ToolExecutionStart_WithoutArguments_SetsToolArgumentsToNull()
+    {
+        RunTurnCommandDto command = CreateCommand();
+        CopilotTurnExecutionState state = new(command);
+
+        state.ObserveSessionEvent(
+            command.Workflow.GetAgentNodes()[0],
+            SessionEvent.FromJson(
+                """{"type":"tool.execution_start","data":{"toolCallId":"tool-call-1","toolName":"view"},"id":"33333333-3333-3333-3333-333333333333","timestamp":"2026-03-27T00:00:00Z"}"""));
+
+        AgentActivityEventDto toolActivity = Assert.Single(state.DrainPendingEvents().OfType<AgentActivityEventDto>());
+        Assert.Null(toolActivity.ToolArguments);
     }
 
     [Fact]

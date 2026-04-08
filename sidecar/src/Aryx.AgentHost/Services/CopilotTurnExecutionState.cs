@@ -98,7 +98,8 @@ internal sealed class CopilotTurnExecutionState
                 string toolName = toolExecutionStart.Data.ToolName.Trim();
                 ToolNamesByCallId[toolCallId] = toolName;
                 ActiveAgent = agent;
-                AgentActivityEventDto? toolActivity = CreateToolCallingActivity(agent, toolName, toolCallId);
+                AgentActivityEventDto? toolActivity = CreateToolCallingActivity(
+                    agent, toolName, toolCallId, toolExecutionStart.Data.Arguments);
                 if (toolActivity is not null)
                 {
                     _pendingEvents.Enqueue(toolActivity);
@@ -295,7 +296,8 @@ internal sealed class CopilotTurnExecutionState
     private AgentActivityEventDto? CreateToolCallingActivity(
         AgentIdentity agent,
         string toolName,
-        string toolCallId)
+        string toolCallId,
+        object? rawArguments = null)
     {
         if (toolName.StartsWith("handoff_to_", StringComparison.Ordinal))
         {
@@ -312,6 +314,7 @@ internal sealed class CopilotTurnExecutionState
             AgentName = agent.AgentName,
             ToolName = toolName,
             ToolCallId = toolCallId,
+            ToolArguments = WorkflowRequestInfoInterpreter.NormalizeRawToolArguments(rawArguments),
         };
     }
 

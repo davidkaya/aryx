@@ -15,7 +15,7 @@ public sealed class WorkflowRequestInfoInterpreterTests
     [Fact]
     public void TryCreateActivityFromRequest_ReturnsToolCallingActivityForFunctionCalls()
     {
-        ConcurrentDictionary<string, string> toolNamesByCallId = new(StringComparer.Ordinal);
+        var tracking = CreateToolTracking();
         RequestInfoEvent requestInfo = CreateRequestInfoEvent(
             new FunctionCallContent("call-1", "view", new Dictionary<string, object?>
             {
@@ -27,7 +27,8 @@ public sealed class WorkflowRequestInfoInterpreterTests
             CreateSingleAgentCommand(),
             requestInfo,
             new AgentIdentity("agent-1", "Primary"),
-            toolNamesByCallId);
+            tracking.ToolNamesByCallId,
+            tracking.ToolCallHasArgumentsById);
 
         Assert.NotNull(activity);
         Assert.Equal("tool-calling", activity.ActivityType);
@@ -37,13 +38,14 @@ public sealed class WorkflowRequestInfoInterpreterTests
         Assert.NotNull(activity.ToolArguments);
         Assert.Equal(@"C:\workspace\file.txt", activity.ToolArguments["path"]);
         Assert.Equal([10, 25], Assert.IsAssignableFrom<IReadOnlyList<object?>>(activity.ToolArguments["viewRange"]));
-        Assert.Equal("view", toolNamesByCallId["call-1"]);
+        Assert.Equal("view", tracking.ToolNamesByCallId["call-1"]);
+        Assert.True(tracking.ToolCallHasArgumentsById["call-1"]);
     }
 
     [Fact]
     public void TryCreateActivityFromRequest_MapsMcpToolCalls()
     {
-        ConcurrentDictionary<string, string> toolNamesByCallId = new(StringComparer.Ordinal);
+        var tracking = CreateToolTracking();
         RequestInfoEvent requestInfo = CreateRequestInfoEvent(
             CreateMcpToolCall(
                 "call-1",
@@ -59,7 +61,8 @@ public sealed class WorkflowRequestInfoInterpreterTests
             CreateSingleAgentCommand(),
             requestInfo,
             new AgentIdentity("agent-1", "Primary"),
-            toolNamesByCallId);
+            tracking.ToolNamesByCallId,
+            tracking.ToolCallHasArgumentsById);
 
         Assert.NotNull(activity);
         Assert.Equal("tool-calling", activity.ActivityType);
@@ -67,13 +70,14 @@ public sealed class WorkflowRequestInfoInterpreterTests
         Assert.NotNull(activity.ToolArguments);
         Assert.Equal(@"C:\workspace", activity.ToolArguments["path"]);
         Assert.Equal(true, activity.ToolArguments["includeIgnored"]);
-        Assert.Equal("git.status", toolNamesByCallId["call-1"]);
+        Assert.Equal("git.status", tracking.ToolNamesByCallId["call-1"]);
+        Assert.True(tracking.ToolCallHasArgumentsById["call-1"]);
     }
 
     [Fact]
     public void TryCreateActivityFromRequest_MapsCodeInterpreterCallsToSyntheticToolName()
     {
-        ConcurrentDictionary<string, string> toolNamesByCallId = new(StringComparer.Ordinal);
+        var tracking = CreateToolTracking();
         RequestInfoEvent requestInfo = CreateRequestInfoEvent(
             CreateCodeInterpreterToolCall("call-1", "print('hello')"));
 
@@ -81,7 +85,8 @@ public sealed class WorkflowRequestInfoInterpreterTests
             CreateSingleAgentCommand(),
             requestInfo,
             new AgentIdentity("agent-1", "Primary"),
-            toolNamesByCallId);
+            tracking.ToolNamesByCallId,
+            tracking.ToolCallHasArgumentsById);
 
         Assert.NotNull(activity);
         Assert.Equal("tool-calling", activity.ActivityType);
@@ -90,32 +95,35 @@ public sealed class WorkflowRequestInfoInterpreterTests
         Assert.Equal(
             ["print('hello')"],
             Assert.IsAssignableFrom<IReadOnlyList<object?>>(activity.ToolArguments["inputs"]));
-        Assert.Equal("code interpreter", toolNamesByCallId["call-1"]);
+        Assert.Equal("code interpreter", tracking.ToolNamesByCallId["call-1"]);
+        Assert.True(tracking.ToolCallHasArgumentsById["call-1"]);
     }
 
     [Fact]
     public void TryCreateActivityFromRequest_MapsImageGenerationCallsWithoutTrackingCallId()
     {
-        ConcurrentDictionary<string, string> toolNamesByCallId = new(StringComparer.Ordinal);
+        var tracking = CreateToolTracking();
         RequestInfoEvent requestInfo = CreateRequestInfoEvent(CreateImageGenerationToolCall());
 
         AgentActivityEventDto? activity = WorkflowRequestInfoInterpreter.TryCreateActivityFromRequest(
             CreateSingleAgentCommand(),
             requestInfo,
             new AgentIdentity("agent-1", "Primary"),
-            toolNamesByCallId);
+            tracking.ToolNamesByCallId,
+            tracking.ToolCallHasArgumentsById);
 
         Assert.NotNull(activity);
         Assert.Equal("tool-calling", activity.ActivityType);
         Assert.Equal("image generation", activity.ToolName);
         Assert.Null(activity.ToolArguments);
-        Assert.Empty(toolNamesByCallId);
+        Assert.Empty(tracking.ToolNamesByCallId);
+        Assert.Empty(tracking.ToolCallHasArgumentsById);
     }
 
     [Fact]
     public void TryCreateActivityFromRequest_LeavesToolArgumentsNullWhenFunctionCallHasNoUsableArguments()
     {
-        ConcurrentDictionary<string, string> toolNamesByCallId = new(StringComparer.Ordinal);
+        var tracking = CreateToolTracking();
         RequestInfoEvent requestInfo = CreateRequestInfoEvent(
             new FunctionCallContent("call-1", "view", new Dictionary<string, object?>
             {
@@ -127,16 +135,18 @@ public sealed class WorkflowRequestInfoInterpreterTests
             CreateSingleAgentCommand(),
             requestInfo,
             new AgentIdentity("agent-1", "Primary"),
-            toolNamesByCallId);
+            tracking.ToolNamesByCallId,
+            tracking.ToolCallHasArgumentsById);
 
         Assert.NotNull(activity);
         Assert.Null(activity.ToolArguments);
+        Assert.False(tracking.ToolCallHasArgumentsById["call-1"]);
     }
 
     [Fact]
     public void TryCreateActivityFromRequest_TruncatesOversizedToolArgumentValues()
     {
-        ConcurrentDictionary<string, string> toolNamesByCallId = new(StringComparer.Ordinal);
+        var tracking = CreateToolTracking();
         RequestInfoEvent requestInfo = CreateRequestInfoEvent(
             new FunctionCallContent(
                 "call-1",
@@ -150,37 +160,71 @@ public sealed class WorkflowRequestInfoInterpreterTests
             CreateSingleAgentCommand(),
             requestInfo,
             new AgentIdentity("agent-1", "Primary"),
-            toolNamesByCallId);
+            tracking.ToolNamesByCallId,
+            tracking.ToolCallHasArgumentsById);
 
         Assert.NotNull(activity);
         Assert.NotNull(activity.ToolArguments);
         Assert.Equal("[truncated]", activity.ToolArguments["command"]);
+        Assert.True(tracking.ToolCallHasArgumentsById["call-1"]);
     }
 
     [Fact]
-    public void TryCreateActivityFromRequest_SkipsDuplicateTrackedToolCallIds()
+    public void TryCreateActivityFromRequest_SkipsDuplicateTrackedToolCallIdsThatAlreadyHaveArguments()
     {
-        ConcurrentDictionary<string, string> toolNamesByCallId = new(StringComparer.Ordinal)
-        {
-            ["call-1"] = "view",
-        };
+        var tracking = CreateToolTracking();
+        tracking.ToolNamesByCallId["call-1"] = "view";
+        tracking.ToolCallHasArgumentsById["call-1"] = true;
         RequestInfoEvent requestInfo = CreateRequestInfoEvent(
-            new FunctionCallContent("call-1", "view", new Dictionary<string, object?>()));
+            new FunctionCallContent("call-1", "view", new Dictionary<string, object?>
+            {
+                ["path"] = @"C:\workspace\file.txt",
+            }));
 
         AgentActivityEventDto? activity = WorkflowRequestInfoInterpreter.TryCreateActivityFromRequest(
             CreateSingleAgentCommand(),
             requestInfo,
             new AgentIdentity("agent-1", "Primary"),
-            toolNamesByCallId);
+            tracking.ToolNamesByCallId,
+            tracking.ToolCallHasArgumentsById);
 
         Assert.Null(activity);
-        Assert.Equal("view", toolNamesByCallId["call-1"]);
+        Assert.Equal("view", tracking.ToolNamesByCallId["call-1"]);
+        Assert.True(tracking.ToolCallHasArgumentsById["call-1"]);
+    }
+
+    [Fact]
+    public void TryCreateActivityFromRequest_EmitsEnrichmentWhenTrackedToolCallWasMissingArguments()
+    {
+        var tracking = CreateToolTracking();
+        tracking.ToolNamesByCallId["call-1"] = "view";
+        tracking.ToolCallHasArgumentsById["call-1"] = false;
+        RequestInfoEvent requestInfo = CreateRequestInfoEvent(
+            new FunctionCallContent("call-1", "view", new Dictionary<string, object?>
+            {
+                ["path"] = @"C:\workspace\file.txt",
+            }));
+
+        AgentActivityEventDto? activity = WorkflowRequestInfoInterpreter.TryCreateActivityFromRequest(
+            CreateSingleAgentCommand(),
+            requestInfo,
+            new AgentIdentity("agent-1", "Primary"),
+            tracking.ToolNamesByCallId,
+            tracking.ToolCallHasArgumentsById);
+
+        Assert.NotNull(activity);
+        Assert.Equal("tool-calling", activity.ActivityType);
+        Assert.Equal("call-1", activity.ToolCallId);
+        Assert.NotNull(activity.ToolArguments);
+        Assert.Equal(@"C:\workspace\file.txt", activity.ToolArguments["path"]);
+        Assert.Equal("view", tracking.ToolNamesByCallId["call-1"]);
+        Assert.True(tracking.ToolCallHasArgumentsById["call-1"]);
     }
 
     [Fact]
     public void TryCreateActivityFromRequest_ReturnsHandoffActivityForKnownTargets()
     {
-        ConcurrentDictionary<string, string> toolNamesByCallId = new(StringComparer.Ordinal);
+        var tracking = CreateToolTracking();
         RequestInfoEvent requestInfo = CreateRequestInfoEvent(
             CreateHandoffTarget("agent-handoff-ux", "UX Specialist"));
 
@@ -188,7 +232,8 @@ public sealed class WorkflowRequestInfoInterpreterTests
             CreateHandoffCommand(),
             requestInfo,
             new AgentIdentity("agent-handoff-triage", "Triage"),
-            toolNamesByCallId);
+            tracking.ToolNamesByCallId,
+            tracking.ToolCallHasArgumentsById);
 
         Assert.NotNull(activity);
         Assert.Equal("handoff", activity.ActivityType);
@@ -197,7 +242,8 @@ public sealed class WorkflowRequestInfoInterpreterTests
         Assert.Equal("agent-handoff-triage", activity.SourceAgentId);
         Assert.Equal("Triage", activity.SourceAgentName);
         Assert.Null(activity.ToolName);
-        Assert.Empty(toolNamesByCallId);
+        Assert.Empty(tracking.ToolNamesByCallId);
+        Assert.Empty(tracking.ToolCallHasArgumentsById);
     }
 
     [Fact]
@@ -294,6 +340,11 @@ public sealed class WorkflowRequestInfoInterpreterTests
             CreateAgent("agent-handoff-triage", "Triage"),
             CreateAgent("agent-handoff-ux", "UX Specialist"),
         ]);
+
+    private static (
+        ConcurrentDictionary<string, string> ToolNamesByCallId,
+        ConcurrentDictionary<string, bool> ToolCallHasArgumentsById) CreateToolTracking()
+        => (new(StringComparer.Ordinal), new(StringComparer.Ordinal));
 
     private static RunTurnCommandDto CreateCommand(string orchestrationMode, IReadOnlyList<WorkflowNodeDto> agents)
     {

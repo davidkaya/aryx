@@ -78,6 +78,8 @@ public sealed class CopilotTurnExecutionStateTests
         Assert.Equal("/src/main.ts", toolActivity.ToolArguments["path"]);
         Assert.True(state.ToolNamesByCallId.TryGetValue("tool-call-1", out string? toolName));
         Assert.Equal("view", toolName);
+        Assert.True(state.ToolCallHasArgumentsById.TryGetValue("tool-call-1", out bool hasArguments));
+        Assert.True(hasArguments);
     }
 
     [Fact]
@@ -93,6 +95,8 @@ public sealed class CopilotTurnExecutionStateTests
 
         AgentActivityEventDto toolActivity = Assert.Single(state.DrainPendingEvents().OfType<AgentActivityEventDto>());
         Assert.Null(toolActivity.ToolArguments);
+        Assert.True(state.ToolCallHasArgumentsById.TryGetValue("tool-call-1", out bool hasArguments));
+        Assert.False(hasArguments);
     }
 
     [Fact]
@@ -109,6 +113,8 @@ public sealed class CopilotTurnExecutionStateTests
         Assert.Empty(state.DrainPendingEvents().OfType<AgentActivityEventDto>());
         Assert.True(state.ToolNamesByCallId.TryGetValue("tool-call-1", out string? toolName));
         Assert.Equal("handoff_to_specialist", toolName);
+        Assert.True(state.ToolCallHasArgumentsById.TryGetValue("tool-call-1", out bool hasArguments));
+        Assert.False(hasArguments);
     }
 
     [Fact]
@@ -231,6 +237,10 @@ public sealed class CopilotTurnExecutionStateTests
         Assert.Equal("rg", firstToolName);
         Assert.True(state.ToolNamesByCallId.TryGetValue("tool-call-2", out string? secondToolName));
         Assert.Equal("view", secondToolName);
+        Assert.True(state.ToolCallHasArgumentsById.TryGetValue("tool-call-1", out bool firstHasArguments));
+        Assert.False(firstHasArguments);
+        Assert.True(state.ToolCallHasArgumentsById.TryGetValue("tool-call-2", out bool secondHasArguments));
+        Assert.False(secondHasArguments);
     }
 
     [Fact]

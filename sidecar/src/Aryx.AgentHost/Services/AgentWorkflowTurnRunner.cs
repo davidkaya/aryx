@@ -319,7 +319,8 @@ public class AgentWorkflowTurnRunner : ITurnWorkflowRunner
                 command,
                 requestInfo,
                 state.ActiveAgent,
-                state.ToolNamesByCallId);
+                state.ToolNamesByCallId,
+                state.ToolCallHasArgumentsById);
 
             if (activity is null)
             {

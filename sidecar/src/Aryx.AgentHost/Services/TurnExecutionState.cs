@@ -23,6 +23,8 @@ internal class TurnExecutionState
 
     public ConcurrentDictionary<string, string> ToolNamesByCallId { get; } = new(StringComparer.Ordinal);
 
+    public ConcurrentDictionary<string, bool> ToolCallHasArgumentsById { get; } = new(StringComparer.Ordinal);
+
     public AgentIdentity? ActiveAgent { get; private set; }
 
     public List<ChatMessageDto> CompletedMessages { get; private set; } = [];
@@ -93,7 +95,7 @@ internal class TurnExecutionState
             case ProviderToolExecutionStartEvent toolExecutionStart:
                 string toolCallId = toolExecutionStart.ToolCallId;
                 string toolName = toolExecutionStart.ToolName;
-                ToolNamesByCallId[toolCallId] = toolName;
+                TrackToolCall(toolCallId, toolName, toolExecutionStart.ToolArguments);
                 ActiveAgent = agent;
                 AgentActivityEventDto? toolActivity = CreateToolCallingActivity(
                     agent, toolName, toolCallId, toolExecutionStart.ToolArguments);
@@ -267,6 +269,15 @@ internal class TurnExecutionState
         ActiveAgent = agent;
         _observedAgentsByMessageId[messageId] = agent;
         _lastObservedMessageId = messageId;
+    }
+
+    private void TrackToolCall(
+        string toolCallId,
+        string toolName,
+        IReadOnlyDictionary<string, object?>? toolArguments)
+    {
+        ToolNamesByCallId[toolCallId] = toolName;
+        ToolCallHasArgumentsById[toolCallId] = toolArguments is { Count: > 0 };
     }
 
     private void QueueMessageReclassifiedIfNeeded(string? messageId)

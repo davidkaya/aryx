@@ -20,7 +20,8 @@ internal static class WorkflowRequestInfoInterpreter
         RunTurnCommandDto command,
         RequestInfoEvent requestInfo,
         AgentIdentity? activeAgent,
-        ConcurrentDictionary<string, string> toolNamesByCallId)
+        ConcurrentDictionary<string, string> toolNamesByCallId,
+        ConcurrentDictionary<string, bool> toolCallHasArgumentsById)
     {
         RequestInterpretation interpretation = InterpretRequest(command.Workflow, requestInfo);
         return interpretation switch
@@ -28,7 +29,7 @@ internal static class WorkflowRequestInfoInterpreter
             HandoffRequestInterpretation handoff =>
                 CreateHandoffActivity(command, handoff.TargetAgent, activeAgent),
             ToolRequestInterpretation tool when activeAgent.HasValue =>
-                CreateToolCallingActivity(command, activeAgent.Value, tool, toolNamesByCallId),
+                CreateToolCallingActivity(command, activeAgent.Value, tool, toolNamesByCallId, toolCallHasArgumentsById),
             _ => null,
         };
     }
@@ -63,14 +64,21 @@ internal static class WorkflowRequestInfoInterpreter
         RunTurnCommandDto command,
         AgentIdentity activeAgent,
         ToolRequestInterpretation tool,
-        ConcurrentDictionary<string, string> toolNamesByCallId)
+        ConcurrentDictionary<string, string> toolNamesByCallId,
+        ConcurrentDictionary<string, bool> toolCallHasArgumentsById)
     {
+        bool hasToolArguments = tool.ToolArguments is { Count: > 0 };
         if (tool.ToolCallId is not null && toolNamesByCallId.ContainsKey(tool.ToolCallId))
         {
-            return null;
+            bool trackedHasArguments = toolCallHasArgumentsById.TryGetValue(tool.ToolCallId, out bool hasTrackedArguments)
+                && hasTrackedArguments;
+            if (trackedHasArguments || !hasToolArguments)
+            {
+                return null;
+            }
         }
 
-        TrackToolCallId(toolNamesByCallId, tool.ToolCallId, tool.ToolName);
+        TrackToolCallId(toolNamesByCallId, toolCallHasArgumentsById, tool.ToolCallId, tool.ToolName, hasToolArguments);
 
         return new AgentActivityEventDto
         {
@@ -88,12 +96,15 @@ internal static class WorkflowRequestInfoInterpreter
 
     private static void TrackToolCallId(
         ConcurrentDictionary<string, string> toolNamesByCallId,
+        ConcurrentDictionary<string, bool> toolCallHasArgumentsById,
         string? toolCallId,
-        string toolName)
+        string toolName,
+        bool hasToolArguments)
     {
         if (toolCallId is not null)
         {
             toolNamesByCallId[toolCallId] = toolName;
+            toolCallHasArgumentsById[toolCallId] = hasToolArguments;
         }
     }
 

@@ -722,6 +722,65 @@ public sealed class CopilotWorkflowRunnerTests
     }
 
     [Fact]
+    public async Task HandleWorkflowEventAsync_EmitsToolActivityEnrichmentWhenRequestInfoAddsMissingArguments()
+    {
+        RunTurnCommandDto command = CreateApprovalCommand();
+        CopilotTurnExecutionState state = new(command);
+        state.ObserveSessionEvent(
+            CreateAgent("agent-1", "Primary"),
+            SessionEvent.FromJson(
+                """
+                {
+                  "type": "tool.execution_start",
+                  "data": {
+                    "toolCallId": "tool-call-1",
+                    "toolName": "view"
+                  },
+                  "id": "f61652d1-120e-4a9f-8f0e-1dbf04fb18da",
+                  "timestamp": "2026-03-27T00:00:00Z"
+                }
+                """));
+        _ = state.DrainPendingEvents();
+
+        RequestInfoEvent requestInfo = CreateRequestInfoEvent(
+            new FunctionCallContent("tool-call-1", "view", new Dictionary<string, object?>
+            {
+                ["path"] = @"C:\workspace\README.md",
+            }));
+        List<AgentActivityEventDto> activities = [];
+
+        MethodInfo handleWorkflowEvent = typeof(CopilotWorkflowRunner).GetMethod(
+            "HandleWorkflowEventAsync",
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+        Task<bool> handleTask = (Task<bool>)handleWorkflowEvent.Invoke(
+            null,
+            [
+                command,
+                requestInfo,
+                Array.Empty<ChatMessage>(),
+                state,
+                (Func<TurnDeltaEventDto, Task>)(_ => Task.CompletedTask),
+                (Func<SidecarEventDto, Task>)(sidecarEvent =>
+                {
+                    activities.Add(Assert.IsType<AgentActivityEventDto>(sidecarEvent));
+                    return Task.CompletedTask;
+                }),
+            ])!;
+
+        bool shouldEndTurn = await handleTask;
+
+        Assert.False(shouldEndTurn);
+        AgentActivityEventDto activity = Assert.Single(activities);
+        Assert.Equal("tool-calling", activity.ActivityType);
+        Assert.Equal("view", activity.ToolName);
+        Assert.Equal("tool-call-1", activity.ToolCallId);
+        Assert.NotNull(activity.ToolArguments);
+        Assert.Equal(@"C:\workspace\README.md", activity.ToolArguments["path"]);
+        Assert.True(state.ToolCallHasArgumentsById.TryGetValue("tool-call-1", out bool hasArguments));
+        Assert.True(hasArguments);
+    }
+
+    [Fact]
     public void CreateExecutionEnvironment_UsesLockstepWhenRequested()
     {
         RunTurnCommandDto command = new()

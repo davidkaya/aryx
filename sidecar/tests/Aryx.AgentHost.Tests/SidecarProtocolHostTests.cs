@@ -63,6 +63,103 @@ public sealed class SidecarProtocolHostTests
     }
 
     [Fact]
+    public async Task InternalConstructor_UsesAgentProviderDefaults()
+    {
+        FakeWorkflowRunner workflowRunner = new(async (command, onDelta, onActivity, onApproval, onUserInput, onMcpOAuthRequired, onExitPlanMode, cancellationToken) =>
+        {
+            await onActivity(new AgentActivityEventDto
+            {
+                Type = "agent-activity",
+                RequestId = command.RequestId,
+                SessionId = command.SessionId,
+                ActivityType = "thinking",
+                AgentId = "agent-provider",
+                AgentName = "Provider Agent",
+            });
+
+            return
+            [
+                new ChatMessageDto
+                {
+                    Id = "assistant-provider",
+                    Role = "assistant",
+                    AuthorName = "Provider Agent",
+                    Content = "Hello from the provider.",
+                    CreatedAt = "2026-01-01T00:00:00.0000000Z",
+                },
+            ];
+        });
+        FakeSessionManager sessionManager = new()
+        {
+            Sessions =
+            [
+                new CopilotSessionInfoDto
+                {
+                    CopilotSessionId = "aryx::provider-session::agent-provider",
+                    ManagedByAryx = true,
+                    SessionId = "provider-session",
+                    AgentId = "agent-provider",
+                },
+            ],
+        };
+        SidecarCapabilitiesDto capabilities = new()
+        {
+            Modes = new Dictionary<string, SidecarModeCapabilityDto>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["single"] = new() { Available = true },
+            },
+            Models =
+            [
+                new SidecarModelCapabilityDto
+                {
+                    Id = "provider-model",
+                    Name = "Provider Model",
+                },
+            ],
+            RuntimeTools = [],
+            Connection = new SidecarConnectionDiagnosticsDto
+            {
+                Status = "ready",
+                Summary = "Provider is ready.",
+                CheckedAt = "2026-01-01T00:00:00.0000000Z",
+            },
+        };
+        SidecarProtocolHost host = new(
+            new WorkflowValidator(),
+            new FakeAgentProvider(workflowRunner, sessionManager, capabilities));
+
+        IReadOnlyList<JsonElement> capabilityEvents = await RunHostAsync(
+            new DescribeCapabilitiesCommandDto
+            {
+                Type = "describe-capabilities",
+                RequestId = "provider-capabilities",
+            },
+            host);
+        IReadOnlyList<JsonElement> sessionEvents = await RunHostAsync(
+            new ListSessionsCommandDto
+            {
+                Type = "list-sessions",
+                RequestId = "provider-sessions",
+            },
+            host);
+        IReadOnlyList<JsonElement> turnEvents = await RunHostAsync(
+            CreateRunTurnCommand(requestId: "provider-turn"),
+            host);
+
+        JsonElement capabilityEvent = AssertSingleEvent(capabilityEvents, "capabilities", "provider-capabilities");
+        JsonElement model = Assert.Single(capabilityEvent.GetProperty("capabilities").GetProperty("models").EnumerateArray());
+        Assert.Equal("provider-model", model.GetProperty("id").GetString());
+
+        JsonElement listedEvent = AssertSingleEvent(sessionEvents, "sessions-listed", "provider-sessions");
+        JsonElement session = Assert.Single(listedEvent.GetProperty("sessions").EnumerateArray());
+        Assert.Equal("provider-session", session.GetProperty("sessionId").GetString());
+
+        JsonElement turnComplete = AssertSingleEvent(turnEvents, "turn-complete", "provider-turn");
+        JsonElement message = Assert.Single(turnComplete.GetProperty("messages").EnumerateArray());
+        Assert.Equal("Hello from the provider.", message.GetProperty("content").GetString());
+    }
+
+    [Fact]
     public async Task ValidateWorkflowCommand_ReturnsIssuesAndCompletion()
     {
         IReadOnlyList<JsonElement> events = await RunHostAsync(new ValidateWorkflowCommandDto
@@ -668,7 +765,7 @@ public sealed class SidecarProtocolHostTests
     [Fact]
     public void MapRuntimeTools_ExcludesOnlyInternalMetaToolsAndDeduplicatesByName()
     {
-        IReadOnlyList<SidecarRuntimeToolDto> runtimeTools = SidecarProtocolHost.MapRuntimeTools(
+        IReadOnlyList<SidecarRuntimeToolDto> runtimeTools = CopilotAgentProvider.MapRuntimeTools(
         [
             new Tool
             {
@@ -721,7 +818,7 @@ public sealed class SidecarProtocolHostTests
     [Fact]
     public void ClassifyConnectionStatus_ReturnsAuthRequiredForLoginFailures()
     {
-        string status = SidecarProtocolHost.ClassifyConnectionStatus(
+        string status = CopilotAgentProvider.ClassifyConnectionStatus(
             new InvalidOperationException("Please run copilot auth login to continue."));
 
         Assert.Equal("copilot-auth-required", status);
@@ -731,7 +828,7 @@ public sealed class SidecarProtocolHostTests
     public void CreateReadyConnectionDiagnostics_ReportsCliPathAndModelCount()
     {
         SidecarConnectionDiagnosticsDto diagnostics =
-            SidecarProtocolHost.CreateReadyConnectionDiagnostics(
+            CopilotAgentProvider.CreateReadyConnectionDiagnostics(
                 @"C:\tools\copilot\copilot.exe",
                 2,
                 new SidecarCopilotCliVersionDiagnosticsDto
@@ -1142,6 +1239,38 @@ public sealed class SidecarProtocolHostTests
             CancellationToken cancellationToken)
         {
             return _resolveUserInputHandler(command, cancellationToken);
+        }
+    }
+
+    private sealed class FakeAgentProvider : IAgentProvider
+    {
+        private readonly ITurnWorkflowRunner _workflowRunner;
+        private readonly IProviderSessionManager _sessionManager;
+        private readonly SidecarCapabilitiesDto _capabilities;
+
+        public FakeAgentProvider(
+            ITurnWorkflowRunner workflowRunner,
+            IProviderSessionManager sessionManager,
+            SidecarCapabilitiesDto capabilities)
+        {
+            _workflowRunner = workflowRunner;
+            _sessionManager = sessionManager;
+            _capabilities = capabilities;
+        }
+
+        public ITurnWorkflowRunner CreateWorkflowRunner(WorkflowValidator workflowValidator)
+        {
+            return _workflowRunner;
+        }
+
+        public Task<SidecarCapabilitiesDto> GetCapabilitiesAsync(CancellationToken cancellationToken)
+        {
+            return Task.FromResult(_capabilities);
+        }
+
+        public IProviderSessionManager CreateSessionManager()
+        {
+            return _sessionManager;
         }
     }
 

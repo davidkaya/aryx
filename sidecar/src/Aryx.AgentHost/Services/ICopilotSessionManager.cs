@@ -2,7 +2,7 @@ using Aryx.AgentHost.Contracts;
 
 namespace Aryx.AgentHost.Services;
 
-public interface ICopilotSessionManager
+public interface IProviderSessionManager
 {
     Task<IReadOnlyList<CopilotSessionInfoDto>> ListSessionsAsync(
         CopilotSessionListFilterDto? filter,
@@ -16,4 +16,6 @@ public interface ICopilotSessionManager
     Task<IReadOnlyDictionary<string, QuotaSnapshotDto>> GetQuotaAsync(
         CancellationToken cancellationToken);
 }
+
+public interface ICopilotSessionManager : IProviderSessionManager;
 

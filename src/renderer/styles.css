@@ -663,6 +663,17 @@ body {
   animation: turn-activity-row-in 0.15s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
+@keyframes intent-divider-in {
+  from {
+    opacity: 0;
+    transform: scaleX(0.7);
+  }
+}
+
+.turn-activity-row[role="separator"] {
+  animation: intent-divider-in 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
 /* ── Respect reduced motion ──────────────────────────────────── */
 
 @media (prefers-reduced-motion: reduce) {
@@ -677,7 +688,8 @@ body {
   .banner-slide-enter,
   .update-banner-enter,
   .turn-activity-enter,
-  .turn-activity-row {
+  .turn-activity-row,
+  .turn-activity-row[role="separator"] {
     animation: none;
   }
 }

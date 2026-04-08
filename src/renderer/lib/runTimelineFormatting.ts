@@ -5,6 +5,7 @@ import type {
   SessionRunStatus,
 } from '@shared/domain/runTimeline';
 import { buildMarkdownExcerpt } from '@shared/utils/markdownText';
+import { formatToolCallPrimaryLabel } from '@renderer/lib/toolCallSummary';
 
 export function formatRunTimestamp(isoDate: string): string {
   try {
@@ -78,9 +79,7 @@ export function formatEventLabel(event: RunTimelineEventRecord): string {
       }
       return event.targetAgentName ? `Handoff to ${event.targetAgentName}` : 'Handoff';
     case 'tool-call':
-      return event.toolName
-        ? `${event.agentName ?? 'Agent'} used ${event.toolName}`
-        : `${event.agentName ?? 'Agent'} tool call`;
+      return formatToolCallPrimaryLabel(event.toolName, event.toolArguments);
     case 'approval':
       if (event.status === 'completed') {
         return event.approvalTitle ? `${event.approvalTitle} approved` : 'Approval granted';

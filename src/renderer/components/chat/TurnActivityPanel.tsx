@@ -6,8 +6,17 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
+  Database,
+  Eye,
+  ExternalLink,
+  FileSearch,
+  Github,
   MessageSquare,
+  Pencil,
+  Search,
   ShieldAlert,
+  Terminal,
+  Users,
   Wrench,
   XCircle,
   Zap,
@@ -18,20 +27,11 @@ import { FileChangePreview } from '@renderer/components/chat/FileChangePreview';
 import { ToolCallDetailPanel } from '@renderer/components/chat/ToolCallDetailPanel';
 import { RunChangeSummaryCard } from '@renderer/components/chat/RunChangeSummaryCard';
 import { formatEventLabel, truncateContent, filterEventsByAgent, summarizeActivity, type ActivitySummary } from '@renderer/lib/runTimelineFormatting';
+import { formatToolGroupLabel, extractToolCallSnippet, formatToolCallPrimaryLabel } from '@renderer/lib/toolCallSummary';
+import { buildActivityStream, groupActivityStream, extractLatestIntent, generateActivitySummary, type GroupedActivityItem } from '@renderer/lib/activityGrouping';
 import type { ChatMessageRecord } from '@shared/domain/session';
 import type { ProjectGitFileReference } from '@shared/domain/project';
 import type { RunTimelineEventRecord, SessionRunRecord } from '@shared/domain/runTimeline';
-
-/* ── Types ─────────────────────────────────────────────────── */
-
-/** A unified activity stream item, merging chat thinking messages
- *  and run timeline events into a single chronological list. */
-type ActivityStreamItem =
-  | { kind: 'thinking-step'; message: ChatMessageRecord }
-  | { kind: 'timeline-event'; event: RunTimelineEventRecord };
-
-/** Events to skip in the inline panel (redundant or implicit). */
-const SKIP_EVENT_KINDS = new Set(['run-started', 'thinking']);
 
 /* ── Props ─────────────────────────────────────────────────── */
 
@@ -41,9 +41,7 @@ export interface TurnActivityPanelProps {
   isActive: boolean;
   turnStartedAt?: string;
   sessionId: string;
-  /** Agent names in this turn group — used to scope run events in multi-agent runs. */
   agentNames?: ReadonlySet<string>;
-  /** True when this panel is the last one sharing a given run (controls git summary / discard). */
   isLastRunPanel?: boolean;
   onDiscard?: (sessionId: string, runId: string, files?: ProjectGitFileReference[]) => Promise<unknown>;
   onOpenCommitComposer?: () => void;
@@ -58,35 +56,10 @@ function truncatePreview(text: string, maxLength: number): string {
   return `${cleaned.slice(0, maxLength)}…`;
 }
 
-function buildActivityStream(
-  thinkingMessages: ChatMessageRecord[],
-  events: readonly RunTimelineEventRecord[],
-): ActivityStreamItem[] {
-  const items: ActivityStreamItem[] = [];
-
-  for (const msg of thinkingMessages) {
-    items.push({ kind: 'thinking-step', message: msg });
-  }
-
-  for (const event of events) {
-    if (SKIP_EVENT_KINDS.has(event.kind)) continue;
-    items.push({ kind: 'timeline-event', event });
-  }
-
-  // Sort chronologically by timestamp
-  items.sort((a, b) => {
-    const tsA = a.kind === 'thinking-step' ? a.message.createdAt : a.event.occurredAt;
-    const tsB = b.kind === 'thinking-step' ? b.message.createdAt : b.event.occurredAt;
-    return new Date(tsA).getTime() - new Date(tsB).getTime();
-  });
-
-  return items;
-}
-
 function formatSummaryParts(summary: ActivitySummary): string[] {
   const parts: string[] = [];
   if (summary.toolCalls > 0) {
-    parts.push(`${summary.toolCalls} tool ${summary.toolCalls === 1 ? 'call' : 'calls'}`);
+    parts.push(`${summary.toolCalls} ${summary.toolCalls === 1 ? 'action' : 'actions'}`);
   }
   if (summary.handoffs > 0) {
     parts.push(`${summary.handoffs} ${summary.handoffs === 1 ? 'handoff' : 'handoffs'}`);
@@ -94,20 +67,57 @@ function formatSummaryParts(summary: ActivitySummary): string[] {
   if (summary.approvals > 0) {
     parts.push(`${summary.approvals} ${summary.approvals === 1 ? 'approval' : 'approvals'}`);
   }
-  if (summary.thinkingSteps > 0) {
-    parts.push(`${summary.thinkingSteps} thinking ${summary.thinkingSteps === 1 ? 'step' : 'steps'}`);
-  }
   return parts;
 }
 
-/* ── Event icon ────────────────────────────────────────────── */
+/* ── Tool-category icon ────────────────────────────────────── */
 
-function ActivityEventIcon({ kind, status }: { kind: RunTimelineEventRecord['kind']; status: RunTimelineEventRecord['status'] }) {
+function ToolCategoryIcon({ toolName, className }: { toolName?: string; className?: string }) {
+  const base = className ?? 'size-3 shrink-0';
+
+  if (!toolName) return <Wrench className={`${base} text-[var(--color-text-muted)]`} />;
+
+  if (toolName.startsWith('github-')) {
+    return <Github className={`${base} text-[var(--color-text-secondary)]`} />;
+  }
+
+  switch (toolName) {
+    case 'view':
+      return <Eye className={`${base} text-[var(--color-accent-sky)]`} />;
+    case 'grep':
+    case 'glob':
+      return <Search className={`${base} text-[var(--color-accent-purple)]`} />;
+    case 'lsp':
+      return <FileSearch className={`${base} text-[var(--color-accent-purple)]`} />;
+    case 'edit':
+    case 'create':
+      return <Pencil className={`${base} text-[var(--color-status-warning)]`} />;
+    case 'powershell':
+      return <Terminal className={`${base} text-[var(--color-text-secondary)]`} />;
+    case 'web_fetch':
+    case 'web_search':
+      return <ExternalLink className={`${base} text-[var(--color-accent-sky)]`} />;
+    case 'sql':
+      return <Database className={`${base} text-[var(--color-accent-purple)]`} />;
+    case 'task':
+      return <Users className={`${base} text-[var(--color-accent-sky)]`} />;
+    default:
+      return <Wrench className={`${base} text-[var(--color-text-muted)]`} />;
+  }
+}
+
+/* ── Event icon (for non-tool events) ──────────────────────── */
+
+function ActivityEventIcon({ kind, status, toolName }: {
+  kind: RunTimelineEventRecord['kind'];
+  status: RunTimelineEventRecord['status'];
+  toolName?: string;
+}) {
   const base = 'size-3 shrink-0';
 
   switch (kind) {
     case 'tool-call':
-      return <Wrench className={`${base} text-[var(--color-accent-purple)]`} />;
+      return <ToolCategoryIcon toolName={toolName} className={base} />;
     case 'approval':
       return (
         <ShieldAlert
@@ -135,7 +145,7 @@ function ActivityEventIcon({ kind, status }: { kind: RunTimelineEventRecord['kin
   }
 }
 
-/* ── Activity event row ────────────────────────────────────── */
+/* ── Single event row ──────────────────────────────────────── */
 
 function ActivityTimelineEventRow({ event }: { event: RunTimelineEventRecord }) {
   const label = formatEventLabel(event);
@@ -144,7 +154,7 @@ function ActivityTimelineEventRow({ event }: { event: RunTimelineEventRecord }) 
   return (
     <div className="turn-activity-row flex gap-2 py-1">
       <div className="mt-0.5 flex shrink-0 items-start">
-        <ActivityEventIcon kind={event.kind} status={event.status} />
+        <ActivityEventIcon kind={event.kind} status={event.status} toolName={event.toolName} />
       </div>
       <div className="min-w-0 flex-1">
         <span className={`text-[12px] font-medium ${isTerminal ? 'text-[var(--color-text-muted)]' : 'text-[var(--color-text-secondary)]'}`}>
@@ -203,6 +213,106 @@ function ActivityTimelineEventRow({ event }: { event: RunTimelineEventRecord }) 
   );
 }
 
+/* ── Grouped tool-call row ─────────────────────────────────── */
+
+function GroupedToolCallRow({ toolName, events }: { toolName: string; events: RunTimelineEventRecord[] }) {
+  const [expanded, setExpanded] = useState(false);
+  const label = formatToolGroupLabel(toolName, events.length);
+
+  const snippets = useMemo(
+    () => events.map((e) => extractToolCallSnippet(toolName, e.toolArguments)).filter(Boolean) as string[],
+    [toolName, events],
+  );
+
+  const hasFileChanges = events.some((e) => e.fileChanges && e.fileChanges.length > 0);
+
+  return (
+    <div className="turn-activity-row py-0.5">
+      <button
+        type="button"
+        className="flex w-full items-start gap-2 py-1 text-left transition-colors hover:bg-[var(--color-surface-2)]/30 rounded px-1 -mx-1"
+        onClick={() => setExpanded((prev) => !prev)}
+        aria-expanded={expanded}
+      >
+        <div className="mt-0.5 flex shrink-0 items-start">
+          <ToolCategoryIcon toolName={toolName} />
+        </div>
+        <span className="min-w-0 flex-1 text-[12px] font-medium text-[var(--color-text-secondary)]">
+          {label}
+        </span>
+        <ChevronRight
+          className={`mt-0.5 size-3 shrink-0 text-[var(--color-text-muted)] transition-transform duration-150 ${
+            expanded ? 'rotate-90' : ''
+          }`}
+        />
+      </button>
+
+      {/* Collapsed preview: show snippets inline */}
+      {!expanded && snippets.length > 0 && (
+        <div className="ml-5 flex flex-wrap gap-x-2 gap-y-0.5 pb-0.5">
+          {snippets.slice(0, 6).map((s, i) => (
+            <span key={i} className="truncate font-mono text-[10px] text-[var(--color-text-muted)]">
+              {s}
+            </span>
+          ))}
+          {snippets.length > 6 && (
+            <span className="text-[10px] text-[var(--color-text-muted)]">
+              +{snippets.length - 6} more
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Expanded: full per-event rows */}
+      {expanded && (
+        <div className="ml-5 border-l border-[var(--color-border)]/30 pl-2">
+          {events.map((event) => (
+            <div key={event.id} className="py-0.5">
+              <span className="text-[11px] text-[var(--color-text-secondary)]">
+                {formatToolCallPrimaryLabel(event.toolName, event.toolArguments)}
+              </span>
+              <ToolCallDetailPanel toolName={event.toolName} toolArguments={event.toolArguments} />
+              {event.fileChanges && event.fileChanges.length > 0 && (
+                <div className="mt-0.5">
+                  <FileChangePreview fileChanges={event.fileChanges} />
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Aggregate file changes when collapsed */}
+      {!expanded && hasFileChanges && (
+        <div className="ml-5 mt-0.5">
+          {events
+            .filter((e) => e.fileChanges && e.fileChanges.length > 0)
+            .flatMap((e) => e.fileChanges!)
+            .length > 0 && (
+            <FileChangePreview
+              fileChanges={events.flatMap((e) => e.fileChanges ?? [])}
+            />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Intent divider ────────────────────────────────────────── */
+
+function IntentDividerRow({ text }: { text: string }) {
+  return (
+    <div className="turn-activity-row flex items-center gap-2 py-1.5" role="separator">
+      <div className="h-px flex-1 bg-[var(--color-border)]/40" />
+      <span className="shrink-0 text-[10px] font-medium tracking-wide text-[var(--color-text-muted)]">
+        {text}
+      </span>
+      <div className="h-px flex-1 bg-[var(--color-border)]/40" />
+    </div>
+  );
+}
+
 /* ── Thinking step row ─────────────────────────────────────── */
 
 function ThinkingStepRow({ message }: { message: ChatMessageRecord }) {
@@ -216,13 +326,57 @@ function ThinkingStepRow({ message }: { message: ChatMessageRecord }) {
         <Brain className="size-3 text-[var(--color-accent-purple)]" />
       </div>
       <div className="min-w-0 flex-1">
-        {message.authorName && (
-          <span className="mr-1.5 text-[12px] font-medium text-[var(--color-text-secondary)]">
-            {message.authorName}
-          </span>
-        )}
-        <span className="text-[12px] text-[var(--color-text-muted)]">{preview}</span>
+        <p className="border-l-2 border-[var(--color-accent-purple)]/20 pl-2 text-[11px] italic leading-snug text-[var(--color-text-muted)]">
+          "{preview}"
+        </p>
       </div>
+    </div>
+  );
+}
+
+/* ── Thinking group (multiple consecutive) ─────────────────── */
+
+function ThinkingGroupRow({ messages }: { messages: ChatMessageRecord[] }) {
+  const [expanded, setExpanded] = useState(false);
+
+  const visibleMessages = messages.filter((m) => !m.pending || m.content);
+  if (visibleMessages.length === 0) return null;
+
+  const latest = visibleMessages[visibleMessages.length - 1];
+  const preview = truncatePreview(latest.content, 180);
+  const hiddenCount = visibleMessages.length - 1;
+
+  return (
+    <div className="turn-activity-row py-0.5">
+      <div className="flex gap-2 py-1">
+        <div className="mt-0.5 flex shrink-0 items-start">
+          <Brain className="size-3 text-[var(--color-accent-purple)]" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="border-l-2 border-[var(--color-accent-purple)]/20 pl-2 text-[11px] italic leading-snug text-[var(--color-text-muted)]">
+            "{preview}"
+          </p>
+          {hiddenCount > 0 && (
+            <button
+              type="button"
+              className="mt-0.5 pl-2 text-[10px] text-[var(--color-accent)] hover:underline"
+              onClick={() => setExpanded((prev) => !prev)}
+            >
+              {expanded ? 'Hide' : `${hiddenCount} earlier ${hiddenCount === 1 ? 'thought' : 'thoughts'}`}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {expanded && (
+        <div className="ml-5 space-y-0.5 border-l border-[var(--color-border)]/30 pl-2">
+          {visibleMessages.slice(0, -1).map((msg) => (
+            <p key={msg.id} className="text-[10px] italic leading-snug text-[var(--color-text-muted)]">
+              "{truncatePreview(msg.content, 140)}"
+            </p>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -237,6 +391,23 @@ function ActivityPulse() {
       <span className="thinking-dot size-1 rounded-full bg-[var(--color-accent)]" />
     </span>
   );
+}
+
+/* ── Grouped item renderer ─────────────────────────────────── */
+
+function GroupedItemRow({ item }: { item: GroupedActivityItem }) {
+  switch (item.kind) {
+    case 'intent-divider':
+      return <IntentDividerRow text={item.intentText} />;
+    case 'single-event':
+      return <ActivityTimelineEventRow event={item.event} />;
+    case 'tool-group':
+      return <GroupedToolCallRow toolName={item.toolName} events={item.events} />;
+    case 'single-thinking':
+      return <ThinkingStepRow message={item.message} />;
+    case 'thinking-group':
+      return <ThinkingGroupRow messages={item.messages} />;
+  }
 }
 
 /* ── Main component ────────────────────────────────────────── */
@@ -255,8 +426,6 @@ export function TurnActivityPanel({
   const [expanded, setExpanded] = useState(false);
   const wasActiveRef = useRef(isActive);
 
-  // Auto-expand when the turn is active (run exists or thinking arrives).
-  // Auto-collapse once the turn finishes.
   useEffect(() => {
     if (isActive && (thinkingMessages.length > 0 || run)) {
       setExpanded(true);
@@ -268,25 +437,20 @@ export function TurnActivityPanel({
 
   const toggle = useCallback(() => setExpanded((prev) => !prev), []);
 
-  // When the run is shared across multiple panels (multi-agent sequential),
-  // scope events to only those belonging to this panel's agents.
   const scopedEvents = useMemo(
     () => filterEventsByAgent(run?.events ?? [], agentNames),
     [run?.events, agentNames],
   );
 
-  // Derive per-agent timing from the scoped events when agent names are set
-  // (multi-agent run). For single-agent runs, use the run-level start time.
   const effectiveTurnStartedAt = useMemo(() => {
     if (!agentNames || agentNames.size === 0 || scopedEvents.length === 0) {
       return turnStartedAt;
     }
-    // Use the earliest scoped event as the start time for this agent's panel.
     let earliest = turnStartedAt;
     for (const e of scopedEvents) {
       if (!earliest || e.occurredAt < earliest) {
         earliest = e.occurredAt;
-        break; // events are already in insertion order (chronological)
+        break;
       }
     }
     return earliest;
@@ -302,12 +466,18 @@ export function TurnActivityPanel({
     [thinkingMessages, scopedEvents],
   );
 
-  const activityStream = useMemo(
-    () => buildActivityStream(thinkingMessages, scopedEvents),
-    [thinkingMessages, scopedEvents],
+  const groupedItems = useMemo(() => {
+    const stream = buildActivityStream(thinkingMessages, scopedEvents);
+    return groupActivityStream(stream);
+  }, [thinkingMessages, scopedEvents]);
+
+  // Extract intent text for the header
+  const intentText = useMemo(() => extractLatestIntent(scopedEvents), [scopedEvents]);
+  const fallbackSummary = useMemo(
+    () => !intentText ? generateActivitySummary(scopedEvents) : undefined,
+    [intentText, scopedEvents],
   );
 
-  // Nothing to show — no thinking messages, no run, and not active
   if (thinkingMessages.length === 0 && !run) {
     return null;
   }
@@ -318,10 +488,8 @@ export function TurnActivityPanel({
   const isFailed = runStatus === 'error';
   const isCancelled = runStatus === 'cancelled';
   const isTerminated = isCompleted || isFailed || isCancelled;
-  // Only show git summary and discard on the last panel for a given run
   const showGitSummary = run && isTerminated && run.postRunGitSummary && onDiscard && (isLastRunPanel !== false);
 
-  // Build the summary label
   let summaryLabel: string;
   if (isActive) {
     summaryLabel = 'Working';
@@ -334,6 +502,8 @@ export function TurnActivityPanel({
   } else {
     summaryLabel = 'Completed';
   }
+
+  const headerDetail = intentText ?? fallbackSummary;
 
   const statusColorClass = isFailed
     ? 'text-[var(--color-status-error)]'
@@ -374,9 +544,17 @@ export function TurnActivityPanel({
           <span className={statusColorClass}>{summaryLabel}</span>
         )}
 
+        {/* Intent / generated summary */}
+        {headerDetail && (
+          <span className="min-w-0 truncate text-[11px] text-[var(--color-text-muted)]">
+            {'· '}
+            {intentText ? `"${headerDetail}"` : headerDetail}
+          </span>
+        )}
+
         {/* Inline counters */}
         {summaryParts.length > 0 && (
-          <span className="font-mono text-[10px] text-[var(--color-text-muted)]">
+          <span className="shrink-0 font-mono text-[10px] text-[var(--color-text-muted)]">
             {'· '}
             {summaryParts.join(' · ')}
           </span>
@@ -389,16 +567,13 @@ export function TurnActivityPanel({
         </span>
       </button>
 
-      {/* Expanded activity stream */}
+      {/* Expanded activity stream — grouped */}
       {expanded && (
         <div className="border-t border-[var(--color-border)]/30 px-3 py-2">
           <div className="space-y-0.5">
-            {activityStream.map((item) => {
-              if (item.kind === 'thinking-step') {
-                return <ThinkingStepRow key={item.message.id} message={item.message} />;
-              }
-              return <ActivityTimelineEventRow key={item.event.id} event={item.event} />;
-            })}
+            {groupedItems.map((item, index) => (
+              <GroupedItemRow key={index} item={item} />
+            ))}
           </div>
 
           {/* Post-run git changes */}

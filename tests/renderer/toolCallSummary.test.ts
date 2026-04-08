@@ -4,6 +4,9 @@ import {
   formatToolCallSummary,
   formatToolArgumentValue,
   getDisplayableArguments,
+  formatToolCallPrimaryLabel,
+  formatToolGroupLabel,
+  extractToolCallSnippet,
 } from '@renderer/lib/toolCallSummary';
 
 describe('formatToolCallSummary', () => {
@@ -169,5 +172,108 @@ describe('getDisplayableArguments', () => {
   test('filters out description key', () => {
     const result = getDisplayableArguments({ description: 'Insert todos', query: 'INSERT ...' });
     expect(result).toEqual([['query', 'INSERT ...']]);
+  });
+});
+
+/* ── formatToolCallPrimaryLabel ────────────────────────────── */
+
+describe('formatToolCallPrimaryLabel', () => {
+  test('produces verb-based label for view with path', () => {
+    expect(formatToolCallPrimaryLabel('view', { path: '/src/components/ChatPane.tsx' }))
+      .toBe('Viewed `ChatPane.tsx`');
+  });
+
+  test('includes view range', () => {
+    expect(formatToolCallPrimaryLabel('view', { path: '/src/index.ts', view_range: [10, 25] }))
+      .toBe('Viewed `index.ts:10-25`');
+  });
+
+  test('produces verb-based label for edit', () => {
+    expect(formatToolCallPrimaryLabel('edit', { path: '/src/utils.ts', old_str: 'foo' }))
+      .toBe('Edited `utils.ts`');
+  });
+
+  test('produces verb-based label for create', () => {
+    expect(formatToolCallPrimaryLabel('create', { path: '/new-file.ts' }))
+      .toBe('Created `new-file.ts`');
+  });
+
+  test('produces verb-based label for grep', () => {
+    expect(formatToolCallPrimaryLabel('grep', { pattern: 'TODO', path: '/src' }))
+      .toBe('Searched for `TODO`');
+  });
+
+  test('produces verb-based label for powershell', () => {
+    expect(formatToolCallPrimaryLabel('powershell', { command: 'npm run build' }))
+      .toBe('Ran `npm run build`');
+  });
+
+  test('produces verb-based label for task', () => {
+    expect(formatToolCallPrimaryLabel('task', { description: 'Explore codebase' }))
+      .toBe('Launched agent: Explore codebase');
+  });
+
+  test('produces verb-based label for web_fetch with hostname', () => {
+    expect(formatToolCallPrimaryLabel('web_fetch', { url: 'https://example.com/page' }))
+      .toBe('Fetched `example.com`');
+  });
+
+  test('produces verb-based label for sql', () => {
+    expect(formatToolCallPrimaryLabel('sql', { description: 'Insert todos', query: 'INSERT ...' }))
+      .toBe('SQL: Insert todos');
+  });
+
+  test('handles GitHub tools', () => {
+    const result = formatToolCallPrimaryLabel('github-mcp-server-search_code', { query: 'auth' });
+    expect(result).toContain('search code');
+    expect(result).toContain('auth');
+  });
+
+  test('falls back to "Used <tool>" for unknown tools', () => {
+    expect(formatToolCallPrimaryLabel('custom_tool', { data: 'test' }))
+      .toBe('Used custom_tool: test');
+  });
+
+  test('returns "Tool call" for undefined toolName', () => {
+    expect(formatToolCallPrimaryLabel(undefined, {})).toBe('Tool call');
+  });
+});
+
+/* ── formatToolGroupLabel ─────────────────────────────────── */
+
+describe('formatToolGroupLabel', () => {
+  test('pluralizes correctly for view', () => {
+    expect(formatToolGroupLabel('view', 1)).toBe('Viewed 1 file');
+    expect(formatToolGroupLabel('view', 4)).toBe('Viewed 4 files');
+  });
+
+  test('pluralizes correctly for grep', () => {
+    expect(formatToolGroupLabel('grep', 1)).toBe('Searched 1 pattern');
+    expect(formatToolGroupLabel('grep', 3)).toBe('Searched 3 patterns');
+  });
+
+  test('uses generic format for unknown tools', () => {
+    expect(formatToolGroupLabel('custom', 2)).toBe('2 custom calls');
+  });
+});
+
+/* ── extractToolCallSnippet ───────────────────────────────── */
+
+describe('extractToolCallSnippet', () => {
+  test('extracts file name for view', () => {
+    expect(extractToolCallSnippet('view', { path: '/src/components/ChatPane.tsx' }))
+      .toBe('ChatPane.tsx');
+  });
+
+  test('extracts pattern for grep', () => {
+    expect(extractToolCallSnippet('grep', { pattern: 'TODO' })).toBe('TODO');
+  });
+
+  test('extracts command for powershell', () => {
+    expect(extractToolCallSnippet('powershell', { command: 'npm test' })).toBe('npm test');
+  });
+
+  test('returns undefined for unknown tool', () => {
+    expect(extractToolCallSnippet('custom', { foo: 'bar' })).toBeUndefined();
   });
 });

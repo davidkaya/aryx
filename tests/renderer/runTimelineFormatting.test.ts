@@ -67,7 +67,7 @@ describe('run timeline formatting', () => {
       kind: 'tool-call',
       agentName: 'Writer',
       toolName: 'file_search',
-    }))).toBe('Writer used file_search');
+    }))).toBe('Used file_search');
     expect(formatEventLabel(createEvent({
       kind: 'approval',
       status: 'running',

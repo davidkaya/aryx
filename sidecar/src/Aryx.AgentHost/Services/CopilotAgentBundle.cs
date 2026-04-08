@@ -226,19 +226,19 @@ internal sealed class CopilotAgentBundle : IAsyncDisposable
         };
     }
 
-    internal static HandoffsWorkflowBuilder CreateHandoffWorkflowBuilder(
+    internal static HandoffWorkflowBuilder CreateHandoffWorkflowBuilder(
         AIAgent entryAgent,
         HandoffModeSettingsDto? settings = null)
     {
         HandoffModeSettingsDto effectiveSettings = settings ?? new HandoffModeSettingsDto();
-        HandoffsWorkflowBuilder builder = AgentWorkflowBuilder.CreateHandoffBuilderWith(entryAgent)
+        HandoffWorkflowBuilder builder = AgentWorkflowBuilder.CreateHandoffBuilderWith(entryAgent)
             .WithToolCallFilteringBehavior(MapHandoffToolCallFiltering(effectiveSettings.ToolCallFiltering))
             .WithHandoffInstructions(NormalizeOptionalString(effectiveSettings.HandoffInstructions)
                 ?? HandoffWorkflowGuidance.CreateWorkflowInstructions());
 
         if (effectiveSettings.ReturnToPrevious)
         {
-            TryEnableReturnToPrevious(builder);
+            builder = builder.EnableReturnToPrevious();
         }
 
         return builder;
@@ -256,7 +256,7 @@ internal sealed class CopilotAgentBundle : IAsyncDisposable
         WorkflowNodeDto triageNode = ResolveTriageAgentNode(workflowDefinition, agentNodes);
         AIAgent triageAgent = ResolveAgentForNode(triageNode, agentsById);
         HandoffModeSettingsDto? settings = workflowDefinition.Settings.ModeSettings?.Handoff;
-        HandoffsWorkflowBuilder builder = CreateHandoffWorkflowBuilder(triageAgent, settings);
+        HandoffWorkflowBuilder builder = CreateHandoffWorkflowBuilder(triageAgent, settings);
 
         List<WorkflowNodeDto> specialistNodes = agentNodes
             .Where(node => !string.Equals(node.Id, triageNode.Id, StringComparison.Ordinal))
@@ -446,13 +446,6 @@ internal sealed class CopilotAgentBundle : IAsyncDisposable
             "all" => HandoffToolCallFilteringBehavior.All,
             _ => HandoffToolCallFilteringBehavior.HandoffOnly,
         };
-    }
-
-    private static void TryEnableReturnToPrevious(HandoffsWorkflowBuilder builder)
-    {
-        builder.GetType()
-            .GetMethod("EnableReturnToPrevious", Type.EmptyTypes)?
-            .Invoke(builder, null);
     }
 
     private static int ResolveGroupChatMaxRounds(WorkflowDefinitionDto workflowDefinition)

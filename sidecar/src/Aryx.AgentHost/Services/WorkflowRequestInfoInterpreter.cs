@@ -175,7 +175,7 @@ internal static class WorkflowRequestInfoInterpreter
     {
         if (requestData.Is<McpServerToolCallContent>(out McpServerToolCallContent? mcpToolCall))
         {
-            toolName = NormalizeOptionalString(mcpToolCall.ToolName)
+            toolName = NormalizeOptionalString(mcpToolCall.Name)
                 ?? NormalizeOptionalString(mcpToolCall.ServerName)
                 ?? string.Empty;
             toolCallId = NormalizeOptionalString(mcpToolCall.CallId);

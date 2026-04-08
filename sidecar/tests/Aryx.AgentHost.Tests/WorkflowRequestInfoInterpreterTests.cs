@@ -317,8 +317,7 @@ public sealed class WorkflowRequestInfoInterpreterTests
         Type type = Type.GetType(
             "Microsoft.Extensions.AI.CodeInterpreterToolCallContent, Microsoft.Extensions.AI.Abstractions",
             throwOnError: true)!;
-        object instance = Activator.CreateInstance(type)!;
-        type.GetProperty("CallId")!.SetValue(instance, callId);
+        object instance = Activator.CreateInstance(type, callId)!;
         if (inputs.Length > 0)
         {
             Type aiContentType = Type.GetType(
@@ -363,7 +362,7 @@ public sealed class WorkflowRequestInfoInterpreterTests
         Type type = Type.GetType(
             "Microsoft.Extensions.AI.ImageGenerationToolCallContent, Microsoft.Extensions.AI.Abstractions",
             throwOnError: true)!;
-        return Activator.CreateInstance(type)!;
+        return Activator.CreateInstance(type, "image-call-1")!;
     }
 
     private static object CreateHandoffTarget(string id, string name)

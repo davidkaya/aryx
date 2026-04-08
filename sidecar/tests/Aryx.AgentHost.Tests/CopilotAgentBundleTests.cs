@@ -163,12 +163,12 @@ public sealed class CopilotAgentBundleTests
     {
         ChatClientAgent entryAgent = CreateChatClientAgent("agent-1", "Primary");
 
-        HandoffsWorkflowBuilder builder = CopilotAgentBundle.CreateHandoffWorkflowBuilder(entryAgent);
+        HandoffWorkflowBuilder builder = CopilotAgentBundle.CreateHandoffWorkflowBuilder(entryAgent);
 
-        FieldInfo field = typeof(HandoffsWorkflowBuilder).GetField(
+        FieldInfo field = GetInstanceField(
+            typeof(HandoffWorkflowBuilder),
             "_toolCallFilteringBehavior",
-            BindingFlags.Instance | BindingFlags.NonPublic)
-            ?? throw new InvalidOperationException("Expected HandoffsWorkflowBuilder to expose a filtering field.");
+            "Expected HandoffWorkflowBuilder to expose a filtering field.");
 
         HandoffToolCallFilteringBehavior behavior = Assert.IsType<HandoffToolCallFilteringBehavior>(field.GetValue(builder));
 
@@ -181,7 +181,7 @@ public sealed class CopilotAgentBundleTests
     {
         ChatClientAgent entryAgent = CreateChatClientAgent("agent-1", "Primary");
 
-        HandoffsWorkflowBuilder builder = CopilotAgentBundle.CreateHandoffWorkflowBuilder(
+        HandoffWorkflowBuilder builder = CopilotAgentBundle.CreateHandoffWorkflowBuilder(
             entryAgent,
             new HandoffModeSettingsDto
             {
@@ -190,12 +190,17 @@ public sealed class CopilotAgentBundleTests
                 HandoffInstructions = "Use custom delegation guidance.",
             });
 
-        FieldInfo filteringField = typeof(HandoffsWorkflowBuilder).GetField(
+        FieldInfo filteringField = GetInstanceField(
+            typeof(HandoffWorkflowBuilder),
             "_toolCallFilteringBehavior",
-            BindingFlags.Instance | BindingFlags.NonPublic)
-            ?? throw new InvalidOperationException("Expected HandoffsWorkflowBuilder to expose a filtering field.");
+            "Expected HandoffWorkflowBuilder to expose a filtering field.");
+        FieldInfo returnToPreviousField = GetInstanceField(
+            typeof(HandoffWorkflowBuilder),
+            "_returnToPrevious",
+            "Expected HandoffWorkflowBuilder to expose a return-to-previous field.");
 
         Assert.Equal(HandoffToolCallFilteringBehavior.All, filteringField.GetValue(builder));
+        Assert.Equal(true, returnToPreviousField.GetValue(builder));
         Assert.Equal("Use custom delegation guidance.", builder.HandoffInstructions);
     }
 
@@ -629,6 +634,20 @@ public sealed class CopilotAgentBundleTests
                 Name = name,
                 Description = "Echo test tool",
             });
+    }
+
+    private static FieldInfo GetInstanceField(Type type, string name, string errorMessage)
+    {
+        for (Type? current = type; current is not null; current = current.BaseType)
+        {
+            FieldInfo? field = current.GetField(name, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+            if (field is not null)
+            {
+                return field;
+            }
+        }
+
+        throw new InvalidOperationException(errorMessage);
     }
 
     private static AIFunctionDeclaration CreateHandoffDeclaration()

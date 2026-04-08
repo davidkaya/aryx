@@ -7,6 +7,7 @@ export interface AgentActivityState {
   agentName: string;
   activityType?: SessionEventRecord['activityType'];
   toolName?: string;
+  toolArguments?: Record<string, unknown>;
 }
 
 export interface SessionUsageState {
@@ -45,6 +46,7 @@ export function applySessionEventActivity(
           agentName: event.agentName?.trim() || event.agentId?.trim() || agentKey,
           activityType: event.activityType,
           toolName: event.toolName,
+          toolArguments: event.toolArguments,
         },
       },
     };

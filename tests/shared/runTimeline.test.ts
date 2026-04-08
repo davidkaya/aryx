@@ -9,6 +9,7 @@ import {
   upsertRunApprovalEvent,
   upsertRunMessageEvent,
 } from '@shared/domain/runTimeline';
+import type { SessionRunRecord } from '@shared/domain/runTimeline';
 import type { ProjectRecord } from '@shared/domain/project';
 import type { PendingApprovalRecord } from '@shared/domain/approval';
 
@@ -263,6 +264,71 @@ describe('run timeline helpers', () => {
 
   test('normalizes missing run collections to an empty array', () => {
     expect(normalizeSessionRunRecords(undefined)).toEqual([]);
+  });
+
+  test('preserves toolArguments through normalization round-trip', () => {
+    const baseRun = createSessionRunRecord({
+      requestId: 'turn-1',
+      project: createProject(),
+      workspaceKind: 'project',
+      workflow: createWorkflow(),
+      triggerMessageId: 'msg-user-1',
+      startedAt: '2026-03-23T00:00:01.000Z',
+    });
+
+    const run = appendRunActivityEvent(baseRun, {
+      activityType: 'tool-calling',
+      occurredAt: '2026-03-23T00:00:02.000Z',
+      agentId: 'agent-writer',
+      toolName: 'view',
+      toolCallId: 'tool-call-view-1',
+      toolArguments: { path: 'src/main.ts', view_range: [1, 50] },
+    });
+
+    // Simulate persisting and reloading via normalizeSessionRunRecords
+    const roundTripped = normalizeSessionRunRecords(
+      JSON.parse(JSON.stringify([run])) as SessionRunRecord[],
+    );
+
+    expect(roundTripped).toHaveLength(1);
+    const toolCallEvent = roundTripped[0].events.find(
+      (event) => event.kind === 'tool-call',
+    );
+    expect(toolCallEvent).toBeDefined();
+    expect(toolCallEvent!.toolArguments).toEqual({
+      path: 'src/main.ts',
+      view_range: [1, 50],
+    });
+  });
+
+  test('handles missing toolArguments gracefully during normalization', () => {
+    const baseRun = createSessionRunRecord({
+      requestId: 'turn-1',
+      project: createProject(),
+      workspaceKind: 'project',
+      workflow: createWorkflow(),
+      triggerMessageId: 'msg-user-1',
+      startedAt: '2026-03-23T00:00:01.000Z',
+    });
+
+    const run = appendRunActivityEvent(baseRun, {
+      activityType: 'tool-calling',
+      occurredAt: '2026-03-23T00:00:02.000Z',
+      agentId: 'agent-writer',
+      toolName: 'rg',
+      toolCallId: 'tool-call-rg-1',
+      // No toolArguments provided
+    });
+
+    const roundTripped = normalizeSessionRunRecords(
+      JSON.parse(JSON.stringify([run])) as SessionRunRecord[],
+    );
+
+    const toolCallEvent = roundTripped[0].events.find(
+      (event) => event.kind === 'tool-call',
+    );
+    expect(toolCallEvent).toBeDefined();
+    expect(toolCallEvent!.toolArguments).toBeUndefined();
   });
 
   test('tracks approval checkpoints as a single timeline event that can be resolved later', () => {

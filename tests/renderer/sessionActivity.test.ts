@@ -99,6 +99,32 @@ describe('session activity helpers', () => {
     });
   });
 
+  test('includes toolArguments in activity state', () => {
+    const event: SessionEventRecord = {
+      sessionId: 'session-1',
+      kind: 'agent-activity',
+      occurredAt: '2026-03-23T00:00:00.000Z',
+      activityType: 'tool-calling',
+      agentId: 'architect',
+      agentName: 'Architect',
+      toolName: 'view',
+      toolArguments: { path: 'src/main.ts', view_range: [1, 50] },
+    };
+
+    const result = applySessionEventActivity({}, event);
+    expect(result).toEqual({
+      'session-1': {
+        architect: {
+          agentId: 'architect',
+          agentName: 'Architect',
+          activityType: 'tool-calling',
+          toolName: 'view',
+          toolArguments: { path: 'src/main.ts', view_range: [1, 50] },
+        },
+      },
+    });
+  });
+
   test('warns when an agent-activity event is missing identifiers', () => {
     const originalWarn = console.warn;
     const warnings: unknown[][] = [];

@@ -494,6 +494,7 @@ function normalizeRunTimelineEvent(
     targetAgentName: normalizeOptionalString(event.targetAgentName),
     toolName: normalizeOptionalString(event.toolName),
     toolCallId: normalizeOptionalString(event.toolCallId),
+    toolArguments: event.toolArguments,
     fileChanges: normalizeToolCallFileChanges(event.fileChanges),
     approvalId: normalizeOptionalString(event.approvalId),
     approvalKind: event.approvalKind,

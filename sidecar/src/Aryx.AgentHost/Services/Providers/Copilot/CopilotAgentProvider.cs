@@ -30,7 +30,7 @@ internal sealed class CopilotAgentProvider : IAgentProvider
     public ITurnWorkflowRunner CreateWorkflowRunner(WorkflowValidator workflowValidator)
     {
         ArgumentNullException.ThrowIfNull(workflowValidator);
-        return new CopilotWorkflowRunner(workflowValidator);
+        return new AgentWorkflowTurnRunner(new CopilotTurnRunnerSupport(), workflowValidator);
     }
 
     public Task<SidecarCapabilitiesDto> GetCapabilitiesAsync(CancellationToken cancellationToken)

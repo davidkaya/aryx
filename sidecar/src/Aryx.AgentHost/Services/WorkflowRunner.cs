@@ -141,7 +141,7 @@ internal sealed class WorkflowRunner
                 throw new InvalidOperationException($"Workflow node \"{node.Id}\" references unknown agent \"{agentId}\".");
             }
 
-            return new WorkflowNodeRoute(agent.BindAsExecutor(CopilotAgentBundle.CreateAgentHostOptions()));
+            return new WorkflowNodeRoute(agent.BindAsExecutor(AgentHostOptionsFactory.CreateDefault()));
         }
 
         if (string.Equals(node.Kind, "code-executor", StringComparison.OrdinalIgnoreCase))

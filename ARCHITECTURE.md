@@ -141,13 +141,15 @@ Workflows describe how agents collaborate. The architecture supports:
 
 Their runtime semantics follow the Agent Framework orchestration model: sequential and group chat preserve a visible shared conversation, concurrent aggregates multiple independent responses into one turn, and handoff turns can end once the active agent has responded and is waiting for the next user input.
 
-For Copilot-backed agents, Aryx uses a repo-local adapter around the Copilot SDK session layer so workflow agent routes still behave like Agent Framework handoffs. This is necessary because the upstream `GitHubCopilotAgent` does not currently project run-time handoff tool declarations into Copilot sessions or surface Copilot tool requests back as `FunctionCallContent` for the workflow runtime.
+For Copilot-backed agents, Aryx uses a repo-local provider module around the Copilot SDK session layer so workflow agent routes still behave like Agent Framework handoffs. This is necessary because the upstream `GitHubCopilotAgent` does not currently project run-time handoff tool declarations into Copilot sessions or surface Copilot tool requests back as `FunctionCallContent` for the workflow runtime.
+
+The sidecar now keeps that Copilot-specific behavior behind provider seams. Core execution uses shared `IAgentProvider`, `IProviderTurnSupport`, `ProviderSessionEvent`, `ProviderAgentBundle`, `TurnExecutionState`, and `AgentWorkflowTurnRunner` abstractions, while `Services/Providers/Copilot/` owns SDK-specific bundle creation, transcript projection, approvals, user input, MCP OAuth, exit-plan-mode handling, CLI/session management, and event adaptation.
 
 Workflows are shared application data, not renderer-only configuration. The same workflow definition now drives validation, persistence, session execution, and sidecar orchestration.
 
 Each workflow persists an explicit graph-backed topology. Agent nodes carry stable ids, ordering, and layout metadata, while start/end, fan-out/fan-in, sub-workflow, function, and request-port nodes make execution structure visible in the saved contract.
 
-That graph remains the execution contract for the sidecar, but orchestration mode is now a first-class backend concept. Graph-based modes (`single`, `sequential`, `concurrent`) still execute directly from saved edges. Builder-based modes (`handoff`, `group-chat`) additionally persist mode-specific `settings.modeSettings` data for handoff filtering, triage selection, return behavior, and group-chat round limits, and the sidecar translates those settings into specialized Agent Framework workflow builders at run time.
+That graph remains the execution contract for the sidecar, but orchestration mode is now a first-class backend concept. Graph-based modes (`single`, `sequential`, `concurrent`) still execute directly from saved edges. Builder-based modes (`handoff`, `group-chat`) additionally persist mode-specific `settings.modeSettings` data for handoff filtering, triage selection, return behavior, and group-chat round limits, and the sidecar translates those settings into specialized Agent Framework workflow builders at run time through shared orchestration helpers rather than Copilot-specific workflow code.
 
 Workflow templates remain a first-class shared-domain contract. The shared layer owns workflow definitions, workflow template definitions, and workflow import/export helpers (YAML import/export plus Mermaid and DOT export). Built-in workflows seed workspace state directly, while built-in and custom templates let the main process create additional saved workflows without expanding the sidecar protocol.
 
@@ -214,7 +216,7 @@ This is a structured stdio protocol used for:
 - streaming partial output
 - streaming agent activity
 
-This protocol boundary keeps the AI execution runtime replaceable and prevents the Electron main process from becoming overloaded with workflow-specific behavior.
+This protocol boundary keeps the AI execution runtime replaceable and prevents the Electron main process from becoming overloaded with workflow-specific behavior. On the sidecar side, raw provider events are first normalized into sidecar-owned provider event records before they become streamed run activity, so future providers can plug into the same transport without reshaping the main-process contract.
 
 The protocol also carries **turn-scoped lifecycle events** alongside output deltas. These events let the UI visualize execution internals without the main process having to interpret AI workflow semantics:
 

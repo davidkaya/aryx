@@ -188,6 +188,10 @@ describe('formatToolCallPrimaryLabel', () => {
       .toBe('Viewed `index.ts:10-25`');
   });
 
+  test('falls back to tool name when view has no args', () => {
+    expect(formatToolCallPrimaryLabel('view', {})).toBe('view');
+  });
+
   test('produces verb-based label for edit', () => {
     expect(formatToolCallPrimaryLabel('edit', { path: '/src/utils.ts', old_str: 'foo' }))
       .toBe('Edited `utils.ts`');
@@ -221,6 +225,11 @@ describe('formatToolCallPrimaryLabel', () => {
   test('produces verb-based label for sql', () => {
     expect(formatToolCallPrimaryLabel('sql', { description: 'Insert todos', query: 'INSERT ...' }))
       .toBe('SQL: Insert todos');
+  });
+
+  test('uses fallback string arg when specific key is missing', () => {
+    expect(formatToolCallPrimaryLabel('view', { file_path: '/src/foo.ts' }))
+      .toBe('Viewed `/src/foo.ts`');
   });
 
   test('handles GitHub tools', () => {
@@ -274,6 +283,10 @@ describe('extractToolCallSnippet', () => {
   });
 
   test('returns undefined for unknown tool', () => {
-    expect(extractToolCallSnippet('custom', { foo: 'bar' })).toBeUndefined();
+    expect(extractToolCallSnippet('custom', {})).toBeUndefined();
+  });
+
+  test('falls back to first string arg when specific key is missing', () => {
+    expect(extractToolCallSnippet('view', { file_path: '/src/foo.ts' })).toBe('/src/foo.ts');
   });
 });

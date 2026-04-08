@@ -140,37 +140,49 @@ type VerbLabelExtractor = (args: Record<string, unknown>) => string;
 const verbLabels: Record<string, VerbLabelExtractor> = {
   view: (args) => {
     const target = pathWithRange(args);
-    return target ? `Viewed \`${target}\`` : 'Viewed a file';
+    if (target) return `Viewed \`${target}\``;
+    const fb = fallbackSummary(args);
+    return fb ? `Viewed \`${fb}\`` : 'view';
   },
   edit: (args) => {
     const name = stringArg(args, 'path') ? shortenPath(stringArg(args, 'path')!) : undefined;
-    return name ? `Edited \`${name}\`` : 'Edited a file';
+    if (name) return `Edited \`${name}\``;
+    const fb = fallbackSummary(args);
+    return fb ? `Edited \`${fb}\`` : 'edit';
   },
   create: (args) => {
     const name = stringArg(args, 'path') ? shortenPath(stringArg(args, 'path')!) : undefined;
-    return name ? `Created \`${name}\`` : 'Created a file';
+    if (name) return `Created \`${name}\``;
+    const fb = fallbackSummary(args);
+    return fb ? `Created \`${fb}\`` : 'create';
   },
   grep: (args) => {
     const pattern = stringArg(args, 'pattern');
-    return pattern ? `Searched for \`${truncateSummary(pattern)}\`` : 'Searched files';
+    if (pattern) return `Searched for \`${truncateSummary(pattern)}\``;
+    const fb = fallbackSummary(args);
+    return fb ? `Searched for \`${fb}\`` : 'grep';
   },
   glob: (args) => {
     const pattern = stringArg(args, 'pattern');
-    return pattern ? `Glob \`${truncateSummary(pattern)}\`` : 'Searched for files';
+    if (pattern) return `Glob \`${truncateSummary(pattern)}\``;
+    const fb = fallbackSummary(args);
+    return fb ? `Glob \`${fb}\`` : 'glob';
   },
   lsp: (args) => {
     const op = stringArg(args, 'operation');
     const file = stringArg(args, 'file') ? shortenPath(stringArg(args, 'file')!) : undefined;
     if (op && file) return `LSP ${op} \`${file}\``;
-    return op ? `LSP ${op}` : 'LSP operation';
+    return op ? `LSP ${op}` : 'lsp';
   },
   powershell: (args) => {
     const cmd = stringArg(args, 'command');
-    return cmd ? `Ran \`${truncateSummary(cmd)}\`` : 'Ran a command';
+    if (cmd) return `Ran \`${truncateSummary(cmd)}\``;
+    const fb = fallbackSummary(args);
+    return fb ? `Ran \`${fb}\`` : 'powershell';
   },
   web_fetch: (args) => {
     const url = stringArg(args, 'url');
-    if (!url) return 'Fetched a URL';
+    if (!url) return 'web_fetch';
     try {
       const hostname = new URL(url).hostname;
       return `Fetched \`${hostname}\``;
@@ -180,23 +192,23 @@ const verbLabels: Record<string, VerbLabelExtractor> = {
   },
   web_search: (args) => {
     const query = stringArg(args, 'query');
-    return query ? `Searched web: "${truncateSummary(query)}"` : 'Web search';
+    return query ? `Searched web: "${truncateSummary(query)}"` : 'web_search';
   },
   sql: (args) => {
     const desc = stringArg(args, 'description');
-    return desc ? `SQL: ${truncateSummary(desc)}` : 'SQL query';
+    return desc ? `SQL: ${truncateSummary(desc)}` : 'sql';
   },
   task: (args) => {
     const desc = stringArg(args, 'description');
-    return desc ? `Launched agent: ${truncateSummary(desc)}` : 'Launched agent';
+    return desc ? `Launched agent: ${truncateSummary(desc)}` : 'task';
   },
   ask_user: (args) => {
     const q = stringArg(args, 'question');
-    return q ? `Asked: "${truncateSummary(q)}"` : 'Asked a question';
+    return q ? `Asked: "${truncateSummary(q)}"` : 'ask_user';
   },
   skill: (args) => {
     const name = stringArg(args, 'skill');
-    return name ? `Used skill \`${name}\`` : 'Used a skill';
+    return name ? `Used skill \`${name}\`` : 'skill';
   },
   store_memory: () => 'Stored a memory',
   report_intent: (args) => {
@@ -265,29 +277,36 @@ export function extractToolCallSnippet(
   toolArguments: Record<string, unknown> | undefined,
 ): string | undefined {
   if (!toolArguments) return undefined;
+  let result: string | undefined;
   switch (toolName) {
     case 'view':
     case 'edit':
     case 'create':
-      return pathWithRange(toolArguments) ?? stringArg(toolArguments, 'path');
+      result = pathWithRange(toolArguments) ?? stringArg(toolArguments, 'path');
+      break;
     case 'grep':
     case 'glob':
-      return stringArg(toolArguments, 'pattern');
+      result = stringArg(toolArguments, 'pattern');
+      break;
     case 'powershell':
-      return stringArg(toolArguments, 'command') ? truncateSummary(stringArg(toolArguments, 'command')!) : undefined;
+      result = stringArg(toolArguments, 'command') ? truncateSummary(stringArg(toolArguments, 'command')!) : undefined;
+      break;
     case 'lsp': {
       const op = stringArg(toolArguments, 'operation');
       const file = stringArg(toolArguments, 'file') ? shortenPath(stringArg(toolArguments, 'file')!) : undefined;
-      if (op && file) return `${op} ${file}`;
-      return op ?? undefined;
+      result = op && file ? `${op} ${file}` : op ?? undefined;
+      break;
     }
     case 'web_fetch':
-      return stringArg(toolArguments, 'url');
+      result = stringArg(toolArguments, 'url');
+      break;
     case 'sql':
-      return stringArg(toolArguments, 'description');
+      result = stringArg(toolArguments, 'description');
+      break;
     case 'task':
-      return stringArg(toolArguments, 'description');
-    default:
-      return undefined;
+      result = stringArg(toolArguments, 'description');
+      break;
   }
+  // Fall back to the first usable string value from any argument key
+  return result ?? fallbackSummary(toolArguments);
 }

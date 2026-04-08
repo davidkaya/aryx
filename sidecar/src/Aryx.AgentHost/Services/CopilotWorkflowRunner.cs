@@ -44,6 +44,7 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
             throw new InvalidOperationException(validationError);
         }
 
+        IProviderEventAdapter providerEventAdapter = new CopilotEventAdapter();
         CopilotTurnExecutionState state = new(command);
         using CancellationTokenSource runCancellation =
             CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -70,7 +71,11 @@ public sealed class CopilotWorkflowRunner : ITurnWorkflowRunner
                     runCancellation.Token),
                 (agent, sessionEvent) =>
                 {
-                    state.ObserveSessionEvent(agent, sessionEvent);
+                    if (providerEventAdapter.TryAdapt(sessionEvent) is { } providerEvent)
+                    {
+                        state.ObserveSessionEvent(agent, providerEvent);
+                    }
+
                     if (sessionEvent is McpOauthRequiredEvent mcpOauthRequired)
                     {
                         state.EnqueuePendingMcpOauthRequest(

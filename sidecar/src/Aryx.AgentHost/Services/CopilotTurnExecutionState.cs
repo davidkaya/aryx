@@ -1,6 +1,5 @@
 using System.Collections.Concurrent;
 using Aryx.AgentHost.Contracts;
-using GitHub.Copilot.SDK;
 using Microsoft.Extensions.AI;
 
 namespace Aryx.AgentHost.Services;
@@ -70,7 +69,7 @@ internal sealed class CopilotTurnExecutionState
         }
     }
 
-    public void ObserveSessionEvent(WorkflowNodeDto agentDefinition, SessionEvent sessionEvent)
+    public void ObserveSessionEvent(WorkflowNodeDto agentDefinition, ProviderSessionEvent sessionEvent)
     {
         AgentIdentity agent = AgentIdentityResolver.ResolveAgentIdentity(
             _command.Workflow,
@@ -79,27 +78,25 @@ internal sealed class CopilotTurnExecutionState
 
         switch (sessionEvent)
         {
-            case AssistantMessageDeltaEvent messageDelta when !string.IsNullOrWhiteSpace(messageDelta.Data?.MessageId):
-                RecordObservedAgentForMessage(agent, messageDelta.Data!.MessageId);
+            case ProviderAssistantMessageDeltaEvent messageDelta:
+                RecordObservedAgentForMessage(agent, messageDelta.MessageId);
                 QueueThinkingIfNeeded(agent);
                 break;
-            case AssistantMessageEvent assistantMessage when !string.IsNullOrWhiteSpace(assistantMessage.Data?.MessageId):
-                RecordObservedAgentForMessage(agent, assistantMessage.Data!.MessageId);
+            case ProviderAssistantMessageEvent assistantMessage:
+                RecordObservedAgentForMessage(agent, assistantMessage.MessageId);
                 QueueThinkingIfNeeded(agent);
-                if (assistantMessage.Data?.ToolRequests is { Length: > 0 })
+                if (assistantMessage.HasToolRequests)
                 {
-                    QueueMessageReclassifiedIfNeeded(assistantMessage.Data.MessageId);
+                    QueueMessageReclassifiedIfNeeded(assistantMessage.MessageId);
                 }
                 break;
-            case ToolExecutionStartEvent toolExecutionStart
-                when !string.IsNullOrWhiteSpace(toolExecutionStart.Data?.ToolCallId)
-                    && !string.IsNullOrWhiteSpace(toolExecutionStart.Data?.ToolName):
-                string toolCallId = toolExecutionStart.Data.ToolCallId.Trim();
-                string toolName = toolExecutionStart.Data.ToolName.Trim();
+            case ProviderToolExecutionStartEvent toolExecutionStart:
+                string toolCallId = toolExecutionStart.ToolCallId;
+                string toolName = toolExecutionStart.ToolName;
                 ToolNamesByCallId[toolCallId] = toolName;
                 ActiveAgent = agent;
                 AgentActivityEventDto? toolActivity = CreateToolCallingActivity(
-                    agent, toolName, toolCallId, toolExecutionStart.Data.Arguments);
+                    agent, toolName, toolCallId, toolExecutionStart.ToolArguments);
                 if (toolActivity is not null)
                 {
                     _pendingEvents.Enqueue(toolActivity);
@@ -107,86 +104,101 @@ internal sealed class CopilotTurnExecutionState
 
                 QueueMessageReclassifiedIfNeeded(_lastObservedMessageId);
                 break;
-            case AssistantIntentEvent intentEvent:
+            case ProviderAssistantIntentEvent intentEvent:
                 ActiveAgent = agent;
                 QueueThinkingIfNeeded(agent);
-                AssistantIntentEventDto? assistantIntent = CreateAssistantIntentEvent(agent, intentEvent.Data);
+                AssistantIntentEventDto? assistantIntent = CreateAssistantIntentEvent(agent, intentEvent.Intent);
                 if (assistantIntent is not null)
                 {
                     _pendingEvents.Enqueue(assistantIntent);
                 }
                 break;
-            case AssistantReasoningDeltaEvent reasoningDelta:
+            case ProviderAssistantReasoningDeltaEvent reasoningDelta:
                 ActiveAgent = agent;
                 QueueThinkingIfNeeded(agent);
-                ReasoningDeltaEventDto? reasoningDeltaEvent = CreateReasoningDeltaEvent(agent, reasoningDelta.Data);
+                ReasoningDeltaEventDto? reasoningDeltaEvent = CreateReasoningDeltaEvent(
+                    agent,
+                    reasoningDelta.ReasoningId,
+                    reasoningDelta.DeltaContent);
                 if (reasoningDeltaEvent is not null)
                 {
                     _pendingEvents.Enqueue(reasoningDeltaEvent);
                 }
                 break;
-            case SubagentStartedEvent started:
+            case ProviderSubagentStartedEvent started:
                 ActiveAgent = agent;
-                _pendingEvents.Enqueue(CreateSubagentEvent(agent, "started", started.Data));
+                _pendingEvents.Enqueue(CreateSubagentStartedEvent(agent, started));
                 break;
-            case SubagentCompletedEvent completed:
+            case ProviderSubagentCompletedEvent completed:
                 ActiveAgent = agent;
-                _pendingEvents.Enqueue(CreateSubagentCompletedEvent(agent, completed.Data));
+                _pendingEvents.Enqueue(CreateSubagentCompletedEvent(agent, completed));
                 break;
-            case SubagentFailedEvent failed:
+            case ProviderSubagentFailedEvent failed:
                 ActiveAgent = agent;
-                _pendingEvents.Enqueue(CreateSubagentFailedEvent(agent, failed.Data));
+                _pendingEvents.Enqueue(CreateSubagentFailedEvent(agent, failed));
                 break;
-            case SubagentSelectedEvent selected:
+            case ProviderSubagentSelectedEvent selected:
                 ActiveAgent = agent;
-                _pendingEvents.Enqueue(CreateSubagentSelectedEvent(agent, selected.Data));
+                _pendingEvents.Enqueue(CreateSubagentSelectedEvent(agent, selected));
                 break;
-            case SubagentDeselectedEvent:
+            case ProviderSubagentDeselectedEvent:
                 ActiveAgent = agent;
                 _pendingEvents.Enqueue(CreateSubagentDeselectedEvent(agent));
                 break;
-            case SkillInvokedEvent skillInvoked:
+            case ProviderSkillInvokedEvent skillInvoked:
                 ActiveAgent = agent;
-                _pendingEvents.Enqueue(CreateSkillInvokedEvent(agent, skillInvoked.Data));
+                _pendingEvents.Enqueue(CreateSkillInvokedEvent(agent, skillInvoked));
                 break;
-            case HookStartEvent hookStart:
-                ActiveAgent = agent;
-                if (!SuppressHookLifecycleEvents)
-                {
-                    _pendingEvents.Enqueue(CreateHookLifecycleEvent(agent, "start", hookStart.Data));
-                }
-                break;
-            case HookEndEvent hookEnd:
+            case ProviderHookStartEvent hookStart:
                 ActiveAgent = agent;
                 if (!SuppressHookLifecycleEvents)
                 {
-                    _pendingEvents.Enqueue(CreateHookLifecycleEvent(agent, "end", hookEnd.Data));
+                    _pendingEvents.Enqueue(CreateHookLifecycleEvent(
+                        agent,
+                        "start",
+                        hookStart.HookInvocationId,
+                        hookStart.HookType,
+                        input: hookStart.Input));
                 }
                 break;
-            case AssistantUsageEvent assistantUsage:
+            case ProviderHookEndEvent hookEnd:
                 ActiveAgent = agent;
-                _pendingEvents.Enqueue(CreateAssistantUsageEvent(agent, assistantUsage.Data));
+                if (!SuppressHookLifecycleEvents)
+                {
+                    _pendingEvents.Enqueue(CreateHookLifecycleEvent(
+                        agent,
+                        "end",
+                        hookEnd.HookInvocationId,
+                        hookEnd.HookType,
+                        success: hookEnd.Success,
+                        output: hookEnd.Output,
+                        error: hookEnd.Error));
+                }
                 break;
-            case SessionUsageInfoEvent usageInfo:
+            case ProviderAssistantUsageEvent assistantUsage:
                 ActiveAgent = agent;
-                _pendingEvents.Enqueue(CreateUsageEvent(agent, usageInfo.Data));
+                _pendingEvents.Enqueue(CreateAssistantUsageEvent(agent, assistantUsage));
                 break;
-            case SessionCompactionStartEvent compactionStart:
+            case ProviderSessionUsageEvent usageInfo:
                 ActiveAgent = agent;
-                _pendingEvents.Enqueue(CreateCompactionStartEvent(agent, compactionStart.Data));
+                _pendingEvents.Enqueue(CreateUsageEvent(agent, usageInfo));
                 break;
-            case SessionCompactionCompleteEvent compactionComplete:
+            case ProviderSessionCompactionStartEvent compactionStart:
                 ActiveAgent = agent;
-                _pendingEvents.Enqueue(CreateCompactionCompleteEvent(agent, compactionComplete.Data));
+                _pendingEvents.Enqueue(CreateCompactionStartEvent(agent, compactionStart));
                 break;
-            case PendingMessagesModifiedEvent:
+            case ProviderSessionCompactionCompleteEvent compactionComplete:
+                ActiveAgent = agent;
+                _pendingEvents.Enqueue(CreateCompactionCompleteEvent(agent, compactionComplete));
+                break;
+            case ProviderPendingMessagesModifiedEvent:
                 ActiveAgent = agent;
                 _pendingEvents.Enqueue(CreatePendingMessagesModifiedEvent(agent));
                 break;
-            case McpOauthRequiredEvent:
+            case ProviderMcpOauthRequiredEvent:
                 ActiveAgent = agent;
                 break;
-            case ExitPlanModeRequestedEvent:
+            case ProviderExitPlanModeRequestedEvent:
                 HasPendingExitPlanModeRequest = true;
                 ActiveAgent = agent;
                 break;
@@ -297,7 +309,7 @@ internal sealed class CopilotTurnExecutionState
         AgentIdentity agent,
         string toolName,
         string toolCallId,
-        object? rawArguments = null)
+        IReadOnlyDictionary<string, object?>? toolArguments = null)
     {
         if (toolName.StartsWith("handoff_to_", StringComparison.Ordinal))
         {
@@ -314,7 +326,7 @@ internal sealed class CopilotTurnExecutionState
             AgentName = agent.AgentName,
             ToolName = toolName,
             ToolCallId = toolCallId,
-            ToolArguments = WorkflowRequestInfoInterpreter.NormalizeRawToolArguments(rawArguments),
+            ToolArguments = toolArguments,
         };
     }
 
@@ -377,29 +389,28 @@ internal sealed class CopilotTurnExecutionState
         return CompletedMessages;
     }
 
-    private SubagentEventDto CreateSubagentEvent(
+    private SubagentEventDto CreateSubagentStartedEvent(
         AgentIdentity agent,
-        string eventKind,
-        SubagentStartedData? data)
+        ProviderSubagentStartedEvent data)
     {
         return new SubagentEventDto
         {
             Type = "subagent-event",
             RequestId = _command.RequestId,
             SessionId = _command.SessionId,
-            EventKind = eventKind,
+            EventKind = "started",
             AgentId = agent.AgentId,
             AgentName = agent.AgentName,
-            ToolCallId = data?.ToolCallId,
-            CustomAgentName = data?.AgentName,
-            CustomAgentDisplayName = data?.AgentDisplayName,
-            CustomAgentDescription = data?.AgentDescription,
+            ToolCallId = data.ToolCallId,
+            CustomAgentName = data.AgentName,
+            CustomAgentDisplayName = data.AgentDisplayName,
+            CustomAgentDescription = data.AgentDescription,
         };
     }
 
     private SubagentEventDto CreateSubagentCompletedEvent(
         AgentIdentity agent,
-        SubagentCompletedData? data)
+        ProviderSubagentCompletedEvent data)
     {
         return new SubagentEventDto
         {
@@ -409,15 +420,15 @@ internal sealed class CopilotTurnExecutionState
             EventKind = "completed",
             AgentId = agent.AgentId,
             AgentName = agent.AgentName,
-            ToolCallId = data?.ToolCallId,
-            CustomAgentName = data?.AgentName,
-            CustomAgentDisplayName = data?.AgentDisplayName,
+            ToolCallId = data.ToolCallId,
+            CustomAgentName = data.AgentName,
+            CustomAgentDisplayName = data.AgentDisplayName,
         };
     }
 
     private SubagentEventDto CreateSubagentFailedEvent(
         AgentIdentity agent,
-        SubagentFailedData? data)
+        ProviderSubagentFailedEvent data)
     {
         return new SubagentEventDto
         {
@@ -427,16 +438,16 @@ internal sealed class CopilotTurnExecutionState
             EventKind = "failed",
             AgentId = agent.AgentId,
             AgentName = agent.AgentName,
-            ToolCallId = data?.ToolCallId,
-            CustomAgentName = data?.AgentName,
-            CustomAgentDisplayName = data?.AgentDisplayName,
-            Error = data?.Error,
+            ToolCallId = data.ToolCallId,
+            CustomAgentName = data.AgentName,
+            CustomAgentDisplayName = data.AgentDisplayName,
+            Error = data.Error,
         };
     }
 
     private SubagentEventDto CreateSubagentSelectedEvent(
         AgentIdentity agent,
-        SubagentSelectedData? data)
+        ProviderSubagentSelectedEvent data)
     {
         return new SubagentEventDto
         {
@@ -446,9 +457,9 @@ internal sealed class CopilotTurnExecutionState
             EventKind = "selected",
             AgentId = agent.AgentId,
             AgentName = agent.AgentName,
-            CustomAgentName = data?.AgentName,
-            CustomAgentDisplayName = data?.AgentDisplayName,
-            Tools = data?.Tools,
+            CustomAgentName = data.AgentName,
+            CustomAgentDisplayName = data.AgentDisplayName,
+            Tools = data.Tools,
         };
     }
 
@@ -467,10 +478,10 @@ internal sealed class CopilotTurnExecutionState
 
     private AssistantIntentEventDto? CreateAssistantIntentEvent(
         AgentIdentity agent,
-        AssistantIntentData? data)
+        string? intent)
     {
-        string? intent = data?.Intent?.Trim();
-        if (string.IsNullOrWhiteSpace(intent))
+        string? normalizedIntent = intent?.Trim();
+        if (string.IsNullOrWhiteSpace(normalizedIntent))
         {
             return null;
         }
@@ -482,17 +493,17 @@ internal sealed class CopilotTurnExecutionState
             SessionId = _command.SessionId,
             AgentId = agent.AgentId,
             AgentName = agent.AgentName,
-            Intent = intent,
+            Intent = normalizedIntent,
         };
     }
 
     private ReasoningDeltaEventDto? CreateReasoningDeltaEvent(
         AgentIdentity agent,
-        AssistantReasoningDeltaData? data)
+        string? reasoningId,
+        string? deltaContent)
     {
-        if (data is null
-            || string.IsNullOrWhiteSpace(data.ReasoningId)
-            || string.IsNullOrEmpty(data.DeltaContent))
+        if (string.IsNullOrWhiteSpace(reasoningId)
+            || string.IsNullOrEmpty(deltaContent))
         {
             return null;
         }
@@ -504,14 +515,14 @@ internal sealed class CopilotTurnExecutionState
             SessionId = _command.SessionId,
             AgentId = agent.AgentId,
             AgentName = agent.AgentName,
-            ReasoningId = data.ReasoningId,
-            ContentDelta = data.DeltaContent,
+            ReasoningId = reasoningId,
+            ContentDelta = deltaContent,
         };
     }
 
     private SkillInvokedEventDto CreateSkillInvokedEvent(
         AgentIdentity agent,
-        SkillInvokedData? data)
+        ProviderSkillInvokedEvent data)
     {
         return new SkillInvokedEventDto
         {
@@ -520,19 +531,24 @@ internal sealed class CopilotTurnExecutionState
             SessionId = _command.SessionId,
             AgentId = agent.AgentId,
             AgentName = agent.AgentName,
-            SkillName = data?.Name ?? string.Empty,
-            Path = data?.Path ?? string.Empty,
-            Content = data?.Content ?? string.Empty,
-            AllowedTools = data?.AllowedTools,
-            PluginName = data?.PluginName,
-            PluginVersion = data?.PluginVersion,
+            SkillName = data.SkillName,
+            Path = data.Path,
+            Content = data.Content,
+            AllowedTools = data.AllowedTools,
+            PluginName = data.PluginName,
+            PluginVersion = data.PluginVersion,
         };
     }
 
     private HookLifecycleEventDto CreateHookLifecycleEvent(
         AgentIdentity agent,
         string phase,
-        HookStartData? data)
+        string hookInvocationId,
+        string hookType,
+        object? input = null,
+        bool? success = null,
+        object? output = null,
+        string? error = null)
     {
         return new HookLifecycleEventDto
         {
@@ -541,37 +557,19 @@ internal sealed class CopilotTurnExecutionState
             SessionId = _command.SessionId,
             AgentId = agent.AgentId,
             AgentName = agent.AgentName,
-            HookInvocationId = data?.HookInvocationId ?? string.Empty,
-            HookType = data?.HookType ?? string.Empty,
+            HookInvocationId = hookInvocationId,
+            HookType = hookType,
             Phase = phase,
-            Input = data?.Input,
-        };
-    }
-
-    private HookLifecycleEventDto CreateHookLifecycleEvent(
-        AgentIdentity agent,
-        string phase,
-        HookEndData? data)
-    {
-        return new HookLifecycleEventDto
-        {
-            Type = "hook-lifecycle",
-            RequestId = _command.RequestId,
-            SessionId = _command.SessionId,
-            AgentId = agent.AgentId,
-            AgentName = agent.AgentName,
-            HookInvocationId = data?.HookInvocationId ?? string.Empty,
-            HookType = data?.HookType ?? string.Empty,
-            Phase = phase,
-            Success = data?.Success,
-            Output = data?.Output,
-            Error = data?.Error?.Message,
+            Input = input,
+            Success = success,
+            Output = output,
+            Error = error,
         };
     }
 
     private AssistantUsageEventDto CreateAssistantUsageEvent(
         AgentIdentity agent,
-        AssistantUsageData? data)
+        ProviderAssistantUsageEvent data)
     {
         return new AssistantUsageEventDto
         {
@@ -580,19 +578,19 @@ internal sealed class CopilotTurnExecutionState
             SessionId = _command.SessionId,
             AgentId = agent.AgentId,
             AgentName = agent.AgentName,
-            Model = data?.Model ?? string.Empty,
-            InputTokens = data?.InputTokens,
-            OutputTokens = data?.OutputTokens,
-            CacheReadTokens = data?.CacheReadTokens,
-            CacheWriteTokens = data?.CacheWriteTokens,
-            Cost = data?.Cost,
-            Duration = data?.Duration,
-            TotalNanoAiu = data?.CopilotUsage?.TotalNanoAiu,
-            QuotaSnapshots = QuotaSnapshotMapper.MapOrNull(data?.QuotaSnapshots),
+            Model = data.Model,
+            InputTokens = data.InputTokens,
+            OutputTokens = data.OutputTokens,
+            CacheReadTokens = data.CacheReadTokens,
+            CacheWriteTokens = data.CacheWriteTokens,
+            Cost = data.Cost,
+            Duration = data.Duration,
+            TotalNanoAiu = data.TotalNanoAiu,
+            QuotaSnapshots = data.QuotaSnapshots,
         };
     }
 
-    private SessionUsageEventDto CreateUsageEvent(AgentIdentity agent, SessionUsageInfoData? data)
+    private SessionUsageEventDto CreateUsageEvent(AgentIdentity agent, ProviderSessionUsageEvent data)
     {
         return new SessionUsageEventDto
         {
@@ -601,19 +599,19 @@ internal sealed class CopilotTurnExecutionState
             SessionId = _command.SessionId,
             AgentId = agent.AgentId,
             AgentName = agent.AgentName,
-            TokenLimit = data?.TokenLimit ?? 0,
-            CurrentTokens = data?.CurrentTokens ?? 0,
-            MessagesLength = data?.MessagesLength ?? 0,
-            SystemTokens = data?.SystemTokens,
-            ConversationTokens = data?.ConversationTokens,
-            ToolDefinitionsTokens = data?.ToolDefinitionsTokens,
-            IsInitial = data?.IsInitial,
+            TokenLimit = data.TokenLimit,
+            CurrentTokens = data.CurrentTokens,
+            MessagesLength = data.MessagesLength,
+            SystemTokens = data.SystemTokens,
+            ConversationTokens = data.ConversationTokens,
+            ToolDefinitionsTokens = data.ToolDefinitionsTokens,
+            IsInitial = data.IsInitial,
         };
     }
 
     private SessionCompactionEventDto CreateCompactionStartEvent(
         AgentIdentity agent,
-        SessionCompactionStartData? data)
+        ProviderSessionCompactionStartEvent data)
     {
         return new SessionCompactionEventDto
         {
@@ -623,15 +621,15 @@ internal sealed class CopilotTurnExecutionState
             AgentId = agent.AgentId,
             AgentName = agent.AgentName,
             Phase = "start",
-            SystemTokens = data?.SystemTokens,
-            ConversationTokens = data?.ConversationTokens,
-            ToolDefinitionsTokens = data?.ToolDefinitionsTokens,
+            SystemTokens = data.SystemTokens,
+            ConversationTokens = data.ConversationTokens,
+            ToolDefinitionsTokens = data.ToolDefinitionsTokens,
         };
     }
 
     private SessionCompactionEventDto CreateCompactionCompleteEvent(
         AgentIdentity agent,
-        SessionCompactionCompleteData? data)
+        ProviderSessionCompactionCompleteEvent data)
     {
         return new SessionCompactionEventDto
         {
@@ -641,19 +639,19 @@ internal sealed class CopilotTurnExecutionState
             AgentId = agent.AgentId,
             AgentName = agent.AgentName,
             Phase = "complete",
-            Success = data?.Success,
-            Error = data?.Error,
-            SystemTokens = data?.SystemTokens,
-            ConversationTokens = data?.ConversationTokens,
-            ToolDefinitionsTokens = data?.ToolDefinitionsTokens,
-            PreCompactionTokens = data?.PreCompactionTokens,
-            PostCompactionTokens = data?.PostCompactionTokens,
-            PreCompactionMessagesLength = data?.PreCompactionMessagesLength,
-            MessagesRemoved = data?.MessagesRemoved,
-            TokensRemoved = data?.TokensRemoved,
-            SummaryContent = data?.SummaryContent,
-            CheckpointNumber = data?.CheckpointNumber,
-            CheckpointPath = data?.CheckpointPath,
+            Success = data.Success,
+            Error = data.Error,
+            SystemTokens = data.SystemTokens,
+            ConversationTokens = data.ConversationTokens,
+            ToolDefinitionsTokens = data.ToolDefinitionsTokens,
+            PreCompactionTokens = data.PreCompactionTokens,
+            PostCompactionTokens = data.PostCompactionTokens,
+            PreCompactionMessagesLength = data.PreCompactionMessagesLength,
+            MessagesRemoved = data.MessagesRemoved,
+            TokensRemoved = data.TokensRemoved,
+            SummaryContent = data.SummaryContent,
+            CheckpointNumber = data.CheckpointNumber,
+            CheckpointPath = data.CheckpointPath,
         };
     }
 

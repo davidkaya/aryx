@@ -350,7 +350,12 @@ internal static class AgentIdentityResolver
                 continue;
             }
 
-            WorkflowDefinitionDto subWorkflow = node.ResolveSubWorkflowDefinition(workflowLibrary);
+            WorkflowDefinitionDto? subWorkflow = node.TryResolveSubWorkflowDefinition(workflowLibrary);
+            if (subWorkflow is null)
+            {
+                continue;
+            }
+
             CollectAgentSubworkflowContexts(
                 subWorkflow,
                 workflowLibrary,

@@ -67,6 +67,15 @@ internal static class WorkflowDefinitionExtensions
         this WorkflowNodeDto node,
         IReadOnlyDictionary<string, WorkflowDefinitionDto>? workflowLibrary)
     {
+        return node.TryResolveSubWorkflowDefinition(workflowLibrary)
+            ?? throw new InvalidOperationException(
+                $"Sub-workflow node \"{node.Id}\" references unknown workflow \"{node.Config.WorkflowId}\".");
+    }
+
+    public static WorkflowDefinitionDto? TryResolveSubWorkflowDefinition(
+        this WorkflowNodeDto node,
+        IReadOnlyDictionary<string, WorkflowDefinitionDto>? workflowLibrary)
+    {
         ArgumentNullException.ThrowIfNull(node);
 
         if (node.Config.InlineWorkflow is not null)
@@ -81,8 +90,7 @@ internal static class WorkflowDefinitionExtensions
             return workflow;
         }
 
-        throw new InvalidOperationException(
-            $"Sub-workflow node \"{node.Id}\" references unknown workflow \"{node.Config.WorkflowId}\".");
+        return null;
     }
 
     public static bool IsOrchestrationMode(this WorkflowDefinitionDto workflow, string mode)
@@ -190,8 +198,11 @@ internal static class WorkflowDefinitionExtensions
                 continue;
             }
 
-            WorkflowDefinitionDto subWorkflow = node.ResolveSubWorkflowDefinition(workflowLibrary);
-            CollectAgentNodes(subWorkflow, workflowLibrary, agentNodes, visitedWorkflowIds, visitedAnonymousWorkflows);
+            WorkflowDefinitionDto? subWorkflow = node.TryResolveSubWorkflowDefinition(workflowLibrary);
+            if (subWorkflow is not null)
+            {
+                CollectAgentNodes(subWorkflow, workflowLibrary, agentNodes, visitedWorkflowIds, visitedAnonymousWorkflows);
+            }
         }
     }
 
@@ -227,7 +238,12 @@ internal static class WorkflowDefinitionExtensions
                 return node;
             }
 
-            WorkflowDefinitionDto subWorkflow = node.ResolveSubWorkflowDefinition(workflowLibrary);
+            WorkflowDefinitionDto? subWorkflow = node.TryResolveSubWorkflowDefinition(workflowLibrary);
+            if (subWorkflow is null)
+            {
+                continue;
+            }
+
             WorkflowNodeDto? match = FindSubWorkflowNode(
                 subWorkflow,
                 nodeId,

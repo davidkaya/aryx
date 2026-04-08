@@ -174,6 +174,23 @@ public sealed class AgentIdentityResolverTests
         Assert.Equal("Inner Review", subworkflow.SubworkflowName);
     }
 
+    [Fact]
+    public void BuildAgentSubworkflowIndex_SkipsUnresolvableSubWorkflowReferences()
+    {
+        WorkflowDefinitionDto workflow = CreateWorkflow(
+            "parent-workflow",
+            [
+                CreateAgent("agent-top-level", "Top Level"),
+                CreateSubworkflow("subworkflow-missing", "Missing Pipeline", workflowId: "nonexistent-workflow"),
+            ],
+            orchestrationMode: "concurrent");
+
+        IReadOnlyDictionary<string, SubworkflowContext> index =
+            AgentIdentityResolver.BuildAgentSubworkflowIndex(workflow);
+
+        Assert.Empty(index);
+    }
+
     private static WorkflowDefinitionDto CreateWorkflow(
         IReadOnlyList<WorkflowNodeDto> nodes,
         string orchestrationMode = "concurrent")

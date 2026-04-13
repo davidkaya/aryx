@@ -80,7 +80,9 @@ export function QuickPromptApp() {
       } else if (event.kind === 'message-complete') {
         setPhase('complete');
       } else if (event.kind === 'status' && event.status === 'idle') {
-        setPhase((prev) => (prev === 'streaming' ? 'complete' : prev));
+        setPhase((prev) => (prev === 'idle' || prev === 'complete' ? prev : 'complete'));
+      } else if (event.kind === 'agent-activity' && event.activityType === 'completed') {
+        setPhase((prev) => (prev === 'idle' || prev === 'complete' ? prev : 'complete'));
       } else if (event.kind === 'error') {
         setErrorMessage(event.error ?? 'An unexpected error occurred.');
         setPhase('error');

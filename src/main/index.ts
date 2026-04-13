@@ -4,16 +4,24 @@ import type { BrowserWindow as BrowserWindowType } from 'electron';
 import { registerIpcHandlers } from '@main/ipc/registerIpcHandlers';
 import { AryxAppService } from '@main/AryxAppService';
 import { AutoUpdateService } from '@main/services/autoUpdater';
+import { GlobalHotkeyService } from '@main/services/globalHotkey';
 import { createMainWindow } from '@main/windows/createMainWindow';
+import {
+  createQuickPromptWindow,
+  toggleQuickPromptWindow,
+} from '@main/windows/createQuickPromptWindow';
 import { applyTitleBarTheme } from '@main/windows/titleBarTheme';
 import { SystemTray, setupCloseToTray, showAndFocusWindow } from '@main/services/systemTray';
+import { createDefaultQuickPromptSettings } from '@shared/domain/tooling';
 
 const { app, BrowserWindow } = electron;
 
 let mainWindow: BrowserWindowType | undefined;
+let quickPromptWindow: BrowserWindowType | undefined;
 let appService: AryxAppService | undefined;
 let systemTray: SystemTray | undefined;
 let autoUpdateService: AutoUpdateService | undefined;
+let globalHotkeyService: GlobalHotkeyService | undefined;
 
 async function bootstrap(): Promise<void> {
   appService = new AryxAppService();
@@ -21,13 +29,14 @@ async function bootstrap(): Promise<void> {
   autoUpdateService = new AutoUpdateService({ isPackaged: app.isPackaged });
 
   mainWindow = createMainWindow();
-  registerIpcHandlers(mainWindow, appService, autoUpdateService);
+  quickPromptWindow = createQuickPromptWindow();
+  registerIpcHandlers(mainWindow, appService, autoUpdateService, quickPromptWindow);
 
   // Start workspace loading in parallel — don't block window from showing.
   // The renderer fetches the workspace via its own IPC call after mount.
   const workspaceReady = appService.loadWorkspace();
 
-  // Apply theme and set up tray once workspace is available
+  // Apply theme, set up tray, and register global hotkey once workspace is available
   workspaceReady
     .then((workspace) => {
       if (!mainWindow) return;
@@ -46,6 +55,19 @@ async function bootstrap(): Promise<void> {
 
       appService!.on('workspace-updated', (updatedWorkspace) => {
         systemTray?.updateRunningCount(updatedWorkspace);
+      });
+
+      // Register global hotkey for Quick Prompt
+      globalHotkeyService = new GlobalHotkeyService();
+      const hotkeySettings = workspace.settings.quickPrompt ?? createDefaultQuickPromptSettings();
+      globalHotkeyService.register(hotkeySettings, () => {
+        if (quickPromptWindow) toggleQuickPromptWindow(quickPromptWindow);
+      });
+
+      // Re-register hotkey when settings change
+      appService!.on('workspace-updated', (updatedWorkspace) => {
+        const updatedSettings = updatedWorkspace.settings.quickPrompt ?? createDefaultQuickPromptSettings();
+        globalHotkeyService?.update(updatedSettings);
       });
     })
     .catch((error) => {
@@ -72,7 +94,9 @@ app.on('window-all-closed', () => {
   if (process.platform === 'darwin') return;
 
   const windows = BrowserWindow.getAllWindows();
-  const allHidden = windows.length > 0 && windows.every((w) => !w.isVisible());
+  // Ignore the quick prompt window (it's always hidden, never truly closed)
+  const visibleWindows = windows.filter((w) => w !== quickPromptWindow);
+  const allHidden = visibleWindows.length > 0 && visibleWindows.every((w) => !w.isVisible());
   if (allHidden) return;
 
   app.quit();
@@ -87,6 +111,7 @@ app.on('activate', async () => {
 });
 
 app.on('before-quit', async () => {
+  globalHotkeyService?.dispose();
   autoUpdateService?.dispose();
   autoUpdateService = undefined;
   systemTray?.dispose();

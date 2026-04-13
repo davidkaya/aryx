@@ -689,9 +689,126 @@ body {
   .update-banner-enter,
   .turn-activity-enter,
   .turn-activity-row,
-  .turn-activity-row[role="separator"] {
+  .turn-activity-row[role="separator"],
+  .qp-panel-enter,
+  .qp-response-enter,
+  .qp-actions-enter,
+  .qp-dropdown-enter {
     animation: none;
   }
+
+  .qp-border-streaming {
+    animation: none;
+    border-color: var(--color-accent);
+  }
+}
+
+/* ── Quick Prompt — Glass Command Bar ────────────────────────── */
+
+.qp-container {
+  background: transparent;
+}
+
+.qp-panel {
+  background: var(--color-glass);
+  backdrop-filter: blur(24px) saturate(1.4);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  box-shadow:
+    0 24px 80px rgba(0, 0, 0, 0.55),
+    0 0 1px rgba(255, 255, 255, 0.06) inset;
+  transition: border-color 0.3s ease;
+}
+
+/* Border states */
+.qp-border-idle {
+  border: 1px solid var(--color-glass-border);
+}
+
+.qp-border-complete {
+  border: 1px solid var(--color-border-glow);
+  box-shadow:
+    0 24px 80px rgba(0, 0, 0, 0.55),
+    0 0 20px rgba(36, 92, 249, 0.06),
+    0 0 1px rgba(255, 255, 255, 0.06) inset;
+}
+
+/* Animated breathing border during streaming */
+@keyframes qp-border-breathe {
+  0%, 100% {
+    border-color: rgba(36, 92, 249, 0.35);
+    box-shadow:
+      0 24px 80px rgba(0, 0, 0, 0.55),
+      0 0 20px rgba(36, 92, 249, 0.08),
+      0 0 1px rgba(255, 255, 255, 0.06) inset;
+  }
+  50% {
+    border-color: rgba(138, 41, 230, 0.4);
+    box-shadow:
+      0 24px 80px rgba(0, 0, 0, 0.55),
+      0 0 32px rgba(138, 41, 230, 0.1),
+      0 0 1px rgba(255, 255, 255, 0.06) inset;
+  }
+}
+
+.qp-border-streaming {
+  border: 1px solid rgba(36, 92, 249, 0.35);
+  animation: qp-border-breathe 2.5s ease-in-out infinite;
+}
+
+/* Panel entrance animation */
+@keyframes qp-panel-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(-6px);
+  }
+}
+
+.qp-panel-enter {
+  animation: qp-panel-in 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Response area entrance */
+@keyframes qp-response-in {
+  from {
+    opacity: 0;
+    max-height: 0;
+  }
+  to {
+    opacity: 1;
+    max-height: min(55vh, 520px);
+  }
+}
+
+.qp-response-enter {
+  animation: qp-response-in 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Action bar entrance */
+@keyframes qp-actions-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+.qp-actions-enter {
+  animation: qp-actions-in 0.2s cubic-bezier(0.16, 1, 0.3, 1) 0.05s both;
+}
+
+/* Dropdown entrance */
+@keyframes qp-dropdown-in {
+  from {
+    opacity: 0;
+    transform: translateY(calc(100% - 4px)) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(100%);
+  }
+}
+
+.qp-dropdown-enter {
+  animation: qp-dropdown-in 0.15s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 /* ── Markdown prose styles ───────────────────────────────────── */

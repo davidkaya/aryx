@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { ChevronLeft, ChevronRight, CircleCheck, Code, Cpu, FolderOpen, GitBranch, Palette, Plus, RefreshCw, Server, TriangleAlert, UserCircle, Wrench } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CircleCheck, Code, Cpu, FolderOpen, GitBranch, Palette, Plus, RefreshCw, Server, Sparkles, TriangleAlert, UserCircle, Wrench } from 'lucide-react';
 
 import { CopilotStatusCard } from '@renderer/components/CopilotStatusCard';
 import { WorkflowEditor } from '@renderer/components/WorkflowEditor';
@@ -21,6 +21,7 @@ import {
   type AppearanceTheme,
   type LspProfileDefinition,
   type McpServerDefinition,
+  type QuickPromptSettings,
   type WorkspaceToolingSettings,
 } from '@shared/domain/tooling';
 import { normalizeWorkspaceAgentDefinition, findWorkspaceAgentUsages, type WorkspaceAgentDefinition } from '@shared/domain/workspaceAgent';
@@ -62,9 +63,11 @@ interface SettingsPanelProps {
   onGetQuota?: () => Promise<Record<string, QuotaSnapshot>>;
   workflowTemplates?: WorkflowTemplateDefinition[];
   onCreateWorkflowFromTemplate?: (templateId: string, name?: string) => Promise<void>;
+  quickPromptSettings?: QuickPromptSettings;
+  onSetQuickPromptSettings?: (patch: Partial<QuickPromptSettings>) => void;
 }
 
-export type SettingsSection = 'appearance' | 'connection' | 'workflows' | 'agents' | 'mcp-servers' | 'lsp-profiles' | 'troubleshooting';
+export type SettingsSection = 'appearance' | 'connection' | 'workflows' | 'agents' | 'mcp-servers' | 'lsp-profiles' | 'quick-prompt' | 'troubleshooting';
 
 interface NavItem {
   id: SettingsSection;
@@ -82,6 +85,7 @@ const navGroups: NavGroup[] = [
     label: 'General',
     items: [
       { id: 'appearance', label: 'Appearance', icon: <Palette className="size-3.5" /> },
+      { id: 'quick-prompt', label: 'Quick Prompt', icon: <Sparkles className="size-3.5" /> },
     ],
   },
   {
@@ -149,6 +153,8 @@ export function SettingsPanel({
   onGetQuota,
   workflowTemplates,
   onCreateWorkflowFromTemplate,
+  quickPromptSettings,
+  onSetQuickPromptSettings,
 }: SettingsPanelProps) {
   const [activeSection, setActiveSection] = useState<SettingsSection>(initialSection ?? 'appearance');
   const [editingWorkflow, setEditingWorkflow] = useState<WorkflowDefinition | null>(null);
@@ -378,6 +384,13 @@ export function SettingsPanel({
                 onEditProfile={(profile) => setEditingLspProfile(structuredClone(profile))}
                 onNewProfile={() => setEditingLspProfile(onNewLspProfile())}
                 profiles={toolingSettings.lspProfiles}
+              />
+            )}
+            {activeSection === 'quick-prompt' && (
+              <QuickPromptSettingsSection
+                settings={quickPromptSettings}
+                availableModels={availableModels}
+                onUpdate={onSetQuickPromptSettings}
               />
             )}
             {activeSection === 'troubleshooting' && (
@@ -1302,5 +1315,178 @@ function TroubleshootingAction({
       </div>
       <ChevronRight className="size-4 text-[var(--color-text-muted)] transition-all duration-200 group-hover:text-[var(--color-text-muted)]" />
     </button>
+  );
+}
+
+function QuickPromptSettingsSection({
+  settings,
+  availableModels,
+  onUpdate,
+}: {
+  settings?: QuickPromptSettings;
+  availableModels: ReadonlyArray<ModelDefinition>;
+  onUpdate?: (patch: Partial<QuickPromptSettings>) => void;
+}) {
+  const enabled = settings?.enabled ?? true;
+  const hotkey = settings?.hotkey ?? 'Super+Shift+A';
+  const defaultModel = settings?.defaultModel;
+  const defaultReasoning = settings?.defaultReasoningEffort;
+
+  const hotkeyDisplay = hotkey
+    .replace('Super', process.platform === 'darwin' ? '⌘' : 'Win')
+    .replace('Shift', '⇧')
+    .replace('+', ' + ');
+
+  return (
+    <div>
+      <div className="mb-1">
+        <h3 className="font-display text-[13px] font-semibold text-[var(--color-text-primary)]">Quick Prompt</h3>
+        <p className="mt-0.5 text-[12px] text-[var(--color-text-muted)]">
+          Press a global hotkey to ask the AI a quick question from anywhere
+        </p>
+      </div>
+
+      {/* Enable / Disable */}
+      <button
+        className="mt-5 flex w-full items-center justify-between rounded-lg border border-[var(--color-border)] px-4 py-3 text-left transition hover:bg-[var(--color-surface-3)]/40"
+        onClick={() => onUpdate?.({ enabled: !enabled })}
+        type="button"
+      >
+        <div>
+          <span className="text-[13px] font-medium text-[var(--color-text-primary)]">
+            Enable global hotkey
+          </span>
+          <p className="text-[12px] text-[var(--color-text-muted)]">
+            Register a system-wide keyboard shortcut to summon the Quick Prompt overlay
+          </p>
+        </div>
+        <ToggleSwitch enabled={enabled} />
+      </button>
+
+      {/* Hotkey display */}
+      <div className="mt-6 mb-1">
+        <h3 className="font-display text-[13px] font-semibold text-[var(--color-text-primary)]">Keyboard Shortcut</h3>
+        <p className="mt-0.5 text-[12px] text-[var(--color-text-muted)]">
+          The key combination that opens the Quick Prompt overlay
+        </p>
+      </div>
+
+      <div className="mt-4 flex items-center gap-3 rounded-lg border border-[var(--color-border)] px-4 py-3">
+        <div className="flex gap-1.5">
+          {hotkeyDisplay.split(' + ').map((key) => (
+            <kbd
+              key={key}
+              className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2 py-0.5 font-mono text-[12px] text-[var(--color-text-secondary)]"
+            >
+              {key.trim()}
+            </kbd>
+          ))}
+        </div>
+      </div>
+
+      {/* Default Model */}
+      <div className="mt-8 mb-1">
+        <h3 className="font-display text-[13px] font-semibold text-[var(--color-text-primary)]">Default Model</h3>
+        <p className="mt-0.5 text-[12px] text-[var(--color-text-muted)]">
+          The model used by Quick Prompt sessions. Can be overridden per-prompt.
+        </p>
+      </div>
+
+      <div className="mt-4 space-y-1.5">
+        {/* "Use workflow default" option */}
+        <button
+          className={`flex w-full items-center gap-3 rounded-lg border px-4 py-3 text-left transition-all duration-200 ${
+            !defaultModel
+              ? 'border-[var(--color-border-glow)] bg-[var(--color-accent-muted)]'
+              : 'border-[var(--color-border)] hover:bg-[var(--color-surface-3)]/40'
+          }`}
+          onClick={() => onUpdate?.({ defaultModel: undefined })}
+          type="button"
+        >
+          <div
+            className={`flex size-4 shrink-0 items-center justify-center rounded-full border-2 transition-all duration-200 ${
+              !defaultModel ? 'border-[var(--color-accent)]' : 'border-[var(--color-border)]'
+            }`}
+          >
+            {!defaultModel && <div className="size-2 rounded-full bg-[var(--color-accent)]" />}
+          </div>
+          <div>
+            <span className={`text-[13px] font-medium ${!defaultModel ? 'text-[var(--color-text-primary)]' : 'text-[var(--color-text-secondary)]'}`}>
+              Use workflow default
+            </span>
+            <p className="text-[12px] text-[var(--color-text-muted)]">
+              Use whichever model is configured in the scratchpad workflow
+            </p>
+          </div>
+        </button>
+
+        {availableModels.map((model) => {
+          const isSelected = defaultModel === model.id;
+          return (
+            <button
+              className={`flex w-full items-center gap-3 rounded-lg border px-4 py-3 text-left transition-all duration-200 ${
+                isSelected
+                  ? 'border-[var(--color-border-glow)] bg-[var(--color-accent-muted)]'
+                  : 'border-[var(--color-border)] hover:bg-[var(--color-surface-3)]/40'
+              }`}
+              key={model.id}
+              onClick={() => onUpdate?.({ defaultModel: model.id })}
+              type="button"
+            >
+              <div
+                className={`flex size-4 shrink-0 items-center justify-center rounded-full border-2 transition-all duration-200 ${
+                  isSelected ? 'border-[var(--color-accent)]' : 'border-[var(--color-border)]'
+                }`}
+              >
+                {isSelected && <div className="size-2 rounded-full bg-[var(--color-accent)]" />}
+              </div>
+              <div className="flex-1">
+                <span className={`text-[13px] font-medium ${isSelected ? 'text-[var(--color-text-primary)]' : 'text-[var(--color-text-secondary)]'}`}>
+                  {model.name}
+                </span>
+                {model.tier && (
+                  <span className="ml-2 rounded bg-[var(--color-surface-3)] px-1.5 py-px text-[10px] text-[var(--color-text-muted)]">
+                    {model.tier}
+                  </span>
+                )}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Reasoning Effort */}
+      {availableModels.some((m) => m.supportedReasoningEfforts?.length) && (
+        <>
+          <div className="mt-8 mb-1">
+            <h3 className="font-display text-[13px] font-semibold text-[var(--color-text-primary)]">Reasoning Effort</h3>
+            <p className="mt-0.5 text-[12px] text-[var(--color-text-muted)]">
+              Default reasoning effort for Quick Prompt. Higher effort produces more thorough answers.
+            </p>
+          </div>
+
+          <div className="mt-4 flex gap-2">
+            {([undefined, 'low', 'medium', 'high'] as const).map((effort) => {
+              const isActive = defaultReasoning === effort;
+              const label = effort ?? 'Default';
+              return (
+                <button
+                  key={label}
+                  onClick={() => onUpdate?.({ defaultReasoningEffort: effort })}
+                  className={`flex-1 rounded-lg border py-2.5 text-[13px] font-medium transition-all duration-200 ${
+                    isActive
+                      ? 'border-[var(--color-border-glow)] bg-[var(--color-accent-muted)] text-[var(--color-text-primary)]'
+                      : 'border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-3)]/40'
+                  }`}
+                  type="button"
+                >
+                  {label.charAt(0).toUpperCase() + label.slice(1)}
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
   );
 }

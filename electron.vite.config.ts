@@ -20,6 +20,12 @@ export default defineConfig({
   preload: {
     build: {
       outDir: 'dist-electron/preload',
+      rollupOptions: {
+        input: {
+          index: resolve(__dirname, 'src/preload/index.ts'),
+          quickprompt: resolve(__dirname, 'src/preload/quickprompt.ts'),
+        },
+      },
     },
     plugins: [externalizeDepsPlugin()],
     resolve: {
@@ -32,6 +38,12 @@ export default defineConfig({
     root: 'src/renderer',
     build: {
       outDir: 'dist/renderer',
+      rollupOptions: {
+        input: {
+          index: resolve(__dirname, 'src/renderer/index.html'),
+          quickprompt: resolve(__dirname, 'src/renderer/quickprompt.html'),
+        },
+      },
     },
     plugins: [react(), tailwindcss()],
     resolve: {

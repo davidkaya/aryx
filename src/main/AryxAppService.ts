@@ -132,6 +132,7 @@ import {
 } from '@shared/domain/runTimeline';
 import {
   createSessionToolingSelection,
+  createDefaultQuickPromptSettings,
   listApprovalToolNames,
   normalizeTerminalHeight,
   normalizeTheme,
@@ -140,6 +141,7 @@ import {
   type AppearanceTheme,
   type LspProfileDefinition,
   type McpServerDefinition,
+  type QuickPromptSettings,
   type SessionToolingSelection,
   type WorkspaceToolingSettings,
   normalizeLspProfileDefinition,
@@ -827,6 +829,17 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
       this.stopPeriodicProjectGitRefresh();
     }
 
+    return this.persistAndBroadcast(workspace);
+  }
+
+  getQuickPromptSettings(): QuickPromptSettings {
+    return this.workspace?.settings.quickPrompt ?? createDefaultQuickPromptSettings();
+  }
+
+  async setQuickPromptSettings(patch: Partial<QuickPromptSettings>): Promise<WorkspaceState> {
+    const workspace = await this.loadWorkspace();
+    const current = workspace.settings.quickPrompt ?? createDefaultQuickPromptSettings();
+    workspace.settings.quickPrompt = { ...current, ...patch };
     return this.persistAndBroadcast(workspace);
   }
 

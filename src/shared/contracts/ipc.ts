@@ -19,11 +19,13 @@ import type {
   McpServerDefinition,
   SessionToolingSelection,
   AppearanceTheme,
+  QuickPromptSettings,
 } from '@shared/domain/tooling';
 import type { WorkspaceState } from '@shared/domain/workspace';
 import type { ChatMessageAttachment } from '@shared/domain/attachment';
 import type { ProjectPromptInvocation } from '@shared/domain/projectCustomization';
 import type { WorkspaceAgentDefinition } from '@shared/domain/workspaceAgent';
+import type { ModelDefinition } from '@shared/domain/models';
 
 export interface CreateSessionInput {
   projectId: string;
@@ -381,9 +383,42 @@ export interface ElectronApi {
   onSessionEvent(listener: (event: SessionEventRecord) => void): () => void;
   onUpdateStatus(listener: (status: UpdateStatus) => void): () => void;
   onTrayCreateScratchpad(listener: () => void): () => void;
+  getQuickPromptSettings(): Promise<QuickPromptSettings>;
+  setQuickPromptSettings(settings: Partial<QuickPromptSettings>): Promise<void>;
 }
 
 export interface RendererSelectionState {
   selectedProject?: ProjectRecord;
   selectedWorkflow?: WorkflowDefinition;
+}
+
+// --- Quick Prompt contracts ---
+
+export interface QuickPromptSendInput {
+  content: string;
+  model?: string;
+  reasoningEffort?: ReasoningEffort;
+}
+
+export interface QuickPromptSessionInfo {
+  sessionId: string;
+}
+
+export interface QuickPromptCapabilities {
+  models: ReadonlyArray<ModelDefinition>;
+  defaultModel?: string;
+  defaultReasoningEffort?: ReasoningEffort;
+}
+
+export interface QuickPromptElectronApi {
+  send(input: QuickPromptSendInput): Promise<QuickPromptSessionInfo>;
+  discard(): Promise<void>;
+  close(): Promise<void>;
+  continueInAryx(): Promise<void>;
+  cancelTurn(): Promise<void>;
+  getCapabilities(): Promise<QuickPromptCapabilities>;
+  setSettings(settings: Partial<QuickPromptSettings>): Promise<void>;
+  onSessionEvent(listener: (event: SessionEventRecord) => void): () => void;
+  onShow(listener: () => void): () => void;
+  onHide(listener: () => void): () => void;
 }

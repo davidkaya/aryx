@@ -55,7 +55,7 @@ flowchart LR
 | --- | --- | --- | --- |
 | Renderer | Screens, interaction, local view composition, theme application | Filesystem, process spawning, raw Electron access, Copilot runtime | Typed preload API and pushed events |
 | Preload | Narrow bridge between browser context and Electron IPC | Business logic, persistence, orchestration | `ipcRenderer` / `ipcMain` |
-| Main process | Workspace mutation, persistence, git inspection/write operations, run change attribution, commit workflow orchestration, session lifecycle, native window state, sidecar lifecycle, PTY-backed terminal lifecycle | UI rendering, LLM orchestration internals | IPC, filesystem, git CLI, stdio with sidecar, native child processes |
+| Main process | Workspace mutation, persistence, git inspection/write operations, run change attribution, commit workflow orchestration, session lifecycle, native window state, global hotkey registration, sidecar lifecycle, PTY-backed terminal lifecycle | UI rendering, LLM orchestration internals | IPC, filesystem, git CLI, stdio with sidecar, native child processes |
 | Sidecar | Capability discovery, workflow validation, run execution, streaming deltas and activity | UI, workspace persistence, Electron APIs | Line-delimited JSON over stdio |
 | External systems | Git data, Copilot account/model access, OS window chrome | Application state and UI behavior | Controlled adapters owned by main or sidecar |
 
@@ -350,7 +350,8 @@ That gives the system:
 
 The main process owns desktop concerns such as:
 
-- native window creation
+- native window creation (main window and quick prompt overlay)
+- global hotkey registration
 - title bar behavior
 - background process management
 - filesystem access
@@ -358,13 +359,28 @@ The main process owns desktop concerns such as:
 
 This keeps those concerns out of the renderer while still letting the UI feel native.
 
+### Multi-window setup and Quick Prompt
+
+Aryx runs two `BrowserWindow` instances:
+
+- the **main window** — the full workspace UI
+- the **quick prompt window** — a frameless, transparent, always-on-top overlay for one-off AI questions
+
+The quick prompt window loads a separate, lightweight renderer entry (`quickprompt.html` / `quickprompt.tsx`) with its own preload script (`preload/quickprompt.ts`). This keeps its bundle small and avoids loading the full workspace renderer. It communicates with the main process through dedicated IPC channels prefixed with `quick-prompt:`.
+
+A **global hotkey service** (`src/main/services/globalHotkey.ts`) registers a system-wide keyboard shortcut (default `Super+Shift+A`, configurable in settings) using Electron's `globalShortcut` API. Pressing the hotkey toggles the quick prompt window. The service re-registers the shortcut when the configured hotkey changes and unregisters on app quit.
+
+Quick prompt sessions are real `SessionRecord` instances created on the scratchpad project. The main process routes matching session events from the sidecar to the quick prompt window's `webContents`. After a response completes, the user can discard the session, close the window (preserving the session for later access in the main UI), or continue the conversation in the main window.
+
+The `window-all-closed` handler excludes the quick prompt window so the app does not stay alive solely because the hidden popup exists.
+
 ## Build and release architecture
 
 Aryx ships as an Electron application bundled together with a self-contained .NET sidecar.
 
 The build pipeline is organized around three layers:
 
-- building the Electron renderer and main process assets
+- building the Electron renderer entries (main workspace and quick prompt) and main process assets
 - publishing the sidecar for the target runtime
 - packaging platform artifacts with electron-builder
 

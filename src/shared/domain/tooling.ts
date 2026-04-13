@@ -61,6 +61,20 @@ export interface WorkspaceToolingSettings {
 
 export type AppearanceTheme = 'dark' | 'light' | 'system';
 
+export interface QuickPromptSettings {
+  enabled: boolean;
+  hotkey: string;
+  defaultModel?: string;
+  defaultReasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh';
+}
+
+export function createDefaultQuickPromptSettings(): QuickPromptSettings {
+  return {
+    enabled: true,
+    hotkey: 'Super+Shift+A',
+  };
+}
+
 export interface WorkspaceSettings {
   theme: AppearanceTheme;
   tooling: WorkspaceToolingSettings;
@@ -70,6 +84,7 @@ export interface WorkspaceSettings {
   notificationsEnabled?: boolean;
   minimizeToTray?: boolean;
   gitAutoRefreshEnabled?: boolean;
+  quickPrompt?: QuickPromptSettings;
 }
 
 export interface SessionToolingSelection {
@@ -215,6 +230,7 @@ export function normalizeWorkspaceSettings(settings?: Partial<WorkspaceSettings>
     ...(settings?.notificationsEnabled !== undefined ? { notificationsEnabled: settings.notificationsEnabled } : {}),
     ...(settings?.minimizeToTray !== undefined ? { minimizeToTray: settings.minimizeToTray } : {}),
     ...(settings?.gitAutoRefreshEnabled !== undefined ? { gitAutoRefreshEnabled: settings.gitAutoRefreshEnabled } : {}),
+    ...(settings?.quickPrompt !== undefined ? { quickPrompt: settings.quickPrompt } : {}),
   };
 }
 

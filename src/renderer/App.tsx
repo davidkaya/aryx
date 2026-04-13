@@ -34,6 +34,7 @@ import { isScratchpadProject, SCRATCHPAD_PROJECT_ID } from '@shared/domain/proje
 import type { ProjectGitFileReference } from '@shared/domain/project';
 import { applySessionModelConfig } from '@shared/domain/session';
 import type { AppearanceTheme, LspProfileDefinition, McpServerDefinition } from '@shared/domain/tooling';
+import { createDefaultQuickPromptSettings, type QuickPromptSettings } from '@shared/domain/tooling';
 import type { WorkspaceAgentDefinition } from '@shared/domain/workspaceAgent';
 import type { WorkspaceState } from '@shared/domain/workspace';
 import type { UpdateStatus } from '@shared/contracts/ipc';
@@ -59,7 +60,7 @@ const WelcomePane = lazy(() => import('@renderer/components/WelcomePane').then((
 const WorkflowPicker = lazy(() => import('@renderer/components/workflow/WorkflowPicker').then((m) => ({ default: m.WorkflowPicker })));
 
 // Re-export type-only imports from lazy modules so they're available without pulling in the bundle
-type SettingsSection = 'appearance' | 'connection' | 'workflows' | 'agents' | 'mcp-servers' | 'lsp-profiles' | 'troubleshooting';
+type SettingsSection = 'appearance' | 'connection' | 'workflows' | 'agents' | 'mcp-servers' | 'lsp-profiles' | 'quick-prompt' | 'troubleshooting';
 type BottomPanelTab = 'terminal' | 'git';
 
 // Constants duplicated from BottomPanel to avoid importing the full module at startup
@@ -180,6 +181,9 @@ export default function App() {
   // Commit composer state
   const [commitComposerCtx, setCommitComposerCtx] = useState<{ projectId: string; sessionId: string; runId?: string }>();
 
+  // Quick prompt settings
+  const [quickPromptSettings, setQuickPromptSettings] = useState<QuickPromptSettings>(createDefaultQuickPromptSettings);
+
   // Bottom panel state (terminal + git)
   const [bottomPanelOpen, setBottomPanelOpen] = useState(false);
   const [bottomPanelTab, setBottomPanelTab] = useState<BottomPanelTab>('terminal');
@@ -197,6 +201,11 @@ export default function App() {
       .loadWorkspace()
       .then((ws) => !disposed && setWorkspace(ws))
       .catch((e) => !disposed && setError(e instanceof Error ? e.message : String(e)));
+
+    void api
+      .getQuickPromptSettings()
+      .then((s) => !disposed && setQuickPromptSettings(s))
+      .catch(() => { /* quick prompt settings unavailable, use defaults */ });
 
     const offWorkspace = api.onWorkspaceUpdated((ws) => {
       setWorkspace(ws);
@@ -858,6 +867,12 @@ export default function App() {
           void api.resolveWorkspaceDiscoveredTooling({ serverIds, resolution });
         }}
         onGetQuota={() => api.getQuota()}
+        quickPromptSettings={quickPromptSettings}
+        onSetQuickPromptSettings={(patch) => {
+          const updated = { ...quickPromptSettings, ...patch };
+          setQuickPromptSettings(updated);
+          void api.setQuickPromptSettings(patch);
+        }}
       />
     </Suspense>
   ) : null;

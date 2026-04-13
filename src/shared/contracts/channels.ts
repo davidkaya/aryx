@@ -83,4 +83,18 @@ export const ipcChannels = {
   updateStatus: 'app:update-status',
   getQuota: 'sidecar:get-quota',
   trayCreateScratchpad: 'tray:create-scratchpad',
+
+  // Quick Prompt
+  quickPromptSend: 'quick-prompt:send',
+  quickPromptDiscard: 'quick-prompt:discard',
+  quickPromptClose: 'quick-prompt:close',
+  quickPromptContinueInAryx: 'quick-prompt:continue-in-aryx',
+  quickPromptCancelTurn: 'quick-prompt:cancel-turn',
+  quickPromptSetSettings: 'quick-prompt:set-settings',
+  quickPromptGetSettings: 'quick-prompt:get-settings',
+  quickPromptGetCapabilities: 'quick-prompt:get-capabilities',
+  quickPromptSessionCreated: 'quick-prompt:session-created',
+  quickPromptSessionEvent: 'quick-prompt:session-event',
+  quickPromptShow: 'quick-prompt:show',
+  quickPromptHide: 'quick-prompt:hide',
 } as const;

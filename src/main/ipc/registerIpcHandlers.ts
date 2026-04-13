@@ -51,14 +51,18 @@ import type {
   UpdateSessionModelConfigInput,
   UpdateSessionApprovalSettingsInput,
   UpdateSessionToolingInput,
+  QuickPromptSendInput,
 } from '@shared/contracts/ipc';
 import type { QuerySessionsInput } from '@shared/domain/sessionLibrary';
-import type { AppearanceTheme } from '@shared/domain/tooling';
+import type { AppearanceTheme, QuickPromptSettings } from '@shared/domain/tooling';
 
 import { AryxAppService } from '@main/AryxAppService';
 import { AutoUpdateService } from '@main/services/autoUpdater';
 import { createDesktopNotificationHandler } from '@main/services/desktopNotifications';
 import { applyTitleBarTheme } from '@main/windows/titleBarTheme';
+import { hideQuickPromptWindow } from '@main/windows/createQuickPromptWindow';
+import { buildAvailableModelCatalog } from '@shared/domain/models';
+import { SCRATCHPAD_PROJECT_ID } from '@shared/domain/project';
 import type { UpdateStatus } from '@shared/contracts/ipc';
 
 const { ipcMain } = electron;
@@ -67,6 +71,7 @@ export function registerIpcHandlers(
   window: BrowserWindow,
   service: AryxAppService,
   autoUpdateService: AutoUpdateService,
+  quickPromptWindow?: BrowserWindow,
 ): void {
   window.on('focus', () => {
     if (service.isGitAutoRefreshEnabled()) {
@@ -348,4 +353,94 @@ export function registerIpcHandlers(
   service.on('terminal-exit', (info) => {
     window.webContents.send(ipcChannels.terminalExit, info);
   });
+
+  // --- Quick Prompt IPC ---
+
+  // Track the active quick prompt session so events can be routed
+  let quickPromptSessionId: string | undefined;
+
+  ipcMain.handle(ipcChannels.quickPromptSend, async (_event, input: QuickPromptSendInput) => {
+    const workspace = await service.loadWorkspace();
+    const workflowId = workspace.selectedWorkflowId ?? workspace.workflows[0]?.id;
+    if (!workflowId) throw new Error('No workflow available');
+
+    const created = await service.createSession(SCRATCHPAD_PROJECT_ID, workflowId);
+    const session = created.sessions[0];
+    if (!session) throw new Error('Failed to create quick prompt session');
+
+    quickPromptSessionId = session.id;
+
+    // Apply model override if provided
+    if (input.model) {
+      await service.updateSessionModelConfig(session.id, input.model, input.reasoningEffort);
+    }
+
+    // Send the message (fire-and-forget — results arrive via session events)
+    void service.sendSessionMessage(session.id, input.content);
+
+    return { sessionId: session.id };
+  });
+
+  ipcMain.handle(ipcChannels.quickPromptCancelTurn, async () => {
+    if (quickPromptSessionId) {
+      await service.cancelSessionTurn(quickPromptSessionId);
+    }
+  });
+
+  ipcMain.handle(ipcChannels.quickPromptDiscard, async () => {
+    if (quickPromptSessionId) {
+      await service.deleteSession(quickPromptSessionId);
+      quickPromptSessionId = undefined;
+    }
+    if (quickPromptWindow) hideQuickPromptWindow(quickPromptWindow);
+  });
+
+  ipcMain.handle(ipcChannels.quickPromptClose, async () => {
+    quickPromptSessionId = undefined;
+    if (quickPromptWindow) hideQuickPromptWindow(quickPromptWindow);
+  });
+
+  ipcMain.handle(ipcChannels.quickPromptContinueInAryx, async () => {
+    if (quickPromptSessionId) {
+      await service.selectSession(quickPromptSessionId);
+      quickPromptSessionId = undefined;
+    }
+    if (quickPromptWindow) hideQuickPromptWindow(quickPromptWindow);
+    // Show and focus the main window
+    if (!window.isDestroyed()) {
+      if (window.isMinimized()) window.restore();
+      window.show();
+      window.focus();
+    }
+  });
+
+  ipcMain.handle(ipcChannels.quickPromptGetCapabilities, async () => {
+    const capabilities = await service.describeSidecarCapabilities();
+    const settings = service.getQuickPromptSettings();
+    const models = buildAvailableModelCatalog(capabilities.models);
+    return {
+      models,
+      defaultModel: settings.defaultModel,
+      defaultReasoningEffort: settings.defaultReasoningEffort,
+    };
+  });
+
+  ipcMain.handle(
+    ipcChannels.quickPromptSetSettings,
+    (_event, settings: Partial<QuickPromptSettings>) => service.setQuickPromptSettings(settings),
+  );
+
+  ipcMain.handle(
+    ipcChannels.quickPromptGetSettings,
+    () => service.getQuickPromptSettings(),
+  );
+
+  // Route session events to the quick prompt window
+  if (quickPromptWindow) {
+    service.on('session-event', (event) => {
+      if (event.sessionId === quickPromptSessionId && !quickPromptWindow.isDestroyed()) {
+        quickPromptWindow.webContents.send(ipcChannels.quickPromptSessionEvent, event);
+      }
+    });
+  }
 }

@@ -17,15 +17,49 @@ declare global {
 
 type PromptPhase = 'idle' | 'streaming' | 'complete' | 'error';
 
-interface StreamedMessage {
+/**
+ * Per-message state tracked by messageId, mirroring the main app's
+ * SessionRecord.messages model. This is necessary because the sidecar's
+ * fire-and-forget event handlers can emit events out of order — e.g.
+ * `message-complete` and `status: idle` can arrive before all
+ * `message-delta` events have been emitted.
+ */
+interface TrackedMessage {
   content: string;
-  thinkingContent: string;
+  messageKind?: string;
   authorName: string;
+  pending: boolean;
+  finalized: boolean;
+}
+
+/** Derive display values from tracked messages. */
+function deriveDisplay(messages: Map<string, TrackedMessage>) {
+  let content = '';
+  let thinkingContent = '';
+  let authorName = '';
+  let hasVisibleContent = false;
+  let allComplete = messages.size > 0;
+
+  for (const msg of messages.values()) {
+    if (msg.messageKind === 'thinking') {
+      if (msg.content) thinkingContent += (thinkingContent ? '\n' : '') + msg.content;
+    } else {
+      // Last non-thinking message wins as the response
+      content = msg.content;
+      authorName = msg.authorName;
+      if (msg.content.length > 0) hasVisibleContent = true;
+    }
+    if (msg.pending) allComplete = false;
+  }
+
+  return { content, thinkingContent, authorName, isComplete: allComplete && hasVisibleContent };
 }
 
 export function QuickPromptApp() {
   const [phase, setPhase] = useState<PromptPhase>('idle');
-  const [response, setResponse] = useState<StreamedMessage>({ content: '', thinkingContent: '', authorName: '' });
+  const [displayContent, setDisplayContent] = useState('');
+  const [displayThinking, setDisplayThinking] = useState('');
+  const [displayAuthor, setDisplayAuthor] = useState('');
   const [errorMessage, setErrorMessage] = useState<string>();
   const [capabilities, setCapabilities] = useState<QuickPromptCapabilities>();
   const [selectedModel, setSelectedModel] = useState<string>();
@@ -33,10 +67,17 @@ export function QuickPromptApp() {
   const [visible, setVisible] = useState(false);
 
   const sessionIdRef = useRef<string | null>(null);
-  // Track whether we've received any response content (non-thinking) so we
-  // don't prematurely treat setup/init events as the final completion signal.
-  const hasContentRef = useRef(false);
+  const messagesRef = useRef<Map<string, TrackedMessage>>(new Map());
   const api = window.quickPromptApi;
+
+  /** Push tracked-message state into React display state. */
+  const syncDisplay = useCallback(() => {
+    const display = deriveDisplay(messagesRef.current);
+    setDisplayContent(display.content);
+    setDisplayThinking(display.thinkingContent);
+    setDisplayAuthor(display.authorName);
+    return display;
+  }, []);
 
   // Load capabilities on mount
   useEffect(() => {
@@ -50,7 +91,6 @@ export function QuickPromptApp() {
   // Subscribe to show/hide events from main process
   useEffect(() => {
     const offShow = api.onShow((theme: string) => {
-      // Apply theme to document root so CSS variables match the main app
       const effective = theme === 'system'
         ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
         : theme;
@@ -66,47 +106,88 @@ export function QuickPromptApp() {
     };
   }, [api]);
 
-  // Subscribe to session events (streaming)
+  // Subscribe to session events (streaming) — processes events using
+  // message-by-ID tracking that tolerates out-of-order delivery.
   useEffect(() => {
     const off = api.onSessionEvent((event: SessionEventRecord) => {
-      if (event.kind === 'message-delta' && event.contentDelta) {
-        if (event.messageKind === 'thinking') {
-          setResponse((prev) => ({ ...prev, thinkingContent: prev.thinkingContent + event.contentDelta! }));
+      const msgs = messagesRef.current;
+
+      if (event.kind === 'message-delta' && event.messageId && (event.contentDelta || event.content !== undefined)) {
+        const existing = msgs.get(event.messageId);
+
+        if (existing) {
+          // Skip deltas that arrive after message-complete replaced the
+          // content with the authoritative final version.
+          if (existing.finalized) return;
+
+          if (event.content !== undefined) {
+            existing.content = event.content;
+          } else if (event.contentDelta) {
+            existing.content += event.contentDelta;
+          }
+          existing.authorName = event.authorName ?? existing.authorName;
         } else {
-          hasContentRef.current = true;
-          setResponse((prev) => ({
-            ...prev,
-            content: prev.content + event.contentDelta!,
-            authorName: event.authorName ?? prev.authorName,
-          }));
+          msgs.set(event.messageId, {
+            content: event.contentDelta ?? event.content ?? '',
+            messageKind: event.messageKind,
+            authorName: event.authorName ?? '',
+            pending: true,
+            finalized: false,
+          });
         }
+
+        syncDisplay();
         setPhase('streaming');
-      } else if (
-        event.kind === 'message-complete' ||
-        (event.kind === 'status' && event.status === 'idle') ||
-        (event.kind === 'agent-activity' && event.activityType === 'completed')
-      ) {
-        // Only transition to "complete" once we've received actual response
-        // content. The session may emit completion events from initialisation
-        // or setup runs before the real content-generating turn starts.
-        if (hasContentRef.current) {
-          setPhase('complete');
+
+      } else if (event.kind === 'message-complete' && event.messageId) {
+        const existing = msgs.get(event.messageId);
+        if (existing) {
+          if (event.content !== undefined) existing.content = event.content;
+          existing.pending = false;
+          existing.finalized = true;
+        } else {
+          msgs.set(event.messageId, {
+            content: event.content ?? '',
+            messageKind: undefined,
+            authorName: event.authorName ?? '',
+            pending: false,
+            finalized: true,
+          });
         }
+
+        const display = syncDisplay();
+        if (display.isComplete) setPhase('complete');
+
+      } else if (event.kind === 'message-reclassified' && event.messageId && event.messageKind) {
+        const existing = msgs.get(event.messageId);
+        if (existing) {
+          existing.messageKind = event.messageKind;
+          syncDisplay();
+        }
+
+      } else if (event.kind === 'status' && event.status === 'idle') {
+        for (const msg of msgs.values()) {
+          msg.pending = false;
+        }
+        const display = syncDisplay();
+        if (display.isComplete) setPhase('complete');
+
       } else if (event.kind === 'error') {
         setErrorMessage(event.error ?? 'An unexpected error occurred.');
         setPhase('error');
       }
     });
     return off;
-  }, [api]);
+  }, [api, syncDisplay]);
 
   const resetState = useCallback(() => {
     setPhase('idle');
-    setResponse({ content: '', thinkingContent: '', authorName: '' });
+    setDisplayContent('');
+    setDisplayThinking('');
+    setDisplayAuthor('');
     setErrorMessage(undefined);
     sessionIdRef.current = null;
-    hasContentRef.current = false;
-    // Refresh capabilities in case models changed
+    messagesRef.current = new Map();
     api.getCapabilities().then((caps) => {
       setCapabilities(caps);
       setSelectedModel(caps.defaultModel ?? caps.models[0]?.id);
@@ -118,9 +199,11 @@ export function QuickPromptApp() {
     if (!content.trim() || phase === 'streaming') return;
 
     setPhase('streaming');
-    setResponse({ content: '', thinkingContent: '', authorName: '' });
+    setDisplayContent('');
+    setDisplayThinking('');
+    setDisplayAuthor('');
     setErrorMessage(undefined);
-    hasContentRef.current = false;
+    messagesRef.current = new Map();
 
     try {
       const result = await api.send({
@@ -212,9 +295,9 @@ export function QuickPromptApp() {
         {/* Response area — grows dynamically */}
         {hasResponse && (
           <QuickPromptResponse
-            content={response.content}
-            thinkingContent={response.thinkingContent}
-            authorName={response.authorName}
+            content={displayContent}
+            thinkingContent={displayThinking}
+            authorName={displayAuthor}
             phase={phase}
             error={errorMessage}
           />

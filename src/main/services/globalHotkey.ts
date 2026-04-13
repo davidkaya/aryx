@@ -51,9 +51,9 @@ export class GlobalHotkeyService {
 
 /**
  * Convert our portable hotkey string (e.g. "Super+Shift+A") to an Electron
- * accelerator string. Electron uses "Super" on all platforms, which maps to
- * Cmd on macOS and Win on Windows/Linux.
+ * accelerator string. Electron uses "Meta" which maps to Cmd on macOS and
+ * Win key on Windows/Linux.
  */
 function toElectronAccelerator(hotkey: string): string {
-  return hotkey;
+  return hotkey.replace(/Super/gi, 'Meta');
 }

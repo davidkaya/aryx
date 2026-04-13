@@ -1,7 +1,7 @@
 import electron from 'electron';
 import type { BrowserWindow as BrowserWindowType } from 'electron';
 
-import { registerIpcHandlers } from '@main/ipc/registerIpcHandlers';
+import { registerIpcHandlers, registerQuickPromptIpcHandlers } from '@main/ipc/registerIpcHandlers';
 import { AryxAppService } from '@main/AryxAppService';
 import { AutoUpdateService } from '@main/services/autoUpdater';
 import { GlobalHotkeyService } from '@main/services/globalHotkey';
@@ -29,8 +29,10 @@ async function bootstrap(): Promise<void> {
   autoUpdateService = new AutoUpdateService({ isPackaged: app.isPackaged });
 
   mainWindow = createMainWindow();
-  quickPromptWindow = createQuickPromptWindow();
-  registerIpcHandlers(mainWindow, appService, autoUpdateService, quickPromptWindow);
+
+  // Defer quick prompt window creation — create it lazily when workspace is ready
+  // so a failure here cannot block the main window from loading.
+  registerIpcHandlers(mainWindow, appService, autoUpdateService);
 
   // Start workspace loading in parallel — don't block window from showing.
   // The renderer fetches the workspace via its own IPC call after mount.
@@ -57,7 +59,14 @@ async function bootstrap(): Promise<void> {
         systemTray?.updateRunningCount(updatedWorkspace);
       });
 
-      // Register global hotkey for Quick Prompt
+      // Create quick prompt window and register global hotkey
+      try {
+        quickPromptWindow = createQuickPromptWindow();
+        registerQuickPromptIpcHandlers(mainWindow!, appService!, quickPromptWindow);
+      } catch (err) {
+        console.error('[aryx] Failed to create quick prompt window:', err);
+      }
+
       globalHotkeyService = new GlobalHotkeyService();
       const hotkeySettings = workspace.settings.quickPrompt ?? createDefaultQuickPromptSettings();
       globalHotkeyService.register(hotkeySettings, () => {

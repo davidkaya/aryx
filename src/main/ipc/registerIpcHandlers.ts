@@ -71,7 +71,6 @@ export function registerIpcHandlers(
   window: BrowserWindow,
   service: AryxAppService,
   autoUpdateService: AutoUpdateService,
-  quickPromptWindow?: BrowserWindow,
 ): void {
   window.on('focus', () => {
     if (service.isGitAutoRefreshEnabled()) {
@@ -354,9 +353,39 @@ export function registerIpcHandlers(
     window.webContents.send(ipcChannels.terminalExit, info);
   });
 
-  // --- Quick Prompt IPC ---
+  // --- Quick Prompt IPC (window-independent) ---
 
-  // Track the active quick prompt session so events can be routed
+  ipcMain.handle(ipcChannels.quickPromptGetCapabilities, async () => {
+    const capabilities = await service.describeSidecarCapabilities();
+    const settings = service.getQuickPromptSettings();
+    const models = buildAvailableModelCatalog(capabilities.models);
+    return {
+      models,
+      defaultModel: settings.defaultModel,
+      defaultReasoningEffort: settings.defaultReasoningEffort,
+    };
+  });
+
+  ipcMain.handle(
+    ipcChannels.quickPromptSetSettings,
+    (_event, settings: Partial<QuickPromptSettings>) => service.setQuickPromptSettings(settings),
+  );
+
+  ipcMain.handle(
+    ipcChannels.quickPromptGetSettings,
+    () => service.getQuickPromptSettings(),
+  );
+}
+
+/**
+ * Register IPC handlers that depend on the quick prompt BrowserWindow.
+ * Called separately after the quick prompt window is created (deferred from bootstrap).
+ */
+export function registerQuickPromptIpcHandlers(
+  mainWindow: BrowserWindow,
+  service: AryxAppService,
+  quickPromptWindow: BrowserWindow,
+): void {
   let quickPromptSessionId: string | undefined;
 
   ipcMain.handle(ipcChannels.quickPromptSend, async (_event, input: QuickPromptSendInput) => {
@@ -392,12 +421,12 @@ export function registerIpcHandlers(
       await service.deleteSession(quickPromptSessionId);
       quickPromptSessionId = undefined;
     }
-    if (quickPromptWindow) hideQuickPromptWindow(quickPromptWindow);
+    hideQuickPromptWindow(quickPromptWindow);
   });
 
   ipcMain.handle(ipcChannels.quickPromptClose, async () => {
     quickPromptSessionId = undefined;
-    if (quickPromptWindow) hideQuickPromptWindow(quickPromptWindow);
+    hideQuickPromptWindow(quickPromptWindow);
   });
 
   ipcMain.handle(ipcChannels.quickPromptContinueInAryx, async () => {
@@ -405,42 +434,19 @@ export function registerIpcHandlers(
       await service.selectSession(quickPromptSessionId);
       quickPromptSessionId = undefined;
     }
-    if (quickPromptWindow) hideQuickPromptWindow(quickPromptWindow);
+    hideQuickPromptWindow(quickPromptWindow);
     // Show and focus the main window
-    if (!window.isDestroyed()) {
-      if (window.isMinimized()) window.restore();
-      window.show();
-      window.focus();
+    if (!mainWindow.isDestroyed()) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
+      mainWindow.focus();
     }
   });
 
-  ipcMain.handle(ipcChannels.quickPromptGetCapabilities, async () => {
-    const capabilities = await service.describeSidecarCapabilities();
-    const settings = service.getQuickPromptSettings();
-    const models = buildAvailableModelCatalog(capabilities.models);
-    return {
-      models,
-      defaultModel: settings.defaultModel,
-      defaultReasoningEffort: settings.defaultReasoningEffort,
-    };
-  });
-
-  ipcMain.handle(
-    ipcChannels.quickPromptSetSettings,
-    (_event, settings: Partial<QuickPromptSettings>) => service.setQuickPromptSettings(settings),
-  );
-
-  ipcMain.handle(
-    ipcChannels.quickPromptGetSettings,
-    () => service.getQuickPromptSettings(),
-  );
-
   // Route session events to the quick prompt window
-  if (quickPromptWindow) {
-    service.on('session-event', (event) => {
-      if (event.sessionId === quickPromptSessionId && !quickPromptWindow.isDestroyed()) {
-        quickPromptWindow.webContents.send(ipcChannels.quickPromptSessionEvent, event);
-      }
-    });
-  }
+  service.on('session-event', (event) => {
+    if (event.sessionId === quickPromptSessionId && !quickPromptWindow.isDestroyed()) {
+      quickPromptWindow.webContents.send(ipcChannels.quickPromptSessionEvent, event);
+    }
+  });
 }

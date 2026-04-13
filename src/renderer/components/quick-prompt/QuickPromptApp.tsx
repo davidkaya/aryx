@@ -39,7 +39,7 @@ export function QuickPromptApp() {
   useEffect(() => {
     api.getCapabilities().then((caps) => {
       setCapabilities(caps);
-      setSelectedModel(caps.defaultModel);
+      setSelectedModel(caps.defaultModel ?? caps.models[0]?.id);
       setSelectedReasoning(caps.defaultReasoningEffort);
     });
   }, [api]);
@@ -91,10 +91,10 @@ export function QuickPromptApp() {
     // Refresh capabilities in case models changed
     api.getCapabilities().then((caps) => {
       setCapabilities(caps);
-      if (!selectedModel) setSelectedModel(caps.defaultModel);
-      if (!selectedReasoning) setSelectedReasoning(caps.defaultReasoningEffort);
+      setSelectedModel(caps.defaultModel ?? caps.models[0]?.id);
+      setSelectedReasoning(caps.defaultReasoningEffort);
     });
-  }, [api, selectedModel, selectedReasoning]);
+  }, [api]);
 
   const handleSend = useCallback(async (content: string) => {
     if (!content.trim() || phase === 'streaming') return;

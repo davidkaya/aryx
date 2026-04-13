@@ -530,7 +530,7 @@ export function ChatPane({
               </div>
             )}
             {isSessionBusy && !pendingApproval && !pendingUserInput && (() => {
-              const label = summarizeSessionActivity(sessionActivity);
+              const label = session.currentIntent ?? summarizeSessionActivity(sessionActivity);
               return (
                 <div className="flex items-center gap-1.5 text-[12px] text-[var(--color-accent-sky)]">
                   <span className="size-2 animate-pulse rounded-full bg-[var(--color-accent-sky)]" />
@@ -593,6 +593,7 @@ export function ChatPane({
                         isActive={isTurnActive(item, itemIndex)}
                         turnStartedAt={item.turnStartedAt}
                         sessionId={session.id}
+                        currentIntent={session.currentIntent}
                         agentNames={item.agentNames}
                         isLastRunPanel={item.isLastRunPanel}
                         onDiscard={onDiscardRunChanges}

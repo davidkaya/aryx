@@ -41,6 +41,7 @@ export interface TurnActivityPanelProps {
   isActive: boolean;
   turnStartedAt?: string;
   sessionId: string;
+  currentIntent?: string;
   agentNames?: ReadonlySet<string>;
   isLastRunPanel?: boolean;
   onDiscard?: (sessionId: string, runId: string, files?: ProjectGitFileReference[]) => Promise<unknown>;
@@ -418,6 +419,7 @@ export function TurnActivityPanel({
   isActive,
   turnStartedAt,
   sessionId,
+  currentIntent,
   agentNames,
   isLastRunPanel,
   onDiscard,
@@ -471,8 +473,12 @@ export function TurnActivityPanel({
     return groupActivityStream(stream);
   }, [thinkingMessages, scopedEvents]);
 
-  // Extract intent text for the header
-  const intentText = useMemo(() => extractLatestIntent(scopedEvents), [scopedEvents]);
+  // Prefer the session-level normalized intent when active; fall back to
+  // scanning run timeline for report_intent tool calls (backward compat).
+  const intentText = useMemo(
+    () => (isActive ? currentIntent : undefined) ?? extractLatestIntent(scopedEvents),
+    [isActive, currentIntent, scopedEvents],
+  );
   const fallbackSummary = useMemo(
     () => !intentText ? generateActivitySummary(scopedEvents) : undefined,
     [intentText, scopedEvents],

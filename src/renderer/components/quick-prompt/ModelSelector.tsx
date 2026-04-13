@@ -1,7 +1,9 @@
 import { useEffect, useRef, useMemo } from 'react';
-import { Check, Crown, Zap, Brain } from 'lucide-react';
+import { Check, Brain } from 'lucide-react';
 
-import type { ModelDefinition } from '@shared/domain/models';
+import { ProviderIcon } from '@renderer/components/ProviderIcons';
+import type { ModelDefinition, ModelProvider } from '@shared/domain/models';
+import { providerMeta } from '@shared/domain/models';
 import type { ReasoningEffort } from '@shared/domain/workflow';
 
 interface ModelSelectorProps {
@@ -13,12 +15,6 @@ interface ModelSelectorProps {
   onClose: () => void;
 }
 
-const tierMeta: Record<string, { label: string; icon: typeof Crown; color: string; bg: string }> = {
-  premium: { label: 'Premium', icon: Crown, color: 'text-amber-400', bg: 'bg-amber-400/10' },
-  standard: { label: 'Standard', icon: Zap, color: 'text-[var(--color-text-accent)]', bg: 'bg-[var(--color-accent-muted)]' },
-  fast: { label: 'Fast', icon: Zap, color: 'text-emerald-400', bg: 'bg-emerald-400/10' },
-};
-
 const reasoningLevels: { value: ReasoningEffort; label: string; description: string }[] = [
   { value: 'low', label: 'Low', description: 'Fast, concise' },
   { value: 'medium', label: 'Med', description: 'Balanced' },
@@ -26,8 +22,8 @@ const reasoningLevels: { value: ReasoningEffort; label: string; description: str
   { value: 'xhigh', label: 'Max', description: 'Exhaustive' },
 ];
 
-interface ModelGroup {
-  tier: string;
+interface ProviderGroup {
+  provider: ModelProvider | 'other';
   label: string;
   models: ModelDefinition[];
 }
@@ -66,25 +62,38 @@ export function ModelSelector({
   const selectedModel = models.find((m) => m.id === selectedModelId);
   const supportedEfforts = selectedModel?.supportedReasoningEfforts;
 
-  // Group models by tier
-  const groups = useMemo((): ModelGroup[] => {
-    const tierOrder = ['premium', 'standard', 'fast', 'other'];
+  // Group models by provider
+  const groups = useMemo((): ProviderGroup[] => {
+    const providerOrder = providerMeta.map((p) => p.id);
+    const providerLabels = new Map(providerMeta.map((p) => [p.id, p.label]));
     const grouped = new Map<string, ModelDefinition[]>();
 
     for (const model of models) {
-      const tier = model.tier ?? 'other';
-      const list = grouped.get(tier) ?? [];
+      const key = model.provider ?? 'other';
+      const list = grouped.get(key) ?? [];
       list.push(model);
-      grouped.set(tier, list);
+      grouped.set(key, list);
     }
 
-    return tierOrder
-      .filter((t) => grouped.has(t))
-      .map((tier) => ({
-        tier,
-        label: tier === 'other' ? 'Other' : tierMeta[tier]?.label ?? tier,
-        models: grouped.get(tier)!,
-      }));
+    const result: ProviderGroup[] = [];
+    for (const providerId of providerOrder) {
+      const providerModels = grouped.get(providerId);
+      if (providerModels) {
+        result.push({
+          provider: providerId,
+          label: providerLabels.get(providerId) ?? providerId,
+          models: providerModels,
+        });
+      }
+    }
+
+    // Any models without a known provider
+    const other = grouped.get('other');
+    if (other) {
+      result.push({ provider: 'other', label: 'Other', models: other });
+    }
+
+    return result;
   }, [models]);
 
   return (
@@ -94,54 +103,63 @@ export function ModelSelector({
       role="listbox"
       aria-label="Select model"
     >
-      {/* Model list — grouped by tier */}
+      {/* Model list — grouped by provider */}
       <div className="max-h-[280px] overflow-y-auto overscroll-contain p-1.5">
-        {groups.map((group, gi) => {
-          const meta = tierMeta[group.tier];
-          const TierIcon = meta?.icon;
+        {groups.map((group, gi) => (
+          <div key={group.provider}>
+            {gi > 0 && <div className="mx-2 my-1 border-t border-[var(--color-border-subtle)]/50" />}
 
-          return (
-            <div key={group.tier}>
-              {gi > 0 && <div className="mx-2 my-1 border-t border-[var(--color-border-subtle)]/50" />}
-
-              {/* Group header */}
-              <div className="flex items-center gap-1.5 px-2.5 pt-2 pb-1">
-                {TierIcon && <TierIcon className={`size-2.5 ${meta.color}`} />}
-                <span className={`text-[10px] font-semibold tracking-wider uppercase ${meta?.color ?? 'text-[var(--color-text-muted)]'}`}>
-                  {group.label}
-                </span>
-              </div>
-
-              {/* Models in this group */}
-              {group.models.map((model) => {
-                const isSelected = model.id === selectedModelId;
-
-                return (
-                  <button
-                    key={model.id}
-                    onClick={() => onSelect(model)}
-                    className={`flex w-full items-center gap-2 rounded-lg px-3 py-[7px] text-left transition-colors ${
-                      isSelected
-                        ? 'bg-[var(--color-accent-muted)] text-[var(--color-text-primary)]'
-                        : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-primary)]'
-                    }`}
-                    type="button"
-                    role="option"
-                    aria-selected={isSelected}
-                  >
-                    <span className="flex-1 truncate text-[12px] font-medium">{model.name}</span>
-
-                    {model.supportedReasoningEfforts?.length ? (
-                      <Brain className="size-3 flex-none text-[var(--color-text-muted)]/60" aria-label="Supports reasoning" />
-                    ) : null}
-
-                    {isSelected && <Check className="size-3.5 flex-none text-[var(--color-accent)]" />}
-                  </button>
-                );
-              })}
+            {/* Provider header */}
+            <div className="flex items-center gap-1.5 px-2.5 pt-2 pb-1">
+              {group.provider !== 'other' && (
+                <ProviderIcon provider={group.provider} className="size-3" />
+              )}
+              <span className="text-[10px] font-semibold tracking-wider text-[var(--color-text-muted)] uppercase">
+                {group.label}
+              </span>
             </div>
-          );
-        })}
+
+            {/* Models in this provider group */}
+            {group.models.map((model) => {
+              const isSelected = model.id === selectedModelId;
+              const tierLabel = model.tier === 'premium' ? 'PRO' : model.tier === 'fast' ? 'FAST' : undefined;
+              const tierColor = model.tier === 'premium'
+                ? 'text-amber-400 bg-amber-400/10'
+                : model.tier === 'fast'
+                  ? 'text-emerald-400 bg-emerald-400/10'
+                  : '';
+
+              return (
+                <button
+                  key={model.id}
+                  onClick={() => onSelect(model)}
+                  className={`flex w-full items-center gap-2 rounded-lg px-3 py-[7px] text-left transition-colors ${
+                    isSelected
+                      ? 'bg-[var(--color-accent-muted)] text-[var(--color-text-primary)]'
+                      : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-primary)]'
+                  }`}
+                  type="button"
+                  role="option"
+                  aria-selected={isSelected}
+                >
+                  <span className="flex-1 truncate text-[12px] font-medium">{model.name}</span>
+
+                  {tierLabel && (
+                    <span className={`rounded-[4px] px-1.5 py-px text-[8px] font-bold tracking-wider ${tierColor}`}>
+                      {tierLabel}
+                    </span>
+                  )}
+
+                  {model.supportedReasoningEfforts?.length ? (
+                    <Brain className="size-3 flex-none text-[var(--color-text-muted)]/60" aria-label="Supports reasoning" />
+                  ) : null}
+
+                  {isSelected && <Check className="size-3.5 flex-none text-[var(--color-accent)]" />}
+                </button>
+              );
+            })}
+          </div>
+        ))}
       </div>
 
       {/* Reasoning effort — only shown when selected model supports it */}

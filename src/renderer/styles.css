@@ -708,13 +708,14 @@ body {
 /* Override body/root backgrounds when inside the quickprompt window so the
    transparent BrowserWindow doesn't show a colored rectangle behind the
    rounded panel. The data attribute is set on the <body> in quickprompt.html. */
-body[data-quickprompt] {
+body[data-quickprompt],
+body[data-quickprompt] #root {
   background: transparent !important;
   min-height: 0 !important;
 }
 
-body[data-quickprompt] #root {
-  min-height: 0 !important;
+html:has(body[data-quickprompt]) {
+  background: transparent !important;
 }
 
 .qp-container {
@@ -723,10 +724,8 @@ body[data-quickprompt] #root {
 
 .qp-panel {
   background: var(--color-surface-1);
-  box-shadow:
-    0 24px 80px rgba(0, 0, 0, 0.6),
-    0 8px 24px rgba(0, 0, 0, 0.4),
-    0 0 1px rgba(255, 255, 255, 0.08) inset;
+  /* No box-shadow — on Windows transparent windows, shadows paint visibly
+     on the transparent canvas and create a visible dark rectangle. */
   transition: border-color 0.3s ease;
 }
 
@@ -737,27 +736,15 @@ body[data-quickprompt] #root {
 
 .qp-border-complete {
   border: 1px solid var(--color-border-glow);
-  box-shadow:
-    0 24px 80px rgba(0, 0, 0, 0.55),
-    0 0 20px rgba(36, 92, 249, 0.06),
-    0 0 1px rgba(255, 255, 255, 0.06) inset;
 }
 
 /* Animated breathing border during streaming */
 @keyframes qp-border-breathe {
   0%, 100% {
     border-color: rgba(36, 92, 249, 0.35);
-    box-shadow:
-      0 24px 80px rgba(0, 0, 0, 0.55),
-      0 0 20px rgba(36, 92, 249, 0.08),
-      0 0 1px rgba(255, 255, 255, 0.06) inset;
   }
   50% {
     border-color: rgba(138, 41, 230, 0.4);
-    box-shadow:
-      0 24px 80px rgba(0, 0, 0, 0.55),
-      0 0 32px rgba(138, 41, 230, 0.1),
-      0 0 1px rgba(255, 255, 255, 0.06) inset;
   }
 }
 

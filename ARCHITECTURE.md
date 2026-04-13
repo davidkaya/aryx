@@ -56,7 +56,7 @@ flowchart LR
 | Renderer | Screens, interaction, local view composition, theme application | Filesystem, process spawning, raw Electron access, Copilot runtime | Typed preload API and pushed events |
 | Preload | Narrow bridge between browser context and Electron IPC | Business logic, persistence, orchestration | `ipcRenderer` / `ipcMain` |
 | Main process | Workspace mutation, persistence, git inspection/write operations, run change attribution, commit workflow orchestration, session lifecycle, native window state, global hotkey registration, sidecar lifecycle, PTY-backed terminal lifecycle | UI rendering, LLM orchestration internals | IPC, filesystem, git CLI, stdio with sidecar, native child processes |
-| Sidecar | Capability discovery, workflow validation, run execution, streaming deltas and activity | UI, workspace persistence, Electron APIs | Line-delimited JSON over stdio |
+| Sidecar | Capability discovery, workflow validation, run execution, provider event normalization, streaming deltas and activity, streamed text assembly | UI, workspace persistence, Electron APIs | Line-delimited JSON over stdio |
 | External systems | Git data, Copilot account/model access, OS window chrome | Application state and UI behavior | Controlled adapters owned by main or sidecar |
 
 This split is the most important architectural feature in the app. It is what keeps the system understandable as more capabilities are added.
@@ -143,7 +143,9 @@ Their runtime semantics follow the Agent Framework orchestration model: sequenti
 
 For Copilot-backed agents, Aryx uses a repo-local provider module around the Copilot SDK session layer so workflow agent routes still behave like Agent Framework handoffs. This is necessary because the upstream `GitHubCopilotAgent` does not currently project run-time handoff tool declarations into Copilot sessions or surface Copilot tool requests back as `FunctionCallContent` for the workflow runtime.
 
-The sidecar now keeps that Copilot-specific behavior behind provider seams. Core execution uses shared `IAgentProvider`, `IProviderTurnSupport`, `ProviderSessionEvent`, `ProviderAgentBundle`, `TurnExecutionState`, and `AgentWorkflowTurnRunner` abstractions, while `Services/Providers/Copilot/` owns SDK-specific bundle creation, transcript projection, approvals, user input, MCP OAuth, exit-plan-mode handling, CLI/session management, and event adaptation.
+The sidecar now keeps that Copilot-specific behavior behind provider seams. Core execution uses shared `IAgentProvider`, `IProviderTurnSupport`, `ProviderSessionEvent`, `ProviderAgentBundle`, `TurnExecutionState`, and `AgentWorkflowTurnRunner` abstractions, while `Services/Providers/Copilot/` owns SDK-specific bundle creation, transcript projection, approvals, user input, MCP OAuth, exit-plan-mode handling, CLI/session management, and event adaptation. Provider adapters implement `IProviderEventAdapter.TryAdapt()` to translate provider-native session events into the normalized `ProviderSessionEvent` records that `TurnExecutionState` consumes. The Copilot adapter is the first concrete implementation; adding a second provider means writing a new adapter without changing the turn-state machine or the main-process contract.
+
+Streamed text assembly is a single-owner responsibility. The sidecar's `StreamingTranscriptBuffer` resolves content deltas and snapshot-mode content from provider events, producing authoritative `content` fields on every message-delta event. The main process forwards that resolved content to the renderer, which trusts it directly without re-running merge logic. This eliminates the duplicate text-assembly that previously caused glitches when the sidecar, main process, and renderer each independently merged streaming text.
 
 Workflows are shared application data, not renderer-only configuration. The same workflow definition now drives validation, persistence, session execution, and sidecar orchestration.
 
@@ -216,7 +218,7 @@ This is a structured stdio protocol used for:
 - streaming partial output
 - streaming agent activity
 
-This protocol boundary keeps the AI execution runtime replaceable and prevents the Electron main process from becoming overloaded with workflow-specific behavior. On the sidecar side, raw provider events are first normalized into sidecar-owned provider event records before they become streamed run activity, so future providers can plug into the same transport without reshaping the main-process contract.
+This protocol boundary keeps the AI execution runtime replaceable and prevents the Electron main process from becoming overloaded with workflow-specific behavior. On the sidecar side, raw provider events are first normalized into sidecar-owned provider event records (via `IProviderEventAdapter`) before they become streamed run activity, so future providers can plug into the same transport without reshaping the main-process contract. Each event carries capability metadata so the main process and renderer can degrade gracefully when a provider does not support intent, reasoning, or fine-grained tool progress.
 
 The protocol also carries **turn-scoped lifecycle events** alongside output deltas. These events let the UI visualize execution internals without the main process having to interpret AI workflow semantics:
 
@@ -225,7 +227,7 @@ The protocol also carries **turn-scoped lifecycle events** alongside output delt
 - **Sub-agent events**: started, completed, failed, selected, deselected — surfaced when custom agents are defined
 - **Skill invocation events**: emitted when an agent-side skill is triggered
 - **Message reclassification events**: let the sidecar retroactively mark a streamed assistant message as `thinking` once the SDK confirms that message requested tool work, so the UI can separate intermediate planning chatter from the final response without sacrificing live streaming
-- **Assistant intent and reasoning-delta events**: optional Copilot SDK metadata that exposes short "what I'm doing" labels plus incremental reasoning text for richer thinking-process surfaces
+- **Assistant intent and reasoning-delta events**: optional provider metadata that exposes short "what I'm doing" labels plus incremental reasoning text for richer thinking-process surfaces; normalized through the provider adapter layer so the UI consumes them uniformly regardless of provider origin
 - **Hook lifecycle events**: start and end of configured project hook commands discovered from `.github/hooks/*.json`; Aryx suppresses the SDK's built-in no-op hook chatter so the UI only sees meaningful hook activity
 - **Assistant usage events**: per-LLM-call tokens, cost, AIU, and quota snapshots from the Copilot SDK's `assistant.usage` stream
 - **Session compaction events**: start and complete, with token-reduction metrics when infinite sessions trigger context trimming

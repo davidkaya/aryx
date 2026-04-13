@@ -464,4 +464,242 @@ describe('session workspace helpers', () => {
 
     expect(workspace?.sessions[0].currentIntent).toBe('Analyzing code');
   });
+
+  /* ── Streaming regression tests ──────────────────────────── */
+
+  test('thinking-to-response transition: reclassified message stays hidden, new message becomes final', () => {
+    // Step 1: first message streams as normal assistant content
+    let ws = applySessionEventWorkspace(createWorkspace(), {
+      sessionId: 'session-1',
+      kind: 'message-delta',
+      occurredAt: '2026-03-23T00:00:01.000Z',
+      messageId: 'assistant-1',
+      authorName: 'Agent',
+      contentDelta: 'Let me look into this...',
+      content: 'Let me look into this...',
+    } satisfies SessionEventRecord);
+
+    // Step 2: reclassified as thinking (the agent decided to search first)
+    ws = applySessionEventWorkspace(ws, {
+      sessionId: 'session-1',
+      kind: 'message-reclassified',
+      occurredAt: '2026-03-23T00:00:02.000Z',
+      messageId: 'assistant-1',
+      messageKind: 'thinking',
+    } satisfies SessionEventRecord);
+
+    expect(ws?.sessions[0].messages[0]).toMatchObject({
+      id: 'assistant-1',
+      messageKind: 'thinking',
+      pending: true,
+    });
+
+    // Step 3: a new actual response message starts streaming
+    ws = applySessionEventWorkspace(ws, {
+      sessionId: 'session-1',
+      kind: 'message-delta',
+      occurredAt: '2026-03-23T00:00:03.000Z',
+      messageId: 'assistant-2',
+      authorName: 'Agent',
+      contentDelta: 'Here is the answer.',
+      content: 'Here is the answer.',
+    } satisfies SessionEventRecord);
+
+    // The thinking message should be auto-completed, new one is pending
+    expect(ws?.sessions[0].messages).toHaveLength(2);
+    expect(ws?.sessions[0].messages[0]).toMatchObject({
+      id: 'assistant-1',
+      messageKind: 'thinking',
+      pending: false,
+    });
+    expect(ws?.sessions[0].messages[1]).toMatchObject({
+      id: 'assistant-2',
+      content: 'Here is the answer.',
+      pending: true,
+    });
+  });
+
+  test('concurrent multi-message streaming keeps messages independent', () => {
+    // Two different assistant messages stream interleaved (e.g. multi-agent)
+    let ws = applySessionEventWorkspace(createWorkspace(), {
+      sessionId: 'session-1',
+      kind: 'message-delta',
+      occurredAt: '2026-03-23T00:00:01.000Z',
+      messageId: 'msg-agent-a',
+      authorName: 'Architect',
+      contentDelta: 'Design: ',
+      content: 'Design: ',
+    } satisfies SessionEventRecord);
+
+    ws = applySessionEventWorkspace(ws, {
+      sessionId: 'session-1',
+      kind: 'message-delta',
+      occurredAt: '2026-03-23T00:00:02.000Z',
+      messageId: 'msg-agent-a',
+      authorName: 'Architect',
+      contentDelta: 'Use modules.',
+      content: 'Design: Use modules.',
+    } satisfies SessionEventRecord);
+
+    // Complete one message, verify others are unaffected
+    ws = applySessionEventWorkspace(ws, {
+      sessionId: 'session-1',
+      kind: 'message-complete',
+      occurredAt: '2026-03-23T00:00:04.000Z',
+      messageId: 'msg-agent-a',
+      authorName: 'Architect',
+      content: 'Design: Use modules.',
+    } satisfies SessionEventRecord);
+
+    expect(ws?.sessions[0].messages).toHaveLength(1);
+    expect(ws?.sessions[0].messages[0]).toMatchObject({
+      id: 'msg-agent-a',
+      content: 'Design: Use modules.',
+      pending: false,
+    });
+  });
+
+  test('run-updated replaces existing run by id and handles new runs', () => {
+    const runV1: SessionRunRecord = {
+      id: 'run-1',
+      requestId: 'turn-1',
+      projectId: 'project-1',
+      projectPath: 'C:\\workspace',
+      workspaceKind: 'project',
+      workflowId: 'workflow-1',
+      workflowName: 'Review',
+      workflowMode: 'sequential',
+      triggerMessageId: 'msg-user-1',
+      startedAt: '2026-03-23T00:00:01.000Z',
+      status: 'running',
+      agents: [],
+      events: [],
+    };
+
+    let ws = applySessionEventWorkspace(createWorkspace(), {
+      sessionId: 'session-1',
+      kind: 'run-updated',
+      occurredAt: '2026-03-23T00:00:01.000Z',
+      run: runV1,
+    } satisfies SessionEventRecord);
+
+    expect(ws?.sessions[0].runs).toHaveLength(1);
+    expect(ws?.sessions[0].runs[0].status).toBe('running');
+
+    // Run updated with new status and events
+    const runV2: SessionRunRecord = {
+      ...runV1,
+      status: 'completed',
+      events: [
+        {
+          id: 'evt-1',
+          kind: 'run-started',
+          occurredAt: '2026-03-23T00:00:01.000Z',
+          status: 'completed',
+        },
+      ],
+    };
+
+    ws = applySessionEventWorkspace(ws, {
+      sessionId: 'session-1',
+      kind: 'run-updated',
+      occurredAt: '2026-03-23T00:00:02.000Z',
+      run: runV2,
+    } satisfies SessionEventRecord);
+
+    // Should replace, not duplicate
+    expect(ws?.sessions[0].runs).toHaveLength(1);
+    expect(ws?.sessions[0].runs[0].status).toBe('completed');
+    expect(ws?.sessions[0].runs[0].events).toHaveLength(1);
+  });
+
+  test('full turn lifecycle: intent → deltas → complete → idle clears intent', () => {
+    let ws = applySessionEventWorkspace(createWorkspace(), {
+      sessionId: 'session-1',
+      kind: 'status',
+      occurredAt: '2026-03-23T00:00:00.000Z',
+      status: 'running',
+    } satisfies SessionEventRecord);
+
+    ws = applySessionEventWorkspace(ws, {
+      sessionId: 'session-1',
+      kind: 'assistant-intent',
+      occurredAt: '2026-03-23T00:00:01.000Z',
+      intent: 'Exploring codebase',
+    } satisfies SessionEventRecord);
+
+    ws = applySessionEventWorkspace(ws, {
+      sessionId: 'session-1',
+      kind: 'message-delta',
+      occurredAt: '2026-03-23T00:00:02.000Z',
+      messageId: 'assistant-1',
+      authorName: 'Agent',
+      contentDelta: 'Found the issue.',
+      content: 'Found the issue.',
+    } satisfies SessionEventRecord);
+
+    // Intent survives during message streaming
+    expect(ws?.sessions[0].currentIntent).toBe('Exploring codebase');
+    expect(ws?.sessions[0].messages[0].pending).toBe(true);
+
+    ws = applySessionEventWorkspace(ws, {
+      sessionId: 'session-1',
+      kind: 'assistant-intent',
+      occurredAt: '2026-03-23T00:00:03.000Z',
+      intent: 'Fixing bug',
+    } satisfies SessionEventRecord);
+
+    expect(ws?.sessions[0].currentIntent).toBe('Fixing bug');
+
+    ws = applySessionEventWorkspace(ws, {
+      sessionId: 'session-1',
+      kind: 'message-complete',
+      occurredAt: '2026-03-23T00:00:04.000Z',
+      messageId: 'assistant-1',
+      authorName: 'Agent',
+      content: 'Found the issue. Here is the fix.',
+    } satisfies SessionEventRecord);
+
+    // Intent still active until idle
+    expect(ws?.sessions[0].currentIntent).toBe('Fixing bug');
+
+    ws = applySessionEventWorkspace(ws, {
+      sessionId: 'session-1',
+      kind: 'status',
+      occurredAt: '2026-03-23T00:00:05.000Z',
+      status: 'idle',
+    } satisfies SessionEventRecord);
+
+    expect(ws?.sessions[0].currentIntent).toBeUndefined();
+    expect(ws?.sessions[0].status).toBe('idle');
+    expect(ws?.sessions[0].messages[0].content).toBe('Found the issue. Here is the fix.');
+    expect(ws?.sessions[0].messages[0].pending).toBe(false);
+  });
+
+  test('message-complete content overrides previously streamed content', () => {
+    let ws = applySessionEventWorkspace(createWorkspace(), {
+      sessionId: 'session-1',
+      kind: 'message-delta',
+      occurredAt: '2026-03-23T00:00:01.000Z',
+      messageId: 'assistant-1',
+      authorName: 'Agent',
+      contentDelta: 'Partial draft...',
+      content: 'Partial draft...',
+    } satisfies SessionEventRecord);
+
+    // Backend sends final authoritative content on completion
+    ws = applySessionEventWorkspace(ws, {
+      sessionId: 'session-1',
+      kind: 'message-complete',
+      occurredAt: '2026-03-23T00:00:02.000Z',
+      messageId: 'assistant-1',
+      authorName: 'Agent',
+      content: 'The complete, polished final answer with all details.',
+    } satisfies SessionEventRecord);
+
+    expect(ws?.sessions[0].messages[0]).toMatchObject({
+      content: 'The complete, polished final answer with all details.',
+      pending: false,
+    });
+  });
 });

@@ -1,20 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { CommitComposer } from '@renderer/components/chat/CommitComposer';
 import { AppShell } from '@renderer/components/AppShell';
-import { ActivityPanel } from '@renderer/components/ActivityPanel';
-import { ChatPane } from '@renderer/components/ChatPane';
-import { CommandPalette } from '@renderer/components/CommandPalette';
-import { DiscoveredToolingModal } from '@renderer/components/DiscoveredToolingModal';
-import { KeyboardShortcutsPanel } from '@renderer/components/KeyboardShortcutsPanel';
-import { ProjectSettingsPanel } from '@renderer/components/ProjectSettingsPanel';
-import { BookmarksPanel } from '@renderer/components/BookmarksPanel';
-import { SessionSearchPanel } from '@renderer/components/SessionSearchPanel';
-import { SettingsPanel, type SettingsSection } from '@renderer/components/SettingsPanel';
 import { Sidebar } from '@renderer/components/Sidebar';
-import { BottomPanel, DEFAULT_HEIGHT as DEFAULT_BOTTOM_HEIGHT, MIN_HEIGHT as MIN_BOTTOM_HEIGHT, type BottomPanelTab } from '@renderer/components/BottomPanel';
-import { GitPanel } from '@renderer/components/GitPanel';
-import { TerminalPanel } from '@renderer/components/TerminalPanel';
 import { resolveChatToolingSettings } from '@renderer/lib/chatTooling';
 import {
   applySessionEventActivity,
@@ -33,7 +20,6 @@ import {
 } from '@renderer/lib/sessionActivity';
 import { applySubagentEvent, pruneSubagentMap, type ActiveSubagentMap } from '@renderer/lib/subagentTracker';
 import { applySessionEventWorkspace } from '@renderer/lib/sessionWorkspace';
-import { WelcomePane } from '@renderer/components/WelcomePane';
 import { getElectronApi } from '@renderer/lib/electronApi';
 import { useTheme, useSidecarCapabilities } from '@renderer/hooks/useAppHooks';
 import {
@@ -52,7 +38,33 @@ import type { WorkspaceAgentDefinition } from '@shared/domain/workspaceAgent';
 import type { WorkspaceState } from '@shared/domain/workspace';
 import type { UpdateStatus } from '@shared/contracts/ipc';
 import { createId, nowIso } from '@shared/utils/ids';
-import { WorkflowPicker } from '@renderer/components/workflow/WorkflowPicker';
+
+// Lazy-loaded components — kept off the critical startup bundle.
+// These pull in heavy dependencies (Lexical, @xyflow/react, @xterm/xterm, motion, etc.)
+// that are not needed until the user interacts with the corresponding feature.
+const ActivityPanel = lazy(() => import('@renderer/components/ActivityPanel').then((m) => ({ default: m.ActivityPanel })));
+const BookmarksPanel = lazy(() => import('@renderer/components/BookmarksPanel').then((m) => ({ default: m.BookmarksPanel })));
+const BottomPanel = lazy(() => import('@renderer/components/BottomPanel').then((m) => ({ default: m.BottomPanel })));
+const ChatPane = lazy(() => import('@renderer/components/ChatPane').then((m) => ({ default: m.ChatPane })));
+const CommandPalette = lazy(() => import('@renderer/components/CommandPalette').then((m) => ({ default: m.CommandPalette })));
+const CommitComposer = lazy(() => import('@renderer/components/chat/CommitComposer').then((m) => ({ default: m.CommitComposer })));
+const DiscoveredToolingModal = lazy(() => import('@renderer/components/DiscoveredToolingModal').then((m) => ({ default: m.DiscoveredToolingModal })));
+const GitPanel = lazy(() => import('@renderer/components/GitPanel').then((m) => ({ default: m.GitPanel })));
+const KeyboardShortcutsPanel = lazy(() => import('@renderer/components/KeyboardShortcutsPanel').then((m) => ({ default: m.KeyboardShortcutsPanel })));
+const ProjectSettingsPanel = lazy(() => import('@renderer/components/ProjectSettingsPanel').then((m) => ({ default: m.ProjectSettingsPanel })));
+const SessionSearchPanel = lazy(() => import('@renderer/components/SessionSearchPanel').then((m) => ({ default: m.SessionSearchPanel })));
+const SettingsPanel = lazy(() => import('@renderer/components/SettingsPanel').then((m) => ({ default: m.SettingsPanel })));
+const TerminalPanel = lazy(() => import('@renderer/components/TerminalPanel').then((m) => ({ default: m.TerminalPanel })));
+const WelcomePane = lazy(() => import('@renderer/components/WelcomePane').then((m) => ({ default: m.WelcomePane })));
+const WorkflowPicker = lazy(() => import('@renderer/components/workflow/WorkflowPicker').then((m) => ({ default: m.WorkflowPicker })));
+
+// Re-export type-only imports from lazy modules so they're available without pulling in the bundle
+type SettingsSection = 'appearance' | 'connection' | 'workflows' | 'agents' | 'mcp-servers' | 'lsp-profiles' | 'troubleshooting';
+type BottomPanelTab = 'terminal' | 'git';
+
+// Constants duplicated from BottomPanel to avoid importing the full module at startup
+const DEFAULT_BOTTOM_HEIGHT = 280;
+const MIN_BOTTOM_HEIGHT = 120;
 
 function createDraftMcpServer(): McpServerDefinition {
   const timestamp = nowIso();
@@ -643,6 +655,9 @@ export default function App() {
     );
   }
 
+  // Suspense fallback for lazy-loaded panels — intentionally blank to avoid layout flash
+  const lazyFallback = null;
+
   // Determine main content
   let content: React.ReactNode;
   let detailPanel: React.ReactNode | undefined;
@@ -657,6 +672,7 @@ export default function App() {
     );
   } else if (selectedSession && workflowForSession && projectForSession) {
     content = (
+      <Suspense fallback={lazyFallback}>
         <ChatPane
           onSend={(c, attachments, messageMode, promptInvocation) => api.sendSessionMessage({
             sessionId: selectedSession.id,
@@ -740,30 +756,36 @@ export default function App() {
           onDiscardRunChanges={handleDiscardRunChanges}
           onOpenCommitComposer={handleOpenCommitComposer}
         />
+      </Suspense>
     );
     detailPanel = (
-      <ActivityPanel
-        activity={activityForSession}
-        workflow={workflowForSession}
-        session={selectedSession}
-        sessionRequestUsage={requestUsageForSession}
-        turnEvents={turnEventsForSession}
-      />
+      <Suspense fallback={lazyFallback}>
+        <ActivityPanel
+          activity={activityForSession}
+          workflow={workflowForSession}
+          session={selectedSession}
+          sessionRequestUsage={requestUsageForSession}
+          turnEvents={turnEventsForSession}
+        />
+      </Suspense>
     );
   } else {
     content = (
-      <WelcomePane
-        hasProjects={hasUserProjects}
-        connectionStatus={sidecarCapabilities?.connection.status}
-        onAddProject={() => void api.addProject()}
-        onNewScratchpad={() => handleCreateScratchpad()}
-        onOpenSettings={() => setShowSettings(true)}
-      />
+      <Suspense fallback={lazyFallback}>
+        <WelcomePane
+          hasProjects={hasUserProjects}
+          connectionStatus={sidecarCapabilities?.connection.status}
+          onAddProject={() => void api.addProject()}
+          onNewScratchpad={() => handleCreateScratchpad()}
+          onOpenSettings={() => setShowSettings(true)}
+        />
+      </Suspense>
     );
   }
 
   // Settings overlay
   const overlay = showSettings ? (
+    <Suspense fallback={lazyFallback}>
       <SettingsPanel
         availableModels={availableModels}
         initialSection={settingsSection}
@@ -836,6 +858,7 @@ export default function App() {
         }}
         onGetQuota={() => api.getQuota()}
       />
+    </Suspense>
   ) : null;
 
   return (
@@ -846,29 +869,31 @@ export default function App() {
         overlay={overlay}
         bottomPanel={
           bottomPanelOpen ? (
-            <BottomPanel
-              activeTab={bottomPanelTab}
-              gitContent={
-                selectedSession && !isScratchpadProject(selectedSession.projectId) ? (
-                  <GitPanel
-                    onDirtyChange={setGitDirty}
-                    projectId={selectedSession.projectId}
-                  />
-                ) : (
-                  <div className="flex items-center justify-center py-8 text-[11px] text-[var(--color-text-muted)]">
-                    Git is not available for scratchpad sessions
-                  </div>
-                )
-              }
-              gitDirty={gitDirty}
-              height={bottomPanelHeight}
-              onClose={handleBottomPanelClose}
-              onHeightChange={handleBottomPanelHeightChange}
-              onTabChange={setBottomPanelTab}
-              showGitTab={!!selectedSession && !isScratchpadProject(selectedSession.projectId)}
-              terminalContent={<TerminalPanel onRunningChange={setTerminalRunning} />}
-              terminalRunning={terminalRunning}
-            />
+            <Suspense fallback={lazyFallback}>
+              <BottomPanel
+                activeTab={bottomPanelTab}
+                gitContent={
+                  selectedSession && !isScratchpadProject(selectedSession.projectId) ? (
+                    <GitPanel
+                      onDirtyChange={setGitDirty}
+                      projectId={selectedSession.projectId}
+                    />
+                  ) : (
+                    <div className="flex items-center justify-center py-8 text-[11px] text-[var(--color-text-muted)]">
+                      Git is not available for scratchpad sessions
+                    </div>
+                  )
+                }
+                gitDirty={gitDirty}
+                height={bottomPanelHeight}
+                onClose={handleBottomPanelClose}
+                onHeightChange={handleBottomPanelHeightChange}
+                onTabChange={setBottomPanelTab}
+                showGitTab={!!selectedSession && !isScratchpadProject(selectedSession.projectId)}
+                terminalContent={<TerminalPanel onRunningChange={setTerminalRunning} />}
+                terminalRunning={terminalRunning}
+              />
+            </Suspense>
           ) : undefined
         }
         sidebar={
@@ -911,120 +936,136 @@ export default function App() {
       />
 
       {showDiscoveryModal && (
-        <DiscoveredToolingModal
-          onClose={() => setShowDiscoveryModal(false)}
-          onResolveProjectServers={(serverIds, resolution) => {
-            if (selectedProject) {
-              void api.resolveProjectDiscoveredTooling({ projectId: selectedProject.id, serverIds, resolution });
-            }
-          }}
-          onResolveUserServers={(serverIds, resolution) => {
-            void api.resolveWorkspaceDiscoveredTooling({ serverIds, resolution });
-          }}
-          projectDiscoveredTooling={selectedProject?.discoveredTooling}
-          projectName={selectedProject?.name}
-          userDiscoveredTooling={workspace.settings.discoveredUserTooling}
-        />
+        <Suspense fallback={lazyFallback}>
+          <DiscoveredToolingModal
+            onClose={() => setShowDiscoveryModal(false)}
+            onResolveProjectServers={(serverIds, resolution) => {
+              if (selectedProject) {
+                void api.resolveProjectDiscoveredTooling({ projectId: selectedProject.id, serverIds, resolution });
+              }
+            }}
+            onResolveUserServers={(serverIds, resolution) => {
+              void api.resolveWorkspaceDiscoveredTooling({ serverIds, resolution });
+            }}
+            projectDiscoveredTooling={selectedProject?.discoveredTooling}
+            projectName={selectedProject?.name}
+            userDiscoveredTooling={workspace.settings.discoveredUserTooling}
+          />
+        </Suspense>
       )}
 
       {projectForSettings && (
-        <ProjectSettingsPanel
-          project={projectForSettings}
-          onClose={() => setProjectSettingsId(undefined)}
-          onRescanConfigs={() => {
-            void api.rescanProjectConfigs({ projectId: projectForSettings.id });
-          }}
-          onRescanCustomization={() => {
-            void api.rescanProjectCustomization({ projectId: projectForSettings.id });
-          }}
-          onResolveDiscoveredTooling={(serverIds, resolution) => {
-            void api.resolveProjectDiscoveredTooling({ projectId: projectForSettings.id, serverIds, resolution });
-          }}
-          onSetAgentProfileEnabled={(agentProfileId, enabled) => {
-            void api.setProjectAgentProfileEnabled({ projectId: projectForSettings.id, agentProfileId, enabled });
-          }}
-          onRemoveProject={() => {
-            void api.removeProject(projectForSettings.id);
-            setProjectSettingsId(undefined);
-          }}
-        />
+        <Suspense fallback={lazyFallback}>
+          <ProjectSettingsPanel
+            project={projectForSettings}
+            onClose={() => setProjectSettingsId(undefined)}
+            onRescanConfigs={() => {
+              void api.rescanProjectConfigs({ projectId: projectForSettings.id });
+            }}
+            onRescanCustomization={() => {
+              void api.rescanProjectCustomization({ projectId: projectForSettings.id });
+            }}
+            onResolveDiscoveredTooling={(serverIds, resolution) => {
+              void api.resolveProjectDiscoveredTooling({ projectId: projectForSettings.id, serverIds, resolution });
+            }}
+            onSetAgentProfileEnabled={(agentProfileId, enabled) => {
+              void api.setProjectAgentProfileEnabled({ projectId: projectForSettings.id, agentProfileId, enabled });
+            }}
+            onRemoveProject={() => {
+              void api.removeProject(projectForSettings.id);
+              setProjectSettingsId(undefined);
+            }}
+          />
+        </Suspense>
       )}
 
       {commandPaletteOpen && workspace && (
-        <CommandPalette
-          workspace={workspace}
-          onClose={() => setCommandPaletteOpen(false)}
-          onSelectSession={(sessionId) => {
-            void api.selectSession(sessionId);
-          }}
-          onSelectProject={(projectId) => {
-            void api.selectProject(projectId);
-          }}
-          onNewSession={(projectId) => handleNewSession(projectId)}
-          onCreateScratchpad={handleCreateScratchpad}
-          onOpenSettings={() => setShowSettings(true)}
-          onOpenProjectSettings={(projectId) => setProjectSettingsId(projectId)}
-          onToggleTerminal={handleTerminalToggle}
-          onSetTheme={(theme) => void api.setTheme(theme)}
-          onDuplicateSession={(sessionId) => {
-            void api.duplicateSession({ sessionId });
-          }}
-          onPinSession={(sessionId, isPinned) => {
-            void api.setSessionPinned({ sessionId, isPinned });
-          }}
-          onArchiveSession={(sessionId, isArchived) => {
-            void api.setSessionArchived({ sessionId, isArchived });
-          }}
-          onAddProject={() => void api.addProject()}
-          onOpenAppDataFolder={() => void api.openAppDataFolder()}
-          onShowShortcuts={() => setShowShortcuts(true)}
-          onShowSearch={() => setShowSearch(true)}
-          onShowBookmarks={() => setShowBookmarks(true)}
-        />
+        <Suspense fallback={lazyFallback}>
+          <CommandPalette
+            workspace={workspace}
+            onClose={() => setCommandPaletteOpen(false)}
+            onSelectSession={(sessionId) => {
+              void api.selectSession(sessionId);
+            }}
+            onSelectProject={(projectId) => {
+              void api.selectProject(projectId);
+            }}
+            onNewSession={(projectId) => handleNewSession(projectId)}
+            onCreateScratchpad={handleCreateScratchpad}
+            onOpenSettings={() => setShowSettings(true)}
+            onOpenProjectSettings={(projectId) => setProjectSettingsId(projectId)}
+            onToggleTerminal={handleTerminalToggle}
+            onSetTheme={(theme) => void api.setTheme(theme)}
+            onDuplicateSession={(sessionId) => {
+              void api.duplicateSession({ sessionId });
+            }}
+            onPinSession={(sessionId, isPinned) => {
+              void api.setSessionPinned({ sessionId, isPinned });
+            }}
+            onArchiveSession={(sessionId, isArchived) => {
+              void api.setSessionArchived({ sessionId, isArchived });
+            }}
+            onAddProject={() => void api.addProject()}
+            onOpenAppDataFolder={() => void api.openAppDataFolder()}
+            onShowShortcuts={() => setShowShortcuts(true)}
+            onShowSearch={() => setShowSearch(true)}
+            onShowBookmarks={() => setShowBookmarks(true)}
+          />
+        </Suspense>
       )}
 
       {showShortcuts && (
-        <KeyboardShortcutsPanel onClose={() => setShowShortcuts(false)} />
+        <Suspense fallback={lazyFallback}>
+          <KeyboardShortcutsPanel onClose={() => setShowShortcuts(false)} />
+        </Suspense>
       )}
 
       {showSearch && workspace && (
-        <SessionSearchPanel
-          workspace={workspace}
-          onClose={() => setShowSearch(false)}
-          onSelectSession={(sessionId) => {
-            void api.selectSession(sessionId);
-          }}
-        />
+        <Suspense fallback={lazyFallback}>
+          <SessionSearchPanel
+            workspace={workspace}
+            onClose={() => setShowSearch(false)}
+            onSelectSession={(sessionId) => {
+              void api.selectSession(sessionId);
+            }}
+          />
+        </Suspense>
       )}
 
       {showBookmarks && workspace && (
-        <BookmarksPanel
-          workspace={workspace}
-          onClose={() => setShowBookmarks(false)}
-          onSelectSession={(sessionId) => {
-            void api.selectSession(sessionId);
-          }}
-          onUnpinMessage={(sessionId, messageId) => {
-            void api.setSessionMessagePinned({ sessionId, messageId, isPinned: false });
-          }}
-        />
+        <Suspense fallback={lazyFallback}>
+          <BookmarksPanel
+            workspace={workspace}
+            onClose={() => setShowBookmarks(false)}
+            onSelectSession={(sessionId) => {
+              void api.selectSession(sessionId);
+            }}
+            onUnpinMessage={(sessionId, messageId) => {
+              void api.setSessionMessagePinned({ sessionId, messageId, isPinned: false });
+            }}
+          />
+        </Suspense>
       )}
 
       {commitComposerCtx && (
-        <CommitComposer
-          onClose={() => setCommitComposerCtx(undefined)}
-          projectId={commitComposerCtx.projectId}
-          runId={commitComposerCtx.runId}
-          sessionId={commitComposerCtx.sessionId}
-        />
+        <Suspense fallback={lazyFallback}>
+          <CommitComposer
+            onClose={() => setCommitComposerCtx(undefined)}
+            projectId={commitComposerCtx.projectId}
+            runId={commitComposerCtx.runId}
+            sessionId={commitComposerCtx.sessionId}
+          />
+        </Suspense>
       )}
 
       {workflowPickerProjectId && workspace && (
-        <WorkflowPicker
-          workflows={workspace.workflows}
-          onSelect={handleWorkflowPicked}
-          onClose={() => setWorkflowPickerProjectId(null)}
-        />
+        <Suspense fallback={lazyFallback}>
+          <WorkflowPicker
+            workflows={workspace.workflows}
+            onSelect={handleWorkflowPicked}
+            onClose={() => setWorkflowPickerProjectId(null)}
+          />
+        </Suspense>
       )}
     </>
   );

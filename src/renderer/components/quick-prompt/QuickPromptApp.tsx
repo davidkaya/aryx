@@ -33,6 +33,9 @@ export function QuickPromptApp() {
   const [visible, setVisible] = useState(false);
 
   const sessionIdRef = useRef<string | null>(null);
+  // Track whether we've received any response content (non-thinking) so we
+  // don't prematurely treat setup/init events as the final completion signal.
+  const hasContentRef = useRef(false);
   const api = window.quickPromptApi;
 
   // Load capabilities on mount
@@ -70,6 +73,7 @@ export function QuickPromptApp() {
         if (event.messageKind === 'thinking') {
           setResponse((prev) => ({ ...prev, thinkingContent: prev.thinkingContent + event.contentDelta! }));
         } else {
+          hasContentRef.current = true;
           setResponse((prev) => ({
             ...prev,
             content: prev.content + event.contentDelta!,
@@ -77,12 +81,17 @@ export function QuickPromptApp() {
           }));
         }
         setPhase('streaming');
-      } else if (event.kind === 'message-complete') {
-        setPhase('complete');
-      } else if (event.kind === 'status' && event.status === 'idle') {
-        setPhase((prev) => (prev === 'idle' || prev === 'complete' ? prev : 'complete'));
-      } else if (event.kind === 'agent-activity' && event.activityType === 'completed') {
-        setPhase((prev) => (prev === 'idle' || prev === 'complete' ? prev : 'complete'));
+      } else if (
+        event.kind === 'message-complete' ||
+        (event.kind === 'status' && event.status === 'idle') ||
+        (event.kind === 'agent-activity' && event.activityType === 'completed')
+      ) {
+        // Only transition to "complete" once we've received actual response
+        // content. The session may emit completion events from initialisation
+        // or setup runs before the real content-generating turn starts.
+        if (hasContentRef.current) {
+          setPhase('complete');
+        }
       } else if (event.kind === 'error') {
         setErrorMessage(event.error ?? 'An unexpected error occurred.');
         setPhase('error');
@@ -96,6 +105,7 @@ export function QuickPromptApp() {
     setResponse({ content: '', thinkingContent: '', authorName: '' });
     setErrorMessage(undefined);
     sessionIdRef.current = null;
+    hasContentRef.current = false;
     // Refresh capabilities in case models changed
     api.getCapabilities().then((caps) => {
       setCapabilities(caps);
@@ -110,6 +120,7 @@ export function QuickPromptApp() {
     setPhase('streaming');
     setResponse({ content: '', thinkingContent: '', authorName: '' });
     setErrorMessage(undefined);
+    hasContentRef.current = false;
 
     try {
       const result = await api.send({

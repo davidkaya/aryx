@@ -71,7 +71,7 @@ export interface QuickPromptSettings {
 export function createDefaultQuickPromptSettings(): QuickPromptSettings {
   return {
     enabled: true,
-    hotkey: 'Super+Shift+A',
+    hotkey: 'Alt+Shift+C',
   };
 }
 

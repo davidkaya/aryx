@@ -23,6 +23,26 @@ let systemTray: SystemTray | undefined;
 let autoUpdateService: AutoUpdateService | undefined;
 let globalHotkeyService: GlobalHotkeyService | undefined;
 
+let quickPromptInitialized = false;
+
+/** Lazily creates the quick prompt window on first use. */
+function ensureQuickPromptWindow(): BrowserWindowType | undefined {
+  if (quickPromptWindow && !quickPromptWindow.isDestroyed()) return quickPromptWindow;
+  if (quickPromptInitialized) return undefined;
+  if (!mainWindow || !appService) return undefined;
+
+  try {
+    quickPromptWindow = createQuickPromptWindow();
+    registerQuickPromptIpcHandlers(mainWindow, appService, quickPromptWindow);
+    quickPromptInitialized = true;
+  } catch (err) {
+    console.error('[aryx] Failed to create quick prompt window:', err);
+    quickPromptInitialized = true;
+  }
+
+  return quickPromptWindow;
+}
+
 async function bootstrap(): Promise<void> {
   appService = new AryxAppService();
   autoUpdateService?.dispose();
@@ -30,8 +50,6 @@ async function bootstrap(): Promise<void> {
 
   mainWindow = createMainWindow();
 
-  // Defer quick prompt window creation — create it lazily when workspace is ready
-  // so a failure here cannot block the main window from loading.
   registerIpcHandlers(mainWindow, appService, autoUpdateService);
 
   // Start workspace loading in parallel — don't block window from showing.
@@ -59,18 +77,13 @@ async function bootstrap(): Promise<void> {
         systemTray?.updateRunningCount(updatedWorkspace);
       });
 
-      // Create quick prompt window and register global hotkey
-      try {
-        quickPromptWindow = createQuickPromptWindow();
-        registerQuickPromptIpcHandlers(mainWindow!, appService!, quickPromptWindow);
-      } catch (err) {
-        console.error('[aryx] Failed to create quick prompt window:', err);
-      }
-
+      // Register global hotkey — the quick prompt window is created lazily on
+      // first press so it cannot interfere with main window startup.
       globalHotkeyService = new GlobalHotkeyService();
       const hotkeySettings = workspace.settings.quickPrompt ?? createDefaultQuickPromptSettings();
       globalHotkeyService.register(hotkeySettings, () => {
-        if (quickPromptWindow) toggleQuickPromptWindow(quickPromptWindow);
+        const win = ensureQuickPromptWindow();
+        if (win) toggleQuickPromptWindow(win);
       });
 
       // Re-register hotkey when settings change

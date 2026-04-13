@@ -8,6 +8,7 @@ import { LspProfileEditor } from '@renderer/components/settings/LspProfileEditor
 import { McpServerEditor } from '@renderer/components/settings/McpServerEditor';
 import { WorkspaceAgentEditor } from '@renderer/components/settings/WorkspaceAgentEditor';
 import { getElectronApi } from '@renderer/lib/electronApi';
+import { isMac } from '@renderer/lib/platform';
 import type { SidecarCapabilities, QuotaSnapshot } from '@shared/contracts/sidecar';
 import type { DiscoveredMcpServer, DiscoveredToolingState } from '@shared/domain/discoveredTooling';
 import { listAcceptedDiscoveredMcpServers, listPendingDiscoveredMcpServers } from '@shared/domain/discoveredTooling';
@@ -1328,14 +1329,15 @@ function QuickPromptSettingsSection({
   onUpdate?: (patch: Partial<QuickPromptSettings>) => void;
 }) {
   const enabled = settings?.enabled ?? true;
-  const hotkey = settings?.hotkey ?? 'Super+Shift+A';
+  const hotkey = settings?.hotkey ?? 'Alt+Shift+C';
   const defaultModel = settings?.defaultModel;
   const defaultReasoning = settings?.defaultReasoningEffort;
 
   const hotkeyDisplay = hotkey
-    .replace('Super', process.platform === 'darwin' ? '⌘' : 'Win')
+    .replace('Super', isMac ? '⌘' : 'Win')
+    .replace('Alt', isMac ? '⌥' : 'Alt')
     .replace('Shift', '⇧')
-    .replace('+', ' + ');
+    .replace(/\+/g, ' + ');
 
   return (
     <div>

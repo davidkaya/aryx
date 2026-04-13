@@ -46,7 +46,13 @@ export function QuickPromptApp() {
 
   // Subscribe to show/hide events from main process
   useEffect(() => {
-    const offShow = api.onShow(() => {
+    const offShow = api.onShow((theme: string) => {
+      // Apply theme to document root so CSS variables match the main app
+      const effective = theme === 'system'
+        ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+        : theme;
+      document.documentElement.dataset.theme = effective;
+
       setVisible(true);
       resetState();
     });

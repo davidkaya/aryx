@@ -36,7 +36,7 @@ const api: QuickPromptElectronApi = {
     return () => ipcRenderer.off(ch.sessionEvent, handler);
   },
   onShow: (listener) => {
-    const handler = () => listener();
+    const handler = (_event: Electron.IpcRendererEvent, theme: string) => listener(theme);
     ipcRenderer.on(ch.show, handler);
     return () => ipcRenderer.off(ch.show, handler);
   },

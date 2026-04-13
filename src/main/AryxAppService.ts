@@ -836,6 +836,10 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     return this.workspace?.settings.quickPrompt ?? createDefaultQuickPromptSettings();
   }
 
+  getCurrentTheme(): AppearanceTheme {
+    return this.workspace?.settings.theme ?? 'dark';
+  }
+
   async setQuickPromptSettings(patch: Partial<QuickPromptSettings>): Promise<WorkspaceState> {
     const workspace = await this.loadWorkspace();
     const current = workspace.settings.quickPrompt ?? createDefaultQuickPromptSettings();

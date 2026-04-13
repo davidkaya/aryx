@@ -419,6 +419,6 @@ export interface QuickPromptElectronApi {
   getCapabilities(): Promise<QuickPromptCapabilities>;
   setSettings(settings: Partial<QuickPromptSettings>): Promise<void>;
   onSessionEvent(listener: (event: SessionEventRecord) => void): () => void;
-  onShow(listener: () => void): () => void;
+  onShow(listener: (theme: string) => void): () => void;
   onHide(listener: () => void): () => void;
 }

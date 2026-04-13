@@ -57,7 +57,7 @@ export function createQuickPromptWindow(): BrowserWindowType {
   return window;
 }
 
-export async function toggleQuickPromptWindow(window: BrowserWindowType): Promise<void> {
+export async function toggleQuickPromptWindow(window: BrowserWindowType, theme?: string): Promise<void> {
   if (window.isVisible()) {
     window.webContents.send('quick-prompt:hide');
     window.hide();
@@ -73,14 +73,14 @@ export async function toggleQuickPromptWindow(window: BrowserWindowType): Promis
   }
 
   centerOnActiveDisplay(window);
-  window.webContents.send('quick-prompt:show');
+  window.webContents.send('quick-prompt:show', theme ?? 'dark');
   window.show();
   window.focus();
 }
 
-export function showQuickPromptWindow(window: BrowserWindowType): void {
+export function showQuickPromptWindow(window: BrowserWindowType, theme?: string): void {
   centerOnActiveDisplay(window);
-  window.webContents.send('quick-prompt:show');
+  window.webContents.send('quick-prompt:show', theme ?? 'dark');
   window.show();
   window.focus();
 }

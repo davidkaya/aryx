@@ -2,10 +2,13 @@ namespace Aryx.AgentHost.Contracts;
 
 internal abstract record ProviderSessionEvent;
 
-internal sealed record ProviderAssistantMessageDeltaEvent(string MessageId) : ProviderSessionEvent;
+internal sealed record ProviderAssistantMessageDeltaEvent(
+    string MessageId,
+    string? DeltaContent) : ProviderSessionEvent;
 
 internal sealed record ProviderAssistantMessageEvent(
     string MessageId,
+    string? Content,
     bool HasToolRequests) : ProviderSessionEvent;
 
 internal sealed record ProviderToolExecutionStartEvent(
@@ -13,11 +16,34 @@ internal sealed record ProviderToolExecutionStartEvent(
     string ToolName,
     IReadOnlyDictionary<string, object?>? ToolArguments) : ProviderSessionEvent;
 
+internal sealed record ProviderToolExecutionProgressEvent(
+    string ToolCallId,
+    string? ProgressMessage) : ProviderSessionEvent;
+
+internal sealed record ProviderToolExecutionPartialResultEvent(
+    string ToolCallId,
+    string? PartialOutput) : ProviderSessionEvent;
+
+internal sealed record ProviderToolExecutionCompleteEvent(
+    string ToolCallId,
+    bool Success,
+    string? ResultContent,
+    string? DetailedResultContent,
+    string? Error) : ProviderSessionEvent;
+
 internal sealed record ProviderAssistantIntentEvent(string? Intent) : ProviderSessionEvent;
 
 internal sealed record ProviderAssistantReasoningDeltaEvent(
     string? ReasoningId,
     string? DeltaContent) : ProviderSessionEvent;
+
+internal sealed record ProviderAssistantReasoningEvent(
+    string? ReasoningId,
+    string? Content) : ProviderSessionEvent;
+
+internal sealed record ProviderAssistantTurnStartEvent(string? TurnId) : ProviderSessionEvent;
+
+internal sealed record ProviderAssistantTurnEndEvent(string? TurnId) : ProviderSessionEvent;
 
 internal sealed record ProviderSubagentStartedEvent(
     string? ToolCallId,

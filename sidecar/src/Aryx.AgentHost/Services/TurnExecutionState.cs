@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
 using Aryx.AgentHost.Contracts;
 using Microsoft.Extensions.AI;
 
@@ -14,6 +15,9 @@ internal class TurnExecutionState
     private readonly ConcurrentQueue<SidecarEventDto> _pendingEvents = new();
     private readonly ConcurrentQueue<McpOauthRequiredEventDto> _pendingMcpOauthRequests = new();
     private readonly ConcurrentDictionary<string, AgentIdentity> _observedAgentsByMessageId = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, ProviderToolExecutionSnapshot> _toolExecutionsByCallId = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, ProviderReasoningSnapshot> _reasoningById = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, string> _latestIntentByAgentId = new(StringComparer.Ordinal);
     private readonly StreamingTranscriptBuffer _transcriptBuffer = new();
     private int _fallbackMessageIndex;
     private string? _lastObservedMessageId;
@@ -35,7 +39,18 @@ internal class TurnExecutionState
 
     public bool HasPendingExitPlanModeRequest { get; private set; }
 
+    public ProviderTurnStreamCapabilities StreamCapabilities { get; private set; } = ProviderTurnStreamCapabilities.None;
+
+    public string? CurrentProviderTurnId { get; private set; }
+
+    public string? LatestCompletedProviderTurnId { get; private set; }
+
     public bool SuppressHookLifecycleEvents { get; set; }
+
+    public void SetStreamCapabilities(ProviderTurnStreamCapabilities capabilities)
+    {
+        StreamCapabilities = capabilities ?? throw new ArgumentNullException(nameof(capabilities));
+    }
 
     public AgentIdentity ResolveAgentIdentity(string? agentId, string? agentName)
     {
@@ -162,9 +177,22 @@ internal class TurnExecutionState
 
                 QueueMessageReclassifiedIfNeeded(_lastObservedMessageId);
                 break;
+            case ProviderToolExecutionProgressEvent toolExecutionProgress:
+                ActiveAgent = agent;
+                TrackToolExecutionProgress(toolExecutionProgress.ToolCallId, toolExecutionProgress.ProgressMessage);
+                break;
+            case ProviderToolExecutionPartialResultEvent toolExecutionPartialResult:
+                ActiveAgent = agent;
+                TrackToolExecutionPartialResult(toolExecutionPartialResult.ToolCallId, toolExecutionPartialResult.PartialOutput);
+                break;
+            case ProviderToolExecutionCompleteEvent toolExecutionComplete:
+                ActiveAgent = agent;
+                TrackToolExecutionComplete(toolExecutionComplete);
+                break;
             case ProviderAssistantIntentEvent intentEvent:
                 ActiveAgent = agent;
                 QueueThinkingIfNeeded(agent);
+                TrackLatestIntent(agent.AgentId, intentEvent.Intent);
                 AssistantIntentEventDto? assistantIntent = CreateAssistantIntentEvent(agent, intentEvent.Intent);
                 if (assistantIntent is not null)
                 {
@@ -174,6 +202,7 @@ internal class TurnExecutionState
             case ProviderAssistantReasoningDeltaEvent reasoningDelta:
                 ActiveAgent = agent;
                 QueueThinkingIfNeeded(agent);
+                TrackReasoningContent(reasoningDelta.ReasoningId, reasoningDelta.DeltaContent, isComplete: false);
                 ReasoningDeltaEventDto? reasoningDeltaEvent = CreateReasoningDeltaEvent(
                     agent,
                     reasoningDelta.ReasoningId,
@@ -181,6 +210,22 @@ internal class TurnExecutionState
                 if (reasoningDeltaEvent is not null)
                 {
                     _pendingEvents.Enqueue(reasoningDeltaEvent);
+                }
+                break;
+            case ProviderAssistantReasoningEvent reasoning:
+                ActiveAgent = agent;
+                TrackReasoningContent(reasoning.ReasoningId, reasoning.Content, isComplete: true);
+                break;
+            case ProviderAssistantTurnStartEvent turnStart:
+                ActiveAgent = agent;
+                CurrentProviderTurnId = turnStart.TurnId;
+                break;
+            case ProviderAssistantTurnEndEvent turnEnd:
+                ActiveAgent = agent;
+                LatestCompletedProviderTurnId = turnEnd.TurnId;
+                if (string.Equals(CurrentProviderTurnId, turnEnd.TurnId, StringComparison.Ordinal))
+                {
+                    CurrentProviderTurnId = null;
                 }
                 break;
             case ProviderSubagentStartedEvent started:
@@ -291,6 +336,27 @@ internal class TurnExecutionState
         return pending;
     }
 
+    public bool TryGetToolExecution(string? toolCallId, [NotNullWhen(true)] out ProviderToolExecutionSnapshot? snapshot)
+    {
+        snapshot = null;
+        return !string.IsNullOrWhiteSpace(toolCallId)
+            && _toolExecutionsByCallId.TryGetValue(toolCallId, out snapshot);
+    }
+
+    public bool TryGetReasoning(string? reasoningId, [NotNullWhen(true)] out ProviderReasoningSnapshot? snapshot)
+    {
+        snapshot = null;
+        return !string.IsNullOrWhiteSpace(reasoningId)
+            && _reasoningById.TryGetValue(reasoningId, out snapshot);
+    }
+
+    public bool TryGetLatestIntent(string? agentId, [NotNullWhen(true)] out string? intent)
+    {
+        intent = null;
+        return !string.IsNullOrWhiteSpace(agentId)
+            && _latestIntentByAgentId.TryGetValue(agentId, out intent);
+    }
+
     public bool TryResolveObservedAgentForMessage(string? messageId, out AgentIdentity agent)
     {
         agent = default;
@@ -334,6 +400,129 @@ internal class TurnExecutionState
     {
         ToolNamesByCallId[toolCallId] = toolName;
         ToolCallHasArgumentsById[toolCallId] = toolArguments is { Count: > 0 };
+        TrackToolExecutionStart(toolCallId, toolName, toolArguments);
+    }
+
+    private void TrackToolExecutionStart(
+        string toolCallId,
+        string toolName,
+        IReadOnlyDictionary<string, object?>? toolArguments)
+    {
+        _toolExecutionsByCallId.AddOrUpdate(
+            toolCallId,
+            static (id, state) => new ProviderToolExecutionSnapshot
+            {
+                ToolCallId = id,
+                ToolName = state.ToolName,
+                ToolArguments = state.ToolArguments,
+                Status = ProviderToolExecutionStatus.Running,
+            },
+            static (_, existing, state) => existing with
+            {
+                ToolName = state.ToolName,
+                ToolArguments = state.ToolArguments,
+                Status = ProviderToolExecutionStatus.Running,
+            },
+            (ToolName: toolName, ToolArguments: toolArguments));
+    }
+
+    private void TrackToolExecutionProgress(string toolCallId, string? progressMessage)
+    {
+        string? normalizedProgress = NormalizeOptionalString(progressMessage);
+        _toolExecutionsByCallId.AddOrUpdate(
+            toolCallId,
+            id => new ProviderToolExecutionSnapshot
+            {
+                ToolCallId = id,
+                Status = ProviderToolExecutionStatus.Running,
+                LatestProgressMessage = normalizedProgress,
+            },
+            (_, existing) => existing with
+            {
+                Status = existing.Status is ProviderToolExecutionStatus.Completed or ProviderToolExecutionStatus.Failed
+                    ? existing.Status
+                    : ProviderToolExecutionStatus.Running,
+                LatestProgressMessage = normalizedProgress ?? existing.LatestProgressMessage,
+            });
+    }
+
+    private void TrackToolExecutionPartialResult(string toolCallId, string? partialOutput)
+    {
+        if (string.IsNullOrEmpty(partialOutput))
+        {
+            return;
+        }
+
+        _toolExecutionsByCallId.AddOrUpdate(
+            toolCallId,
+            id => new ProviderToolExecutionSnapshot
+            {
+                ToolCallId = id,
+                Status = ProviderToolExecutionStatus.Running,
+                PartialOutput = partialOutput,
+            },
+            (_, existing) => existing with
+            {
+                Status = existing.Status is ProviderToolExecutionStatus.Completed or ProviderToolExecutionStatus.Failed
+                    ? existing.Status
+                    : ProviderToolExecutionStatus.Running,
+                PartialOutput = string.Concat(existing.PartialOutput, partialOutput),
+            });
+    }
+
+    private void TrackToolExecutionComplete(ProviderToolExecutionCompleteEvent toolExecution)
+    {
+        _toolExecutionsByCallId.AddOrUpdate(
+            toolExecution.ToolCallId,
+            id => new ProviderToolExecutionSnapshot
+            {
+                ToolCallId = id,
+                Status = toolExecution.Success ? ProviderToolExecutionStatus.Completed : ProviderToolExecutionStatus.Failed,
+                ResultContent = toolExecution.ResultContent,
+                DetailedResultContent = toolExecution.DetailedResultContent,
+                Error = toolExecution.Error,
+            },
+            (_, existing) => existing with
+            {
+                Status = toolExecution.Success ? ProviderToolExecutionStatus.Completed : ProviderToolExecutionStatus.Failed,
+                ResultContent = toolExecution.ResultContent ?? existing.ResultContent,
+                DetailedResultContent = toolExecution.DetailedResultContent ?? existing.DetailedResultContent,
+                Error = toolExecution.Error ?? existing.Error,
+            });
+    }
+
+    private void TrackLatestIntent(string agentId, string? intent)
+    {
+        string? normalizedIntent = NormalizeOptionalString(intent);
+        if (normalizedIntent is null)
+        {
+            return;
+        }
+
+        _latestIntentByAgentId[agentId] = normalizedIntent;
+    }
+
+    private void TrackReasoningContent(string? reasoningId, string? content, bool isComplete)
+    {
+        string? normalizedReasoningId = NormalizeOptionalString(reasoningId);
+        if (normalizedReasoningId is null || content is null)
+        {
+            return;
+        }
+
+        _reasoningById.AddOrUpdate(
+            normalizedReasoningId,
+            id => new ProviderReasoningSnapshot
+            {
+                ReasoningId = id,
+                Content = content,
+                IsComplete = isComplete,
+            },
+            (_, existing) => existing with
+            {
+                Content = isComplete ? content : string.Concat(existing.Content, content),
+                IsComplete = isComplete || existing.IsComplete,
+            });
     }
 
     private void QueueMessageReclassifiedIfNeeded(string? messageId)
@@ -758,5 +947,10 @@ internal class TurnExecutionState
             AgentId = agent.AgentId,
             AgentName = agent.AgentName,
         };
+    }
+
+    private static string? NormalizeOptionalString(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
 }

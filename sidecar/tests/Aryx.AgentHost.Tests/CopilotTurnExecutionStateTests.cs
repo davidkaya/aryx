@@ -134,6 +134,114 @@ public sealed class CopilotTurnExecutionStateTests
     }
 
     [Fact]
+    public void ObserveSessionEvent_ToolExecutionProgress_TracksLatestProgressMessage()
+    {
+        RunTurnCommandDto command = CreateCommand();
+        CopilotTurnExecutionState state = new(command);
+
+        state.ObserveSessionEvent(
+            command.Workflow.GetAgentNodes()[0],
+            SessionEvent.FromJson(
+                """{"type":"tool.execution_start","data":{"toolCallId":"tool-call-1","toolName":"view"},"id":"33333333-3333-3333-3333-333333333333","timestamp":"2026-03-27T00:00:00Z"}"""));
+        _ = state.DrainPendingEvents();
+
+        state.ObserveSessionEvent(
+            command.Workflow.GetAgentNodes()[0],
+            SessionEvent.FromJson(
+                """{"type":"tool.execution_progress","data":{"toolCallId":"tool-call-1","progressMessage":"Scanning repository"},"id":"43333333-3333-3333-3333-333333333333","timestamp":"2026-03-27T00:00:01Z"}"""));
+
+        Assert.True(state.TryGetToolExecution("tool-call-1", out ProviderToolExecutionSnapshot? toolExecution));
+        Assert.NotNull(toolExecution);
+        Assert.Equal(ProviderToolExecutionStatus.Running, toolExecution.Status);
+        Assert.Equal("view", toolExecution.ToolName);
+        Assert.Equal("Scanning repository", toolExecution.LatestProgressMessage);
+    }
+
+    [Fact]
+    public void ObserveSessionEvent_ToolExecutionPartialResult_AppendsPartialOutput()
+    {
+        RunTurnCommandDto command = CreateCommand();
+        CopilotTurnExecutionState state = new(command);
+
+        state.ObserveSessionEvent(
+            command.Workflow.GetAgentNodes()[0],
+            SessionEvent.FromJson(
+                """{"type":"tool.execution_start","data":{"toolCallId":"tool-call-1","toolName":"bash"},"id":"53333333-3333-3333-3333-333333333333","timestamp":"2026-03-27T00:00:00Z"}"""));
+        _ = state.DrainPendingEvents();
+
+        state.ObserveSessionEvent(
+            command.Workflow.GetAgentNodes()[0],
+            SessionEvent.FromJson(
+                """{"type":"tool.execution_partial_result","data":{"toolCallId":"tool-call-1","partialOutput":"first line\n"},"id":"63333333-3333-3333-3333-333333333333","timestamp":"2026-03-27T00:00:01Z"}"""));
+        state.ObserveSessionEvent(
+            command.Workflow.GetAgentNodes()[0],
+            SessionEvent.FromJson(
+                """{"type":"tool.execution_partial_result","data":{"toolCallId":"tool-call-1","partialOutput":"second line"},"id":"73333333-3333-3333-3333-333333333333","timestamp":"2026-03-27T00:00:02Z"}"""));
+
+        Assert.True(state.TryGetToolExecution("tool-call-1", out ProviderToolExecutionSnapshot? toolExecution));
+        Assert.NotNull(toolExecution);
+        Assert.Equal("first line\nsecond line", toolExecution.PartialOutput);
+    }
+
+    [Fact]
+    public void ObserveSessionEvent_ToolExecutionComplete_TracksFinalToolState()
+    {
+        RunTurnCommandDto command = CreateCommand();
+        CopilotTurnExecutionState state = new(command);
+
+        state.ObserveSessionEvent(
+            command.Workflow.GetAgentNodes()[0],
+            SessionEvent.FromJson(
+                """{"type":"tool.execution_start","data":{"toolCallId":"tool-call-1","toolName":"view","arguments":{"path":"README.md"}},"id":"83333333-3333-3333-3333-333333333333","timestamp":"2026-03-27T00:00:00Z"}"""));
+        _ = state.DrainPendingEvents();
+
+        state.ObserveSessionEvent(
+            command.Workflow.GetAgentNodes()[0],
+            SessionEvent.FromJson(
+                """
+                {
+                  "type": "tool.execution_complete",
+                  "data": {
+                    "toolCallId": "tool-call-1",
+                    "success": true,
+                    "result": {
+                      "content": "README excerpt",
+                      "detailedContent": "README excerpt\nwith more detail"
+                    }
+                  },
+                  "id": "93333333-3333-3333-3333-333333333333",
+                  "timestamp": "2026-03-27T00:00:01Z"
+                }
+                """));
+
+        Assert.True(state.TryGetToolExecution("tool-call-1", out ProviderToolExecutionSnapshot? toolExecution));
+        Assert.NotNull(toolExecution);
+        Assert.Equal(ProviderToolExecutionStatus.Completed, toolExecution.Status);
+        Assert.Equal("view", toolExecution.ToolName);
+        Assert.NotNull(toolExecution.ToolArguments);
+        Assert.Equal("README excerpt", toolExecution.ResultContent);
+        Assert.Equal("README excerpt\nwith more detail", toolExecution.DetailedResultContent);
+        Assert.Null(toolExecution.Error);
+    }
+
+    [Fact]
+    public void ObserveSessionEvent_ToolExecutionCompleteFailure_TracksErrorState()
+    {
+        RunTurnCommandDto command = CreateCommand();
+        CopilotTurnExecutionState state = new(command);
+
+        state.ObserveSessionEvent(
+            command.Workflow.GetAgentNodes()[0],
+            SessionEvent.FromJson(
+                """{"type":"tool.execution_complete","data":{"toolCallId":"tool-call-err","success":false,"error":{"message":"permission denied"}},"id":"a3333333-3333-3333-3333-333333333333","timestamp":"2026-03-27T00:00:01Z"}"""));
+
+        Assert.True(state.TryGetToolExecution("tool-call-err", out ProviderToolExecutionSnapshot? toolExecution));
+        Assert.NotNull(toolExecution);
+        Assert.Equal(ProviderToolExecutionStatus.Failed, toolExecution.Status);
+        Assert.Equal("permission denied", toolExecution.Error);
+    }
+
+    [Fact]
     public void ObserveSessionEvent_ToolExecutionStart_DoesNotQueueToolActivityForHandoffTools()
     {
         RunTurnCommandDto command = CreateCommand();
@@ -366,6 +474,9 @@ public sealed class CopilotTurnExecutionStateTests
         Assert.Equal("session-1", intent.SessionId);
         Assert.Equal("agent-1", intent.AgentId);
         Assert.Equal("Searching incident playbooks", intent.Intent);
+        Assert.True(state.TryGetLatestIntent("agent-1", out string? latestIntent));
+        Assert.NotNull(latestIntent);
+        Assert.Equal("Searching incident playbooks", latestIntent);
     }
 
     [Fact]
@@ -399,6 +510,93 @@ public sealed class CopilotTurnExecutionStateTests
         Assert.Equal("agent-1", reasoning.AgentId);
         Assert.Equal("reasoning-2", reasoning.ReasoningId);
         Assert.Equal("Searching logs.", reasoning.ContentDelta);
+        Assert.True(state.TryGetReasoning("reasoning-2", out ProviderReasoningSnapshot? reasoningState));
+        Assert.NotNull(reasoningState);
+        Assert.Equal("Searching logs.", reasoningState.Content);
+        Assert.False(reasoningState.IsComplete);
+    }
+
+    [Fact]
+    public void ObserveSessionEvent_AssistantReasoning_TracksCompletedReasoningBlock()
+    {
+        RunTurnCommandDto command = CreateCommand();
+        CopilotTurnExecutionState state = new(command);
+
+        state.ObserveSessionEvent(
+            command.Workflow.GetAgentNodes()[0],
+            SessionEvent.FromJson(
+                """
+                {
+                  "type": "assistant.reasoning_delta",
+                  "data": {
+                    "reasoningId": "reasoning-3",
+                    "deltaContent": "Planning."
+                  },
+                  "id": "cd269258-5e5d-46b6-bf3f-bd8cba793b1a",
+                  "timestamp": "2026-03-27T00:00:00Z"
+                }
+                """));
+        _ = state.DrainPendingEvents();
+
+        state.ObserveSessionEvent(
+            command.Workflow.GetAgentNodes()[0],
+            SessionEvent.FromJson(
+                """
+                {
+                  "type": "assistant.reasoning",
+                  "data": {
+                    "reasoningId": "reasoning-3",
+                    "content": "Planning. Checking logs."
+                  },
+                  "id": "dd269258-5e5d-46b6-bf3f-bd8cba793b1a",
+                  "timestamp": "2026-03-27T00:00:01Z"
+                }
+                """));
+
+        Assert.True(state.TryGetReasoning("reasoning-3", out ProviderReasoningSnapshot? reasoning));
+        Assert.NotNull(reasoning);
+        Assert.Equal("Planning. Checking logs.", reasoning.Content);
+        Assert.True(reasoning.IsComplete);
+    }
+
+    [Fact]
+    public void ObserveSessionEvent_AssistantTurnBoundaries_TrackProviderTurnIds()
+    {
+        RunTurnCommandDto command = CreateCommand();
+        CopilotTurnExecutionState state = new(command);
+
+        state.ObserveSessionEvent(
+            command.Workflow.GetAgentNodes()[0],
+            SessionEvent.FromJson(
+                """
+                {
+                  "type": "assistant.turn_start",
+                  "data": {
+                    "turnId": "turn-sdk-1"
+                  },
+                  "id": "ed269258-5e5d-46b6-bf3f-bd8cba793b1a",
+                  "timestamp": "2026-03-27T00:00:00Z"
+                }
+                """));
+
+        Assert.Equal("turn-sdk-1", state.CurrentProviderTurnId);
+
+        state.ObserveSessionEvent(
+            command.Workflow.GetAgentNodes()[0],
+            SessionEvent.FromJson(
+                """
+                {
+                  "type": "assistant.turn_end",
+                  "data": {
+                    "turnId": "turn-sdk-1"
+                  },
+                  "id": "fd269258-5e5d-46b6-bf3f-bd8cba793b1a",
+                  "timestamp": "2026-03-27T00:00:01Z"
+                }
+                """));
+
+        Assert.Null(state.CurrentProviderTurnId);
+        Assert.Equal("turn-sdk-1", state.LatestCompletedProviderTurnId);
     }
 
     [Fact]

@@ -5,18 +5,34 @@ namespace Aryx.AgentHost.Services;
 
 internal sealed class CopilotEventAdapter : IProviderEventAdapter
 {
+    public ProviderTurnStreamCapabilities Capabilities { get; } = new()
+    {
+        SupportsIntent = true,
+        SupportsReasoningDelta = true,
+        SupportsReasoningBlock = true,
+        SupportsToolExecutionProgress = true,
+        SupportsToolExecutionPartialResult = true,
+        SupportsToolExecutionCompletion = true,
+        SupportsSubagentLifecycle = true,
+        SupportsHookLifecycle = true,
+        SupportsSessionCompaction = true,
+        SupportsPendingMessagesMutation = true,
+        SupportsSessionTurnBoundaries = true,
+    };
+
     public ProviderSessionEvent? TryAdapt(object rawEvent)
     {
         return rawEvent switch
         {
             AssistantMessageDeltaEvent messageDelta
                 when NormalizeRequiredString(messageDelta.Data?.MessageId) is { } messageId =>
-                new ProviderAssistantMessageDeltaEvent(messageId),
+                new ProviderAssistantMessageDeltaEvent(messageId, messageDelta.Data?.DeltaContent),
 
             AssistantMessageEvent assistantMessage
                 when NormalizeRequiredString(assistantMessage.Data?.MessageId) is { } messageId =>
                 new ProviderAssistantMessageEvent(
                     messageId,
+                    assistantMessage.Data?.Content,
                     assistantMessage.Data?.ToolRequests is { Length: > 0 }),
 
             ToolExecutionStartEvent toolExecutionStart
@@ -27,6 +43,27 @@ internal sealed class CopilotEventAdapter : IProviderEventAdapter
                     toolName,
                     WorkflowRequestInfoInterpreter.NormalizeRawToolArguments(toolExecutionStart.Data?.Arguments)),
 
+            ToolExecutionProgressEvent toolExecutionProgress
+                when NormalizeRequiredString(toolExecutionProgress.Data?.ToolCallId) is { } toolCallId =>
+                new ProviderToolExecutionProgressEvent(
+                    toolCallId,
+                    NormalizeOptionalString(toolExecutionProgress.Data?.ProgressMessage)),
+
+            ToolExecutionPartialResultEvent toolExecutionPartialResult
+                when NormalizeRequiredString(toolExecutionPartialResult.Data?.ToolCallId) is { } toolCallId =>
+                new ProviderToolExecutionPartialResultEvent(
+                    toolCallId,
+                    toolExecutionPartialResult.Data?.PartialOutput),
+
+            ToolExecutionCompleteEvent toolExecutionComplete
+                when NormalizeRequiredString(toolExecutionComplete.Data?.ToolCallId) is { } toolCallId =>
+                new ProviderToolExecutionCompleteEvent(
+                    toolCallId,
+                    toolExecutionComplete.Data?.Success ?? false,
+                    NormalizeOptionalString(toolExecutionComplete.Data?.Result?.Content),
+                    NormalizeOptionalString(toolExecutionComplete.Data?.Result?.DetailedContent),
+                    NormalizeOptionalString(toolExecutionComplete.Data?.Error?.Message)),
+
             AssistantIntentEvent intentEvent =>
                 new ProviderAssistantIntentEvent(NormalizeOptionalString(intentEvent.Data?.Intent)),
 
@@ -34,6 +71,17 @@ internal sealed class CopilotEventAdapter : IProviderEventAdapter
                 new ProviderAssistantReasoningDeltaEvent(
                     NormalizeOptionalString(reasoningDelta.Data?.ReasoningId),
                     reasoningDelta.Data?.DeltaContent),
+
+            AssistantReasoningEvent reasoning =>
+                new ProviderAssistantReasoningEvent(
+                    NormalizeOptionalString(reasoning.Data?.ReasoningId),
+                    reasoning.Data?.Content),
+
+            AssistantTurnStartEvent turnStart =>
+                new ProviderAssistantTurnStartEvent(NormalizeOptionalString(turnStart.Data?.TurnId)),
+
+            AssistantTurnEndEvent turnEnd =>
+                new ProviderAssistantTurnEndEvent(NormalizeOptionalString(turnEnd.Data?.TurnId)),
 
             SubagentStartedEvent started =>
                 new ProviderSubagentStartedEvent(

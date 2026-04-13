@@ -20,6 +20,8 @@ internal sealed class CopilotTurnRunnerSupport : IProviderTurnSupport
         CancellationTokenSource runCancellation,
         CancellationToken cancellationToken)
     {
+        state.SetStreamCapabilities(_providerEventAdapter.Capabilities);
+
         return await CopilotAgentBundle.CreateAsync(
                 command,
                 (agent, request, invocation) => _approvalCoordinator.RequestApprovalAsync(

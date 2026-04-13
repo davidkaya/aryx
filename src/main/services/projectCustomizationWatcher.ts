@@ -169,7 +169,14 @@ async function collectExistingDirectories(rootPath: string): Promise<string[]> {
 }
 
 function createProjectWatchHandle(directoryPath: string, onChange: () => void): ProjectWatchHandle {
-  return watch(directoryPath, { persistent: false }, () => {
+  const watcher = watch(directoryPath, { persistent: false }, () => {
     onChange();
   });
+
+  watcher.on('error', (error) => {
+    console.warn(`[aryx customization] Watcher error for ${directoryPath}:`, error);
+    watcher.close();
+  });
+
+  return watcher;
 }

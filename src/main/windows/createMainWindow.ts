@@ -14,6 +14,7 @@ export function createMainWindow(): BrowserWindowType {
     height: 960,
     minWidth: 1120,
     minHeight: 720,
+    show: false,
     title: 'aryx',
     icon: resolveWindowIconPath({
       appPath: app.getAppPath(),
@@ -34,6 +35,10 @@ export function createMainWindow(): BrowserWindowType {
       contextIsolation: true,
       nodeIntegration: false,
     },
+  });
+
+  window.once('ready-to-show', () => {
+    window.show();
   });
 
   const rendererUrl = process.env.ELECTRON_RENDERER_URL;

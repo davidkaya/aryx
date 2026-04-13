@@ -23,31 +23,39 @@ async function bootstrap(): Promise<void> {
   mainWindow = createMainWindow();
   registerIpcHandlers(mainWindow, appService, autoUpdateService);
 
-  // Apply persisted theme to the title bar overlay
-  const workspace = await appService.loadWorkspace();
-  applyTitleBarTheme(mainWindow, workspace.settings.theme);
+  // Start workspace loading in parallel — don't block window from showing.
+  // The renderer fetches the workspace via its own IPC call after mount.
+  const workspaceReady = appService.loadWorkspace();
 
-  // Set up system tray
-  systemTray = new SystemTray({
-    onShowWindow: showAndFocusWindow,
-    onCreateScratchpad: () => {
-      showAndFocusWindow();
-      mainWindow?.webContents.send('tray:create-scratchpad');
-    },
-    onQuit: () => app.quit(),
-  });
-  systemTray.create();
-  systemTray.updateRunningCount(workspace);
+  // Apply theme and set up tray once workspace is available
+  workspaceReady
+    .then((workspace) => {
+      if (!mainWindow) return;
+      applyTitleBarTheme(mainWindow, workspace.settings.theme);
+
+      systemTray = new SystemTray({
+        onShowWindow: showAndFocusWindow,
+        onCreateScratchpad: () => {
+          showAndFocusWindow();
+          mainWindow?.webContents.send('tray:create-scratchpad');
+        },
+        onQuit: () => app.quit(),
+      });
+      systemTray.create();
+      systemTray.updateRunningCount(workspace);
+
+      appService!.on('workspace-updated', (updatedWorkspace) => {
+        systemTray?.updateRunningCount(updatedWorkspace);
+      });
+    })
+    .catch((error) => {
+      console.error('[aryx bootstrap] workspace load failed', error);
+    });
 
   // Intercept close to hide to tray when the setting is enabled
   setupCloseToTray(mainWindow, () => {
     const currentWorkspace = appService?.getCachedWorkspace();
     return currentWorkspace?.settings.minimizeToTray === true;
-  });
-
-  // Keep tray status in sync when workspace changes
-  appService.on('workspace-updated', (updatedWorkspace) => {
-    systemTray?.updateRunningCount(updatedWorkspace);
   });
 
   if (!app.isPackaged) {

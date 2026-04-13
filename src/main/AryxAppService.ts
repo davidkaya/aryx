@@ -473,27 +473,43 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
       const selectedProject = selectedProjectId
         ? this.workspace.projects.find((project) => project.id === selectedProjectId)
         : undefined;
-      const didSyncUserTooling = await this.syncUserDiscoveredTooling(this.workspace);
-      const didSyncProjectTooling = selectedProject
-        ? await this.syncProjectDiscoveredTooling(this.workspace, selectedProject)
-        : false;
-      const didSyncProjectCustomization = selectedProject
-        ? await this.syncProjectCustomization(selectedProject)
-        : false;
+
+      // Run independent sync operations in parallel
+      const [didSyncUserTooling, didSyncProjectTooling, didSyncProjectCustomization] = await Promise.all([
+        this.syncUserDiscoveredTooling(this.workspace),
+        selectedProject
+          ? this.syncProjectDiscoveredTooling(this.workspace, selectedProject)
+          : false,
+        selectedProject
+          ? this.syncProjectCustomization(selectedProject)
+          : false,
+      ]);
+
       const didPruneSelections = this.pruneUnavailableSessionToolingSelections(this.workspace);
-      const didPruneApprovalTools = await this.pruneUnavailableApprovalTools(this.workspace);
       if (
         didSyncUserTooling
         || didSyncProjectTooling
         || didSyncProjectCustomization
         || didPruneSelections
-        || didPruneApprovalTools
         || this.cleanupInterruptedSessions(this.workspace)
       ) {
         await this.workspaceRepository.save(this.workspace);
       }
 
       await this.syncProjectCustomizationWatchers(this.workspace);
+
+      // Defer sidecar-dependent approval pruning so it doesn't block startup.
+      // This runs in the background and emits workspace-updated when done.
+      void this.pruneUnavailableApprovalTools(this.workspace)
+        .then(async (didPrune) => {
+          if (didPrune && this.workspace) {
+            await this.workspaceRepository.save(this.workspace);
+            this.emit('workspace-updated', this.workspace);
+          }
+        })
+        .catch((error) => {
+          console.error('[aryx startup] deferred approval tool pruning failed', error);
+        });
     }
 
     if (!this.didScheduleInitialProjectGitRefresh) {

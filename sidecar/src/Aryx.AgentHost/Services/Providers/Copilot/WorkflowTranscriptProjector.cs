@@ -1,15 +1,8 @@
-using System.Text;
 using Aryx.AgentHost.Contracts;
 using GitHub.Copilot.SDK;
 using Microsoft.Extensions.AI;
 
 namespace Aryx.AgentHost.Services;
-
-internal readonly record struct TranscriptSegment(string MessageId, string AuthorName, string Content)
-{
-    public static TranscriptSegment FromTuple((string MessageId, string AuthorName, string Content) segment)
-        => new(segment.MessageId, segment.AuthorName, segment.Content);
-}
 
 internal static class WorkflowTranscriptProjector
 {
@@ -146,10 +139,16 @@ internal static class WorkflowTranscriptProjector
         ChatMessage message,
         TranscriptSegment? matchedSegment)
     {
+        if (matchedSegment is { IsFinalized: true } finalizedSegment
+            && !string.IsNullOrWhiteSpace(finalizedSegment.Content))
+        {
+            return finalizedSegment.Content;
+        }
+
         return FirstNonBlank(
                 message.Text,
-                matchedSegment?.Content,
-                TryGetAssistantMessageContent(message))
+                TryGetAssistantMessageContent(message),
+                matchedSegment?.Content)
             ?? string.Empty;
     }
 
@@ -225,6 +224,16 @@ internal static class WorkflowTranscriptProjector
         if (remainingSegments.Count == 0)
         {
             return null;
+        }
+
+        string? messageId = FirstNonBlank(message.MessageId);
+        if (messageId is not null
+            && TryFindSegment(
+                remainingSegments,
+                segment => string.Equals(segment.MessageId, messageId, StringComparison.Ordinal),
+                out TranscriptSegment messageIdMatchedSegment))
+        {
+            return messageIdMatchedSegment;
         }
 
         string? messageText = string.IsNullOrWhiteSpace(message.Text) ? null : message.Text;
@@ -443,72 +452,5 @@ internal static class WorkflowTranscriptProjector
         }
 
         return null;
-    }
-}
-
-internal sealed class StreamingTranscriptBuffer
-{
-    private readonly List<BufferedTranscriptSegment> _segments = [];
-
-    public int Count => _segments.Count;
-
-    public TranscriptSegment AppendDelta(
-        string messageId,
-        string authorName,
-        string delta)
-    {
-        BufferedTranscriptSegment segment = GetOrCreateSegment(messageId, authorName);
-        segment.SetContent(StreamingTextMerger.Merge(segment.Content.ToString(), delta));
-        segment.SetAuthorName(authorName);
-        return segment.ToSnapshot();
-    }
-
-    public IReadOnlyList<TranscriptSegment> Snapshot()
-    {
-        return _segments.Select(segment => segment.ToSnapshot()).ToList();
-    }
-
-    private BufferedTranscriptSegment GetOrCreateSegment(string messageId, string authorName)
-    {
-        BufferedTranscriptSegment? existing = _segments.LastOrDefault(segment => segment.MessageId == messageId);
-        if (existing is not null)
-        {
-            return existing;
-        }
-
-        BufferedTranscriptSegment created = new(messageId, authorName);
-        _segments.Add(created);
-        return created;
-    }
-
-    private sealed class BufferedTranscriptSegment
-    {
-        public BufferedTranscriptSegment(string messageId, string authorName)
-        {
-            MessageId = messageId;
-            AuthorName = authorName;
-        }
-
-        public string MessageId { get; }
-
-        public string AuthorName { get; private set; }
-
-        public StringBuilder Content { get; } = new();
-
-        public void SetContent(string value)
-        {
-            Content.Clear();
-            Content.Append(value);
-        }
-
-        public void SetAuthorName(string value)
-        {
-            AuthorName = value;
-        }
-
-        public TranscriptSegment ToSnapshot()
-        {
-            return new TranscriptSegment(MessageId, AuthorName, Content.ToString());
-        }
     }
 }

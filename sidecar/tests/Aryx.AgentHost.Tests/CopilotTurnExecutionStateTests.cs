@@ -847,6 +847,53 @@ public sealed class CopilotTurnExecutionStateTests
         Assert.Equal("agent-1", evt.AgentId);
     }
 
+    [Fact]
+    public void ObserveSessionEvent_AssistantMessage_FinalizesTranscriptAndSuppressesLateDeltas()
+    {
+        RunTurnCommandDto command = CreateCommand();
+        CopilotTurnExecutionState state = new(command);
+
+        Assert.True(state.TryAppendDelta("msg-final", "Primary", "Draft response", out TranscriptSegment streamed));
+        Assert.False(streamed.IsFinalized);
+
+        state.ObserveSessionEvent(
+            command.Workflow.GetAgentNodes()[0],
+            SessionEvent.FromJson(
+                """
+                {
+                  "type": "assistant.message",
+                  "data": {
+                    "messageId": "msg-final",
+                    "content": "Provider final response"
+                  },
+                  "id": "12121212-1212-1212-1212-121212121212",
+                  "timestamp": "2026-03-27T00:00:00Z"
+                }
+                """));
+
+        TurnDeltaEventDto correction = Assert.Single(state.DrainPendingEvents().OfType<TurnDeltaEventDto>());
+        Assert.Equal("msg-final", correction.MessageId);
+        Assert.Equal("Primary", correction.AuthorName);
+        Assert.Equal(string.Empty, correction.ContentDelta);
+        Assert.Equal("Provider final response", correction.Content);
+
+        Assert.False(state.TryAppendDelta("msg-final", "Primary", " late delta", out TranscriptSegment unchanged));
+        Assert.True(unchanged.IsFinalized);
+        Assert.Equal("Provider final response", unchanged.Content);
+
+        ChatMessage output = new(ChatRole.Assistant, "Workflow wording")
+        {
+            MessageId = "msg-final",
+            AuthorName = "assistant",
+        };
+
+        state.UpdateCompletedMessages([output], []);
+        ChatMessageDto completed = Assert.Single(state.FinalizeCompletedMessages());
+        Assert.Equal("msg-final", completed.Id);
+        Assert.Equal("Primary", completed.AuthorName);
+        Assert.Equal("Provider final response", completed.Content);
+    }
+
     private static SessionEvent CreateHookStartEvent()
     {
         return SessionEvent.FromJson(

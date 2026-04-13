@@ -155,6 +155,20 @@ internal class TurnExecutionState
             case ProviderAssistantMessageEvent assistantMessage:
                 RecordObservedAgentForMessage(agent, assistantMessage.MessageId);
                 QueueThinkingIfNeeded(agent);
+                if (!string.IsNullOrWhiteSpace(assistantMessage.Content)
+                    && TryFinalizeTranscriptMessage(
+                        assistantMessage.MessageId,
+                        agent.AgentName,
+                        assistantMessage.Content,
+                        out TranscriptSegment finalizedSegment))
+                {
+                    _pendingEvents.Enqueue(CreateTurnDeltaEvent(
+                        finalizedSegment.MessageId,
+                        finalizedSegment.AuthorName,
+                        string.Empty,
+                        finalizedSegment.Content));
+                }
+
                 if (assistantMessage.HasToolRequests)
                 {
                     QueueMessageReclassifiedIfNeeded(assistantMessage.MessageId);
@@ -373,6 +387,24 @@ internal class TurnExecutionState
         string delta)
     {
         return _transcriptBuffer.AppendDelta(messageId, authorName, delta);
+    }
+
+    public bool TryAppendDelta(
+        string messageId,
+        string authorName,
+        string delta,
+        out TranscriptSegment segment)
+    {
+        return _transcriptBuffer.TryAppendDelta(messageId, authorName, delta, out segment);
+    }
+
+    public bool TryFinalizeTranscriptMessage(
+        string messageId,
+        string authorName,
+        string content,
+        out TranscriptSegment segment)
+    {
+        return _transcriptBuffer.TryApplySnapshot(messageId, authorName, content, out segment);
     }
 
     public void ClearActiveAgentIfMatching(AgentIdentity completedAgent)
@@ -722,6 +754,24 @@ internal class TurnExecutionState
             AgentName = agent.AgentName,
             ReasoningId = reasoningId,
             ContentDelta = deltaContent,
+        };
+    }
+
+    private TurnDeltaEventDto CreateTurnDeltaEvent(
+        string messageId,
+        string authorName,
+        string contentDelta,
+        string? content)
+    {
+        return new TurnDeltaEventDto
+        {
+            Type = "turn-delta",
+            RequestId = _command.RequestId,
+            SessionId = _command.SessionId,
+            MessageId = messageId,
+            AuthorName = authorName,
+            ContentDelta = contentDelta,
+            Content = content,
         };
     }
 

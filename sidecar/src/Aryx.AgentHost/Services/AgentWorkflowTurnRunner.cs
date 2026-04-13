@@ -100,7 +100,7 @@ public class AgentWorkflowTurnRunner : ITurnWorkflowRunner
                         onDelta,
                         onEvent)
                     .ConfigureAwait(false);
-                await EmitPendingEventsAsync(state, onEvent).ConfigureAwait(false);
+                await EmitPendingEventsAsync(state, onDelta, onEvent).ConfigureAwait(false);
                 await EmitPendingMcpOauthRequestsAsync(state, onMcpOAuthRequired).ConfigureAwait(false);
                 if (shouldEndTurn)
                 {
@@ -108,13 +108,13 @@ public class AgentWorkflowTurnRunner : ITurnWorkflowRunner
                 }
             }
 
-            await EmitPendingEventsAsync(state, onEvent).ConfigureAwait(false);
+            await EmitPendingEventsAsync(state, onDelta, onEvent).ConfigureAwait(false);
             await EmitPendingMcpOauthRequestsAsync(state, onMcpOAuthRequired).ConfigureAwait(false);
             return state.FinalizeCompletedMessages(transcriptProjector);
         }
         catch (OperationCanceledException) when (runCancellation.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
         {
-            await EmitPendingEventsAsync(state, onEvent).ConfigureAwait(false);
+            await EmitPendingEventsAsync(state, onDelta, onEvent).ConfigureAwait(false);
             await EmitPendingMcpOauthRequestsAsync(state, onMcpOAuthRequired).ConfigureAwait(false);
             ExitPlanModeRequestedEventDto? exitPlanModeEvent =
                 _providerTurnSupport.ConsumePendingExitPlanModeRequest(command.RequestId);
@@ -230,10 +230,17 @@ public class AgentWorkflowTurnRunner : ITurnWorkflowRunner
 
     private static async Task EmitPendingEventsAsync(
         TurnExecutionState state,
+        Func<TurnDeltaEventDto, Task> onDelta,
         Func<SidecarEventDto, Task> onEvent)
     {
         foreach (SidecarEventDto pendingEvent in state.DrainPendingEvents())
         {
+            if (pendingEvent is TurnDeltaEventDto delta)
+            {
+                await onDelta(delta).ConfigureAwait(false);
+                continue;
+            }
+
             await onEvent(pendingEvent).ConfigureAwait(false);
         }
     }
@@ -523,10 +530,14 @@ public class AgentWorkflowTurnRunner : ITurnWorkflowRunner
         }
 
         string messageId = state.CreateMessageId(update.Update.MessageId);
-        (string _, string currentAuthorName, string currentContent) = state.AppendDelta(
+        if (!state.TryAppendDelta(
             messageId,
             authorName,
-            update.Update.Text);
+            update.Update.Text,
+            out TranscriptSegment currentSegment))
+        {
+            return;
+        }
 
         await onDelta(new TurnDeltaEventDto
         {
@@ -534,9 +545,9 @@ public class AgentWorkflowTurnRunner : ITurnWorkflowRunner
             RequestId = command.RequestId,
             SessionId = command.SessionId,
             MessageId = messageId,
-            AuthorName = currentAuthorName,
+            AuthorName = currentSegment.AuthorName,
             ContentDelta = update.Update.Text,
-            Content = currentContent,
+            Content = currentSegment.Content,
         }).ConfigureAwait(false);
     }
 

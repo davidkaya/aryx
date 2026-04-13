@@ -452,6 +452,50 @@ public sealed class CopilotWorkflowRunnerTests
     }
 
     [Fact]
+    public void ProjectCompletedMessages_UsesExactMessageIdMatchBeforeFallbackHeuristics()
+    {
+        RunTurnCommandDto command = CreateCommand(
+            "group-chat",
+            CreateAgent(id: "agent-group-writer", name: "Writer"),
+            CreateAgent(id: "agent-group-reviewer", name: "Reviewer"));
+
+        IReadOnlyList<ChatMessageDto> messages = WorkflowTranscriptProjector.ProjectCompletedMessagesFromSegments(
+            command,
+            [
+                new ChatMessage(ChatRole.Assistant, "Revised draft with cleaner wording.")
+                {
+                    AuthorName = "assistant",
+                    MessageId = "msg-writer-2",
+                },
+                new ChatMessage(ChatRole.Assistant, "Review feedback with cleaner wording.")
+                {
+                    AuthorName = "assistant",
+                    MessageId = "msg-reviewer-1",
+                },
+            ],
+            [
+                new TranscriptSegment("msg-writer-1", "Writer", "Initial draft."),
+                new TranscriptSegment("msg-reviewer-1", "Reviewer", "Review feedback with draft wording."),
+                new TranscriptSegment("msg-writer-2", "Writer", "Revised draft with draft wording."),
+            ]);
+
+        Assert.Collection(
+            messages,
+            writer =>
+            {
+                Assert.Equal("msg-writer-2", writer.Id);
+                Assert.Equal("Writer", writer.AuthorName);
+                Assert.Equal("Revised draft with cleaner wording.", writer.Content);
+            },
+            reviewer =>
+            {
+                Assert.Equal("msg-reviewer-1", reviewer.Id);
+                Assert.Equal("Reviewer", reviewer.AuthorName);
+                Assert.Equal("Review feedback with cleaner wording.", reviewer.Content);
+            });
+    }
+
+    [Fact]
     public void ProjectCompletedMessages_UsesFallbackAgentForGenericAssistantOutput()
     {
         RunTurnCommandDto command = CreateCommand(
@@ -532,6 +576,36 @@ public sealed class CopilotWorkflowRunnerTests
     }
 
     [Fact]
+    public void ProjectCompletedMessages_PrefersFinalizedSegmentContentOverWorkflowOutput()
+    {
+        RunTurnCommandDto command = CreateCommand(
+            "single",
+            CreateAgent(id: "agent-single-primary", name: "Primary Agent"));
+
+        IReadOnlyList<ChatMessageDto> messages = WorkflowTranscriptProjector.ProjectCompletedMessagesFromSegments(
+            command,
+            [
+                new ChatMessage(ChatRole.Assistant, "Workflow wording that arrived later.")
+                {
+                    AuthorName = "assistant",
+                    MessageId = "msg-1",
+                },
+            ],
+            [
+                new TranscriptSegment(
+                    "msg-1",
+                    "Primary Agent",
+                    "Provider final wording that should win.",
+                    IsFinalized: true),
+            ]);
+
+        ChatMessageDto message = Assert.Single(messages);
+        Assert.Equal("msg-1", message.Id);
+        Assert.Equal("Primary Agent", message.AuthorName);
+        Assert.Equal("Provider final wording that should win.", message.Content);
+    }
+
+    [Fact]
     public void ProjectCompletedMessages_DropsBlankAssistantOutputMessages()
     {
         RunTurnCommandDto command = CreateCommand(
@@ -602,7 +676,22 @@ public sealed class CopilotWorkflowRunnerTests
                  Assert.Equal("msg-2", second.MessageId);
                  Assert.Equal("Implementer", second.AuthorName);
                  Assert.Equal("B", second.Content);
-             });
+              });
+    }
+
+    [Fact]
+    public void StreamingTranscriptBuffer_IgnoresLateDeltasAfterFinalSnapshot()
+    {
+        StreamingTranscriptBuffer buffer = new();
+
+        buffer.AppendDelta("msg-1", "Architect", "Draft");
+        Assert.True(buffer.TryApplySnapshot("msg-1", "Architect", "Final", out TranscriptSegment finalized));
+        Assert.True(finalized.IsFinalized);
+        Assert.Equal("Final", finalized.Content);
+
+        Assert.False(buffer.TryAppendDelta("msg-1", "Architect", " late delta", out TranscriptSegment unchanged));
+        Assert.True(unchanged.IsFinalized);
+        Assert.Equal("Final", unchanged.Content);
     }
 
     [Fact]

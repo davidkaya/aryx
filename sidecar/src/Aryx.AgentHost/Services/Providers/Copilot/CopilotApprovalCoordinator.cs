@@ -70,7 +70,7 @@ internal sealed class CopilotApprovalCoordinator
         WorkflowNodeDto agent,
         PermissionRequest request,
         PermissionInvocation invocation,
-        IReadOnlyDictionary<string, string> toolNamesByCallId,
+        ToolCallRegistry toolCalls,
         Func<ApprovalRequestedEventDto, Task> onApproval,
         CancellationToken cancellationToken)
     {
@@ -79,7 +79,7 @@ internal sealed class CopilotApprovalCoordinator
                 agent,
                 request,
                 invocation,
-                toolNamesByCallId,
+                toolCalls,
                 onActivity: null,
                 onApproval,
                 cancellationToken)
@@ -91,12 +91,12 @@ internal sealed class CopilotApprovalCoordinator
         WorkflowNodeDto agent,
         PermissionRequest request,
         PermissionInvocation invocation,
-        IReadOnlyDictionary<string, string> toolNamesByCallId,
+        ToolCallRegistry toolCalls,
         Func<AgentActivityEventDto, Task>? onActivity,
         Func<ApprovalRequestedEventDto, Task> onApproval,
         CancellationToken cancellationToken)
     {
-        string? toolName = ResolveApprovalToolName(request, toolNamesByCallId);
+        string? toolName = ResolveApprovalToolName(request, toolCalls);
         string? autoApprovedToolName = ResolveAutoApprovedToolName(request);
         string? mcpServerApprovalKey = ResolveMcpServerApprovalKey(request, command.Tooling?.McpServers);
         string? approvalCacheKey = ResolveApprovalCacheKey(toolName, autoApprovedToolName);
@@ -339,15 +339,15 @@ internal sealed class CopilotApprovalCoordinator
 
     internal static bool TryGetApprovalToolName(
         PermissionRequest request,
-        IReadOnlyDictionary<string, string>? toolNamesByCallId,
+        ToolCallRegistry? toolCalls,
         out string? toolName)
     {
-        toolName = ResolveApprovalToolName(request, toolNamesByCallId);
+        toolName = ResolveApprovalToolName(request, toolCalls);
         return toolName is not null;
     }
 
     internal static bool TryGetApprovalToolName(PermissionRequest request, out string? toolName)
-        => TryGetApprovalToolName(request, toolNamesByCallId: null, out toolName);
+        => TryGetApprovalToolName(request, toolCalls: null, out toolName);
 
     internal void ClearRequestApprovals(string requestId)
     {
@@ -404,10 +404,10 @@ internal sealed class CopilotApprovalCoordinator
 
     private static string? ResolveApprovalToolName(
         PermissionRequest request,
-        IReadOnlyDictionary<string, string>? toolNamesByCallId)
+        ToolCallRegistry? toolCalls)
     {
         return GetDirectToolName(request)
-            ?? ResolveToolNameFromLookup(request, toolNamesByCallId)
+            ?? ResolveToolNameFromLookup(request, toolCalls)
             ?? GetFallbackToolName(request);
     }
 
@@ -480,16 +480,16 @@ internal sealed class CopilotApprovalCoordinator
 
     private static string? ResolveToolNameFromLookup(
         PermissionRequest request,
-        IReadOnlyDictionary<string, string>? toolNamesByCallId)
+        ToolCallRegistry? toolCalls)
     {
-        if (toolNamesByCallId is null)
+        if (toolCalls is null)
         {
             return null;
         }
 
         string? toolCallId = GetToolCallId(request);
         if (toolCallId is null
-            || !toolNamesByCallId.TryGetValue(toolCallId, out string? resolvedToolName))
+            || !toolCalls.TryGetToolName(toolCallId, out string? resolvedToolName))
         {
             return null;
         }

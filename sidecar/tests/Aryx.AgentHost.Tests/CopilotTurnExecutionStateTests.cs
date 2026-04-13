@@ -110,10 +110,9 @@ public sealed class CopilotTurnExecutionStateTests
         Assert.Equal("tool-call-1", toolActivity.ToolCallId);
         Assert.NotNull(toolActivity.ToolArguments);
         Assert.Equal("/src/main.ts", toolActivity.ToolArguments["path"]);
-        Assert.True(state.ToolNamesByCallId.TryGetValue("tool-call-1", out string? toolName));
+        Assert.True(state.ToolCalls.TryGetToolName("tool-call-1", out string? toolName));
         Assert.Equal("view", toolName);
-        Assert.True(state.ToolCallHasArgumentsById.TryGetValue("tool-call-1", out bool hasArguments));
-        Assert.True(hasArguments);
+        Assert.True(state.ToolCalls.HasTrackedArguments("tool-call-1"));
     }
 
     [Fact]
@@ -129,8 +128,7 @@ public sealed class CopilotTurnExecutionStateTests
 
         AgentActivityEventDto toolActivity = Assert.Single(state.DrainPendingEvents().OfType<AgentActivityEventDto>());
         Assert.Null(toolActivity.ToolArguments);
-        Assert.True(state.ToolCallHasArgumentsById.TryGetValue("tool-call-1", out bool hasArguments));
-        Assert.False(hasArguments);
+        Assert.False(state.ToolCalls.HasTrackedArguments("tool-call-1"));
     }
 
     [Fact]
@@ -253,10 +251,9 @@ public sealed class CopilotTurnExecutionStateTests
                 """{"type":"tool.execution_start","data":{"toolCallId":"tool-call-1","toolName":"handoff_to_specialist"},"id":"1ce9d1dc-68f1-4df5-9728-f97017233279","timestamp":"2026-03-27T00:00:00Z"}"""));
 
         Assert.Empty(state.DrainPendingEvents().OfType<AgentActivityEventDto>());
-        Assert.True(state.ToolNamesByCallId.TryGetValue("tool-call-1", out string? toolName));
+        Assert.True(state.ToolCalls.TryGetToolName("tool-call-1", out string? toolName));
         Assert.Equal("handoff_to_specialist", toolName);
-        Assert.True(state.ToolCallHasArgumentsById.TryGetValue("tool-call-1", out bool hasArguments));
-        Assert.False(hasArguments);
+        Assert.False(state.ToolCalls.HasTrackedArguments("tool-call-1"));
     }
 
     [Fact]
@@ -375,14 +372,12 @@ public sealed class CopilotTurnExecutionStateTests
         Assert.Contains(toolActivities, activity => activity.ToolCallId == "tool-call-2" && activity.ToolName == "view");
         MessageReclassifiedEventDto reclassified = Assert.Single(pending.OfType<MessageReclassifiedEventDto>());
         Assert.Equal("msg-3", reclassified.MessageId);
-        Assert.True(state.ToolNamesByCallId.TryGetValue("tool-call-1", out string? firstToolName));
+        Assert.True(state.ToolCalls.TryGetToolName("tool-call-1", out string? firstToolName));
         Assert.Equal("rg", firstToolName);
-        Assert.True(state.ToolNamesByCallId.TryGetValue("tool-call-2", out string? secondToolName));
+        Assert.True(state.ToolCalls.TryGetToolName("tool-call-2", out string? secondToolName));
         Assert.Equal("view", secondToolName);
-        Assert.True(state.ToolCallHasArgumentsById.TryGetValue("tool-call-1", out bool firstHasArguments));
-        Assert.False(firstHasArguments);
-        Assert.True(state.ToolCallHasArgumentsById.TryGetValue("tool-call-2", out bool secondHasArguments));
-        Assert.False(secondHasArguments);
+        Assert.False(state.ToolCalls.HasTrackedArguments("tool-call-1"));
+        Assert.False(state.ToolCalls.HasTrackedArguments("tool-call-2"));
     }
 
     [Fact]

@@ -776,8 +776,165 @@ public sealed class CopilotWorkflowRunnerTests
         Assert.Equal("tool-call-1", activity.ToolCallId);
         Assert.NotNull(activity.ToolArguments);
         Assert.Equal(@"C:\workspace\README.md", activity.ToolArguments["path"]);
-        Assert.True(state.ToolCallHasArgumentsById.TryGetValue("tool-call-1", out bool hasArguments));
-        Assert.True(hasArguments);
+        Assert.True(state.ToolCalls.HasTrackedArguments("tool-call-1"));
+    }
+
+    [Fact]
+    public async Task ObserveSessionEvent_ToolExecutionStart_DoesNotDuplicateTrackedRequestInfoActivity()
+    {
+        RunTurnCommandDto command = CreateApprovalCommand();
+        CopilotTurnExecutionState state = new(command);
+        WorkflowNodeDto agent = CreateAgent("agent-1", "Primary");
+        state.ObserveSessionEvent(
+            agent,
+            SessionEvent.FromJson(
+                """
+                {
+                  "type": "assistant.message_delta",
+                  "data": {
+                    "messageId": "msg-1",
+                    "deltaContent": "Inspecting"
+                  },
+                  "id": "b61652d1-120e-4a9f-8f0e-1dbf04fb18da",
+                  "timestamp": "2026-03-27T00:00:00Z"
+                }
+                """));
+        _ = state.DrainPendingEvents();
+
+        RequestInfoEvent requestInfo = CreateRequestInfoEvent(
+            new FunctionCallContent("tool-call-1", "view", new Dictionary<string, object?>
+            {
+                ["path"] = @"C:\workspace\README.md",
+            }));
+        List<AgentActivityEventDto> requestActivities = [];
+
+        MethodInfo handleWorkflowEvent = typeof(CopilotWorkflowRunner).GetMethod(
+            "HandleWorkflowEventAsync",
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+        Task<bool> handleTask = (Task<bool>)handleWorkflowEvent.Invoke(
+            null,
+            [
+                command,
+                requestInfo,
+                Array.Empty<ChatMessage>(),
+                state,
+                (Func<TurnDeltaEventDto, Task>)(_ => Task.CompletedTask),
+                (Func<SidecarEventDto, Task>)(sidecarEvent =>
+                {
+                    requestActivities.Add(Assert.IsType<AgentActivityEventDto>(sidecarEvent));
+                    return Task.CompletedTask;
+                }),
+            ])!;
+
+        bool shouldEndTurn = await handleTask;
+
+        Assert.False(shouldEndTurn);
+        AgentActivityEventDto requestActivity = Assert.Single(requestActivities);
+        Assert.Equal("tool-calling", requestActivity.ActivityType);
+        Assert.True(state.ToolCalls.HasTrackedArguments("tool-call-1"));
+
+        state.ObserveSessionEvent(
+            agent,
+            SessionEvent.FromJson(
+                """
+                {
+                  "type": "tool.execution_start",
+                  "data": {
+                    "toolCallId": "tool-call-1",
+                    "toolName": "view",
+                    "arguments": {
+                      "path": "C:\\workspace\\README.md"
+                    }
+                  },
+                  "id": "c61652d1-120e-4a9f-8f0e-1dbf04fb18da",
+                  "timestamp": "2026-03-27T00:00:01Z"
+                }
+                """));
+
+        IReadOnlyList<SidecarEventDto> pending = state.DrainPendingEvents();
+        Assert.DoesNotContain(
+            pending.OfType<AgentActivityEventDto>(),
+            activity => activity.ActivityType == "tool-calling");
+
+        MessageReclassifiedEventDto reclassified = Assert.Single(pending.OfType<MessageReclassifiedEventDto>());
+        Assert.Equal("msg-1", reclassified.MessageId);
+    }
+
+    [Fact]
+    public async Task ObserveSessionEvent_ToolExecutionStart_EmitsEnrichmentWhenRequestInfoWasMissingArguments()
+    {
+        RunTurnCommandDto command = CreateApprovalCommand();
+        CopilotTurnExecutionState state = new(command);
+        WorkflowNodeDto agent = CreateAgent("agent-1", "Primary");
+        state.ObserveSessionEvent(
+            agent,
+            SessionEvent.FromJson(
+                """
+                {
+                  "type": "assistant.message_delta",
+                  "data": {
+                    "messageId": "msg-2",
+                    "deltaContent": "Inspecting"
+                  },
+                  "id": "d61652d1-120e-4a9f-8f0e-1dbf04fb18da",
+                  "timestamp": "2026-03-27T00:00:00Z"
+                }
+                """));
+        _ = state.DrainPendingEvents();
+
+        RequestInfoEvent requestInfo = CreateRequestInfoEvent(
+            new FunctionCallContent("tool-call-1", "view", new Dictionary<string, object?>()));
+        List<AgentActivityEventDto> requestActivities = [];
+
+        MethodInfo handleWorkflowEvent = typeof(CopilotWorkflowRunner).GetMethod(
+            "HandleWorkflowEventAsync",
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+        Task<bool> handleTask = (Task<bool>)handleWorkflowEvent.Invoke(
+            null,
+            [
+                command,
+                requestInfo,
+                Array.Empty<ChatMessage>(),
+                state,
+                (Func<TurnDeltaEventDto, Task>)(_ => Task.CompletedTask),
+                (Func<SidecarEventDto, Task>)(sidecarEvent =>
+                {
+                    requestActivities.Add(Assert.IsType<AgentActivityEventDto>(sidecarEvent));
+                    return Task.CompletedTask;
+                }),
+            ])!;
+
+        bool shouldEndTurn = await handleTask;
+
+        Assert.False(shouldEndTurn);
+        AgentActivityEventDto requestActivity = Assert.Single(requestActivities);
+        Assert.Null(requestActivity.ToolArguments);
+        Assert.False(state.ToolCalls.HasTrackedArguments("tool-call-1"));
+
+        state.ObserveSessionEvent(
+            agent,
+            SessionEvent.FromJson(
+                """
+                {
+                  "type": "tool.execution_start",
+                  "data": {
+                    "toolCallId": "tool-call-1",
+                    "toolName": "view",
+                    "arguments": {
+                      "path": "C:\\workspace\\README.md"
+                    }
+                  },
+                  "id": "e61652d1-120e-4a9f-8f0e-1dbf04fb18da",
+                  "timestamp": "2026-03-27T00:00:01Z"
+                }
+                """));
+
+        AgentActivityEventDto enrichment = Assert.Single(
+            state.DrainPendingEvents().OfType<AgentActivityEventDto>(),
+            activity => activity.ActivityType == "tool-calling");
+        Assert.NotNull(enrichment.ToolArguments);
+        Assert.Equal(@"C:\workspace\README.md", enrichment.ToolArguments["path"]);
+        Assert.True(state.ToolCalls.HasTrackedArguments("tool-call-1"));
     }
 
     [Fact]
@@ -1372,14 +1529,12 @@ public sealed class CopilotWorkflowRunnerTests
     [Fact]
     public void TryGetApprovalToolName_UsesToolCallLookupForPermissionCategoriesWithoutDirectToolNames()
     {
-        Dictionary<string, string> toolNamesByCallId = new(StringComparer.Ordinal)
-        {
-            ["tool-call-url"] = "web_fetch",
-            ["tool-call-shell"] = "shell",
-            ["tool-call-read"] = "view",
-            ["tool-call-write"] = "write_file",
-            ["tool-call-memory"] = "store_memory",
-        };
+        ToolCallRegistry toolCalls = CreateToolCallRegistry(
+            ("tool-call-url", "web_fetch"),
+            ("tool-call-shell", "shell"),
+            ("tool-call-read", "view"),
+            ("tool-call-write", "write_file"),
+            ("tool-call-memory", "store_memory"));
 
         Assert.True(
             CopilotApprovalCoordinator.TryGetApprovalToolName(
@@ -1390,7 +1545,7 @@ public sealed class CopilotWorkflowRunnerTests
                     Intention = "Fetch the requested page",
                     Url = "https://example.com/docs",
                 },
-                toolNamesByCallId,
+                toolCalls,
                 out string? urlToolName));
         Assert.Equal("web_fetch", urlToolName);
 
@@ -1408,7 +1563,7 @@ public sealed class CopilotWorkflowRunnerTests
                     HasWriteFileRedirection = false,
                     CanOfferSessionApproval = false,
                 },
-                toolNamesByCallId,
+                toolCalls,
                 out string? shellToolName));
         Assert.Equal("shell", shellToolName);
 
@@ -1421,7 +1576,7 @@ public sealed class CopilotWorkflowRunnerTests
                     Intention = "Inspect a file",
                     Path = "README.md",
                 },
-                toolNamesByCallId,
+                toolCalls,
                 out string? readToolName));
         Assert.Equal("view", readToolName);
 
@@ -1435,7 +1590,7 @@ public sealed class CopilotWorkflowRunnerTests
                     FileName = "README.md",
                     Diff = "@@ -1 +1 @@",
                 },
-                toolNamesByCallId,
+                toolCalls,
                 out string? writeToolName));
         Assert.Equal("write_file", writeToolName);
 
@@ -1449,7 +1604,7 @@ public sealed class CopilotWorkflowRunnerTests
                     Fact = "Use Bun for script execution.",
                     Citations = "package.json",
                 },
-                toolNamesByCallId,
+                toolCalls,
                 out string? memoryToolName));
         Assert.Equal("store_memory", memoryToolName);
     }
@@ -1960,7 +2115,7 @@ public sealed class CopilotWorkflowRunnerTests
             {
                 SessionId = "copilot-session-1",
             },
-            new Dictionary<string, string>(StringComparer.Ordinal),
+            CreateToolCallRegistry(),
             approval =>
             {
                 observedApproval = approval;
@@ -2007,10 +2162,7 @@ public sealed class CopilotWorkflowRunnerTests
             {
                 SessionId = "copilot-session-1",
             },
-            new Dictionary<string, string>(StringComparer.Ordinal)
-            {
-                ["tool-call-write-1"] = "apply_patch",
-            },
+            CreateToolCallRegistry(("tool-call-write-1", "apply_patch")),
             activity =>
             {
                 observedActivity = activity;
@@ -2067,7 +2219,7 @@ public sealed class CopilotWorkflowRunnerTests
             {
                 SessionId = "copilot-session-1",
             },
-            new Dictionary<string, string>(StringComparer.Ordinal),
+            CreateToolCallRegistry(),
             approval =>
             {
                 sawApproval = true;
@@ -2104,7 +2256,7 @@ public sealed class CopilotWorkflowRunnerTests
             {
                 SessionId = "copilot-session-1",
             },
-            new Dictionary<string, string>(StringComparer.Ordinal),
+            CreateToolCallRegistry(),
             approval =>
             {
                 sawApproval = true;
@@ -2137,10 +2289,7 @@ public sealed class CopilotWorkflowRunnerTests
             {
                 SessionId = "copilot-session-1",
             },
-            new Dictionary<string, string>(StringComparer.Ordinal)
-            {
-                ["tool-call-read-1"] = "view",
-            },
+            CreateToolCallRegistry(("tool-call-read-1", "view")),
             approval =>
             {
                 firstApproval = approval;
@@ -2178,10 +2327,7 @@ public sealed class CopilotWorkflowRunnerTests
             {
                 SessionId = "copilot-session-1",
             },
-            new Dictionary<string, string>(StringComparer.Ordinal)
-            {
-                ["tool-call-read-2"] = "grep",
-            },
+            CreateToolCallRegistry(("tool-call-read-2", "grep")),
             approval =>
             {
                 sawSecondApproval = true;
@@ -2214,10 +2360,7 @@ public sealed class CopilotWorkflowRunnerTests
             {
                 SessionId = "copilot-session-1",
             },
-            new Dictionary<string, string>(StringComparer.Ordinal)
-            {
-                ["tool-call-read-1"] = "view",
-            },
+            CreateToolCallRegistry(("tool-call-read-1", "view")),
             approval =>
             {
                 firstApproval = approval;
@@ -2254,10 +2397,7 @@ public sealed class CopilotWorkflowRunnerTests
             {
                 SessionId = "copilot-session-1",
             },
-            new Dictionary<string, string>(StringComparer.Ordinal)
-            {
-                ["tool-call-read-2"] = "grep",
-            },
+            CreateToolCallRegistry(("tool-call-read-2", "grep")),
             approval =>
             {
                 secondApproval = approval;
@@ -2546,6 +2686,17 @@ public sealed class CopilotWorkflowRunnerTests
                 },
             },
         };
+    }
+
+    private static ToolCallRegistry CreateToolCallRegistry(params (string ToolCallId, string ToolName)[] toolCalls)
+    {
+        ToolCallRegistry registry = new();
+        foreach ((string toolCallId, string toolName) in toolCalls)
+        {
+            registry.RecordToolStart(toolCallId, toolName, toolArguments: null);
+        }
+
+        return registry;
     }
 
     private static RunTurnCommandDto CreateRequestPortCommand()

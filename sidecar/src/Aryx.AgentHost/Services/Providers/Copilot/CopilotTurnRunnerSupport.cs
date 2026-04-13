@@ -29,7 +29,7 @@ internal sealed class CopilotTurnRunnerSupport : IProviderTurnSupport
                     agent,
                     request,
                     invocation,
-                    state.ToolNamesByCallId,
+                    state.ToolCalls,
                     activity => AgentWorkflowTurnRunner.EmitActivityAsync(command, state, activity, onEvent),
                     onApproval,
                     runCancellation.Token),

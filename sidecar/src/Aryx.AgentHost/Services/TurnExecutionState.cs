@@ -15,7 +15,6 @@ internal class TurnExecutionState
     private readonly ConcurrentQueue<SidecarEventDto> _pendingEvents = new();
     private readonly ConcurrentQueue<McpOauthRequiredEventDto> _pendingMcpOauthRequests = new();
     private readonly ConcurrentDictionary<string, AgentIdentity> _observedAgentsByMessageId = new(StringComparer.Ordinal);
-    private readonly ConcurrentDictionary<string, ProviderToolExecutionSnapshot> _toolExecutionsByCallId = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, ProviderReasoningSnapshot> _reasoningById = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, string> _latestIntentByAgentId = new(StringComparer.Ordinal);
     private readonly StreamingTranscriptBuffer _transcriptBuffer = new();
@@ -29,9 +28,7 @@ internal class TurnExecutionState
         _agentSubworkflowIndex = AgentIdentityResolver.BuildAgentSubworkflowIndex(command.Workflow, _workflowLibrary);
     }
 
-    public ConcurrentDictionary<string, string> ToolNamesByCallId { get; } = new(StringComparer.Ordinal);
-
-    public ConcurrentDictionary<string, bool> ToolCallHasArgumentsById { get; } = new(StringComparer.Ordinal);
+    public ToolCallRegistry ToolCalls { get; } = new();
 
     public AgentIdentity? ActiveAgent { get; private set; }
 
@@ -166,13 +163,16 @@ internal class TurnExecutionState
             case ProviderToolExecutionStartEvent toolExecutionStart:
                 string toolCallId = toolExecutionStart.ToolCallId;
                 string toolName = toolExecutionStart.ToolName;
-                TrackToolCall(toolCallId, toolName, toolExecutionStart.ToolArguments);
+                bool shouldQueueToolActivity = TrackToolCall(toolCallId, toolName, toolExecutionStart.ToolArguments);
                 ActiveAgent = agent;
-                AgentActivityEventDto? toolActivity = CreateToolCallingActivity(
-                    agent, toolName, toolCallId, toolExecutionStart.ToolArguments);
-                if (toolActivity is not null)
+                if (shouldQueueToolActivity)
                 {
-                    _pendingEvents.Enqueue(toolActivity);
+                    AgentActivityEventDto? toolActivity = CreateToolCallingActivity(
+                        agent, toolName, toolCallId, toolExecutionStart.ToolArguments);
+                    if (toolActivity is not null)
+                    {
+                        _pendingEvents.Enqueue(toolActivity);
+                    }
                 }
 
                 QueueMessageReclassifiedIfNeeded(_lastObservedMessageId);
@@ -338,9 +338,7 @@ internal class TurnExecutionState
 
     public bool TryGetToolExecution(string? toolCallId, [NotNullWhen(true)] out ProviderToolExecutionSnapshot? snapshot)
     {
-        snapshot = null;
-        return !string.IsNullOrWhiteSpace(toolCallId)
-            && _toolExecutionsByCallId.TryGetValue(toolCallId, out snapshot);
+        return ToolCalls.TryGetExecution(toolCallId, out snapshot);
     }
 
     public bool TryGetReasoning(string? reasoningId, [NotNullWhen(true)] out ProviderReasoningSnapshot? snapshot)
@@ -393,102 +391,27 @@ internal class TurnExecutionState
         _lastObservedMessageId = messageId;
     }
 
-    private void TrackToolCall(
+    private bool TrackToolCall(
         string toolCallId,
         string toolName,
         IReadOnlyDictionary<string, object?>? toolArguments)
     {
-        ToolNamesByCallId[toolCallId] = toolName;
-        ToolCallHasArgumentsById[toolCallId] = toolArguments is { Count: > 0 };
-        TrackToolExecutionStart(toolCallId, toolName, toolArguments);
-    }
-
-    private void TrackToolExecutionStart(
-        string toolCallId,
-        string toolName,
-        IReadOnlyDictionary<string, object?>? toolArguments)
-    {
-        _toolExecutionsByCallId.AddOrUpdate(
-            toolCallId,
-            static (id, state) => new ProviderToolExecutionSnapshot
-            {
-                ToolCallId = id,
-                ToolName = state.ToolName,
-                ToolArguments = state.ToolArguments,
-                Status = ProviderToolExecutionStatus.Running,
-            },
-            static (_, existing, state) => existing with
-            {
-                ToolName = state.ToolName,
-                ToolArguments = state.ToolArguments,
-                Status = ProviderToolExecutionStatus.Running,
-            },
-            (ToolName: toolName, ToolArguments: toolArguments));
+        return ToolCalls.TryRecordToolRequest(toolCallId, toolName, toolArguments);
     }
 
     private void TrackToolExecutionProgress(string toolCallId, string? progressMessage)
     {
-        string? normalizedProgress = NormalizeOptionalString(progressMessage);
-        _toolExecutionsByCallId.AddOrUpdate(
-            toolCallId,
-            id => new ProviderToolExecutionSnapshot
-            {
-                ToolCallId = id,
-                Status = ProviderToolExecutionStatus.Running,
-                LatestProgressMessage = normalizedProgress,
-            },
-            (_, existing) => existing with
-            {
-                Status = existing.Status is ProviderToolExecutionStatus.Completed or ProviderToolExecutionStatus.Failed
-                    ? existing.Status
-                    : ProviderToolExecutionStatus.Running,
-                LatestProgressMessage = normalizedProgress ?? existing.LatestProgressMessage,
-            });
+        ToolCalls.RecordProgress(toolCallId, progressMessage);
     }
 
     private void TrackToolExecutionPartialResult(string toolCallId, string? partialOutput)
     {
-        if (string.IsNullOrEmpty(partialOutput))
-        {
-            return;
-        }
-
-        _toolExecutionsByCallId.AddOrUpdate(
-            toolCallId,
-            id => new ProviderToolExecutionSnapshot
-            {
-                ToolCallId = id,
-                Status = ProviderToolExecutionStatus.Running,
-                PartialOutput = partialOutput,
-            },
-            (_, existing) => existing with
-            {
-                Status = existing.Status is ProviderToolExecutionStatus.Completed or ProviderToolExecutionStatus.Failed
-                    ? existing.Status
-                    : ProviderToolExecutionStatus.Running,
-                PartialOutput = string.Concat(existing.PartialOutput, partialOutput),
-            });
+        ToolCalls.RecordPartialResult(toolCallId, partialOutput);
     }
 
     private void TrackToolExecutionComplete(ProviderToolExecutionCompleteEvent toolExecution)
     {
-        _toolExecutionsByCallId.AddOrUpdate(
-            toolExecution.ToolCallId,
-            id => new ProviderToolExecutionSnapshot
-            {
-                ToolCallId = id,
-                Status = toolExecution.Success ? ProviderToolExecutionStatus.Completed : ProviderToolExecutionStatus.Failed,
-                ResultContent = toolExecution.ResultContent,
-                DetailedResultContent = toolExecution.DetailedResultContent,
-                Error = toolExecution.Error,
-            },
-            (_, existing) => existing with
-            {
-                Status = toolExecution.Success ? ProviderToolExecutionStatus.Completed : ProviderToolExecutionStatus.Failed,
-                ResultContent = toolExecution.ResultContent ?? existing.ResultContent,
-                DetailedResultContent = toolExecution.DetailedResultContent ?? existing.DetailedResultContent,
-                Error = toolExecution.Error ?? existing.Error,
-            });
+        ToolCalls.RecordCompletion(toolExecution);
     }
 
     private void TrackLatestIntent(string agentId, string? intent)

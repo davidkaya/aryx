@@ -705,17 +705,28 @@ body {
 
 /* ── Quick Prompt — Glass Command Bar ────────────────────────── */
 
+/* Override body/root backgrounds when inside the quickprompt window so the
+   transparent BrowserWindow doesn't show a colored rectangle behind the
+   rounded panel. The data attribute is set on the <body> in quickprompt.html. */
+body[data-quickprompt] {
+  background: transparent !important;
+  min-height: 0 !important;
+}
+
+body[data-quickprompt] #root {
+  min-height: 0 !important;
+}
+
 .qp-container {
   background: transparent;
 }
 
 .qp-panel {
-  background: var(--color-glass);
-  backdrop-filter: blur(24px) saturate(1.4);
-  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  background: var(--color-surface-1);
   box-shadow:
-    0 24px 80px rgba(0, 0, 0, 0.55),
-    0 0 1px rgba(255, 255, 255, 0.06) inset;
+    0 24px 80px rgba(0, 0, 0, 0.6),
+    0 8px 24px rgba(0, 0, 0, 0.4),
+    0 0 1px rgba(255, 255, 255, 0.08) inset;
   transition: border-color 0.3s ease;
 }
 
@@ -795,11 +806,11 @@ body {
   animation: qp-actions-in 0.2s cubic-bezier(0.16, 1, 0.3, 1) 0.05s both;
 }
 
-/* Dropdown entrance — opens upward */
+/* Dropdown entrance — opens downward */
 @keyframes qp-dropdown-in {
   from {
     opacity: 0;
-    transform: translateY(6px) scale(0.97);
+    transform: translateY(-6px) scale(0.97);
   }
   to {
     opacity: 1;

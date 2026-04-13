@@ -90,7 +90,7 @@ export function ModelSelector({
   return (
     <div
       ref={containerRef}
-      className="qp-dropdown-enter absolute bottom-full left-3 right-3 z-10 mb-1 overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-1)] shadow-2xl shadow-black/50"
+      className="qp-dropdown-enter absolute top-full left-3 right-3 z-10 mt-1 overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-1)] shadow-2xl shadow-black/50"
       role="listbox"
       aria-label="Select model"
     >

@@ -171,7 +171,7 @@ export function QuickPromptApp() {
   return (
     <div className="qp-container flex h-screen w-screen items-start justify-center pt-0">
       <div
-        className={`qp-panel qp-panel-enter flex w-full max-w-[680px] flex-col overflow-hidden rounded-2xl ${
+        className={`qp-panel qp-panel-enter flex w-full max-w-[680px] flex-col rounded-2xl ${
           phase === 'streaming' ? 'qp-border-streaming' : hasResponse ? 'qp-border-complete' : 'qp-border-idle'
         }`}
         role="dialog"

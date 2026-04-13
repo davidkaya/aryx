@@ -44,14 +44,14 @@ export function createQuickPromptWindow(): BrowserWindowType {
   // Hide on blur — but only if the window itself loses focus (not from
   // devtools or transient focus changes during show/hide).
   window.on('blur', () => {
-    // Small delay: avoid hiding during transient focus shifts (e.g. model
-    // selector dropdown causing a brief blur → refocus cycle).
+    // Longer delay: avoid hiding during transient focus shifts when
+    // interacting with model selector dropdown or other UI elements.
     setTimeout(() => {
       if (window.isVisible() && !window.isFocused()) {
         window.webContents.send('quick-prompt:hide');
         window.hide();
       }
-    }, 100);
+    }, 200);
   });
 
   return window;

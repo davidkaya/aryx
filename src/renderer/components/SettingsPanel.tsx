@@ -1328,16 +1328,39 @@ function QuickPromptSettingsSection({
   availableModels: ReadonlyArray<ModelDefinition>;
   onUpdate?: (patch: Partial<QuickPromptSettings>) => void;
 }) {
+  const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
+
   const enabled = settings?.enabled ?? true;
   const hotkey = settings?.hotkey ?? 'Alt+Shift+C';
   const defaultModel = settings?.defaultModel;
   const defaultReasoning = settings?.defaultReasoningEffort;
 
-  const hotkeyDisplay = hotkey
+  const resolvedModel = defaultModel ? availableModels.find((m) => m.id === defaultModel) : undefined;
+  const modelSupportsReasoning = resolvedModel?.supportedReasoningEfforts?.length;
+
+  const hotkeyKeys = hotkey
     .replace('Super', isMac ? '⌘' : 'Win')
     .replace('Alt', isMac ? '⌥' : 'Alt')
     .replace('Shift', '⇧')
-    .replace(/\+/g, ' + ');
+    .split('+')
+    .map((k) => k.trim());
+
+  // Group models by tier for the dropdown
+  const tierOrder = ['premium', 'standard', 'fast'] as const;
+  const tierLabels: Record<string, string> = { premium: 'Premium', standard: 'Standard', fast: 'Fast' };
+  const groupedModels = tierOrder
+    .map((tier) => ({
+      tier,
+      label: tierLabels[tier],
+      models: availableModels.filter((m) => m.tier === tier),
+    }))
+    .filter((g) => g.models.length > 0);
+
+  // Models without a tier
+  const untypedModels = availableModels.filter((m) => !m.tier);
+  if (untypedModels.length > 0) {
+    groupedModels.push({ tier: 'other' as never, label: 'Other', models: untypedModels });
+  }
 
   return (
     <div>
@@ -1348,147 +1371,168 @@ function QuickPromptSettingsSection({
         </p>
       </div>
 
-      {/* Enable / Disable */}
-      <button
-        className="mt-5 flex w-full items-center justify-between rounded-lg border border-[var(--color-border)] px-4 py-3 text-left transition hover:bg-[var(--color-surface-3)]/40"
-        onClick={() => onUpdate?.({ enabled: !enabled })}
-        type="button"
-      >
-        <div>
-          <span className="text-[13px] font-medium text-[var(--color-text-primary)]">
-            Enable global hotkey
-          </span>
-          <p className="text-[12px] text-[var(--color-text-muted)]">
-            Register a system-wide keyboard shortcut to summon the Quick Prompt overlay
-          </p>
-        </div>
-        <ToggleSwitch enabled={enabled} />
-      </button>
-
-      {/* Hotkey display */}
-      <div className="mt-6 mb-1">
-        <h3 className="font-display text-[13px] font-semibold text-[var(--color-text-primary)]">Keyboard Shortcut</h3>
-        <p className="mt-0.5 text-[12px] text-[var(--color-text-muted)]">
-          The key combination that opens the Quick Prompt overlay
-        </p>
-      </div>
-
-      <div className="mt-4 flex items-center gap-3 rounded-lg border border-[var(--color-border)] px-4 py-3">
-        <div className="flex gap-1.5">
-          {hotkeyDisplay.split(' + ').map((key) => (
-            <kbd
-              key={key}
-              className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2 py-0.5 font-mono text-[12px] text-[var(--color-text-secondary)]"
-            >
-              {key.trim()}
-            </kbd>
-          ))}
-        </div>
-      </div>
-
-      {/* Default Model */}
-      <div className="mt-8 mb-1">
-        <h3 className="font-display text-[13px] font-semibold text-[var(--color-text-primary)]">Default Model</h3>
-        <p className="mt-0.5 text-[12px] text-[var(--color-text-muted)]">
-          The model used by Quick Prompt sessions. Can be overridden per-prompt.
-        </p>
-      </div>
-
-      <div className="mt-4 space-y-1.5">
-        {/* "Use workflow default" option */}
+      {/* Enable / Disable + Keyboard Shortcut — compact row */}
+      <div className="mt-5 flex items-center gap-3 rounded-lg border border-[var(--color-border)] px-4 py-3">
         <button
-          className={`flex w-full items-center gap-3 rounded-lg border px-4 py-3 text-left transition-all duration-200 ${
-            !defaultModel
-              ? 'border-[var(--color-border-glow)] bg-[var(--color-accent-muted)]'
-              : 'border-[var(--color-border)] hover:bg-[var(--color-surface-3)]/40'
-          }`}
-          onClick={() => onUpdate?.({ defaultModel: undefined })}
+          className="flex flex-1 items-start gap-0 text-left"
+          onClick={() => onUpdate?.({ enabled: !enabled })}
           type="button"
         >
-          <div
-            className={`flex size-4 shrink-0 items-center justify-center rounded-full border-2 transition-all duration-200 ${
-              !defaultModel ? 'border-[var(--color-accent)]' : 'border-[var(--color-border)]'
-            }`}
-          >
-            {!defaultModel && <div className="size-2 rounded-full bg-[var(--color-accent)]" />}
-          </div>
-          <div>
-            <span className={`text-[13px] font-medium ${!defaultModel ? 'text-[var(--color-text-primary)]' : 'text-[var(--color-text-secondary)]'}`}>
-              Use workflow default
+          <div className="flex-1">
+            <span className="text-[13px] font-medium text-[var(--color-text-primary)]">
+              Global hotkey
             </span>
-            <p className="text-[12px] text-[var(--color-text-muted)]">
-              Use whichever model is configured in the scratchpad workflow
-            </p>
+            <div className="mt-1.5 flex items-center gap-1">
+              {hotkeyKeys.map((key) => (
+                <kbd
+                  key={key}
+                  className="rounded-[5px] border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2 py-[3px] font-mono text-[11px] font-medium leading-none text-[var(--color-text-secondary)] shadow-sm shadow-black/20"
+                >
+                  {key}
+                </kbd>
+              ))}
+            </div>
           </div>
         </button>
-
-        {availableModels.map((model) => {
-          const isSelected = defaultModel === model.id;
-          return (
-            <button
-              className={`flex w-full items-center gap-3 rounded-lg border px-4 py-3 text-left transition-all duration-200 ${
-                isSelected
-                  ? 'border-[var(--color-border-glow)] bg-[var(--color-accent-muted)]'
-                  : 'border-[var(--color-border)] hover:bg-[var(--color-surface-3)]/40'
-              }`}
-              key={model.id}
-              onClick={() => onUpdate?.({ defaultModel: model.id })}
-              type="button"
-            >
-              <div
-                className={`flex size-4 shrink-0 items-center justify-center rounded-full border-2 transition-all duration-200 ${
-                  isSelected ? 'border-[var(--color-accent)]' : 'border-[var(--color-border)]'
-                }`}
-              >
-                {isSelected && <div className="size-2 rounded-full bg-[var(--color-accent)]" />}
-              </div>
-              <div className="flex-1">
-                <span className={`text-[13px] font-medium ${isSelected ? 'text-[var(--color-text-primary)]' : 'text-[var(--color-text-secondary)]'}`}>
-                  {model.name}
-                </span>
-                {model.tier && (
-                  <span className="ml-2 rounded bg-[var(--color-surface-3)] px-1.5 py-px text-[10px] text-[var(--color-text-muted)]">
-                    {model.tier}
-                  </span>
-                )}
-              </div>
-            </button>
-          );
-        })}
+        <button onClick={() => onUpdate?.({ enabled: !enabled })} type="button">
+          <ToggleSwitch enabled={enabled} />
+        </button>
       </div>
 
-      {/* Reasoning Effort */}
-      {availableModels.some((m) => m.supportedReasoningEfforts?.length) && (
-        <>
-          <div className="mt-8 mb-1">
-            <h3 className="font-display text-[13px] font-semibold text-[var(--color-text-primary)]">Reasoning Effort</h3>
-            <p className="mt-0.5 text-[12px] text-[var(--color-text-muted)]">
-              Default reasoning effort for Quick Prompt. Higher effort produces more thorough answers.
-            </p>
-          </div>
+      {/* Default Model — compact dropdown selector */}
+      <div className="mt-6">
+        <h3 className="font-display text-[13px] font-semibold text-[var(--color-text-primary)]">Default Model</h3>
+        <p className="mt-0.5 text-[12px] text-[var(--color-text-muted)]">
+          Override the workflow model for Quick Prompt sessions
+        </p>
 
-          <div className="mt-4 flex gap-2">
+        <div className="relative mt-3">
+          {/* Trigger button */}
+          <button
+            onClick={() => setModelDropdownOpen((prev) => !prev)}
+            className={`flex w-full items-center gap-3 rounded-lg border px-4 py-3 text-left transition ${
+              modelDropdownOpen
+                ? 'border-[var(--color-accent)]/40 bg-[var(--color-accent-muted)]'
+                : 'border-[var(--color-border)] hover:bg-[var(--color-surface-3)]/40'
+            }`}
+            type="button"
+            aria-haspopup="listbox"
+            aria-expanded={modelDropdownOpen}
+          >
+            <div className="flex-1">
+              <span className="text-[13px] font-medium text-[var(--color-text-primary)]">
+                {resolvedModel?.name ?? 'Workflow default'}
+              </span>
+              {resolvedModel?.tier && (
+                <span className={`ml-2 inline-flex items-center gap-1 rounded-[4px] px-1.5 py-px text-[10px] font-medium ${
+                  resolvedModel.tier === 'premium' ? 'bg-amber-400/10 text-amber-400' :
+                  resolvedModel.tier === 'fast' ? 'bg-emerald-400/10 text-emerald-400' :
+                  'bg-[var(--color-accent-muted)] text-[var(--color-text-accent)]'
+                }`}>
+                  {resolvedModel.tier}
+                </span>
+              )}
+            </div>
+            <ChevronRight className={`size-4 text-[var(--color-text-muted)] transition-transform ${modelDropdownOpen ? 'rotate-90' : ''}`} />
+          </button>
+
+          {/* Dropdown */}
+          {modelDropdownOpen && (
+            <div className="absolute top-full left-0 right-0 z-10 mt-1 overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-1)] shadow-xl shadow-black/40">
+              <div className="max-h-[280px] overflow-y-auto p-1.5">
+                {/* Workflow default option */}
+                <button
+                  onClick={() => { onUpdate?.({ defaultModel: undefined }); setModelDropdownOpen(false); }}
+                  className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left transition ${
+                    !defaultModel
+                      ? 'bg-[var(--color-accent-muted)] text-[var(--color-text-primary)]'
+                      : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-primary)]'
+                  }`}
+                  type="button"
+                  role="option"
+                  aria-selected={!defaultModel}
+                >
+                  <span className="flex-1 text-[12px] font-medium">Workflow default</span>
+                  {!defaultModel && <CircleCheck className="size-3.5 text-[var(--color-accent)]" />}
+                </button>
+
+                {/* Grouped models */}
+                {groupedModels.map((group) => (
+                  <div key={group.tier}>
+                    <div className="mx-2 mt-2 mb-1 border-t border-[var(--color-border-subtle)]/50" />
+                    <div className="px-2.5 pt-1.5 pb-0.5 text-[10px] font-semibold tracking-wider text-[var(--color-text-muted)] uppercase">
+                      {group.label}
+                    </div>
+                    {group.models.map((model) => {
+                      const isSelected = defaultModel === model.id;
+                      return (
+                        <button
+                          key={model.id}
+                          onClick={() => { onUpdate?.({ defaultModel: model.id }); setModelDropdownOpen(false); }}
+                          className={`flex w-full items-center gap-2 rounded-lg px-3 py-[7px] text-left transition ${
+                            isSelected
+                              ? 'bg-[var(--color-accent-muted)] text-[var(--color-text-primary)]'
+                              : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-primary)]'
+                          }`}
+                          type="button"
+                          role="option"
+                          aria-selected={isSelected}
+                        >
+                          <span className="flex-1 truncate text-[12px] font-medium">{model.name}</span>
+                          {model.supportedReasoningEfforts?.length ? (
+                            <span className="text-[9px] font-semibold tracking-wide text-[var(--color-text-muted)] uppercase">reasoning</span>
+                          ) : null}
+                          {isSelected && <CircleCheck className="size-3.5 flex-none text-[var(--color-accent)]" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Reasoning Effort — only shown when selected model supports it */}
+      {modelSupportsReasoning ? (
+        <div className="mt-6">
+          <h3 className="font-display text-[13px] font-semibold text-[var(--color-text-primary)]">Reasoning Effort</h3>
+          <p className="mt-0.5 text-[12px] text-[var(--color-text-muted)]">
+            Higher effort produces more thorough answers but takes longer
+          </p>
+
+          <div className="mt-3 flex gap-1.5">
             {([undefined, 'low', 'medium', 'high'] as const).map((effort) => {
               const isActive = defaultReasoning === effort;
-              const label = effort ?? 'Default';
+              const label = effort ?? 'Auto';
+              const displayLabel = label.charAt(0).toUpperCase() + label.slice(1);
+
+              // Only show efforts the model actually supports (plus "Auto")
+              if (effort && !resolvedModel?.supportedReasoningEfforts?.includes(effort)) return null;
+
               return (
                 <button
-                  key={label}
+                  key={displayLabel}
                   onClick={() => onUpdate?.({ defaultReasoningEffort: effort })}
-                  className={`flex-1 rounded-lg border py-2.5 text-[13px] font-medium transition-all duration-200 ${
+                  className={`flex-1 rounded-lg border py-2 text-[12px] font-medium transition-all duration-150 ${
                     isActive
-                      ? 'border-[var(--color-border-glow)] bg-[var(--color-accent-muted)] text-[var(--color-text-primary)]'
-                      : 'border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-3)]/40'
+                      ? 'border-[var(--color-accent)]/40 bg-[var(--color-accent)]/12 text-[var(--color-text-accent)]'
+                      : 'border-[var(--color-border)] text-[var(--color-text-muted)] hover:border-[var(--color-border-glow)] hover:text-[var(--color-text-secondary)]'
                   }`}
                   type="button"
                 >
-                  {label.charAt(0).toUpperCase() + label.slice(1)}
+                  {displayLabel}
                 </button>
               );
             })}
           </div>
-        </>
-      )}
+        </div>
+      ) : defaultModel ? (
+        <p className="mt-4 text-[11px] text-[var(--color-text-muted)]">
+          {resolvedModel?.name ?? 'Selected model'} does not support configurable reasoning effort.
+        </p>
+      ) : null}
     </div>
   );
 }

@@ -795,15 +795,15 @@ body {
   animation: qp-actions-in 0.2s cubic-bezier(0.16, 1, 0.3, 1) 0.05s both;
 }
 
-/* Dropdown entrance */
+/* Dropdown entrance — opens upward */
 @keyframes qp-dropdown-in {
   from {
     opacity: 0;
-    transform: translateY(calc(100% - 4px)) scale(0.98);
+    transform: translateY(6px) scale(0.97);
   }
   to {
     opacity: 1;
-    transform: translateY(100%);
+    transform: translateY(0) scale(1);
   }
 }
 
@@ -916,4 +916,43 @@ body {
 .markdown-content img {
   max-width: 100%;
   border-radius: 0.5rem;
+}
+
+.markdown-content code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 0.25rem;
+  padding: 0.15em 0.35em;
+  color: var(--color-text-primary);
+}
+
+.markdown-content pre {
+  background: var(--color-surface-0);
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  padding: 0.875em 1em;
+  overflow-x: auto;
+  margin-top: 0.75em;
+  margin-bottom: 0.75em;
+}
+
+.markdown-content pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+}
+
+.markdown-content a {
+  color: var(--color-text-accent);
+  text-decoration: underline;
+  text-decoration-color: var(--color-text-accent);
+  text-underline-offset: 2px;
+}
+
+.markdown-content a:hover {
+  color: var(--color-accent-hover);
 }

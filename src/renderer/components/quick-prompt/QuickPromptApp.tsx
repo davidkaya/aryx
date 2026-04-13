@@ -71,6 +71,8 @@ export function QuickPromptApp() {
           }));
         }
         setPhase('streaming');
+      } else if (event.kind === 'message-complete') {
+        setPhase('complete');
       } else if (event.kind === 'status' && event.status === 'idle') {
         setPhase((prev) => (prev === 'streaming' ? 'complete' : prev));
       } else if (event.kind === 'error') {

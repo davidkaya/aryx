@@ -83,7 +83,7 @@ async function bootstrap(): Promise<void> {
       const hotkeySettings = workspace.settings.quickPrompt ?? createDefaultQuickPromptSettings();
       globalHotkeyService.register(hotkeySettings, () => {
         const win = ensureQuickPromptWindow();
-        if (win) toggleQuickPromptWindow(win);
+        if (win) void toggleQuickPromptWindow(win);
       });
 
       // Re-register hotkey when settings change

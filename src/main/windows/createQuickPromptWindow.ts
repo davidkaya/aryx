@@ -9,7 +9,8 @@ const { app, BrowserWindow, screen } = electron;
 export function createQuickPromptWindow(): BrowserWindowType {
   const window = new BrowserWindow({
     width: 680,
-    height: 72,
+    height: 520,
+    minHeight: 72,
     show: false,
     frame: false,
     transparent: true,
@@ -19,6 +20,7 @@ export function createQuickPromptWindow(): BrowserWindowType {
     maximizable: false,
     minimizable: false,
     fullscreenable: false,
+    focusable: true,
     title: 'Aryx Quick Prompt',
     icon: resolveWindowIconPath({
       appPath: app.getAppPath(),
@@ -39,21 +41,35 @@ export function createQuickPromptWindow(): BrowserWindowType {
     void window.loadFile(join(__dirname, '../../dist/renderer/quickprompt.html'));
   }
 
+  // Hide on blur — but only if the window itself loses focus (not from
+  // devtools or transient focus changes during show/hide).
   window.on('blur', () => {
-    if (window.isVisible()) {
-      window.webContents.send('quick-prompt:hide');
-      window.hide();
-    }
+    // Small delay: avoid hiding during transient focus shifts (e.g. model
+    // selector dropdown causing a brief blur → refocus cycle).
+    setTimeout(() => {
+      if (window.isVisible() && !window.isFocused()) {
+        window.webContents.send('quick-prompt:hide');
+        window.hide();
+      }
+    }, 100);
   });
 
   return window;
 }
 
-export function toggleQuickPromptWindow(window: BrowserWindowType): void {
+export async function toggleQuickPromptWindow(window: BrowserWindowType): Promise<void> {
   if (window.isVisible()) {
     window.webContents.send('quick-prompt:hide');
     window.hide();
     return;
+  }
+
+  // Wait for the renderer to finish loading before showing — on the very
+  // first activation the page may still be loading from disk/dev-server.
+  if (window.webContents.isLoading()) {
+    await new Promise<void>((resolve) => {
+      window.webContents.once('did-finish-load', () => resolve());
+    });
   }
 
   centerOnActiveDisplay(window);

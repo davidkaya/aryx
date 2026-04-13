@@ -633,7 +633,7 @@ export class SessionTurnExecutor {
       messageId: event.messageId,
       authorName: event.authorName,
       contentDelta: event.contentDelta,
-      content: event.content,
+      content,
     });
     if (nextRun) {
       this.emitRunUpdated(sessionId, occurredAt, nextRun);
@@ -822,6 +822,7 @@ export class SessionTurnExecutor {
     const completedAt = nowIso();
     session.status = 'idle';
     session.lastError = undefined;
+    session.currentIntent = undefined;
     session.pendingUserInput = undefined;
     session.pendingPlanReview = undefined;
     session.pendingMcpAuth = undefined;
@@ -854,6 +855,7 @@ export class SessionTurnExecutor {
     const cancelledAt = nowIso();
     session.status = 'idle';
     session.lastError = undefined;
+    session.currentIntent = undefined;
     session.pendingUserInput = undefined;
     session.pendingPlanReview = undefined;
     session.pendingMcpAuth = undefined;

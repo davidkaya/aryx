@@ -31,6 +31,8 @@ export type SessionEventKind =
   | 'session-compaction'
   | 'pending-messages-modified'
   | 'assistant-usage'
+  | 'assistant-intent'
+  | 'reasoning-delta'
   | 'workflow-diagnostic';
 
 export type SubagentEventKind = 'started' | 'completed' | 'failed' | 'selected' | 'deselected';
@@ -101,6 +103,13 @@ export interface SessionEventRecord {
   usageDuration?: number;
   usageTotalNanoAiu?: number;
   usageQuotaSnapshots?: Record<string, QuotaSnapshot>;
+
+  // Assistant intent fields
+  intent?: string;
+
+  // Reasoning delta fields
+  reasoningId?: string;
+  reasoningDelta?: string;
 
   // Workflow diagnostic fields
   diagnosticSeverity?: WorkflowDiagnosticSeverity;

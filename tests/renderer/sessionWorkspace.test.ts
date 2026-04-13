@@ -351,4 +351,117 @@ describe('session workspace helpers', () => {
 
     expect(result).toBe(workspace);
   });
+
+  test('uses resolved content from main process and falls back to simple append', () => {
+    // When content is present (main process resolved it), use it directly
+    const first = applySessionEventWorkspace(createWorkspace(), {
+      sessionId: 'session-1',
+      kind: 'message-delta',
+      occurredAt: '2026-03-23T00:00:01.000Z',
+      messageId: 'assistant-1',
+      authorName: 'Agent',
+      contentDelta: 'Hello',
+      content: 'Hello',
+    } satisfies SessionEventRecord);
+
+    // Main process sends full resolved content on every delta
+    const second = applySessionEventWorkspace(first, {
+      sessionId: 'session-1',
+      kind: 'message-delta',
+      occurredAt: '2026-03-23T00:00:02.000Z',
+      messageId: 'assistant-1',
+      authorName: 'Agent',
+      contentDelta: ' world',
+      content: 'Hello world',
+    } satisfies SessionEventRecord);
+
+    expect(second?.sessions[0].messages[0].content).toBe('Hello world');
+
+    // Backward compat: if content is missing, simple append of contentDelta
+    const fallback = applySessionEventWorkspace(second, {
+      sessionId: 'session-1',
+      kind: 'message-delta',
+      occurredAt: '2026-03-23T00:00:03.000Z',
+      messageId: 'assistant-1',
+      authorName: 'Agent',
+      contentDelta: '!',
+    } satisfies SessionEventRecord);
+
+    expect(fallback?.sessions[0].messages[0].content).toBe('Hello world!');
+  });
+
+  test('sets currentIntent from assistant-intent events', () => {
+    const workspace = createWorkspace();
+    const updated = applySessionEventWorkspace(workspace, {
+      sessionId: 'session-1',
+      kind: 'assistant-intent',
+      occurredAt: '2026-03-23T00:00:01.000Z',
+      intent: 'Exploring codebase',
+    } satisfies SessionEventRecord);
+
+    expect(updated?.sessions[0].currentIntent).toBe('Exploring codebase');
+  });
+
+  test('clears currentIntent when session transitions to idle', () => {
+    let workspace = applySessionEventWorkspace(createWorkspace(), {
+      sessionId: 'session-1',
+      kind: 'status',
+      occurredAt: '2026-03-23T00:00:01.000Z',
+      status: 'running',
+    } satisfies SessionEventRecord);
+
+    workspace = applySessionEventWorkspace(workspace, {
+      sessionId: 'session-1',
+      kind: 'assistant-intent',
+      occurredAt: '2026-03-23T00:00:02.000Z',
+      intent: 'Writing tests',
+    } satisfies SessionEventRecord);
+
+    expect(workspace?.sessions[0].currentIntent).toBe('Writing tests');
+
+    workspace = applySessionEventWorkspace(workspace, {
+      sessionId: 'session-1',
+      kind: 'status',
+      occurredAt: '2026-03-23T00:00:03.000Z',
+      status: 'idle',
+    } satisfies SessionEventRecord);
+
+    expect(workspace?.sessions[0].currentIntent).toBeUndefined();
+  });
+
+  test('ignores duplicate assistant-intent events', () => {
+    const workspace = applySessionEventWorkspace(createWorkspace(), {
+      sessionId: 'session-1',
+      kind: 'assistant-intent',
+      occurredAt: '2026-03-23T00:00:01.000Z',
+      intent: 'Exploring codebase',
+    } satisfies SessionEventRecord);
+
+    const duplicate = applySessionEventWorkspace(workspace, {
+      sessionId: 'session-1',
+      kind: 'assistant-intent',
+      occurredAt: '2026-03-23T00:00:02.000Z',
+      intent: 'Exploring codebase',
+    } satisfies SessionEventRecord);
+
+    expect(duplicate).toBe(workspace);
+  });
+
+  test('preserves currentIntent when status changes to running', () => {
+    let workspace = applySessionEventWorkspace(createWorkspace(), {
+      sessionId: 'session-1',
+      kind: 'assistant-intent',
+      occurredAt: '2026-03-23T00:00:01.000Z',
+      intent: 'Analyzing code',
+    } satisfies SessionEventRecord);
+
+    workspace = applySessionEventWorkspace(workspace, {
+      sessionId: 'session-1',
+      kind: 'status',
+      occurredAt: '2026-03-23T00:00:02.000Z',
+      status: 'running',
+    } satisfies SessionEventRecord);
+
+    expect(workspace?.sessions[0].currentIntent).toBe('Analyzing code');
+  });
 });

@@ -2,7 +2,6 @@ import type { SessionEventRecord } from '@shared/domain/event';
 import { upsertSessionRunRecord } from '@shared/domain/runTimeline';
 import type { ChatMessageRecord, SessionRecord } from '@shared/domain/session';
 import type { WorkspaceState } from '@shared/domain/workspace';
-import { mergeStreamingText } from '@shared/utils/streamingText';
 
 export function applySessionEventWorkspace(
   current: WorkspaceState | undefined,
@@ -45,6 +44,8 @@ function applySessionEvent(session: SessionRecord, event: SessionEventRecord): S
       return applyMessageReclassifiedEvent(session, event);
     case 'run-updated':
       return applyRunUpdatedEvent(session, event);
+    case 'assistant-intent':
+      return applyAssistantIntentEvent(session, event);
     default:
       return session;
   }
@@ -63,6 +64,7 @@ function applyStatusEvent(session: SessionRecord, event: SessionEventRecord): Se
     ...session,
     status: event.status,
     lastError: event.status === 'error' ? session.lastError : undefined,
+    currentIntent: event.status === 'idle' ? undefined : session.currentIntent,
     updatedAt: event.occurredAt,
   };
 }
@@ -86,14 +88,19 @@ function applyMessageDeltaEvent(session: SessionRecord, event: SessionEventRecor
     return session;
   }
 
-  const resolvedContent = event.content ?? event.contentDelta ?? '';
   const messageIndex = session.messages.findIndex((message) => message.id === event.messageId);
   if (messageIndex >= 0) {
     const existing = session.messages[messageIndex];
+    // The main process resolves content authoritatively; prefer event.content
+    // (full assembled text) and fall back to simple append for backward compat.
+    const nextContent =
+      event.content !== undefined
+        ? event.content
+        : existing.content + (event.contentDelta ?? '');
     const nextMessage: ChatMessageRecord = {
       ...existing,
       authorName: event.authorName ?? existing.authorName,
-      content: event.content ?? mergeStreamingText(existing.content, resolvedContent),
+      content: nextContent,
       pending: true,
     };
 
@@ -113,6 +120,8 @@ function applyMessageDeltaEvent(session: SessionRecord, event: SessionEventRecor
       updatedAt: event.occurredAt,
     };
   }
+
+  const resolvedContent = event.content ?? event.contentDelta ?? '';
 
   // Auto-complete any previously pending assistant messages so only
   // the new message shows the "Thinking" indicator.
@@ -214,6 +223,18 @@ function applyRunUpdatedEvent(session: SessionRecord, event: SessionEventRecord)
   return {
     ...session,
     runs: nextRuns,
+    updatedAt: event.occurredAt,
+  };
+}
+
+function applyAssistantIntentEvent(session: SessionRecord, event: SessionEventRecord): SessionRecord {
+  if (!event.intent || session.currentIntent === event.intent) {
+    return session;
+  }
+
+  return {
+    ...session,
+    currentIntent: event.intent,
     updatedAt: event.occurredAt,
   };
 }

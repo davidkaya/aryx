@@ -117,7 +117,6 @@ import {
 } from '@shared/domain/session';
 import { prepareChatMessageContent } from '@shared/utils/chatMessage';
 import {
-  appendRunActivityEvent,
   cancelSessionRunRecord,
   completeSessionRunRecord,
   createSessionRunRecord,
@@ -152,7 +151,6 @@ import {
 } from '@shared/domain/tooling';
 import type { WorkspaceState } from '@shared/domain/workspace';
 import { createId, nowIso } from '@shared/utils/ids';
-import { mergeStreamingText } from '@shared/utils/streamingText';
 
 import { WorkspaceRepository } from '@main/persistence/workspaceRepository';
 import { getScratchpadSessionPath } from '@main/persistence/appPaths';
@@ -1924,158 +1922,6 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     session.cwd = scratchpadDirectory;
   }
 
-  private async applyTurnDelta(
-    workspace: WorkspaceState,
-    sessionId: string,
-    requestId: string,
-    event: TurnDeltaEvent,
-  ): Promise<void> {
-    if (event.content === undefined && event.contentDelta === undefined) {
-      return;
-    }
-
-    const occurredAt = nowIso();
-    const session = this.requireSession(workspace, sessionId);
-    const existing = session.messages.find((message) => message.id === event.messageId);
-    const content =
-      existing && event.content === undefined
-        ? mergeStreamingText(existing.content, event.contentDelta)
-        : (event.content ?? event.contentDelta);
-
-    // When a new assistant message begins, auto-complete any previously pending
-    // assistant messages so only the latest one shows the "Thinking" indicator.
-    const completedMessages: ChatMessageRecord[] = [];
-    if (existing) {
-      existing.content = content;
-      existing.pending = true;
-      existing.authorName = event.authorName;
-    } else {
-      for (const message of session.messages) {
-        if (message.pending && message.role === 'assistant') {
-          message.pending = false;
-          completedMessages.push(message);
-        }
-      }
-      session.messages.push({
-        id: event.messageId,
-        role: 'assistant',
-        authorName: event.authorName,
-        content,
-        createdAt: occurredAt,
-        pending: true,
-      });
-    }
-
-    const nextRun = this.updateSessionRun(session, requestId, (run) =>
-      upsertRunMessageEvent(run, {
-        messageId: event.messageId,
-        occurredAt,
-        authorName: event.authorName,
-        content,
-        status: 'running',
-      }));
-
-    session.updatedAt = occurredAt;
-    await this.workspaceRepository.save(workspace);
-
-    for (const completed of completedMessages) {
-      this.emitSessionEvent({
-        sessionId,
-        kind: 'message-complete',
-        occurredAt,
-        messageId: completed.id,
-        authorName: completed.authorName,
-        content: completed.content,
-      });
-    }
-    this.emitSessionEvent({
-      sessionId,
-      kind: 'message-delta',
-      occurredAt,
-      messageId: event.messageId,
-      authorName: event.authorName,
-      contentDelta: event.contentDelta,
-      content: event.content,
-    });
-    if (nextRun) {
-      this.emitRunUpdated(sessionId, occurredAt, nextRun);
-    }
-  }
-
-  private async applyMessageReclassified(
-    workspace: WorkspaceState,
-    sessionId: string,
-    event: MessageReclassifiedEvent,
-  ): Promise<void> {
-    const session = this.requireSession(workspace, sessionId);
-    const message = session.messages.find((m) => m.id === event.messageId);
-    if (!message || message.messageKind === 'thinking') {
-      return;
-    }
-
-    message.messageKind = 'thinking';
-    const occurredAt = nowIso();
-    session.updatedAt = occurredAt;
-    await this.workspaceRepository.save(workspace);
-
-    this.emitSessionEvent({
-      sessionId,
-      kind: 'message-reclassified',
-      occurredAt,
-      messageId: event.messageId,
-      messageKind: 'thinking',
-    });
-  }
-
-  private async applyAgentActivity(
-    workspace: WorkspaceState,
-    sessionId: string,
-    requestId: string,
-    event: AgentActivityEvent,
-  ): Promise<void> {
-    const occurredAt = nowIso();
-    const session = this.requireSession(workspace, sessionId);
-    const activityType = event.activityType;
-    let nextRun: SessionRunRecord | undefined;
-    if (activityType === 'thinking' || activityType === 'tool-calling' || activityType === 'handoff') {
-      nextRun = this.updateSessionRun(session, requestId, (run) =>
-        appendRunActivityEvent(run, {
-          activityType,
-          occurredAt,
-          agentId: event.agentId,
-          agentName: event.agentName,
-          sourceAgentId: event.sourceAgentId,
-          sourceAgentName: event.sourceAgentName,
-          toolName: event.toolName,
-          toolCallId: event.toolCallId,
-          toolArguments: event.toolArguments,
-          fileChanges: event.fileChanges,
-        }));
-    }
-    if (nextRun) {
-      session.updatedAt = occurredAt;
-      await this.workspaceRepository.save(workspace);
-      this.emitRunUpdated(sessionId, occurredAt, nextRun);
-    }
-
-    this.emitSessionEvent({
-      sessionId,
-      kind: 'agent-activity',
-      occurredAt,
-      activityType: event.activityType,
-      agentId: event.agentId,
-      agentName: event.agentName,
-      subworkflowNodeId: event.subworkflowNodeId,
-      subworkflowName: event.subworkflowName,
-      sourceAgentId: event.sourceAgentId,
-      sourceAgentName: event.sourceAgentName,
-      toolName: event.toolName,
-      toolCallId: event.toolCallId,
-      toolArguments: event.toolArguments,
-      fileChanges: event.fileChanges,
-    });
-  }
-
   private emitCompletedActivity(
     sessionId: string,
     workflow: WorkflowDefinition,
@@ -2399,6 +2245,31 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
           usageDuration: event.duration,
           usageTotalNanoAiu: event.totalNanoAiu,
           usageQuotaSnapshots: event.quotaSnapshots,
+        });
+        return;
+      case 'assistant-intent': {
+        const session = this.requireSession(workspace, sessionId);
+        session.currentIntent = event.intent;
+        session.updatedAt = occurredAt;
+        this.emitSessionEvent({
+          sessionId,
+          kind: 'assistant-intent',
+          occurredAt,
+          agentId: event.agentId,
+          agentName: event.agentName,
+          intent: event.intent,
+        });
+        return;
+      }
+      case 'reasoning-delta':
+        this.emitSessionEvent({
+          sessionId,
+          kind: 'reasoning-delta',
+          occurredAt,
+          agentId: event.agentId,
+          agentName: event.agentName,
+          reasoningId: event.reasoningId,
+          reasoningDelta: event.contentDelta,
         });
         return;
     }

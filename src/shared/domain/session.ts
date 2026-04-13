@@ -85,6 +85,7 @@ export interface SessionRecord {
   pendingPlanReview?: PendingPlanReviewRecord;
   pendingMcpAuth?: PendingMcpAuthRecord;
   runs: SessionRunRecord[];
+  currentIntent?: string;
 }
 
 function normalizeOptionalString(value?: string): string | undefined {

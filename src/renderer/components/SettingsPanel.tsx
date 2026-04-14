@@ -199,6 +199,7 @@ export function SettingsPanel({
           }}
           workflow={editingWorkflow}
           workflows={workflows}
+          workspaceAgents={workspaceAgents}
         />
       </div>
     );

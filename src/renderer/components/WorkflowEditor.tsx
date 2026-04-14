@@ -13,6 +13,7 @@ import type {
   SubWorkflowConfig,
   WorkflowStateScope,
 } from '@shared/domain/workflow';
+import type { WorkspaceAgentDefinition } from '@shared/domain/workspaceAgent';
 import { validateWorkflowDefinition, isBuilderBasedMode, syncBuilderModeEdgeIterations } from '@shared/domain/workflow';
 import { createId } from '@shared/utils/ids';
 import { ToggleSwitch } from '@renderer/components/ui';
@@ -25,6 +26,7 @@ import { OrchestrationModePanel } from './workflow/OrchestrationModePanel';
 
 interface WorkflowEditorProps {
   availableModels: ReadonlyArray<ModelDefinition>;
+  workspaceAgents: ReadonlyArray<WorkspaceAgentDefinition>;
   workflow: WorkflowDefinition;
   workflows: ReadonlyArray<WorkflowDefinition>;
   onChange: (workflow: WorkflowDefinition) => void;
@@ -152,6 +154,7 @@ function createMinimalInlineWorkflow(): WorkflowDefinition {
 
 export function WorkflowEditor({
   availableModels,
+  workspaceAgents,
   workflow,
   workflows,
   onChange,
@@ -242,6 +245,36 @@ export function WorkflowEditor({
       label: defaultLabelForKind(kind),
       position: { x: 300, y: 200 },
       config: defaultConfigForKind(kind),
+    };
+    emitGraphChange({
+      ...activeWorkflow.graph,
+      nodes: [...activeWorkflow.graph.nodes, newNode],
+    });
+    setSelectedNodeId(nodeId);
+    setSelectedEdgeId(null);
+  }
+
+  function handleAddWorkspaceAgentNode(agentId: string) {
+    const agent = workspaceAgents.find((a) => a.id === agentId);
+    if (!agent) return;
+    const nodeId = createId('wf-agent');
+    const config: AgentNodeConfig = {
+      kind: 'agent',
+      id: createId('agent'),
+      name: agent.name,
+      description: agent.description,
+      instructions: agent.instructions,
+      model: agent.model,
+      reasoningEffort: agent.reasoningEffort,
+      copilot: agent.copilot,
+      workspaceAgentId: agent.id,
+    };
+    const newNode: WorkflowNode = {
+      id: nodeId,
+      kind: 'agent',
+      label: agent.name,
+      position: { x: 300, y: 200 },
+      config,
     };
     emitGraphChange({
       ...activeWorkflow.graph,
@@ -486,7 +519,12 @@ export function WorkflowEditor({
       <div className="flex min-h-0 flex-1">
         {/* Left palette */}
         <div className="w-40 shrink-0 overflow-y-auto border-r border-[var(--color-border)] bg-[var(--color-surface-1)]">
-          <WorkflowNodePalette disabledKinds={disabledPaletteKinds} onAddNode={handleAddNode} />
+          <WorkflowNodePalette
+            disabledKinds={disabledPaletteKinds}
+            onAddNode={handleAddNode}
+            onAddWorkspaceAgentNode={handleAddWorkspaceAgentNode}
+            workspaceAgents={workspaceAgents}
+          />
         </div>
 
         {/* Center column: validation + canvas + settings */}
@@ -551,6 +589,7 @@ export function WorkflowEditor({
             validationIssues={issues}
             workflow={activeWorkflow}
             workflows={workflows}
+            workspaceAgents={workspaceAgents}
           />
         </div>
       </div>

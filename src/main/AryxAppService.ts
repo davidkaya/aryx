@@ -1149,6 +1149,50 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     return this.persistAndBroadcast(workspace);
   }
 
+  async batchSetSessionsArchived(sessionIds: string[], isArchived: boolean): Promise<WorkspaceState> {
+    const workspace = await this.loadWorkspace();
+    const now = nowIso();
+    for (const sessionId of sessionIds) {
+      const session = workspace.sessions.find((s) => s.id === sessionId);
+      if (session) {
+        session.isArchived = isArchived;
+        session.updatedAt = now;
+      }
+    }
+    return this.persistAndBroadcast(workspace);
+  }
+
+  async batchDeleteSessions(sessionIds: string[]): Promise<WorkspaceState> {
+    const workspace = await this.loadWorkspace();
+    const idsToDelete = new Set(sessionIds);
+
+    // Collect cleanup work before mutating the array
+    const cleanupTasks: Promise<void>[] = [];
+    for (const session of workspace.sessions) {
+      if (!idsToDelete.has(session.id)) continue;
+
+      const scratchpadDirectory = this.resolveScratchpadSessionDirectory(session);
+      if (scratchpadDirectory) {
+        cleanupTasks.push(rm(scratchpadDirectory, { recursive: true, force: true }));
+      }
+      cleanupTasks.push(
+        this.sidecar.deleteSession(session.id).then(() => undefined).catch(() => {
+          // Best-effort — don't fail the deletion if SDK cleanup fails
+        }),
+      );
+    }
+
+    await Promise.allSettled(cleanupTasks);
+
+    workspace.sessions = workspace.sessions.filter((s) => !idsToDelete.has(s.id));
+
+    if (workspace.selectedSessionId && idsToDelete.has(workspace.selectedSessionId)) {
+      workspace.selectedSessionId = workspace.sessions[0]?.id;
+    }
+
+    return this.persistAndBroadcast(workspace);
+  }
+
   async regenerateSessionMessage(sessionId: string, messageId: string): Promise<void> {
     const workspace = await this.loadWorkspace();
     const session = this.requireSession(workspace, sessionId);

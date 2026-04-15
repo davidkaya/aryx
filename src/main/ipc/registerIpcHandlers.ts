@@ -4,6 +4,8 @@ import type { BrowserWindow } from 'electron';
 import { ipcChannels } from '@shared/contracts/channels';
 import type {
   BranchSessionInput,
+  BatchDeleteSessionsInput,
+  BatchSetSessionsArchivedInput,
   CancelSessionTurnInput,
   CommitProjectGitChangesInput,
   CreateSessionInput,
@@ -223,6 +225,12 @@ export function registerIpcHandlers(
   );
   ipcMain.handle(ipcChannels.deleteSession, (_event, input: DeleteSessionInput) =>
     service.deleteSession(input.sessionId),
+  );
+  ipcMain.handle(ipcChannels.batchSetSessionsArchived, (_event, input: BatchSetSessionsArchivedInput) =>
+    service.batchSetSessionsArchived(input.sessionIds, input.isArchived),
+  );
+  ipcMain.handle(ipcChannels.batchDeleteSessions, (_event, input: BatchDeleteSessionsInput) =>
+    service.batchDeleteSessions(input.sessionIds),
   );
   ipcMain.handle(ipcChannels.regenerateSessionMessage, (_event, input: RegenerateSessionMessageInput) =>
     service.regenerateSessionMessage(input.sessionId, input.messageId),

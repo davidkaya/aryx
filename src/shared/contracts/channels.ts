@@ -49,6 +49,8 @@ export const ipcChannels = {
   setSessionPinned: 'sessions:set-pinned',
   setSessionArchived: 'sessions:set-archived',
   deleteSession: 'sessions:delete',
+  batchSetSessionsArchived: 'sessions:batch-set-archived',
+  batchDeleteSessions: 'sessions:batch-delete',
   regenerateSessionMessage: 'sessions:regenerate-message',
   editAndResendSessionMessage: 'sessions:edit-and-resend-message',
   sendSessionMessage: 'sessions:send-message',

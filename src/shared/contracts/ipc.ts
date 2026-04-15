@@ -218,6 +218,15 @@ export interface DeleteSessionInput {
   sessionId: string;
 }
 
+export interface BatchSetSessionsArchivedInput {
+  sessionIds: string[];
+  isArchived: boolean;
+}
+
+export interface BatchDeleteSessionsInput {
+  sessionIds: string[];
+}
+
 export interface ResizeTerminalInput {
   cols: number;
   rows: number;
@@ -334,6 +343,8 @@ export interface ElectronApi {
   setSessionPinned(input: SetSessionPinnedInput): Promise<WorkspaceState>;
   setSessionArchived(input: SetSessionArchivedInput): Promise<WorkspaceState>;
   deleteSession(input: DeleteSessionInput): Promise<WorkspaceState>;
+  batchSetSessionsArchived(input: BatchSetSessionsArchivedInput): Promise<WorkspaceState>;
+  batchDeleteSessions(input: BatchDeleteSessionsInput): Promise<WorkspaceState>;
   regenerateSessionMessage(input: RegenerateSessionMessageInput): Promise<void>;
   editAndResendSessionMessage(input: EditAndResendSessionMessageInput): Promise<void>;
   sendSessionMessage(input: SendSessionMessageInput): Promise<void>;

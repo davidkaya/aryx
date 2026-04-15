@@ -1,4 +1,4 @@
-import { useEffect, useRef, useMemo } from 'react';
+import { useCallback, useEffect, useRef, useMemo, useState } from 'react';
 import { Check, Brain } from 'lucide-react';
 
 import { ProviderIcon } from '@renderer/components/ProviderIcons';
@@ -37,6 +37,55 @@ export function ModelSelector({
   onClose,
 }: ModelSelectorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const flatModels = useMemo(() => [...models], [models]);
+  const initialIndex = flatModels.findIndex((m) => m.id === selectedModelId);
+  const [focusedIndex, setFocusedIndex] = useState(initialIndex >= 0 ? initialIndex : 0);
+  const optionRefs = useRef<Map<number, HTMLButtonElement>>(new Map());
+
+  // Scroll the focused option into view whenever it changes
+  useEffect(() => {
+    optionRefs.current.get(focusedIndex)?.scrollIntoView({ block: 'nearest' });
+  }, [focusedIndex]);
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      switch (e.key) {
+        case 'ArrowDown': {
+          e.preventDefault();
+          setFocusedIndex((prev) => (prev + 1) % flatModels.length);
+          break;
+        }
+        case 'ArrowUp': {
+          e.preventDefault();
+          setFocusedIndex((prev) => (prev - 1 + flatModels.length) % flatModels.length);
+          break;
+        }
+        case 'Home': {
+          e.preventDefault();
+          setFocusedIndex(0);
+          break;
+        }
+        case 'End': {
+          e.preventDefault();
+          setFocusedIndex(flatModels.length - 1);
+          break;
+        }
+        case 'Enter':
+        case ' ': {
+          e.preventDefault();
+          const model = flatModels[focusedIndex];
+          if (model) onSelect(model);
+          break;
+        }
+        case 'Escape': {
+          e.stopPropagation();
+          onClose();
+          break;
+        }
+      }
+    },
+    [flatModels, focusedIndex, onSelect, onClose],
+  );
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -44,20 +93,17 @@ export function ModelSelector({
         onClose();
       }
     };
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        onClose();
-      }
-    };
 
     document.addEventListener('mousedown', handleClickOutside);
-    document.addEventListener('keydown', handleEscape, true);
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleEscape, true);
     };
   }, [onClose]);
+
+  // Focus the container on mount so keyboard events are captured immediately
+  useEffect(() => {
+    containerRef.current?.focus();
+  }, []);
 
   const selectedModel = models.find((m) => m.id === selectedModelId);
   const supportedEfforts = selectedModel?.supportedReasoningEfforts;
@@ -96,12 +142,19 @@ export function ModelSelector({
     return result;
   }, [models]);
 
+  // Build a flat index for each model so we can map group-based rendering
+  // back to the flat focusedIndex.
+  let flatIndex = -1;
+
   return (
     <div
       ref={containerRef}
-      className="qp-dropdown-enter absolute top-full left-3 right-3 z-10 mt-1 overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-1)] shadow-2xl shadow-black/50"
+      className="qp-dropdown-enter absolute top-full left-3 right-3 z-10 mt-1 overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-1)] outline-none"
       role="listbox"
       aria-label="Select model"
+      aria-activedescendant={flatModels[focusedIndex] ? `model-option-${flatModels[focusedIndex].id}` : undefined}
+      tabIndex={0}
+      onKeyDown={handleKeyDown}
     >
       {/* Model list — grouped by provider */}
       <div className="max-h-[280px] overflow-y-auto overscroll-contain p-1.5">
@@ -121,7 +174,10 @@ export function ModelSelector({
 
             {/* Models in this provider group */}
             {group.models.map((model) => {
+              flatIndex++;
+              const modelIndex = flatIndex;
               const isSelected = model.id === selectedModelId;
+              const isFocused = modelIndex === focusedIndex;
               const tierLabel = model.tier === 'premium' ? 'PRO' : model.tier === 'fast' ? 'FAST' : undefined;
               const tierColor = model.tier === 'premium'
                 ? 'text-amber-400 bg-amber-400/10'
@@ -132,15 +188,24 @@ export function ModelSelector({
               return (
                 <button
                   key={model.id}
+                  id={`model-option-${model.id}`}
+                  ref={(el) => {
+                    if (el) optionRefs.current.set(modelIndex, el);
+                    else optionRefs.current.delete(modelIndex);
+                  }}
                   onClick={() => onSelect(model)}
+                  onMouseEnter={() => setFocusedIndex(modelIndex)}
                   className={`flex w-full items-center gap-2 rounded-lg px-3 py-[7px] text-left transition-colors ${
-                    isSelected
-                      ? 'bg-[var(--color-accent-muted)] text-[var(--color-text-primary)]'
-                      : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-primary)]'
+                    isFocused
+                      ? 'bg-[var(--color-surface-2)] text-[var(--color-text-primary)]'
+                      : isSelected
+                        ? 'bg-[var(--color-accent-muted)] text-[var(--color-text-primary)]'
+                        : 'text-[var(--color-text-secondary)]'
                   }`}
                   type="button"
                   role="option"
                   aria-selected={isSelected}
+                  tabIndex={-1}
                 >
                   <span className="flex-1 truncate text-[12px] font-medium">{model.name}</span>
 

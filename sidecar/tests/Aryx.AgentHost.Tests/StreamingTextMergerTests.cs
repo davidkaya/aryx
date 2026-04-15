@@ -37,22 +37,36 @@ public sealed class StreamingTextMergerTests
         Assert.Equal(incoming, StreamingTextMerger.Merge(current, incoming));
     }
 
-    [Fact]
-    public void Merge_InsertsWhitespaceWhenSnapshotLikeUpdatesWouldOtherwiseGlueWordsTogether()
+    [Theory]
+    [InlineData("requires all wr", "itable fields", "requires all writable fields")]
+    [InlineData("becomes frag", "ile for clients", "becomes fragile for clients")]
+    [InlineData("Endpoint (domain) uniqu", "eness across tenants", "Endpoint (domain) uniqueness across tenants")]
+    [InlineData("The doc says \"wildc", "ards are allowed\"", "The doc says \"wildcards are allowed\"")]
+    [InlineData("What wildcard syntax supported (*.cont", "oso.com? contoso.* ?)", "What wildcard syntax supported (*.contoso.com? contoso.* ?)")]
+    [InlineData("How does Pur", "view match traffic", "How does Purview match traffic")]
+    [InlineData("more M", "DA properties", "more MDA properties")]
+    [InlineData("does UA", "G normalize them?", "does UAG normalize them?")]
+    public void Merge_DoesNotInjectSpacesIntoSplitWords(string current, string incoming, string expected)
     {
-        Assert.Equal(
-            "How about The **Ashen Crown** feels",
-            StreamingTextMerger.Merge("How about", "The **Ashen Crown** feels"));
-        Assert.Equal(
-            "The **Ashen Crown** feels classic and timeless.",
-            StreamingTextMerger.Merge("The **Ashen Crown** feels", "classic and timeless."));
+        Assert.Equal(expected, StreamingTextMerger.Merge(current, incoming));
     }
 
     [Fact]
-    public void Merge_InsertsNewlineBeforeStreamedMarkdownBlockMarkers()
+    public void Merge_PreservesWhitespaceAlreadyPresentInDelta()
+    {
+        Assert.Equal(
+            "How about The **Ashen Crown** feels",
+            StreamingTextMerger.Merge("How about", " The **Ashen Crown** feels"));
+        Assert.Equal(
+            "The **Ashen Crown** feels classic and timeless.",
+            StreamingTextMerger.Merge("The **Ashen Crown** feels", " classic and timeless."));
+    }
+
+    [Fact]
+    public void Merge_PreservesNewlineAlreadyPresentInDelta()
     {
         Assert.Equal(
             "If you want, I can also give you\n- darker titles",
-            StreamingTextMerger.Merge("If you want, I can also give you", "- darker titles"));
+            StreamingTextMerger.Merge("If you want, I can also give you", "\n- darker titles"));
     }
 }

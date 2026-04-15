@@ -26,17 +26,34 @@ describe('streaming text merge', () => {
     expect(mergeStreamingText(current, incoming)).toBe(incoming);
   });
 
-  test('inserts whitespace when snapshot-like updates would otherwise glue words together', () => {
-    expect(mergeStreamingText('How about', 'The **Ashen Crown** feels')).toBe(
+  test.each([
+    ['requires all wr', 'itable fields', 'requires all writable fields'],
+    ['becomes frag', 'ile for clients', 'becomes fragile for clients'],
+    ['Endpoint (domain) uniqu', 'eness across tenants', 'Endpoint (domain) uniqueness across tenants'],
+    ['The doc says "wildc', 'ards are allowed"', 'The doc says "wildcards are allowed"'],
+    [
+      'What wildcard syntax supported (*.cont',
+      'oso.com? contoso.* ?)',
+      'What wildcard syntax supported (*.contoso.com? contoso.* ?)',
+    ],
+    ['How does Pur', 'view match traffic', 'How does Purview match traffic'],
+    ['more M', 'DA properties', 'more MDA properties'],
+    ['does UA', 'G normalize them?', 'does UAG normalize them?'],
+  ])('does not inject spaces into split words: %s + %s', (current, incoming, expected) => {
+    expect(mergeStreamingText(current, incoming)).toBe(expected);
+  });
+
+  test('preserves whitespace already present in delta', () => {
+    expect(mergeStreamingText('How about', ' The **Ashen Crown** feels')).toBe(
       'How about The **Ashen Crown** feels',
     );
-    expect(mergeStreamingText('The **Ashen Crown** feels', 'classic and timeless.')).toBe(
+    expect(mergeStreamingText('The **Ashen Crown** feels', ' classic and timeless.')).toBe(
       'The **Ashen Crown** feels classic and timeless.',
     );
   });
 
-  test('inserts a newline before streamed markdown block markers', () => {
-    expect(mergeStreamingText('If you want, I can also give you', '- darker titles')).toBe(
+  test('preserves newline already present in delta', () => {
+    expect(mergeStreamingText('If you want, I can also give you', '\n- darker titles')).toBe(
       'If you want, I can also give you\n- darker titles',
     );
   });

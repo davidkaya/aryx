@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import appIconUrl from '../../../assets/icons/icon.png';
 import { isMac } from '@renderer/lib/platform';
 import {
   AlertTriangle,
   Archive,
   ArrowLeftRight,
+  Check,
   ChevronDown,
   ChevronRight,
   Circle,
@@ -35,6 +36,10 @@ import { querySessions } from '@shared/domain/sessionLibrary';
 import type { UpdateStatus } from '@shared/contracts/ipc';
 import type { WorkspaceState } from '@shared/domain/workspace';
 import { UpdateBanner } from '@renderer/components/ui';
+import { useSessionSelection } from '@renderer/hooks/useSessionSelection';
+import { BatchActionBar } from '@renderer/components/sidebar/BatchActionBar';
+import { BatchDeleteConfirmDialog } from '@renderer/components/sidebar/BatchDeleteConfirmDialog';
+import { UndoToast } from '@renderer/components/sidebar/UndoToast';
 
 interface SidebarProps {
   workspace: WorkspaceState;
@@ -50,6 +55,8 @@ interface SidebarProps {
   onSetSessionPinned: (sessionId: string, isPinned: boolean) => void;
   onSetSessionArchived: (sessionId: string, isArchived: boolean) => void;
   onDeleteSession: (sessionId: string) => void;
+  onBatchArchiveSessions: (sessionIds: string[], isArchived: boolean) => void;
+  onBatchDeleteSessions: (sessionIds: string[]) => void;
   onRefreshGitContext: (projectId: string) => void;
   updateStatus?: UpdateStatus;
   onViewUpdateDetails?: () => void;
@@ -183,6 +190,10 @@ function SessionItem({
   onOpenMenu,
   onRenameSubmit,
   onRenameCancel,
+  isSelecting,
+  isSelected,
+  selectionIndex,
+  onToggleSelection,
 }: {
   session: SessionRecord;
   workflow?: WorkflowDefinition;
@@ -192,6 +203,10 @@ function SessionItem({
   onOpenMenu: (e: React.MouseEvent) => void;
   onRenameSubmit: (title: string) => void;
   onRenameCancel: () => void;
+  isSelecting?: boolean;
+  isSelected?: boolean;
+  selectionIndex?: number;
+  onToggleSelection?: () => void;
 }) {
   const isRunning = session.status === 'running';
   const isError = session.status === 'error';
@@ -201,6 +216,7 @@ function SessionItem({
   const visual = modeVisuals[mode];
   const ModeIcon = visual.icon;
   const agentCount = workflow ? resolveWorkflowAgentNodes(workflow).length : 1;
+  const isSelectDisabled = isRunning && isSelecting;
 
   const [renameText, setRenameText] = useState(session.title);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -232,34 +248,81 @@ function SessionItem({
     else onRenameCancel();
   }
 
+  function handleClick(e: React.MouseEvent) {
+    if (isRenaming) return;
+    if (isSelecting) {
+      if (!isSelectDisabled) onToggleSelection?.();
+      return;
+    }
+    onSelect();
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if ((e.key === 'Enter' || e.key === ' ') && !isRenaming) {
+      e.preventDefault();
+      if (isSelecting) {
+        if (!isSelectDisabled) onToggleSelection?.();
+      } else {
+        onSelect();
+      }
+    }
+  }
+
   return (
     <div
       className={`session-item-enter group relative flex w-full cursor-pointer items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-all duration-200 ${
-        isActive
+        isSelecting && isSelected
           ? 'bg-[var(--color-accent-muted)] ring-1 ring-[var(--color-border-glow)]'
-          : 'hover:bg-[var(--color-surface-2)]/60'
-      } ${isRunning ? 'sidebar-running' : ''} ${session.isArchived ? 'opacity-50' : ''}`}
-      onClick={isRenaming ? undefined : onSelect}
-      role="button"
+          : isActive && !isSelecting
+            ? 'bg-[var(--color-accent-muted)] ring-1 ring-[var(--color-border-glow)]'
+            : 'hover:bg-[var(--color-surface-2)]/60'
+      } ${isRunning ? 'sidebar-running' : ''} ${session.isArchived ? 'opacity-50' : ''} ${isSelectDisabled ? 'cursor-not-allowed opacity-40' : ''}`}
+      onClick={handleClick}
+      role={isSelecting ? 'checkbox' : 'button'}
+      aria-checked={isSelecting ? isSelected : undefined}
       tabIndex={0}
-      onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && !isRenaming) { e.preventDefault(); onSelect(); } }}
+      onKeyDown={handleKeyDown}
     >
       {/* Running/approval left accent bar */}
-      {isRunning && !hasPendingApproval && (
+      {isRunning && !hasPendingApproval && !isSelecting && (
         <span className="absolute inset-y-1.5 left-0 w-[3px] rounded-full accent-flow" />
       )}
-      {hasPendingApproval && (
+      {hasPendingApproval && !isSelecting && (
         <span className="absolute inset-y-1.5 left-0 w-[3px] rounded-full bg-[var(--color-status-warning)]" />
       )}
+      {/* Selection accent bar */}
+      {isSelecting && isSelected && (
+        <span className="absolute inset-y-1.5 left-0 w-[3px] rounded-full bg-[var(--color-accent)]" />
+      )}
 
-      {/* Mode icon */}
-      <span
-        className={`mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md ${
-          isActive ? 'bg-[var(--color-accent-muted)]' : 'bg-[var(--color-surface-2)]'
-        }`}
-      >
-        <ModeIcon className={`size-3.5 ${isActive ? 'text-[var(--color-accent)]' : visual.color}`} />
-      </span>
+      {/* Mode icon or selection checkbox */}
+      {isSelecting ? (
+        <span
+          className="selection-checkbox-enter mt-0.5 flex size-6 shrink-0 items-center justify-center"
+          style={{ animationDelay: `${(selectionIndex ?? 0) * 30}ms` }}
+          title={isSelectDisabled ? "Can't select running sessions" : undefined}
+        >
+          <span
+            className={`flex size-4 items-center justify-center rounded border transition-all duration-150 ${
+              isSelected
+                ? 'checkbox-check border-[var(--color-accent)] bg-[var(--color-accent)]'
+                : isSelectDisabled
+                  ? 'border-[var(--color-text-muted)]/30 bg-transparent'
+                  : 'border-[var(--color-text-muted)]/50 bg-transparent hover:border-[var(--color-accent)]/50'
+            }`}
+          >
+            {isSelected && <Check className="size-3 text-white" strokeWidth={3} />}
+          </span>
+        </span>
+      ) : (
+        <span
+          className={`mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md ${
+            isActive ? 'bg-[var(--color-accent-muted)]' : 'bg-[var(--color-surface-2)]'
+          }`}
+        >
+          <ModeIcon className={`size-3.5 ${isActive ? 'text-[var(--color-accent)]' : visual.color}`} />
+        </span>
+      )}
 
       {/* Content */}
       <div className="min-w-0 flex-1">
@@ -342,8 +405,8 @@ function SessionItem({
         </div>
       </div>
 
-      {/* Actions button (hidden during rename) */}
-      {!isRenaming && (
+      {/* Actions button (hidden during rename and selection mode) */}
+      {!isRenaming && !isSelecting && (
         <button
           className="absolute right-1.5 top-1.5 flex size-6 items-center justify-center rounded-md text-[var(--color-text-muted)] opacity-0 transition-all duration-150 hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-primary)] group-hover:opacity-100"
           onClick={(e) => { e.stopPropagation(); onOpenMenu(e); }}
@@ -372,6 +435,9 @@ function ProjectGroup({
   onOpenProjectSettings,
   onNewSession,
   newSessionLabel,
+  isSelecting,
+  isSelected,
+  onToggleSelection,
 }: {
   project: ProjectRecord;
   sessions: SessionRecord[];
@@ -386,6 +452,9 @@ function ProjectGroup({
   onOpenProjectSettings?: (projectId: string) => void;
   onNewSession?: () => void;
   newSessionLabel?: string;
+  isSelecting?: boolean;
+  isSelected?: (sessionId: string) => boolean;
+  onToggleSelection?: (sessionId: string) => void;
 }){
   const [expanded, setExpanded] = useState(true);
   const isScratchpad = isScratchpadProject(project);
@@ -508,7 +577,7 @@ function ProjectGroup({
       {expanded && (
         <div className="ml-2 mt-0.5 space-y-0.5 border-l border-[var(--color-border-subtle)] pl-2">
           {visibleSessions.length > 0 &&
-            visibleSessions.map((session) => (
+            visibleSessions.map((session, index) => (
               <SessionItem
                 isActive={selectedSessionId === session.id}
                 isRenaming={renamingSessionId === session.id}
@@ -519,6 +588,10 @@ function ProjectGroup({
                 onRenameCancel={onRenameCancel}
                  workflow={workflowMap.get(session.workflowId)}
                 session={session}
+                isSelecting={isSelecting}
+                isSelected={isSelected?.(session.id)}
+                selectionIndex={index}
+                onToggleSelection={() => onToggleSelection?.(session.id)}
               />
             ))}
           {onNewSession ? (
@@ -559,6 +632,8 @@ export function Sidebar({
   onSetSessionPinned,
   onSetSessionArchived,
   onDeleteSession,
+  onBatchArchiveSessions,
+  onBatchDeleteSessions,
   onRefreshGitContext,
   updateStatus,
   onViewUpdateDetails,
@@ -600,6 +675,7 @@ export function Sidebar({
   const scrollRef = useRef<HTMLDivElement>(null);
 
   function handleOpenMenu(sessionId: string, e: React.MouseEvent) {
+    if (selection.isSelecting) return;
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     setMenuState({
       sessionId,
@@ -620,6 +696,113 @@ export function Sidebar({
   const menuSession = menuState
     ? workspace.sessions.find((s) => s.id === menuState.sessionId)
     : undefined;
+
+  /* ── Multi-select state ────────────────────────────────────── */
+
+  const selection = useSessionSelection();
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [undoToast, setUndoToast] = useState<{ message: string; sessionIds: string[]; isArchived: boolean } | null>(null);
+
+  // All selectable (non-running) session IDs across the visible list
+  const allSelectableIds = useMemo(() => {
+    const sessions = workspace.sessions.filter((s) => !s.isArchived && s.status !== 'running');
+    return sessions.map((s) => s.id);
+  }, [workspace.sessions]);
+
+  // All visible session IDs (for range select and "select all")
+  const allVisibleIds = useMemo(() => {
+    if (isQueryActive) return queryResults.map((s) => s.id);
+    return workspace.sessions.filter((s) => !s.isArchived).map((s) => s.id);
+  }, [isQueryActive, queryResults, workspace.sessions]);
+
+  const allSelectedArchived = useMemo(() => {
+    if (selection.selectedIds.size === 0) return false;
+    return [...selection.selectedIds].every((id) => {
+      const session = workspace.sessions.find((s) => s.id === id);
+      return session?.isArchived;
+    });
+  }, [selection.selectedIds, workspace.sessions]);
+
+  const selectedSessions = useMemo(
+    () => workspace.sessions.filter((s) => selection.selectedIds.has(s.id)),
+    [selection.selectedIds, workspace.sessions],
+  );
+
+  function handleSessionClick(sessionId: string, e: React.MouseEvent) {
+    const modKey = isMac ? e.metaKey : e.ctrlKey;
+    const session = workspace.sessions.find((s) => s.id === sessionId);
+    const isRunning = session?.status === 'running';
+
+    if (selection.isSelecting) {
+      if (isRunning) return;
+      if (e.shiftKey) {
+        selection.rangeSelect(sessionId, allVisibleIds);
+      } else {
+        selection.toggle(sessionId);
+      }
+      return;
+    }
+
+    if (modKey && !isRunning) {
+      selection.enterSelectionMode(sessionId);
+      return;
+    }
+
+    onSessionSelect(sessionId);
+  }
+
+  function handleToggleSelection(sessionId: string) {
+    const session = workspace.sessions.find((s) => s.id === sessionId);
+    if (session?.status === 'running') return;
+    selection.toggle(sessionId);
+  }
+
+  const handleBatchArchive = useCallback(() => {
+    const ids = [...selection.selectedIds];
+    const isArchived = !allSelectedArchived;
+    onBatchArchiveSessions(ids, isArchived);
+    selection.exitSelectionMode();
+    setUndoToast({
+      message: `${ids.length} session${ids.length === 1 ? '' : 's'} ${isArchived ? 'archived' : 'restored'}`,
+      sessionIds: ids,
+      isArchived,
+    });
+  }, [selection, allSelectedArchived, onBatchArchiveSessions]);
+
+  const handleBatchDeleteConfirm = useCallback(() => {
+    const ids = [...selection.selectedIds];
+    onBatchDeleteSessions(ids);
+    selection.exitSelectionMode();
+    setShowDeleteConfirm(false);
+  }, [selection, onBatchDeleteSessions]);
+
+  const handleUndoArchive = useCallback(() => {
+    if (!undoToast) return;
+    onBatchArchiveSessions(undoToast.sessionIds, !undoToast.isArchived);
+    setUndoToast(null);
+  }, [undoToast, onBatchArchiveSessions]);
+
+  // Exit selection mode on Escape
+  useEffect(() => {
+    if (!selection.isSelecting) return;
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        selection.exitSelectionMode();
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [selection.isSelecting, selection.exitSelectionMode]);
+
+  // Clean up selection when sessions are removed from workspace
+  useEffect(() => {
+    if (!selection.isSelecting) return;
+    const sessionIdSet = new Set(workspace.sessions.map((s) => s.id));
+    const stale = [...selection.selectedIds].filter((id) => !sessionIdSet.has(id));
+    if (stale.length > 0) {
+      for (const id of stale) selection.toggle(id);
+    }
+  }, [workspace.sessions, selection]);
 
   return (
     <div className="flex h-full flex-col">
@@ -685,17 +868,21 @@ export function Sidebar({
                 No sessions match your search
               </div>
             ) : (
-              queryResults.map((session) => (
+              queryResults.map((session, index) => (
                 <SessionItem
                   isActive={workspace.selectedSessionId === session.id}
                   isRenaming={renamingSessionId === session.id}
                   key={session.id}
-                  onSelect={() => onSessionSelect(session.id)}
+                  onSelect={() => handleSessionClick(session.id, { ctrlKey: false, metaKey: false, shiftKey: false } as React.MouseEvent)}
                   onOpenMenu={(e) => handleOpenMenu(session.id, e)}
                   onRenameSubmit={(title) => handleRenameSubmit(session.id, title)}
                   onRenameCancel={() => setRenamingSessionId(undefined)}
                    workflow={workflowMap.get(session.workflowId)}
                   session={session}
+                  isSelecting={selection.isSelecting}
+                  isSelected={selection.isSelected(session.id)}
+                  selectionIndex={index}
+                  onToggleSelection={() => handleToggleSelection(session.id)}
                 />
               ))
             )}
@@ -721,6 +908,9 @@ export function Sidebar({
                   sessions={workspace.sessions.filter((session) => session.projectId === scratchpadProject.id)}
                   onNewSession={onCreateScratchpad}
                   newSessionLabel="New Scratchpad"
+                  isSelecting={selection.isSelecting}
+                  isSelected={selection.isSelected}
+                  onToggleSelection={handleToggleSelection}
                 />
               </div>
             )}
@@ -769,6 +959,9 @@ export function Sidebar({
                     selectedSessionId={workspace.selectedSessionId}
                     sessions={workspace.sessions.filter((session) => session.projectId === project.id)}
                     onNewSession={() => onNewProjectSession(project.id)}
+                    isSelecting={selection.isSelecting}
+                    isSelected={selection.isSelected}
+                    onToggleSelection={handleToggleSelection}
                   />
                 ))}
               </div>
@@ -801,7 +994,7 @@ export function Sidebar({
       )}
 
       {/* Context menu overlay */}
-      {menuState && menuSession && (
+      {menuState && menuSession && !selection.isSelecting && (
         <>
           <div className="fixed inset-0 z-40" onClick={closeMenu} onKeyDown={(e) => { if (e.key === 'Escape') closeMenu(); }} />
           <div
@@ -852,6 +1045,38 @@ export function Sidebar({
             />
           </div>
         </>
+      )}
+
+      {/* Batch action bar */}
+      {selection.isSelecting && selection.selectedIds.size > 0 && (
+        <BatchActionBar
+          selectedCount={selection.selectedIds.size}
+          allSelectedArchived={allSelectedArchived}
+          allSelected={allSelectableIds.length > 0 && allSelectableIds.every((id) => selection.selectedIds.has(id))}
+          onArchive={handleBatchArchive}
+          onDelete={() => setShowDeleteConfirm(true)}
+          onSelectAll={() => selection.selectAll(allSelectableIds)}
+          onDeselectAll={selection.deselectAll}
+          onCancel={selection.exitSelectionMode}
+        />
+      )}
+
+      {/* Undo toast */}
+      {undoToast && (
+        <UndoToast
+          message={undoToast.message}
+          onUndo={handleUndoArchive}
+          onDismiss={() => setUndoToast(null)}
+        />
+      )}
+
+      {/* Batch delete confirmation */}
+      {showDeleteConfirm && selectedSessions.length > 0 && (
+        <BatchDeleteConfirmDialog
+          sessions={selectedSessions}
+          onConfirm={handleBatchDeleteConfirm}
+          onCancel={() => setShowDeleteConfirm(false)}
+        />
       )}
     </div>
   );

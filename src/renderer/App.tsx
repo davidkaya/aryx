@@ -940,6 +940,12 @@ export default function App() {
             onDeleteSession={(sessionId) => {
               void api.deleteSession({ sessionId });
             }}
+            onBatchArchiveSessions={(sessionIds, isArchived) => {
+              void api.batchSetSessionsArchived({ sessionIds, isArchived });
+            }}
+            onBatchDeleteSessions={(sessionIds) => {
+              void api.batchDeleteSessions({ sessionIds });
+            }}
             onRefreshGitContext={(projectId) => {
               void api.refreshProjectGitContext(projectId);
             }}

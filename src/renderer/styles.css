@@ -674,6 +674,108 @@ body {
   animation: intent-divider-in 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
+/* ── Batch selection animations ──────────────────────────────── */
+
+@keyframes selection-checkbox-in {
+  from {
+    opacity: 0;
+    transform: scale(0);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes selection-checkbox-out {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0);
+  }
+}
+
+.selection-checkbox-enter {
+  animation: selection-checkbox-in 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.selection-checkbox-exit {
+  animation: selection-checkbox-out 0.15s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes checkbox-check {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.checkbox-check {
+  animation: checkbox-check 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes batch-action-bar-in {
+  from {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.batch-action-bar-enter {
+  animation: batch-action-bar-in 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes undo-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes undo-toast-out {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(8px) scale(0.96);
+  }
+}
+
+.undo-toast-enter {
+  animation: undo-toast-in 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.undo-toast-exit {
+  animation: undo-toast-out 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes toast-progress {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
 /* ── Respect reduced motion ──────────────────────────────────── */
 
 @media (prefers-reduced-motion: reduce) {
@@ -694,6 +796,15 @@ body {
   .qp-response-enter,
   .qp-actions-enter,
   .qp-dropdown-enter {
+    animation: none;
+  }
+
+  .selection-checkbox-enter,
+  .selection-checkbox-exit,
+  .checkbox-check,
+  .batch-action-bar-enter,
+  .undo-toast-enter,
+  .undo-toast-exit {
     animation: none;
   }
 

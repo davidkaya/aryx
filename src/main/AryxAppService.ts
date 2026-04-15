@@ -1166,23 +1166,23 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
     const workspace = await this.loadWorkspace();
     const idsToDelete = new Set(sessionIds);
 
-    // Collect cleanup work before mutating the array
-    const cleanupTasks: Promise<void>[] = [];
+    // Run cleanup sequentially to avoid requestId collisions in sidecar dispatch
     for (const session of workspace.sessions) {
       if (!idsToDelete.has(session.id)) continue;
 
       const scratchpadDirectory = this.resolveScratchpadSessionDirectory(session);
       if (scratchpadDirectory) {
-        cleanupTasks.push(rm(scratchpadDirectory, { recursive: true, force: true }));
+        await rm(scratchpadDirectory, { recursive: true, force: true }).catch(() => {
+          // Best-effort — directory may not exist or be locked
+        });
       }
-      cleanupTasks.push(
-        this.sidecar.deleteSession(session.id).then(() => undefined).catch(() => {
-          // Best-effort — don't fail the deletion if SDK cleanup fails
-        }),
-      );
-    }
 
-    await Promise.allSettled(cleanupTasks);
+      try {
+        await this.sidecar.deleteSession(session.id);
+      } catch {
+        // Best-effort — don't fail the deletion if SDK cleanup fails
+      }
+    }
 
     workspace.sessions = workspace.sessions.filter((s) => !idsToDelete.has(s.id));
 

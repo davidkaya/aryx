@@ -194,6 +194,8 @@ function SessionItem({
   isSelected,
   selectionIndex,
   onToggleSelection,
+  onEnterSelectionMode,
+  onShiftSelect,
 }: {
   session: SessionRecord;
   workflow?: WorkflowDefinition;
@@ -207,6 +209,8 @@ function SessionItem({
   isSelected?: boolean;
   selectionIndex?: number;
   onToggleSelection?: () => void;
+  onEnterSelectionMode?: () => void;
+  onShiftSelect?: () => void;
 }) {
   const isRunning = session.status === 'running';
   const isError = session.status === 'error';
@@ -216,7 +220,7 @@ function SessionItem({
   const visual = modeVisuals[mode];
   const ModeIcon = visual.icon;
   const agentCount = workflow ? resolveWorkflowAgentNodes(workflow).length : 1;
-  const isSelectDisabled = isRunning && isSelecting;
+  const isSelectDisabled = isRunning;
 
   const [renameText, setRenameText] = useState(session.title);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -250,10 +254,25 @@ function SessionItem({
 
   function handleClick(e: React.MouseEvent) {
     if (isRenaming) return;
+
+    // Already in selection mode — toggle or range-select
     if (isSelecting) {
-      if (!isSelectDisabled) onToggleSelection?.();
+      if (isSelectDisabled) return;
+      if (e.shiftKey) {
+        onShiftSelect?.();
+      } else {
+        onToggleSelection?.();
+      }
       return;
     }
+
+    // Not in selection mode — check for modifier key to enter it
+    const modKey = isMac ? e.metaKey : e.ctrlKey;
+    if (modKey && !isSelectDisabled) {
+      onEnterSelectionMode?.();
+      return;
+    }
+
     onSelect();
   }
 
@@ -438,6 +457,8 @@ function ProjectGroup({
   isSelecting,
   isSelected,
   onToggleSelection,
+  onEnterSelectionMode,
+  onShiftSelect,
 }: {
   project: ProjectRecord;
   sessions: SessionRecord[];
@@ -455,6 +476,8 @@ function ProjectGroup({
   isSelecting?: boolean;
   isSelected?: (sessionId: string) => boolean;
   onToggleSelection?: (sessionId: string) => void;
+  onEnterSelectionMode?: (sessionId: string) => void;
+  onShiftSelect?: (sessionId: string) => void;
 }){
   const [expanded, setExpanded] = useState(true);
   const isScratchpad = isScratchpadProject(project);
@@ -592,6 +615,8 @@ function ProjectGroup({
                 isSelected={isSelected?.(session.id)}
                 selectionIndex={index}
                 onToggleSelection={() => onToggleSelection?.(session.id)}
+                onEnterSelectionMode={() => onEnterSelectionMode?.(session.id)}
+                onShiftSelect={() => onShiftSelect?.(session.id)}
               />
             ))}
           {onNewSession ? (
@@ -728,33 +753,22 @@ export function Sidebar({
     [selection.selectedIds, workspace.sessions],
   );
 
-  function handleSessionClick(sessionId: string, e: React.MouseEvent) {
-    const modKey = isMac ? e.metaKey : e.ctrlKey;
+  function handleEnterSelectionMode(sessionId: string) {
     const session = workspace.sessions.find((s) => s.id === sessionId);
-    const isRunning = session?.status === 'running';
-
-    if (selection.isSelecting) {
-      if (isRunning) return;
-      if (e.shiftKey) {
-        selection.rangeSelect(sessionId, allVisibleIds);
-      } else {
-        selection.toggle(sessionId);
-      }
-      return;
-    }
-
-    if (modKey && !isRunning) {
-      selection.enterSelectionMode(sessionId);
-      return;
-    }
-
-    onSessionSelect(sessionId);
+    if (session?.status === 'running') return;
+    selection.enterSelectionMode(sessionId);
   }
 
   function handleToggleSelection(sessionId: string) {
     const session = workspace.sessions.find((s) => s.id === sessionId);
     if (session?.status === 'running') return;
     selection.toggle(sessionId);
+  }
+
+  function handleShiftSelect(sessionId: string) {
+    const session = workspace.sessions.find((s) => s.id === sessionId);
+    if (session?.status === 'running') return;
+    selection.rangeSelect(sessionId, allVisibleIds);
   }
 
   const handleBatchArchive = useCallback(() => {
@@ -873,7 +887,7 @@ export function Sidebar({
                   isActive={workspace.selectedSessionId === session.id}
                   isRenaming={renamingSessionId === session.id}
                   key={session.id}
-                  onSelect={() => handleSessionClick(session.id, { ctrlKey: false, metaKey: false, shiftKey: false } as React.MouseEvent)}
+                  onSelect={() => onSessionSelect(session.id)}
                   onOpenMenu={(e) => handleOpenMenu(session.id, e)}
                   onRenameSubmit={(title) => handleRenameSubmit(session.id, title)}
                   onRenameCancel={() => setRenamingSessionId(undefined)}
@@ -883,6 +897,8 @@ export function Sidebar({
                   isSelected={selection.isSelected(session.id)}
                   selectionIndex={index}
                   onToggleSelection={() => handleToggleSelection(session.id)}
+                  onEnterSelectionMode={() => handleEnterSelectionMode(session.id)}
+                  onShiftSelect={() => handleShiftSelect(session.id)}
                 />
               ))
             )}
@@ -911,6 +927,8 @@ export function Sidebar({
                   isSelecting={selection.isSelecting}
                   isSelected={selection.isSelected}
                   onToggleSelection={handleToggleSelection}
+                  onEnterSelectionMode={handleEnterSelectionMode}
+                  onShiftSelect={handleShiftSelect}
                 />
               </div>
             )}
@@ -962,6 +980,8 @@ export function Sidebar({
                     isSelecting={selection.isSelecting}
                     isSelected={selection.isSelected}
                     onToggleSelection={handleToggleSelection}
+                    onEnterSelectionMode={handleEnterSelectionMode}
+                    onShiftSelect={handleShiftSelect}
                   />
                 ))}
               </div>

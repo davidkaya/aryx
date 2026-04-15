@@ -228,7 +228,28 @@ export function ChatPane({
       const activeRun = runsByTrigger.get(lastUserMessageId);
       if (activeRun && !consumedRunIds.has(activeRun.id)) {
         items.push({ type: 'turn-activity', thinkingMessages: [], run: activeRun, turnStartedAt: activeRun.startedAt });
+        consumedRunIds.add(activeRun.id);
       }
+    }
+
+    // Inject activity panels for any remaining unconsumed runs from
+    // previous turns (e.g. turns where thinking messages were not
+    // produced or were lost). Place each panel right after the trigger
+    // user message so it appears in the correct chronological position.
+    for (const run of session.runs) {
+      if (consumedRunIds.has(run.id)) continue;
+      const triggerIndex = items.findIndex(
+        (it) => it.type === 'message' && it.message.role === 'user' && it.message.id === run.triggerMessageId,
+      );
+      if (triggerIndex === -1) continue;
+      const panel: DisplayItem = {
+        type: 'turn-activity',
+        thinkingMessages: [],
+        run,
+        turnStartedAt: run.startedAt,
+      };
+      items.splice(triggerIndex + 1, 0, panel);
+      consumedRunIds.add(run.id);
     }
 
     // Tag the last turn-activity panel for each run so only it shows

@@ -674,6 +674,23 @@ body {
   animation: intent-divider-in 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
+/* Timeline spine connecting activity items */
+.activity-timeline-spine > .turn-activity-row:not([role="separator"]) {
+  position: relative;
+}
+
+.activity-timeline-spine > .turn-activity-row:not([role="separator"]):not(:last-child)::before {
+  content: "";
+  position: absolute;
+  left: 7px; /* center of the 16px (w-4) icon column */
+  top: 22px; /* below the icon center */
+  bottom: 0;
+  width: 1px;
+  background: var(--color-border);
+  opacity: 0.25;
+  pointer-events: none;
+}
+
 /* ── Batch selection animations ──────────────────────────────── */
 
 @keyframes selection-checkbox-in {

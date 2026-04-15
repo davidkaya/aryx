@@ -153,12 +153,12 @@ function ActivityTimelineEventRow({ event }: { event: RunTimelineEventRecord }) 
   const isTerminal = event.kind === 'run-completed' || event.kind === 'run-cancelled' || event.kind === 'run-failed';
 
   return (
-    <div className="turn-activity-row flex gap-2 py-1">
-      <div className="mt-0.5 flex shrink-0 items-start">
+    <div className="turn-activity-row flex items-start gap-2 py-1">
+      <div className="flex h-[18px] w-4 shrink-0 items-center justify-center">
         <ActivityEventIcon kind={event.kind} status={event.status} toolName={event.toolName} />
       </div>
       <div className="min-w-0 flex-1">
-        <span className={`text-[12px] font-medium ${isTerminal ? 'text-[var(--color-text-muted)]' : 'text-[var(--color-text-secondary)]'}`}>
+        <span className={`text-[12px] leading-[18px] font-medium ${isTerminal ? 'text-[var(--color-text-muted)]' : 'text-[var(--color-text-secondary)]'}`}>
           {label}
         </span>
 
@@ -231,14 +231,14 @@ function GroupedToolCallRow({ toolName, events }: { toolName: string; events: Ru
     <div className="turn-activity-row py-0.5">
       <button
         type="button"
-        className="flex w-full items-start gap-2 py-1 text-left transition-colors hover:bg-[var(--color-surface-2)]/30 rounded px-1 -mx-1"
+        className="flex w-full items-start gap-2 rounded px-1 -mx-1 py-1 text-left transition-colors hover:bg-[var(--color-surface-2)]/30"
         onClick={() => setExpanded((prev) => !prev)}
         aria-expanded={expanded}
       >
-        <div className="mt-0.5 flex shrink-0 items-start">
+        <div className="flex h-[18px] w-4 shrink-0 items-center justify-center">
           <ToolCategoryIcon toolName={toolName} />
         </div>
-        <span className="min-w-0 flex-1 text-[12px] font-medium text-[var(--color-text-secondary)]">
+        <span className="min-w-0 flex-1 text-[12px] leading-[18px] font-medium text-[var(--color-text-secondary)]">
           {label}
         </span>
         <ChevronRight
@@ -250,7 +250,7 @@ function GroupedToolCallRow({ toolName, events }: { toolName: string; events: Ru
 
       {/* Collapsed preview: show snippets inline */}
       {!expanded && snippets.length > 0 && (
-        <div className="ml-5 flex flex-wrap gap-x-2 gap-y-0.5 pb-0.5">
+        <div className="ml-6 flex flex-wrap gap-x-2 gap-y-0.5 pb-0.5">
           {snippets.slice(0, 6).map((s, i) => (
             <span key={i} className="truncate font-mono text-[10px] text-[var(--color-text-muted)]">
               {s}
@@ -266,7 +266,7 @@ function GroupedToolCallRow({ toolName, events }: { toolName: string; events: Ru
 
       {/* Expanded: full per-event rows */}
       {expanded && (
-        <div className="ml-5 border-l border-[var(--color-border)]/30 pl-2">
+        <div className="ml-6 border-l border-[var(--color-border)]/30 pl-2">
           {events.map((event) => (
             <div key={event.id} className="py-0.5">
               <span className="text-[11px] text-[var(--color-text-secondary)]">
@@ -285,7 +285,7 @@ function GroupedToolCallRow({ toolName, events }: { toolName: string; events: Ru
 
       {/* Aggregate file changes when collapsed */}
       {!expanded && hasFileChanges && (
-        <div className="ml-5 mt-0.5">
+        <div className="ml-6 mt-0.5">
           {events
             .filter((e) => e.fileChanges && e.fileChanges.length > 0)
             .flatMap((e) => e.fileChanges!)
@@ -304,9 +304,9 @@ function GroupedToolCallRow({ toolName, events }: { toolName: string; events: Ru
 
 function IntentDividerRow({ text }: { text: string }) {
   return (
-    <div className="turn-activity-row flex items-center gap-2 py-1.5" role="separator">
+    <div className="turn-activity-row flex items-center gap-2 py-2" role="separator">
       <div className="h-px flex-1 bg-[var(--color-border)]/40" />
-      <span className="shrink-0 text-[10px] font-medium tracking-wide text-[var(--color-text-muted)]">
+      <span className="shrink-0 rounded-full bg-[var(--color-surface-2)]/60 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-[var(--color-text-muted)]">
         {text}
       </span>
       <div className="h-px flex-1 bg-[var(--color-border)]/40" />
@@ -322,8 +322,8 @@ function ThinkingStepRow({ message }: { message: ChatMessageRecord }) {
   if (message.pending && !message.content) return null;
 
   return (
-    <div className="turn-activity-row flex gap-2 py-1">
-      <div className="mt-0.5 flex shrink-0 items-start">
+    <div className="turn-activity-row flex items-start gap-2 py-1">
+      <div className="flex h-[18px] w-4 shrink-0 items-center justify-center">
         <Brain className="size-3 text-[var(--color-accent-purple)]" />
       </div>
       <div className="min-w-0 flex-1">
@@ -349,8 +349,8 @@ function ThinkingGroupRow({ messages }: { messages: ChatMessageRecord[] }) {
 
   return (
     <div className="turn-activity-row py-0.5">
-      <div className="flex gap-2 py-1">
-        <div className="mt-0.5 flex shrink-0 items-start">
+      <div className="flex items-start gap-2 py-1">
+        <div className="flex h-[18px] w-4 shrink-0 items-center justify-center">
           <Brain className="size-3 text-[var(--color-accent-purple)]" />
         </div>
         <div className="min-w-0 flex-1">
@@ -370,7 +370,7 @@ function ThinkingGroupRow({ messages }: { messages: ChatMessageRecord[] }) {
       </div>
 
       {expanded && (
-        <div className="ml-5 space-y-0.5 border-l border-[var(--color-border)]/30 pl-2">
+        <div className="ml-6 space-y-0.5 border-l border-[var(--color-border)]/30 pl-2">
           {visibleMessages.slice(0, -1).map((msg) => (
             <p key={msg.id} className="text-[10px] italic leading-snug text-[var(--color-text-muted)]">
               "{truncatePreview(msg.content, 140)}"
@@ -461,6 +461,7 @@ export function TurnActivityPanel({
   const elapsed = useElapsedTimer(
     thinkingMessages.length > 0 || run ? effectiveTurnStartedAt : undefined,
     isActive,
+    run?.completedAt,
   );
 
   const summary = useMemo(
@@ -516,17 +517,25 @@ export function TurnActivityPanel({
     : isCancelled
       ? 'text-[var(--color-text-muted)]'
       : isActive
-        ? 'text-[var(--color-text-secondary)]'
+        ? 'text-[var(--color-text-primary)]'
         : 'text-[var(--color-text-secondary)]';
+
+  const statusDotClass = isFailed
+    ? 'bg-[var(--color-status-error)]'
+    : isCancelled
+      ? 'bg-[var(--color-text-muted)]'
+      : isActive
+        ? 'bg-[var(--color-accent)]'
+        : 'bg-[var(--color-status-success)]';
 
   return (
     <div
-      className={`turn-activity-enter overflow-hidden rounded-lg border bg-[var(--color-surface-1)]/60 transition-colors duration-200 ${
+      className={`turn-activity-enter overflow-hidden rounded-lg border transition-colors duration-200 ${
         isActive
-          ? 'border-[var(--color-accent)]/30'
+          ? 'border-[var(--color-accent)]/30 bg-[var(--color-accent)]/[0.03]'
           : isFailed
-            ? 'border-[var(--color-status-error)]/20'
-            : 'border-[var(--color-border)]/50'
+            ? 'border-[var(--color-status-error)]/20 bg-[var(--color-surface-1)]/60'
+            : 'border-[var(--color-border)]/50 bg-[var(--color-surface-1)]/60'
       }`}
     >
       {/* Summary header */}
@@ -535,20 +544,23 @@ export function TurnActivityPanel({
         onClick={toggle}
         onKeyDown={(e) => { if (e.key === ' ') { e.preventDefault(); toggle(); } }}
         aria-expanded={expanded}
-        className={`flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] transition-colors hover:bg-[var(--color-surface-2)]/50 ${
-          isActive ? 'bg-[var(--color-accent)]/[0.04]' : ''
-        }`}
+        className="flex w-full items-center gap-2.5 px-3 py-2 text-left transition-colors hover:bg-[var(--color-surface-2)]/50"
       >
-        <Zap className={`size-3.5 shrink-0 ${isActive ? 'text-[var(--color-accent)]' : 'text-[var(--color-text-muted)]'}`} />
+        {/* Status dot */}
+        <span className={`size-2 shrink-0 rounded-full ${statusDotClass} ${isActive ? 'animate-pulse' : ''}`} />
 
-        {isActive ? (
-          <span className="flex items-center gap-1.5">
-            <span className={statusColorClass}>{summaryLabel}</span>
-            <ActivityPulse />
+        {/* Status label + elapsed */}
+        <span className="flex items-center gap-1.5">
+          <span className={`text-[12px] font-semibold ${statusColorClass}`}>
+            {summaryLabel}
           </span>
-        ) : (
-          <span className={statusColorClass}>{summaryLabel}</span>
-        )}
+          {isActive && <ActivityPulse />}
+          {elapsed && (
+            <span className="tabular-nums text-[11px] text-[var(--color-text-muted)]">
+              {isActive ? elapsed : ''}
+            </span>
+          )}
+        </span>
 
         {/* Intent / generated summary */}
         {headerDetail && (
@@ -560,7 +572,7 @@ export function TurnActivityPanel({
 
         {/* Inline counters */}
         {summaryParts.length > 0 && (
-          <span className="shrink-0 font-mono text-[10px] text-[var(--color-text-muted)]">
+          <span className="shrink-0 tabular-nums text-[10px] text-[var(--color-text-muted)]">
             {'· '}
             {summaryParts.join(' · ')}
           </span>
@@ -576,7 +588,7 @@ export function TurnActivityPanel({
       {/* Expanded activity stream — grouped */}
       {expanded && (
         <div className="border-t border-[var(--color-border)]/30 px-3 py-2">
-          <div className="space-y-0.5">
+          <div className="activity-timeline-spine relative space-y-px">
             {groupedItems.map((item, index) => (
               <GroupedItemRow key={index} item={item} />
             ))}

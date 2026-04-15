@@ -5,12 +5,12 @@ import type { ActiveSubagent } from '@renderer/lib/subagentTracker';
 
 const COMPLETION_GRACE_MS = 3000;
 
-function formatElapsed(startedAt: string): string {
-  const seconds = Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000);
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  const remainder = seconds % 60;
-  return `${minutes}m ${remainder}s`;
+import { formatElapsedMs } from '@renderer/hooks/useElapsedTimer';
+
+function formatElapsed(startedAt: string, endedAt?: string): string {
+  const endMs = endedAt ? new Date(endedAt).getTime() : Date.now();
+  const durationMs = endMs - new Date(startedAt).getTime();
+  return formatElapsedMs(durationMs);
 }
 
 function StatusIcon({ status }: { status: ActiveSubagent['status'] }) {

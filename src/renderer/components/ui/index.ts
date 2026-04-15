@@ -7,5 +7,6 @@ export { TextInput } from './TextInput';
 export { TextareaInput } from './TextareaInput';
 export { SelectInput } from './SelectInput';
 export { InfoCallout } from './InfoCallout';
+export { HotkeyRecorder, hotkeyToDisplayTokens } from './HotkeyRecorder';
 export type { UpdateBannerProps } from './UpdateBanner';
 export { UpdateBanner } from './UpdateBanner';

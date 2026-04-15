@@ -3,12 +3,11 @@ import { ChevronLeft, ChevronRight, CircleCheck, Code, Cpu, FolderOpen, GitBranc
 
 import { CopilotStatusCard } from '@renderer/components/CopilotStatusCard';
 import { WorkflowEditor } from '@renderer/components/WorkflowEditor';
-import { ToggleSwitch } from '@renderer/components/ui';
+import { HotkeyRecorder, ToggleSwitch } from '@renderer/components/ui';
 import { LspProfileEditor } from '@renderer/components/settings/LspProfileEditor';
 import { McpServerEditor } from '@renderer/components/settings/McpServerEditor';
 import { WorkspaceAgentEditor } from '@renderer/components/settings/WorkspaceAgentEditor';
 import { getElectronApi } from '@renderer/lib/electronApi';
-import { isMac } from '@renderer/lib/platform';
 import type { SidecarCapabilities, QuotaSnapshot } from '@shared/contracts/sidecar';
 import type { DiscoveredMcpServer, DiscoveredToolingState } from '@shared/domain/discoveredTooling';
 import { listAcceptedDiscoveredMcpServers, listPendingDiscoveredMcpServers } from '@shared/domain/discoveredTooling';
@@ -1339,13 +1338,6 @@ function QuickPromptSettingsSection({
   const resolvedModel = defaultModel ? availableModels.find((m) => m.id === defaultModel) : undefined;
   const modelSupportsReasoning = resolvedModel?.supportedReasoningEfforts?.length;
 
-  const hotkeyKeys = hotkey
-    .replace('Super', isMac ? '⌘' : 'Win')
-    .replace('Alt', isMac ? '⌥' : 'Alt')
-    .replace('Shift', '⇧')
-    .split('+')
-    .map((k) => k.trim());
-
   // Group models by tier for the dropdown
   const tierOrder = ['premium', 'standard', 'fast'] as const;
   const tierLabels: Record<string, string> = { premium: 'Premium', standard: 'Standard', fast: 'Fast' };
@@ -1372,7 +1364,7 @@ function QuickPromptSettingsSection({
         </p>
       </div>
 
-      {/* Enable / Disable + Keyboard Shortcut — compact row */}
+      {/* Enable / Disable toggle */}
       <div className="mt-5 flex items-center gap-3 rounded-lg border border-[var(--color-border)] px-4 py-3">
         <button
           className="flex flex-1 items-start gap-0 text-left"
@@ -1381,23 +1373,30 @@ function QuickPromptSettingsSection({
         >
           <div className="flex-1">
             <span className="text-[13px] font-medium text-[var(--color-text-primary)]">
-              Global hotkey
+              Enable global hotkey
             </span>
-            <div className="mt-1.5 flex items-center gap-1">
-              {hotkeyKeys.map((key) => (
-                <kbd
-                  key={key}
-                  className="rounded-[5px] border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2 py-[3px] font-mono text-[11px] font-medium leading-none text-[var(--color-text-secondary)] shadow-sm shadow-black/20"
-                >
-                  {key}
-                </kbd>
-              ))}
-            </div>
+            <p className="mt-0.5 text-[11px] text-[var(--color-text-muted)]">
+              Summon Quick Prompt from any app
+            </p>
           </div>
         </button>
         <button onClick={() => onUpdate?.({ enabled: !enabled })} type="button">
           <ToggleSwitch enabled={enabled} />
         </button>
+      </div>
+
+      {/* Hotkey Recorder */}
+      <div className="mt-4">
+        <div className="mb-2 flex items-center justify-between">
+          <span className="text-[12px] font-medium text-[var(--color-text-secondary)]">
+            Keyboard shortcut
+          </span>
+        </div>
+        <HotkeyRecorder
+          value={hotkey}
+          disabled={!enabled}
+          onChange={(newHotkey) => onUpdate?.({ hotkey: newHotkey })}
+        />
       </div>
 
       {/* Default Model — compact dropdown selector */}

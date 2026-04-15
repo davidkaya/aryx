@@ -23,7 +23,7 @@ function CodeBlock({ language, children }: { language: string; children: string 
   }
 
   return (
-    <div className="group relative my-3 overflow-hidden rounded-lg border border-zinc-800 bg-[#0d0d10]">
+    <div className="group relative my-3 overflow-hidden rounded-lg border border-zinc-800 bg-surface-1">
       <div className="flex items-center justify-between border-b border-zinc-800/80 px-4 py-1.5">
         <span className="select-none text-[11px] text-zinc-500">
           {language || 'text'}

@@ -1,3 +1,4 @@
+import { join, resolve } from 'node:path';
 import { describe, expect, test } from 'bun:test';
 
 import {
@@ -7,6 +8,9 @@ import {
   type GitCommandResult,
   type ReleaseDependencies,
 } from '../../scripts/release';
+
+const testRepositoryRoot = resolve('/test-workspace/aryx');
+const testPackageJsonPath = join(testRepositoryRoot, 'package.json');
 
 function gitSuccess(stdout = '', stderr = ''): GitCommandResult {
   return {
@@ -109,8 +113,8 @@ describe('release workflow', () => {
 
     const result = await runReleaseWorkflow(
       {
-        repositoryRoot: 'C:\\workspace\\personal\\projects\\aryx',
-        packageJsonPath: 'C:\\workspace\\personal\\projects\\aryx\\package.json',
+        repositoryRoot: testRepositoryRoot,
+        packageJsonPath: testPackageJsonPath,
       },
       dependencies,
     );
@@ -148,8 +152,8 @@ describe('release workflow', () => {
     await expect(
       runReleaseWorkflow(
         {
-          repositoryRoot: 'C:\\workspace\\personal\\projects\\aryx',
-          packageJsonPath: 'C:\\workspace\\personal\\projects\\aryx\\package.json',
+          repositoryRoot: testRepositoryRoot,
+          packageJsonPath: testPackageJsonPath,
         },
         dependencies,
       ),
@@ -173,8 +177,8 @@ describe('release workflow', () => {
     await expect(
       runReleaseWorkflow(
         {
-          repositoryRoot: 'C:\\workspace\\personal\\projects\\aryx',
-          packageJsonPath: 'C:\\workspace\\personal\\projects\\aryx\\package.json',
+          repositoryRoot: testRepositoryRoot,
+          packageJsonPath: testPackageJsonPath,
           bumpArg: 'minor',
         },
         dependencies,
@@ -204,8 +208,8 @@ describe('release workflow', () => {
     await expect(
       runReleaseWorkflow(
         {
-          repositoryRoot: 'C:\\workspace\\personal\\projects\\aryx',
-          packageJsonPath: 'C:\\workspace\\personal\\projects\\aryx\\package.json',
+          repositoryRoot: testRepositoryRoot,
+          packageJsonPath: testPackageJsonPath,
         },
         dependencies,
       ),

@@ -614,8 +614,8 @@ function TelemetrySection({
           placeholder={DEFAULT_OTEL_ENDPOINT}
         />
         <p className="mt-1.5 text-[11px] text-[var(--color-text-muted)]">
-          Use <span className="font-mono">bun run aspire</span> to launch the Aspire Dashboard locally at this default endpoint.
-          Changes take effect on the next sidecar session.
+          The URL of any OTLP-compatible collector (e.g. Jaeger, Aspire Dashboard, Grafana Alloy).
+          Changes take effect on the next session.
         </p>
       </div>
     </div>

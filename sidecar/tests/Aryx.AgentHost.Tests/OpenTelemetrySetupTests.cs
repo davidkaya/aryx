@@ -27,7 +27,7 @@ public sealed class OpenTelemetrySetupTests
         Assert.Equal(OtlpExportProtocol.Grpc, configuration.Protocol);
         Assert.Collection(
             configuration.ActivitySourceNames,
-            source => Assert.Equal("Microsoft.Agents.AI", source),
+            source => Assert.Equal("Experimental.Microsoft.Agents.AI", source),
             source => Assert.Equal("Microsoft.Agents.AI.Workflows", source));
     }
 

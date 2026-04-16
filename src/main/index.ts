@@ -16,6 +16,12 @@ import { createDefaultQuickPromptSettings } from '@shared/domain/tooling';
 
 const { app, BrowserWindow } = electron;
 
+// Enforce single instance — quit immediately if another instance already holds the lock.
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+  app.quit();
+}
+
 let mainWindow: BrowserWindowType | undefined;
 let quickPromptWindow: BrowserWindowType | undefined;
 let appService: AryxAppService | undefined;
@@ -108,6 +114,10 @@ async function bootstrap(): Promise<void> {
 
   autoUpdateService.start();
 }
+
+app.on('second-instance', () => {
+  showAndFocusWindow();
+});
 
 app.whenReady().then(bootstrap);
 

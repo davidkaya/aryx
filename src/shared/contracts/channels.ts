@@ -25,6 +25,7 @@ export const ipcChannels = {
   setNotificationsEnabled: 'settings:set-notifications-enabled',
   setMinimizeToTray: 'settings:set-minimize-to-tray',
   setGitAutoRefreshEnabled: 'settings:set-git-auto-refresh-enabled',
+  setOpenTelemetry: 'settings:set-opentelemetry',
   checkForUpdates: 'app:check-for-updates',
   installUpdate: 'app:install-update',
   saveMcpServer: 'tooling:mcp:save',

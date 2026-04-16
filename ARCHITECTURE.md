@@ -37,6 +37,7 @@ flowchart LR
     Git[Local git repositories]
     Sidecar[.NET sidecar]
     Copilot[GitHub Copilot CLI<br/>+ agent runtime]
+    Telemetry[OTLP collector<br/>Aspire Dashboard]
     OS[Native windowing<br/>and desktop integration]
 
     User --> Renderer
@@ -46,6 +47,7 @@ flowchart LR
     Main <--> Git
     Main <--> Sidecar
     Sidecar <--> Copilot
+    Sidecar --> Telemetry
     Main <--> OS
 ```
 
@@ -56,8 +58,8 @@ flowchart LR
 | Renderer | Screens, interaction, local view composition, theme application | Filesystem, process spawning, raw Electron access, Copilot runtime | Typed preload API and pushed events |
 | Preload | Narrow bridge between browser context and Electron IPC | Business logic, persistence, orchestration | `ipcRenderer` / `ipcMain` |
 | Main process | Workspace mutation, persistence, git inspection/write operations, run change attribution, commit workflow orchestration, session lifecycle, native window state, global hotkey registration, sidecar lifecycle, PTY-backed terminal lifecycle | UI rendering, LLM orchestration internals | IPC, filesystem, git CLI, stdio with sidecar, native child processes |
-| Sidecar | Capability discovery, workflow validation, run execution, provider event normalization, streaming deltas and activity, streamed text assembly | UI, workspace persistence, Electron APIs | Line-delimited JSON over stdio |
-| External systems | Git data, Copilot account/model access, OS window chrome | Application state and UI behavior | Controlled adapters owned by main or sidecar |
+| Sidecar | Capability discovery, workflow validation, run execution, provider event normalization, optional OTLP trace export, streaming deltas and activity, streamed text assembly | UI, workspace persistence, Electron APIs | Line-delimited JSON over stdio, OTLP to external collectors |
+| External systems | Git data, Copilot account/model access, telemetry collectors, OS window chrome | Application state and UI behavior | Controlled adapters owned by main or sidecar |
 
 This split is the most important architectural feature in the app. It is what keeps the system understandable as more capabilities are added.
 
@@ -68,7 +70,7 @@ Aryx runs as a multi-process desktop application:
 1. The **renderer** displays the workspace and captures user intent.
 2. The **preload bridge** exposes a small, typed API into the browser context.
 3. The **main process** validates and mutates application state, persists it, and manages native integrations.
-4. The **sidecar** executes Copilot-backed turns and streams structured execution events back.
+4. The **sidecar** executes Copilot-backed turns, can export OpenTelemetry traces to an external collector, and streams structured execution events back.
 
 The sidecar is intentionally separate from the Electron main process so that AI runtime concerns stay isolated from UI and persistence concerns.
 

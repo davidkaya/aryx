@@ -92,12 +92,18 @@ bun run test           # typecheck + unit tests
 bun run sidecar:test   # backend tests
 bun run build          # full build (electron + sidecar)
 
+bun run aspire         # start the standalone Aspire Dashboard in Docker
+bun run dev:otel       # start Aspire + Aryx dev with OTLP export enabled
 bun run package        # package for current platform → release/
 bun run installer      # create installable artifact
 bun run publish-release # publish to GitHub Releases
 bun run release        # bump patch version, commit, tag, and push
 bun run release minor  # bump minor version instead (use major for breaking releases)
 ```
+
+For local observability, `bun run dev:otel` starts the Aspire Dashboard UI at `http://localhost:18888`
+and configures the sidecar to export OpenTelemetry traces to `http://localhost:4317` over OTLP/gRPC.
+This dev workflow requires Docker.
 
 Tagged releases use GitHub Actions to build and publish Windows (NSIS), macOS (DMG, signed + notarized), and Linux (AppImage) artifacts. The app uses `electron-updater` for in-app updates.
 The release helper expects a clean git worktree, an upstream branch configured for the current branch, and permission to push commits and tags.

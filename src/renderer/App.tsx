@@ -873,6 +873,8 @@ export default function App() {
           setQuickPromptSettings(updated);
           void api.setQuickPromptSettings(patch);
         }}
+        openTelemetry={workspace.settings.openTelemetry}
+        onSetOpenTelemetry={(settings) => void api.setOpenTelemetry(settings)}
       />
     </Suspense>
   ) : null;

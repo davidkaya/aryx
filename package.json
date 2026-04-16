@@ -6,6 +6,8 @@
   "main": "dist-electron/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
+    "dev:otel": "bun run scripts/dev-with-otel.ts",
+    "aspire": "bun run scripts/launch-aspire-dashboard.ts",
     "build:electron": "electron-vite build",
     "build": "bun run build:electron && bun run sidecar:build",
     "package": "bun run scripts/clean-release.ts && bun run build:electron && bun run sidecar:publish && electron-builder --dir --publish never",

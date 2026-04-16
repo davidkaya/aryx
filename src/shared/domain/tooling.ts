@@ -68,6 +68,13 @@ export interface QuickPromptSettings {
   defaultReasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh';
 }
 
+export interface OpenTelemetrySettings {
+  enabled: boolean;
+  endpoint: string;
+}
+
+export const DEFAULT_OTEL_ENDPOINT = 'http://localhost:4317';
+
 export function createDefaultQuickPromptSettings(): QuickPromptSettings {
   return {
     enabled: true,
@@ -85,6 +92,7 @@ export interface WorkspaceSettings {
   minimizeToTray?: boolean;
   gitAutoRefreshEnabled?: boolean;
   quickPrompt?: QuickPromptSettings;
+  openTelemetry?: OpenTelemetrySettings;
 }
 
 export interface SessionToolingSelection {
@@ -231,6 +239,16 @@ export function normalizeWorkspaceSettings(settings?: Partial<WorkspaceSettings>
     ...(settings?.minimizeToTray !== undefined ? { minimizeToTray: settings.minimizeToTray } : {}),
     ...(settings?.gitAutoRefreshEnabled !== undefined ? { gitAutoRefreshEnabled: settings.gitAutoRefreshEnabled } : {}),
     ...(settings?.quickPrompt !== undefined ? { quickPrompt: settings.quickPrompt } : {}),
+    ...(settings?.openTelemetry !== undefined ? { openTelemetry: normalizeOpenTelemetrySettings(settings.openTelemetry) } : {}),
+  };
+}
+
+export function normalizeOpenTelemetrySettings(settings?: Partial<OpenTelemetrySettings>): OpenTelemetrySettings {
+  return {
+    enabled: settings?.enabled === true,
+    endpoint: typeof settings?.endpoint === 'string' && settings.endpoint.trim() !== ''
+      ? settings.endpoint.trim()
+      : DEFAULT_OTEL_ENDPOINT,
   };
 }
 

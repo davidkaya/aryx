@@ -36,6 +36,7 @@ const api: ElectronApi = {
   setNotificationsEnabled: (enabled) => ipcRenderer.invoke(ipcChannels.setNotificationsEnabled, enabled),
   setMinimizeToTray: (enabled) => ipcRenderer.invoke(ipcChannels.setMinimizeToTray, enabled),
   setGitAutoRefreshEnabled: (enabled) => ipcRenderer.invoke(ipcChannels.setGitAutoRefreshEnabled, enabled),
+  setOpenTelemetry: (settings) => ipcRenderer.invoke(ipcChannels.setOpenTelemetry, settings),
   getQuickPromptSettings: () => ipcRenderer.invoke(ipcChannels.quickPromptGetSettings),
   setQuickPromptSettings: (settings) => ipcRenderer.invoke(ipcChannels.quickPromptSetSettings, settings),
   checkForUpdates: () => ipcRenderer.invoke(ipcChannels.checkForUpdates),

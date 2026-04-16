@@ -87,8 +87,13 @@ internal sealed class CopilotAgentBundle : ProviderAgentBundle
                     name: definition.GetAgentName(),
                     description: NormalizeOptionalString(definition.Config.Description));
 
-                agents.Add(agent);
+                AIAgent instrumentedAgent = new AIAgentBuilder(agent).UseOpenTelemetry().Build();
+                agents.Add(instrumentedAgent);
                 disposables.Add(agent);
+                if (instrumentedAgent is IDisposable instrumentedDisposable)
+                {
+                    disposables.Add(new SyncDisposableAdapter(instrumentedDisposable));
+                }
             }
 
             // The bundle owns the shared client — disposed after all agents.
@@ -327,5 +332,18 @@ internal sealed class CopilotAgentBundle : ProviderAgentBundle
     private static string? NormalizeOptionalString(string? value)
     {
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    /// <summary>
+    /// Adapts a synchronous <see cref="IDisposable"/> to <see cref="IAsyncDisposable"/>
+    /// so it can be tracked in the async disposal pipeline.
+    /// </summary>
+    private sealed class SyncDisposableAdapter(IDisposable inner) : IAsyncDisposable
+    {
+        public ValueTask DisposeAsync()
+        {
+            inner.Dispose();
+            return ValueTask.CompletedTask;
+        }
     }
 }

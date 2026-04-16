@@ -112,7 +112,7 @@ internal sealed class WorkflowRunner
             builder = builder.WithName(workflowDefinition.Name);
         }
 
-        return builder.WithOutputFrom(routes[endNode.Id].Exit).Build();
+        return builder.WithOutputFrom(routes[endNode.Id].Exit).WithOpenTelemetry().Build();
     }
 
     private WorkflowNodeRoute CreateNodeRoute(

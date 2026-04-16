@@ -14,7 +14,7 @@ internal static class OpenTelemetrySetup
 
     private static readonly string[] ActivitySourceNames =
     [
-        "Microsoft.Agents.AI",
+        "Experimental.Microsoft.Agents.AI",
         "Microsoft.Agents.AI.Workflows",
     ];
 

@@ -1,9 +1,9 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { ChevronLeft, ChevronRight, CircleCheck, Code, Cpu, FolderOpen, GitBranch, Palette, Plus, RefreshCw, Server, Sparkles, TriangleAlert, UserCircle, Wrench } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CircleCheck, Code, Cpu, FolderOpen, GitBranch, Palette, Plus, RefreshCw, Server, Sparkles, TriangleAlert, UserCircle, Wrench, Activity } from 'lucide-react';
 
 import { CopilotStatusCard } from '@renderer/components/CopilotStatusCard';
 import { WorkflowEditor } from '@renderer/components/WorkflowEditor';
-import { HotkeyRecorder, ToggleSwitch } from '@renderer/components/ui';
+import { HotkeyRecorder, TextInput, ToggleSwitch } from '@renderer/components/ui';
 import { LspProfileEditor } from '@renderer/components/settings/LspProfileEditor';
 import { McpServerEditor } from '@renderer/components/settings/McpServerEditor';
 import { WorkspaceAgentEditor } from '@renderer/components/settings/WorkspaceAgentEditor';
@@ -18,9 +18,11 @@ import type { WorkflowTemplateCategory, WorkflowTemplateDefinition } from '@shar
 import {
   normalizeLspProfileDefinition,
   normalizeMcpServerDefinition,
+  DEFAULT_OTEL_ENDPOINT,
   type AppearanceTheme,
   type LspProfileDefinition,
   type McpServerDefinition,
+  type OpenTelemetrySettings,
   type QuickPromptSettings,
   type WorkspaceToolingSettings,
 } from '@shared/domain/tooling';
@@ -65,9 +67,11 @@ interface SettingsPanelProps {
   onCreateWorkflowFromTemplate?: (templateId: string, name?: string) => Promise<void>;
   quickPromptSettings?: QuickPromptSettings;
   onSetQuickPromptSettings?: (patch: Partial<QuickPromptSettings>) => void;
+  openTelemetry?: OpenTelemetrySettings;
+  onSetOpenTelemetry?: (settings: OpenTelemetrySettings) => void;
 }
 
-export type SettingsSection = 'appearance' | 'connection' | 'workflows' | 'agents' | 'mcp-servers' | 'lsp-profiles' | 'quick-prompt' | 'troubleshooting';
+export type SettingsSection = 'appearance' | 'connection' | 'workflows' | 'agents' | 'mcp-servers' | 'lsp-profiles' | 'quick-prompt' | 'telemetry' | 'troubleshooting';
 
 interface NavItem {
   id: SettingsSection;
@@ -86,6 +90,7 @@ const navGroups: NavGroup[] = [
     items: [
       { id: 'appearance', label: 'Appearance', icon: <Palette className="size-3.5" /> },
       { id: 'quick-prompt', label: 'Quick Prompt', icon: <Sparkles className="size-3.5" /> },
+      { id: 'telemetry', label: 'Telemetry', icon: <Activity className="size-3.5" /> },
     ],
   },
   {
@@ -155,6 +160,8 @@ export function SettingsPanel({
   onCreateWorkflowFromTemplate,
   quickPromptSettings,
   onSetQuickPromptSettings,
+  openTelemetry,
+  onSetOpenTelemetry,
 }: SettingsPanelProps) {
   const [activeSection, setActiveSection] = useState<SettingsSection>(initialSection ?? 'appearance');
   const [editingWorkflow, setEditingWorkflow] = useState<WorkflowDefinition | null>(null);
@@ -394,6 +401,12 @@ export function SettingsPanel({
                 onUpdate={onSetQuickPromptSettings}
               />
             )}
+            {activeSection === 'telemetry' && (
+              <TelemetrySection
+                openTelemetry={openTelemetry}
+                onSetOpenTelemetry={onSetOpenTelemetry}
+              />
+            )}
             {activeSection === 'troubleshooting' && (
               <TroubleshootingSection
                 onOpenAppDataFolder={onOpenAppDataFolder}
@@ -544,6 +557,67 @@ function AppearanceSection({
         </div>
         <ToggleSwitch enabled={gitAutoRefreshEnabled} />
       </button>
+    </div>
+  );
+}
+
+function TelemetrySection({
+  openTelemetry,
+  onSetOpenTelemetry,
+}: {
+  openTelemetry?: OpenTelemetrySettings;
+  onSetOpenTelemetry?: (settings: OpenTelemetrySettings) => void;
+}) {
+  const enabled = openTelemetry?.enabled ?? false;
+  const endpoint = openTelemetry?.endpoint ?? DEFAULT_OTEL_ENDPOINT;
+
+  const handleToggle = () => {
+    onSetOpenTelemetry?.({ enabled: !enabled, endpoint });
+  };
+
+  const handleEndpointChange = (value: string) => {
+    onSetOpenTelemetry?.({ enabled, endpoint: value });
+  };
+
+  return (
+    <div>
+      <div className="mb-1">
+        <h3 className="font-display text-[13px] font-semibold text-[var(--color-text-primary)]">OpenTelemetry</h3>
+        <p className="mt-0.5 text-[12px] text-[var(--color-text-muted)]">
+          Export traces from the sidecar to an OTLP-compatible collector
+        </p>
+      </div>
+
+      <button
+        className="mt-4 flex w-full items-center justify-between rounded-lg border border-[var(--color-border)] px-4 py-3 text-left transition hover:bg-[var(--color-surface-3)]/40"
+        onClick={handleToggle}
+        type="button"
+      >
+        <div>
+          <span className="text-[13px] font-medium text-[var(--color-text-primary)]">
+            Enable OTLP export
+          </span>
+          <p className="text-[12px] text-[var(--color-text-muted)]">
+            Send traces to the configured OTLP endpoint when a new sidecar session starts
+          </p>
+        </div>
+        <ToggleSwitch enabled={enabled} />
+      </button>
+
+      <div className="mt-5">
+        <label className="mb-1.5 block text-[12px] font-medium text-[var(--color-text-secondary)]">
+          OTLP endpoint
+        </label>
+        <TextInput
+          value={endpoint}
+          onChange={handleEndpointChange}
+          placeholder={DEFAULT_OTEL_ENDPOINT}
+        />
+        <p className="mt-1.5 text-[11px] text-[var(--color-text-muted)]">
+          Use <span className="font-mono">bun run aspire</span> to launch the Aspire Dashboard locally at this default endpoint.
+          Changes take effect on the next sidecar session.
+        </p>
+      </div>
     </div>
   );
 }

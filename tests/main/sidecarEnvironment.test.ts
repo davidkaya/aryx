@@ -37,4 +37,46 @@ describe('createSidecarEnvironment', () => {
       HTTPS_PROXY: 'http://proxy.local:8080',
     });
   });
+
+  test('injects OTEL_EXPORTER_OTLP_ENDPOINT when OpenTelemetry is enabled', () => {
+    expect(
+      createSidecarEnvironment(
+        { PATH: 'C:\\tools' },
+        { enabled: true, endpoint: 'http://localhost:4317' },
+      ),
+    ).toEqual({
+      PATH: 'C:\\tools',
+      OTEL_EXPORTER_OTLP_ENDPOINT: 'http://localhost:4317',
+    });
+  });
+
+  test('does not inject OTEL_EXPORTER_OTLP_ENDPOINT when OpenTelemetry is disabled', () => {
+    expect(
+      createSidecarEnvironment(
+        { PATH: 'C:\\tools' },
+        { enabled: false, endpoint: 'http://localhost:4317' },
+      ),
+    ).toEqual({
+      PATH: 'C:\\tools',
+    });
+  });
+
+  test('does not inject OTEL_EXPORTER_OTLP_ENDPOINT when settings are undefined', () => {
+    expect(
+      createSidecarEnvironment({ PATH: 'C:\\tools' }),
+    ).toEqual({
+      PATH: 'C:\\tools',
+    });
+  });
+
+  test('does not inject OTEL_EXPORTER_OTLP_ENDPOINT when endpoint is empty', () => {
+    expect(
+      createSidecarEnvironment(
+        { PATH: 'C:\\tools' },
+        { enabled: true, endpoint: '' },
+      ),
+    ).toEqual({
+      PATH: 'C:\\tools',
+    });
+  });
 });

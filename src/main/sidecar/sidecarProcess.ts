@@ -21,6 +21,7 @@ import type {
 } from '@shared/contracts/sidecar';
 import type { ApprovalDecision } from '@shared/domain/approval';
 import type { ChatMessageRecord } from '@shared/domain/session';
+import type { OpenTelemetrySettings } from '@shared/domain/tooling';
 import { createSidecarEnvironment } from '@main/sidecar/sidecarEnvironment';
 import {
   markRunTurnPendingErrored,
@@ -109,6 +110,11 @@ export class SidecarClient {
   private processState?: ManagedSidecarProcess;
   private nextProcessId = 0;
   private readonly pending = new Map<string, PendingCommand>();
+  private openTelemetrySettings?: OpenTelemetrySettings;
+
+  setOpenTelemetrySettings(settings?: OpenTelemetrySettings): void {
+    this.openTelemetrySettings = settings;
+  }
 
   async describeCapabilities(): Promise<SidecarCapabilities> {
     const command = await this.dispatch<SidecarCapabilities>({
@@ -240,7 +246,7 @@ export class SidecarClient {
     });
     const childProcess = spawn(sidecar.command, sidecar.args, {
       cwd: sidecar.cwd,
-      env: createSidecarEnvironment(process.env),
+      env: createSidecarEnvironment(process.env, this.openTelemetrySettings),
       stdio: 'pipe',
       windowsHide: true,
     });

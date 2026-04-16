@@ -20,6 +20,7 @@ import type {
   SessionToolingSelection,
   AppearanceTheme,
   QuickPromptSettings,
+  OpenTelemetrySettings,
 } from '@shared/domain/tooling';
 import type { WorkspaceState } from '@shared/domain/workspace';
 import type { ChatMessageAttachment } from '@shared/domain/attachment';
@@ -364,6 +365,7 @@ export interface ElectronApi {
   setNotificationsEnabled(enabled: boolean): Promise<WorkspaceState>;
   setMinimizeToTray(enabled: boolean): Promise<WorkspaceState>;
   setGitAutoRefreshEnabled(enabled: boolean): Promise<WorkspaceState>;
+  setOpenTelemetry(settings: OpenTelemetrySettings): Promise<WorkspaceState>;
   checkForUpdates(): Promise<UpdateStatus>;
   installUpdate(): Promise<void>;
   describeTerminal(): Promise<TerminalSnapshot | undefined>;

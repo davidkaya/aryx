@@ -6,12 +6,14 @@ import {
   groupApprovalToolsByProvider,
   listApprovalToolDefinitions,
   listApprovalToolNames,
+  normalizeOpenTelemetrySettings,
   normalizeWorkspaceSettings,
   resolveProjectToolingSettings,
   resolveToolLabel,
   resolveWorkspaceToolingSettings,
   validateLspProfileDefinition,
   validateMcpServerDefinition,
+  DEFAULT_OTEL_ENDPOINT,
   type LspProfileDefinition,
   type McpServerDefinition,
   type WorkspaceToolingSettings,
@@ -116,6 +118,40 @@ describe('tooling settings helpers', () => {
   test('drops invalid persisted terminal height values', () => {
     expect(normalizeWorkspaceSettings({ terminalHeight: 119 }).terminalHeight).toBeUndefined();
     expect(normalizeWorkspaceSettings({ terminalHeight: Number.NaN }).terminalHeight).toBeUndefined();
+  });
+
+  test('normalizes OpenTelemetry settings with defaults', () => {
+    const otel = normalizeOpenTelemetrySettings();
+    expect(otel.enabled).toBe(false);
+    expect(otel.endpoint).toBe(DEFAULT_OTEL_ENDPOINT);
+  });
+
+  test('preserves valid OpenTelemetry settings', () => {
+    const otel = normalizeOpenTelemetrySettings({ enabled: true, endpoint: 'http://custom:4317' });
+    expect(otel.enabled).toBe(true);
+    expect(otel.endpoint).toBe('http://custom:4317');
+  });
+
+  test('trims whitespace from OpenTelemetry endpoint', () => {
+    const otel = normalizeOpenTelemetrySettings({ enabled: true, endpoint: '  http://localhost:4317  ' });
+    expect(otel.endpoint).toBe('http://localhost:4317');
+  });
+
+  test('falls back to default endpoint when blank', () => {
+    const otel = normalizeOpenTelemetrySettings({ enabled: true, endpoint: '  ' });
+    expect(otel.endpoint).toBe(DEFAULT_OTEL_ENDPOINT);
+  });
+
+  test('normalizeWorkspaceSettings preserves OpenTelemetry when present', () => {
+    const settings = normalizeWorkspaceSettings({
+      openTelemetry: { enabled: true, endpoint: 'http://jaeger:4317' },
+    });
+    expect(settings.openTelemetry).toEqual({ enabled: true, endpoint: 'http://jaeger:4317' });
+  });
+
+  test('normalizeWorkspaceSettings omits OpenTelemetry when absent', () => {
+    const settings = normalizeWorkspaceSettings({});
+    expect(settings.openTelemetry).toBeUndefined();
   });
 
   test('validates required MCP transport settings', () => {

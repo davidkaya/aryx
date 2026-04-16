@@ -56,7 +56,7 @@ import type {
   QuickPromptSendInput,
 } from '@shared/contracts/ipc';
 import type { QuerySessionsInput } from '@shared/domain/sessionLibrary';
-import type { AppearanceTheme, QuickPromptSettings } from '@shared/domain/tooling';
+import type { AppearanceTheme, OpenTelemetrySettings, QuickPromptSettings } from '@shared/domain/tooling';
 
 import { AryxAppService } from '@main/AryxAppService';
 import { AutoUpdateService } from '@main/services/autoUpdater';
@@ -154,6 +154,10 @@ export function registerIpcHandlers(
   ipcMain.handle(
     ipcChannels.setGitAutoRefreshEnabled,
     (_event, enabled: boolean) => service.setGitAutoRefreshEnabled(enabled),
+  );
+  ipcMain.handle(
+    ipcChannels.setOpenTelemetry,
+    (_event, settings: OpenTelemetrySettings) => service.setOpenTelemetry(settings),
   );
   ipcMain.handle(ipcChannels.checkForUpdates, () => autoUpdateService.checkForUpdates());
   ipcMain.handle(ipcChannels.installUpdate, () => {

@@ -140,6 +140,7 @@ import {
   type AppearanceTheme,
   type LspProfileDefinition,
   type McpServerDefinition,
+  type OpenTelemetrySettings,
   type QuickPromptSettings,
   type SessionToolingSelection,
   type WorkspaceToolingSettings,
@@ -469,6 +470,7 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
   async loadWorkspace(): Promise<WorkspaceState> {
     if (!this.workspace) {
       this.workspace = await this.workspaceRepository.load();
+      this.sidecar.setOpenTelemetrySettings(this.workspace.settings.openTelemetry);
       const selectedProjectId = this.workspace.selectedProjectId;
       const selectedProject = selectedProjectId
         ? this.workspace.projects.find((project) => project.id === selectedProjectId)
@@ -827,6 +829,13 @@ export class AryxAppService extends EventEmitter<AppServiceEvents> {
       this.stopPeriodicProjectGitRefresh();
     }
 
+    return this.persistAndBroadcast(workspace);
+  }
+
+  async setOpenTelemetry(settings: OpenTelemetrySettings): Promise<WorkspaceState> {
+    const workspace = await this.loadWorkspace();
+    workspace.settings.openTelemetry = settings;
+    this.sidecar.setOpenTelemetrySettings(settings);
     return this.persistAndBroadcast(workspace);
   }
 

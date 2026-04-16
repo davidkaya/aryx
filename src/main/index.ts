@@ -63,9 +63,9 @@ async function bootstrap(): Promise<void> {
       applyTitleBarTheme(mainWindow, workspace.settings.theme);
 
       systemTray = new SystemTray({
-        onShowWindow: showAndFocusWindow,
+        onShowWindow: () => showAndFocusWindow(mainWindow!),
         onCreateScratchpad: () => {
-          showAndFocusWindow();
+          showAndFocusWindow(mainWindow!);
           mainWindow?.webContents.send('tray:create-scratchpad');
         },
         onQuit: () => app.quit(),
@@ -127,8 +127,8 @@ app.on('window-all-closed', () => {
 app.on('activate', async () => {
   if (BrowserWindow.getAllWindows().length === 0) {
     await bootstrap();
-  } else {
-    showAndFocusWindow();
+  } else if (mainWindow && !mainWindow.isDestroyed()) {
+    showAndFocusWindow(mainWindow);
   }
 });
 

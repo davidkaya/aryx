@@ -3,7 +3,7 @@ import { join } from 'node:path';
 
 import type { WorkspaceState } from '@shared/domain/workspace';
 
-const { app, Menu, Tray, nativeImage, BrowserWindow } = electron;
+const { app, Menu, Tray, nativeImage } = electron;
 type TrayType = InstanceType<typeof Tray>;
 type NativeImageType = ReturnType<typeof nativeImage.createFromPath>;
 
@@ -123,10 +123,8 @@ export function setupCloseToTray(
 /**
  * Show and focus the main window, restoring from tray if hidden.
  */
-export function showAndFocusWindow(): void {
-  const windows = BrowserWindow.getAllWindows();
-  const mainWindow = windows[0];
-  if (!mainWindow) return;
+export function showAndFocusWindow(mainWindow: Electron.BrowserWindow): void {
+  if (mainWindow.isDestroyed()) return;
 
   // On macOS, show the dock icon again
   if (process.platform === 'darwin') {

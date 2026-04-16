@@ -116,7 +116,9 @@ async function bootstrap(): Promise<void> {
 }
 
 app.on('second-instance', () => {
-  showAndFocusWindow();
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    showAndFocusWindow(mainWindow);
+  }
 });
 
 app.whenReady().then(bootstrap);

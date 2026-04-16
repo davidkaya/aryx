@@ -11,6 +11,7 @@
     "package": "bun run scripts/clean-release.ts && bun run build:electron && bun run sidecar:publish && electron-builder --dir --publish never",
     "installer": "bun run scripts/clean-release.ts && bun run build:electron && bun run sidecar:publish && electron-builder --publish never",
     "publish-release": "bun run scripts/clean-release.ts && bun run build:electron && bun run sidecar:publish && electron-builder --publish always",
+    "release": "bun run scripts/release.ts",
     "preview": "electron-vite preview",
     "lsp:typescript": "typescript-language-server --stdio",
     "typecheck": "tsc --noEmit -p tsconfig.json",

@@ -7,9 +7,9 @@ import type {
 import {
   dequeuePendingApprovalState,
   enqueuePendingApprovalState,
+  getPendingApprovalToolKey,
   listPendingApprovals,
   resolvePendingApproval,
-  resolveApprovalToolKey,
   type ApprovalDecision,
   type PendingApprovalRecord,
 } from '@shared/domain/approval';
@@ -109,7 +109,7 @@ export class ApprovalCoordinator {
     this.setSessionPendingApprovalState(session, dequeuePendingApprovalState(session, approvalId));
     session.updatedAt = resolvedAt;
 
-    const approvalKey = resolveApprovalToolKey(approval.toolName, approval.permissionKind);
+    const approvalKey = getPendingApprovalToolKey(approval);
     if (decision === 'approved' && alwaysApprove && approvalKey) {
       const existing = session.approvalSettings?.autoApprovedToolNames ?? [];
       if (!existing.includes(approvalKey)) {
@@ -127,7 +127,7 @@ export class ApprovalCoordinator {
           continue;
         }
 
-        const queuedKey = resolveApprovalToolKey(queued.toolName, queued.permissionKind);
+        const queuedKey = getPendingApprovalToolKey(queued);
         if (queuedKey !== approvalKey) {
           continue;
         }
@@ -361,6 +361,7 @@ export class ApprovalCoordinator {
       agentName: event.agentName,
       toolName: event.toolName,
       permissionKind: event.permissionKind,
+      approvalToolKey: event.approvalToolKey,
       title: event.title,
       detail: event.detail,
       permissionDetail: event.permissionDetail,

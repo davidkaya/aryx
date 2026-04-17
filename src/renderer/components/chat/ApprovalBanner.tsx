@@ -3,7 +3,7 @@ import { Bot, Check, ChevronDown, Loader2, ShieldAlert, ShieldBan, ShieldCheck, 
 
 import { MarkdownContent } from '@renderer/components/MarkdownContent';
 import { permissionDetailSummary, PermissionDetailView } from '@renderer/components/chat/PermissionDetailView';
-import { resolveApprovalToolKey } from '@shared/domain/approval';
+import { getPendingApprovalToolKey } from '@shared/domain/approval';
 import type { ApprovalDecision, PendingApprovalRecord } from '@shared/domain/approval';
 import { resolveToolLabel } from '@shared/domain/tooling';
 
@@ -25,7 +25,7 @@ export function ApprovalBanner({
   const kindLabel = approval.kind === 'final-response' ? 'Final response review' : 'Tool call approval';
   const hasMessages = approval.messages && approval.messages.length > 0;
   const showPosition = position !== undefined && total !== undefined && total > 1;
-  const approvalToolKey = resolveApprovalToolKey(approval.toolName, approval.permissionKind);
+  const approvalToolKey = getPendingApprovalToolKey(approval);
   const canAlwaysApprove = approval.kind === 'tool-call' && !!approvalToolKey;
   const approvalToolLabel = approvalToolKey ? resolveToolLabel(approvalToolKey) : undefined;
 

@@ -1488,6 +1488,28 @@ public sealed class CopilotWorkflowRunnerTests
     }
 
     [Fact]
+    public void RequiresToolCallApproval_HonorsCanonicalHookApprovalKeysForModernToolNames()
+    {
+        ApprovalPolicyDto policy = new()
+        {
+            Rules =
+            [
+                new ApprovalCheckpointRuleDto
+                {
+                    Kind = "tool-call",
+                    AgentIds = ["agent-1"],
+                },
+            ],
+            AutoApprovedToolNames = ["read", "write", "web_fetch"],
+        };
+
+        Assert.False(CopilotApprovalCoordinator.RequiresToolCallApproval(policy, "agent-1", "rg", "read"));
+        Assert.False(CopilotApprovalCoordinator.RequiresToolCallApproval(policy, "agent-1", "apply_patch", "write"));
+        Assert.False(CopilotApprovalCoordinator.RequiresToolCallApproval(policy, "agent-1", "web_search", "web_fetch"));
+        Assert.True(CopilotApprovalCoordinator.RequiresToolCallApproval(policy, "agent-1", "powershell", "shell"));
+    }
+
+    [Fact]
     public void RequiresToolCallApproval_HonorsMcpServerLevelApprovalKey()
     {
         ApprovalPolicyDto policy = new()
@@ -1738,6 +1760,7 @@ public sealed class CopilotWorkflowRunnerTests
             "lsp_ts_hover");
 
         Assert.Equal("lsp_ts_hover", approvalEvent.ToolName);
+        Assert.Equal("lsp_ts_hover", approvalEvent.ApprovalToolKey);
         Assert.Equal("Approve lsp_ts_hover", approvalEvent.Title);
         Assert.Contains("tool \"lsp_ts_hover\"", approvalEvent.Detail);
         Assert.NotNull(approvalEvent.PermissionDetail);
@@ -1770,6 +1793,7 @@ public sealed class CopilotWorkflowRunnerTests
             "web_fetch");
 
         Assert.Equal("web_fetch", approvalEvent.ToolName);
+        Assert.Equal("web_fetch", approvalEvent.ApprovalToolKey);
         Assert.Equal("Approve web_fetch", approvalEvent.Title);
         Assert.Contains("url permission", approvalEvent.Detail);
         Assert.Contains("tool \"web_fetch\"", approvalEvent.Detail);
@@ -1992,11 +2016,21 @@ public sealed class CopilotWorkflowRunnerTests
 
     [Theory]
     [InlineData("view", "read")]
+    [InlineData("show_file", "read")]
+    [InlineData("read_file", "read")]
     [InlineData("glob", "read")]
     [InlineData("grep", "read")]
+    [InlineData("rg", "read")]
     [InlineData("lsp", "read")]
     [InlineData("edit", "write")]
     [InlineData("create", "write")]
+    [InlineData("write_file", "write")]
+    [InlineData("apply_patch", "write")]
+    [InlineData("bash", "shell")]
+    [InlineData("read_bash", "shell")]
+    [InlineData("write_bash", "shell")]
+    [InlineData("stop_bash", "shell")]
+    [InlineData("list_bash", "shell")]
     [InlineData("powershell", "shell")]
     [InlineData("read_powershell", "shell")]
     [InlineData("write_powershell", "shell")]
@@ -2005,6 +2039,7 @@ public sealed class CopilotWorkflowRunnerTests
     [InlineData("web_fetch", "url")]
     [InlineData("web_search", "url")]
     [InlineData("store_memory", "memory")]
+    [InlineData("remember_fact", "memory")]
     public void ResolveHookToolCategory_ReturnsExpectedCategoryForKnownTools(string toolName, string expectedCategory)
     {
         Assert.Equal(expectedCategory, CopilotApprovalCoordinator.ResolveHookToolCategory(toolName));
@@ -2025,6 +2060,29 @@ public sealed class CopilotWorkflowRunnerTests
         Assert.Null(CopilotApprovalCoordinator.ResolveHookToolCategory(null));
         Assert.Null(CopilotApprovalCoordinator.ResolveHookToolCategory(""));
         Assert.Null(CopilotApprovalCoordinator.ResolveHookToolCategory("  "));
+    }
+
+    [Theory]
+    [InlineData("view", "read")]
+    [InlineData("rg", "read")]
+    [InlineData("apply_patch", "write")]
+    [InlineData("bash", "shell")]
+    [InlineData("web_fetch", "web_fetch")]
+    [InlineData("web_search", "web_fetch")]
+    [InlineData("store_memory", "store_memory")]
+    [InlineData("remember_fact", "store_memory")]
+    public void ResolveHookApprovalToolKey_ReturnsExpectedKeyForKnownTools(string toolName, string expectedKey)
+    {
+        Assert.Equal(expectedKey, CopilotApprovalCoordinator.ResolveHookApprovalToolKey(toolName));
+    }
+
+    [Fact]
+    public void ResolveHookApprovalToolKey_ReturnsNullForUnknownTools()
+    {
+        Assert.Null(CopilotApprovalCoordinator.ResolveHookApprovalToolKey("custom_tool"));
+        Assert.Null(CopilotApprovalCoordinator.ResolveHookApprovalToolKey(null));
+        Assert.Null(CopilotApprovalCoordinator.ResolveHookApprovalToolKey(""));
+        Assert.Null(CopilotApprovalCoordinator.ResolveHookApprovalToolKey("  "));
     }
 
     [Fact]
@@ -2119,6 +2177,7 @@ public sealed class CopilotWorkflowRunnerTests
             "view");
 
         Assert.Equal("view", approvalEvent.ToolName);
+        Assert.Equal("read", approvalEvent.ApprovalToolKey);
         Assert.Equal("read", approvalEvent.PermissionKind);
         Assert.Contains("read permission", approvalEvent.Detail);
     }
@@ -2151,6 +2210,7 @@ public sealed class CopilotWorkflowRunnerTests
             "icm-mcp-get_schedule");
 
         Assert.Equal("mcp", approvalEvent.PermissionKind);
+        Assert.Equal("icm-mcp-get_schedule", approvalEvent.ApprovalToolKey);
         Assert.Contains("mcp permission", approvalEvent.Detail);
         Assert.NotNull(approvalEvent.PermissionDetail);
         Assert.Equal("mcp", approvalEvent.PermissionDetail!.Kind);
@@ -2182,6 +2242,7 @@ public sealed class CopilotWorkflowRunnerTests
             "icm-mcp-get_schedule");
 
         Assert.Equal("hook", approvalEvent.PermissionKind);
+        Assert.Equal("icm-mcp-get_schedule", approvalEvent.ApprovalToolKey);
     }
 
     [Fact]
@@ -2214,6 +2275,7 @@ public sealed class CopilotWorkflowRunnerTests
 
         Assert.False(pending.IsCompleted);
         Assert.NotNull(observedApproval);
+        Assert.Equal("lsp_ts_definition", observedApproval!.ApprovalToolKey);
 
         await coordinator.ResolveApprovalAsync(
             new ResolveApprovalCommandDto
@@ -2270,6 +2332,8 @@ public sealed class CopilotWorkflowRunnerTests
         Assert.Equal("tool-calling", observedActivity!.ActivityType);
         Assert.Equal("apply_patch", observedActivity.ToolName);
         Assert.Equal("tool-call-write-1", observedActivity.ToolCallId);
+        Assert.Equal("apply_patch", observedApproval!.ToolName);
+        Assert.Equal("write", observedApproval.ApprovalToolKey);
 
         ToolCallFileChangeDto preview = Assert.Single(observedActivity.FileChanges!);
         Assert.Equal("README.md", preview.Path);
@@ -2388,6 +2452,7 @@ public sealed class CopilotWorkflowRunnerTests
 
         Assert.False(firstPending.IsCompleted);
         Assert.NotNull(firstApproval);
+        Assert.Equal("read", firstApproval!.ApprovalToolKey);
 
         await coordinator.ResolveApprovalAsync(
             new ResolveApprovalCommandDto
@@ -2417,6 +2482,82 @@ public sealed class CopilotWorkflowRunnerTests
                 SessionId = "copilot-session-1",
             },
             CreateToolCallRegistry(("tool-call-read-2", "grep")),
+            approval =>
+            {
+                sawSecondApproval = true;
+                return Task.CompletedTask;
+            },
+            CancellationToken.None);
+
+        Assert.False(sawSecondApproval);
+        Assert.Equal(PermissionRequestResultKind.Approved, secondResult.Kind);
+    }
+
+    [Fact]
+    public async Task RequestApprovalAsync_AlwaysApproveCachesCanonicalWriteApprovalForModernHookTools()
+    {
+        CopilotApprovalCoordinator coordinator = new();
+        ApprovalRequestedEventDto? firstApproval = null;
+        RunTurnCommandDto command = CreateApprovalCommand();
+
+        Task<PermissionRequestResult> firstPending = coordinator.RequestApprovalAsync(
+            command,
+            command.Workflow.GetAgentNodes()[0],
+            new PermissionRequestWrite
+            {
+                Kind = "write",
+                ToolCallId = "tool-call-write-1",
+                Intention = "Update the README",
+                FileName = "README.md",
+                Diff = "@@ -1 +1 @@",
+                NewFileContents = "# Aryx\n",
+            },
+            new PermissionInvocation
+            {
+                SessionId = "copilot-session-1",
+            },
+            CreateToolCallRegistry(("tool-call-write-1", "apply_patch")),
+            approval =>
+            {
+                firstApproval = approval;
+                return Task.CompletedTask;
+            },
+            CancellationToken.None);
+
+        Assert.False(firstPending.IsCompleted);
+        Assert.NotNull(firstApproval);
+        Assert.Equal("write", firstApproval!.ApprovalToolKey);
+
+        await coordinator.ResolveApprovalAsync(
+            new ResolveApprovalCommandDto
+            {
+                ApprovalId = firstApproval.ApprovalId,
+                Decision = "approved",
+                AlwaysApprove = true,
+            },
+            CancellationToken.None);
+
+        PermissionRequestResult firstResult = await firstPending;
+        Assert.Equal(PermissionRequestResultKind.Approved, firstResult.Kind);
+
+        bool sawSecondApproval = false;
+        PermissionRequestResult secondResult = await coordinator.RequestApprovalAsync(
+            command,
+            command.Workflow.GetAgentNodes()[0],
+            new PermissionRequestWrite
+            {
+                Kind = "write",
+                ToolCallId = "tool-call-write-2",
+                Intention = "Create docs draft",
+                FileName = "docs\\guide.md",
+                Diff = "@@ -0,0 +1 @@",
+                NewFileContents = "# Guide\n",
+            },
+            new PermissionInvocation
+            {
+                SessionId = "copilot-session-1",
+            },
+            CreateToolCallRegistry(("tool-call-write-2", "write_file")),
             approval =>
             {
                 sawSecondApproval = true;

@@ -678,6 +678,7 @@ public sealed class ApprovalRequestedEventDto : SidecarEventDto
     public string? AgentName { get; init; }
     public string? ToolName { get; init; }
     public string? PermissionKind { get; init; }
+    public string? ApprovalToolKey { get; init; }
     public string Title { get; init; } = string.Empty;
     public string? Detail { get; init; }
     public PermissionDetailDto? PermissionDetail { get; init; }

@@ -10,6 +10,7 @@ import {
   normalizeSessionApprovalSettings,
   pruneSessionApprovalSettings,
   resolveApprovalToolKey,
+  getPendingApprovalToolKey,
   dequeuePendingApprovalState,
   enqueuePendingApprovalState,
   listPendingApprovals,
@@ -260,5 +261,49 @@ describe('approval helpers', () => {
   test('resolveApprovalToolKey returns undefined when both are absent', () => {
     expect(resolveApprovalToolKey(undefined, undefined)).toBeUndefined();
     expect(resolveApprovalToolKey(undefined, 'mcp')).toBeUndefined();
+  });
+
+  test('getPendingApprovalToolKey prefers the explicit approval tool key from the sidecar', () => {
+    expect(
+      getPendingApprovalToolKey({
+        approvalToolKey: 'write',
+        toolName: 'apply_patch',
+        permissionKind: 'hook',
+      }),
+    ).toBe('write');
+
+    expect(
+      getPendingApprovalToolKey({
+        approvalToolKey: 'web_fetch',
+        toolName: 'web_search',
+        permissionKind: 'hook',
+      }),
+    ).toBe('web_fetch');
+
+    expect(
+      getPendingApprovalToolKey({
+        approvalToolKey: 'mcp_server:icm-mcp',
+        toolName: 'icm-mcp-get_schedule',
+        permissionKind: 'mcp',
+      }),
+    ).toBe('mcp_server:icm-mcp');
+  });
+
+  test('getPendingApprovalToolKey falls back to derivation for legacy approvals without the explicit key', () => {
+    expect(
+      getPendingApprovalToolKey({
+        toolName: 'view',
+        permissionKind: 'read',
+      }),
+    ).toBe('read');
+
+    expect(
+      getPendingApprovalToolKey({
+        toolName: 'git.status',
+        permissionKind: 'mcp',
+      }),
+    ).toBe('git.status');
+
+    expect(getPendingApprovalToolKey({})).toBeUndefined();
   });
 });

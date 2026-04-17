@@ -21,22 +21,33 @@ internal sealed class CopilotApprovalCoordinator
     private const string HookPermissionKind = "hook";
     private const string ToolCallingActivityType = "tool-calling";
 
-    private static readonly Dictionary<string, string> HookToolCategories = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly Dictionary<string, HookToolApprovalMapping> HookToolApprovals = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["view"] = ReadPermissionKind,
-        ["glob"] = ReadPermissionKind,
-        ["grep"] = ReadPermissionKind,
-        ["lsp"] = ReadPermissionKind,
-        ["edit"] = WritePermissionKind,
-        ["create"] = WritePermissionKind,
-        ["powershell"] = ShellPermissionKind,
-        ["read_powershell"] = ShellPermissionKind,
-        ["write_powershell"] = ShellPermissionKind,
-        ["stop_powershell"] = ShellPermissionKind,
-        ["list_powershell"] = ShellPermissionKind,
-        ["web_fetch"] = UrlPermissionKind,
-        ["web_search"] = UrlPermissionKind,
-        ["store_memory"] = MemoryPermissionKind,
+        ["view"] = new(ReadPermissionKind, ReadPermissionKind),
+        ["show_file"] = new(ReadPermissionKind, ReadPermissionKind),
+        ["read_file"] = new(ReadPermissionKind, ReadPermissionKind),
+        ["glob"] = new(ReadPermissionKind, ReadPermissionKind),
+        ["grep"] = new(ReadPermissionKind, ReadPermissionKind),
+        ["rg"] = new(ReadPermissionKind, ReadPermissionKind),
+        ["lsp"] = new(ReadPermissionKind, ReadPermissionKind),
+        ["edit"] = new(WritePermissionKind, WritePermissionKind),
+        ["create"] = new(WritePermissionKind, WritePermissionKind),
+        ["write_file"] = new(WritePermissionKind, WritePermissionKind),
+        ["apply_patch"] = new(WritePermissionKind, WritePermissionKind),
+        ["bash"] = new(ShellPermissionKind, ShellPermissionKind),
+        ["read_bash"] = new(ShellPermissionKind, ShellPermissionKind),
+        ["write_bash"] = new(ShellPermissionKind, ShellPermissionKind),
+        ["stop_bash"] = new(ShellPermissionKind, ShellPermissionKind),
+        ["list_bash"] = new(ShellPermissionKind, ShellPermissionKind),
+        ["powershell"] = new(ShellPermissionKind, ShellPermissionKind),
+        ["read_powershell"] = new(ShellPermissionKind, ShellPermissionKind),
+        ["write_powershell"] = new(ShellPermissionKind, ShellPermissionKind),
+        ["stop_powershell"] = new(ShellPermissionKind, ShellPermissionKind),
+        ["list_powershell"] = new(ShellPermissionKind, ShellPermissionKind),
+        ["web_fetch"] = new(UrlPermissionKind, WebFetchToolName),
+        ["web_search"] = new(UrlPermissionKind, WebFetchToolName),
+        ["store_memory"] = new(MemoryPermissionKind, StoreMemoryToolName),
+        ["remember_fact"] = new(MemoryPermissionKind, StoreMemoryToolName),
     };
 
     private readonly ConcurrentDictionary<string, PendingApprovalRequest> _pendingApprovals = new(StringComparer.Ordinal);
@@ -96,19 +107,22 @@ internal sealed class CopilotApprovalCoordinator
         Func<ApprovalRequestedEventDto, Task> onApproval,
         CancellationToken cancellationToken)
     {
-        string? toolName = ResolveApprovalToolName(request, toolCalls);
-        string? autoApprovedToolName = ResolveAutoApprovedToolName(request);
-        string? mcpServerApprovalKey = ResolveMcpServerApprovalKey(request, command.Tooling?.McpServers);
-        string? approvalCacheKey = ResolveApprovalCacheKey(toolName, autoApprovedToolName);
+        ResolvedApprovalContext approval = ResolveApprovalContext(request, toolCalls, command.Tooling?.McpServers);
+        string? approvalCacheKey = ResolveApprovalCacheKey(approval.ToolName, approval.ApprovalToolKey);
 
-        AgentActivityEventDto? fileChangeActivity = BuildToolCallFileChangeActivity(command, agent, request, toolName);
+        AgentActivityEventDto? fileChangeActivity = BuildToolCallFileChangeActivity(command, agent, request, approval.ToolName);
         if (fileChangeActivity is not null && onActivity is not null)
         {
             await onActivity(fileChangeActivity).ConfigureAwait(false);
         }
 
         if (IsToolApprovedForRequest(command.RequestId, approvalCacheKey)
-            || !RequiresToolCallApproval(command.Workflow.Settings.ApprovalPolicy, agent.GetAgentId(), toolName, autoApprovedToolName, mcpServerApprovalKey))
+            || !RequiresToolCallApproval(
+                command.Workflow.Settings.ApprovalPolicy,
+                agent.GetAgentId(),
+                approval.ToolName,
+                approval.ApprovalToolKey,
+                approval.McpServerApprovalKey))
         {
             return CreateApprovalResult(PermissionRequestResultKind.Approved);
         }
@@ -127,7 +141,7 @@ internal sealed class CopilotApprovalCoordinator
                     request,
                     invocation,
                     pending.ApprovalId,
-                    toolName))
+                    approval.ToolName))
                 .ConfigureAwait(false);
 
             using CancellationTokenRegistration registration = cancellationToken.Register(
@@ -155,21 +169,22 @@ internal sealed class CopilotApprovalCoordinator
         string approvalId,
         string? toolName)
     {
-        string permissionKind = ResolvePermissionKind(request, command.Tooling?.McpServers);
+        ResolvedApprovalContext approval = ResolveApprovalContext(request, toolName, command.Tooling?.McpServers);
 
         string agentId = agent.GetAgentId();
         string agentName = agent.GetAgentName();
         string? sessionId = NormalizeOptionalString(invocation.SessionId);
-        string? normalizedToolName = NormalizeOptionalString(toolName);
+        string? normalizedToolName = approval.ToolName;
+        string? displayToolName = normalizedToolName ?? NormalizeOptionalString(approval.ApprovalToolKey);
         string? requestedUrl = request is PermissionRequestUrl urlRequest
             ? NormalizeOptionalString(urlRequest.Url)
             : null;
-        string title = normalizedToolName is null
-            ? $"Approve {permissionKind}"
-            : $"Approve {normalizedToolName}";
-        string detail = normalizedToolName is null
-            ? $"{agentName} requested {permissionKind} permission"
-            : $"{agentName} requested {permissionKind} permission for tool \"{normalizedToolName}\"";
+        string title = displayToolName is null
+            ? $"Approve {approval.PermissionKind}"
+            : $"Approve {displayToolName}";
+        string detail = displayToolName is null
+            ? $"{agentName} requested {approval.PermissionKind} permission"
+            : $"{agentName} requested {approval.PermissionKind} permission for tool \"{displayToolName}\"";
 
         if (requestedUrl is not null)
         {
@@ -195,7 +210,8 @@ internal sealed class CopilotApprovalCoordinator
             AgentId = NormalizeOptionalString(agentId),
             AgentName = NormalizeOptionalString(agentName),
             ToolName = normalizedToolName,
-            PermissionKind = permissionKind,
+            PermissionKind = approval.PermissionKind,
+            ApprovalToolKey = NormalizeOptionalString(approval.ApprovalToolKey),
             Title = title,
             Detail = detail,
             PermissionDetail = BuildPermissionDetail(request, command.Tooling?.McpServers),
@@ -314,7 +330,7 @@ internal sealed class CopilotApprovalCoordinator
         ApprovalPolicyDto? approvalPolicy,
         string agentId,
         string? toolName,
-        string? autoApprovedToolName = null,
+        string? approvalToolKey = null,
         string? mcpServerApprovalKey = null)
     {
         if (approvalPolicy?.Rules is null || approvalPolicy.Rules.Count == 0)
@@ -333,7 +349,7 @@ internal sealed class CopilotApprovalCoordinator
             return true;
         }
 
-        return !MatchesAutoApprovedTool(autoApprovedToolNames, toolName, autoApprovedToolName)
+        return !MatchesAutoApprovedTool(autoApprovedToolNames, toolName, approvalToolKey)
             && !MatchesAutoApprovedToolName(autoApprovedToolNames, mcpServerApprovalKey);
     }
 
@@ -411,9 +427,67 @@ internal sealed class CopilotApprovalCoordinator
             ?? GetFallbackToolName(request);
     }
 
-    private static string? ResolveAutoApprovedToolName(PermissionRequest request)
+    private static ResolvedApprovalContext ResolveApprovalContext(
+        PermissionRequest request,
+        ToolCallRegistry? toolCalls,
+        IReadOnlyList<RunTurnMcpServerConfigDto>? configuredMcpServers)
     {
-        return GetFallbackToolName(request);
+        return ResolveApprovalContext(
+            request,
+            ResolveApprovalToolName(request, toolCalls),
+            configuredMcpServers);
+    }
+
+    private static ResolvedApprovalContext ResolveApprovalContext(
+        PermissionRequest request,
+        string? toolName,
+        IReadOnlyList<RunTurnMcpServerConfigDto>? configuredMcpServers)
+    {
+        string? normalizedToolName = NormalizeOptionalString(toolName);
+        return request switch
+        {
+            PermissionRequestShell => new(
+                normalizedToolName,
+                ShellPermissionKind,
+                ShellPermissionKind,
+                null),
+            PermissionRequestWrite => new(
+                normalizedToolName,
+                WritePermissionKind,
+                WritePermissionKind,
+                null),
+            PermissionRequestRead => new(
+                normalizedToolName,
+                ReadPermissionKind,
+                ReadPermissionKind,
+                null),
+            PermissionRequestUrl => new(
+                normalizedToolName,
+                UrlPermissionKind,
+                WebFetchToolName,
+                null),
+            PermissionRequestMemory => new(
+                normalizedToolName,
+                MemoryPermissionKind,
+                StoreMemoryToolName,
+                null),
+            PermissionRequestMcp => new(
+                normalizedToolName,
+                McpPermissionKind,
+                normalizedToolName,
+                ResolveMcpServerApprovalKey(request, configuredMcpServers)),
+            PermissionRequestCustomTool => new(
+                normalizedToolName,
+                CustomToolPermissionKind,
+                normalizedToolName,
+                null),
+            PermissionRequestHook => ResolveHookApprovalContext(normalizedToolName, configuredMcpServers),
+            _ => new(
+                normalizedToolName,
+                NormalizeOptionalString(request.Kind) ?? "tool access",
+                normalizedToolName,
+                ResolveMcpServerApprovalKey(request, configuredMcpServers)),
+        };
     }
 
     private const string McpServerApprovalPrefix = "mcp_server:";
@@ -522,44 +596,56 @@ internal sealed class CopilotApprovalCoordinator
             PermissionRequestWrite => WritePermissionKind,
             PermissionRequestRead => ReadPermissionKind,
             PermissionRequestMemory => StoreMemoryToolName,
-            PermissionRequestHook hook => ResolveHookToolCategory(hook.ToolName),
+            PermissionRequestHook hook => ResolveHookApprovalToolKey(hook.ToolName),
             _ => null,
         };
     }
 
     internal static string? ResolveHookToolCategory(string? toolName)
     {
-        string? normalized = NormalizeOptionalString(toolName);
-        if (normalized is null)
-        {
-            return null;
-        }
-
-        return HookToolCategories.TryGetValue(normalized, out string? category) ? category : null;
+        return TryResolveHookToolApproval(toolName, out HookToolApprovalMapping? mapping) && mapping is not null
+            ? mapping.PermissionKind
+            : null;
     }
 
-    private static string ResolvePermissionKind(
-        PermissionRequest request,
+    internal static string? ResolveHookApprovalToolKey(string? toolName)
+    {
+        return TryResolveHookToolApproval(toolName, out HookToolApprovalMapping? mapping) && mapping is not null
+            ? mapping.ApprovalToolKey
+            : null;
+    }
+
+    internal static ResolvedApprovalContext ResolveHookApprovalContext(
+        string? toolName,
         IReadOnlyList<RunTurnMcpServerConfigDto>? configuredMcpServers)
     {
-        string permissionKind = string.IsNullOrWhiteSpace(request.Kind)
-            ? "tool access"
-            : request.Kind.Trim();
-
-        if (request is not PermissionRequestHook hook)
+        string? normalizedToolName = NormalizeOptionalString(toolName);
+        if (normalizedToolName is null)
         {
-            return permissionKind;
+            return new ResolvedApprovalContext(null, HookPermissionKind, null, null);
         }
 
-        string? resolvedCategory = ResolveHookToolCategory(hook.ToolName);
-        if (resolvedCategory is not null)
+        if (TryResolveHookToolApproval(normalizedToolName, out HookToolApprovalMapping? mapping) && mapping is not null)
         {
-            return resolvedCategory;
+            return new ResolvedApprovalContext(
+                normalizedToolName,
+                mapping.PermissionKind,
+                mapping.ApprovalToolKey,
+                null);
         }
 
-        return ResolveHookMcpServerName(hook.ToolName, configuredMcpServers) is not null
-            ? McpPermissionKind
-            : permissionKind;
+        string? mcpServerApprovalKey = ResolveHookMcpServerApprovalKey(normalizedToolName, configuredMcpServers);
+        return mcpServerApprovalKey is not null
+            ? new ResolvedApprovalContext(
+                normalizedToolName,
+                McpPermissionKind,
+                normalizedToolName,
+                mcpServerApprovalKey)
+            : new ResolvedApprovalContext(
+                normalizedToolName,
+                HookPermissionKind,
+                normalizedToolName,
+                null);
     }
 
     private static PermissionDetailDto BuildHookPermissionDetail(
@@ -619,13 +705,29 @@ internal sealed class CopilotApprovalCoordinator
             : strippedToolName;
     }
 
+    private static bool TryResolveHookToolApproval(
+        string? toolName,
+        out HookToolApprovalMapping? mapping)
+    {
+        string? normalizedToolName = NormalizeOptionalString(toolName);
+        if (normalizedToolName is not null
+            && HookToolApprovals.TryGetValue(normalizedToolName, out HookToolApprovalMapping? resolvedMapping))
+        {
+            mapping = resolvedMapping;
+            return true;
+        }
+
+        mapping = null;
+        return false;
+    }
+
     private static bool MatchesAutoApprovedTool(
         IReadOnlyList<string> autoApprovedToolNames,
         string? toolName,
-        string? autoApprovedToolName)
+        string? approvalToolKey)
     {
         return MatchesAutoApprovedToolName(autoApprovedToolNames, toolName)
-            || MatchesAutoApprovedToolName(autoApprovedToolNames, autoApprovedToolName);
+            || MatchesAutoApprovedToolName(autoApprovedToolNames, approvalToolKey);
     }
 
     private static bool MatchesAutoApprovedToolName(
@@ -719,6 +821,16 @@ internal sealed class CopilotApprovalCoordinator
 
         return normalized.Count > 0 ? normalized : null;
     }
+
+    internal sealed record ResolvedApprovalContext(
+        string? ToolName,
+        string PermissionKind,
+        string? ApprovalToolKey,
+        string? McpServerApprovalKey);
+
+    private sealed record HookToolApprovalMapping(
+        string PermissionKind,
+        string ApprovalToolKey);
 
     private sealed record PendingApprovalRequest(
         string RequestId,

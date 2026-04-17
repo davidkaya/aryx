@@ -412,6 +412,7 @@ public sealed class SidecarProtocolHostTests
                     AgentId = "agent-1",
                     AgentName = "Primary",
                     PermissionKind = "tool access",
+                    ApprovalToolKey = "shell",
                     Title = "Approve tool access",
                     PermissionDetail = new PermissionDetailDto
                     {
@@ -437,6 +438,7 @@ public sealed class SidecarProtocolHostTests
                 Assert.Equal("turn-approval", approvalEvent.GetProperty("requestId").GetString());
                 Assert.Equal("approval-1", approvalEvent.GetProperty("approvalId").GetString());
                 Assert.Equal("tool-call", approvalEvent.GetProperty("approvalKind").GetString());
+                Assert.Equal("shell", approvalEvent.GetProperty("approvalToolKey").GetString());
                 Assert.Equal("Approve tool access", approvalEvent.GetProperty("title").GetString());
                 JsonElement permissionDetail = approvalEvent.GetProperty("permissionDetail");
                 Assert.Equal("shell", permissionDetail.GetProperty("kind").GetString());

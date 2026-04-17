@@ -154,11 +154,15 @@ public sealed class CopilotSessionHooksTests
     [Theory]
     [InlineData("view", "read")]
     [InlineData("grep", "read")]
+    [InlineData("rg", "read")]
     [InlineData("edit", "write")]
+    [InlineData("apply_patch", "write")]
     [InlineData("powershell", "shell")]
-    public async Task Create_PreToolUseAutoAllowsWhenCategoryIsApproved(string toolName, string category)
+    [InlineData("web_search", "web_fetch")]
+    [InlineData("store_memory", "store_memory")]
+    public async Task Create_PreToolUseAutoAllowsWhenApprovalToolKeyIsApproved(string toolName, string approvalToolKey)
     {
-        RunTurnCommandDto command = CreateCommandWithAutoApprovedCategory(category);
+        RunTurnCommandDto command = CreateCommandWithAutoApprovedCategory(approvalToolKey);
         SessionHooks hooks = CopilotSessionHooks.Create(command, command.Workflow.GetAgentNodes()[0], ResolvedHookSet.Empty, new RecordingHookCommandRunner());
 
         PreToolUseHookOutput? decision = await hooks.OnPreToolUse!(

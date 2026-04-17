@@ -34,6 +34,7 @@ export interface PendingApprovalRecord {
   agentName?: string;
   toolName?: string;
   permissionKind?: string;
+  approvalToolKey?: string;
   title: string;
   detail?: string;
   messages?: PendingApprovalMessageRecord[];
@@ -215,6 +216,22 @@ export function resolveApprovalToolKey(
   return toolName;
 }
 
+/**
+ * Returns the canonical approval key for a pending approval.
+ *
+ * Prefers the explicit `approvalToolKey` supplied by the sidecar. Falls back to
+ * re-deriving the key from `toolName` and `permissionKind` to support legacy
+ * records persisted before the sidecar contract change.
+ */
+export function getPendingApprovalToolKey(
+  record: Pick<PendingApprovalRecord, 'approvalToolKey' | 'toolName' | 'permissionKind'>,
+): string | undefined {
+  return (
+    normalizeOptionalString(record.approvalToolKey)
+    ?? resolveApprovalToolKey(record.toolName, record.permissionKind)
+  );
+}
+
 export function approvalPolicyAutoApprovesTool(
   policy: ApprovalPolicy | undefined,
   toolName?: string,
@@ -312,6 +329,7 @@ export function normalizePendingApproval(
     agentName: normalizeOptionalString(approval?.agentName),
     toolName: normalizeOptionalString(approval?.toolName),
     permissionKind: normalizeOptionalString(approval?.permissionKind),
+    approvalToolKey: normalizeOptionalString(approval?.approvalToolKey),
     title,
     detail: normalizeOptionalString(approval?.detail),
     messages: normalizePendingApprovalMessages(approval?.messages),

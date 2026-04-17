@@ -518,6 +518,7 @@ export interface ApprovalRequestedEvent {
   agentName?: string;
   toolName?: string;
   permissionKind?: string;
+  approvalToolKey?: string;
   title: string;
   detail?: string;
   permissionDetail?: PermissionDetail;
